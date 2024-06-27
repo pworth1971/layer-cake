@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import torch, torchtext
-from torchtext.vocab import GloVe as TorchTextGloVe
 import gensim
 import os
 import numpy as np
@@ -74,40 +73,27 @@ to handle words not found in GloVe’s vocabulary and replacing them with zeros.
 """
 class GloVe(PretrainedEmbeddings):
 
-    def __init__(self, setname='840B', path='./vector_cache', max_vectors=None):
+    def __init__(self, setname='840B', path='./vectors_cache', max_vectors=None):
         super().__init__()
         print(f'Loading GloVe pretrained vectors from torchtext')
+
         # Initialize GloVe model from torchtext
-        self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)
+        self.embed = TorchTextGloVe(name=setname, cache=cache_dir, max_vectors=max_vectors)
+
+        #self.embed = torchtext.vocab.GloVe(setname, cache=path, max_vectors=max_vectors)
         print('Done')
 
     def vocabulary(self):
-        # accessing the vocabulary
         return set(self.embed.stoi.keys())
 
     def dim(self):
-        # getting teh dimension of the embeddings
         return self.embed.dim
 
     def extract(self, words):
-        # Extract embeddings for a list of words
-        source_idx, target_idx = self.reindex(words, self.embed.stoi)
-        extraction = torch.zeros((len(words), self.dim()), dtype=torch.float)
-        valid_source_idx = torch.tensor(source_idx, dtype=torch.long)
-        valid_target_idx = torch.tensor(target_idx, dtype=torch.long)
-        extraction[valid_source_idx] = self.embed.vectors[valid_target_idx]
+        source_idx, target_idx = PretrainedEmbeddings.reindex(words, self.embed.stoi)
+        extraction = torch.zeros((len(words), self.dim()))
+        extraction[source_idx] = self.embed.vectors[target_idx]
         return extraction
-
-    @staticmethod
-    def reindex(words, word2index):
-        source_idx, target_idx = [], []
-        for i, word in enumerate(words):
-            if word not in word2index:
-                continue
-            j = word2index[word]
-            source_idx.append(i)
-            target_idx.append(j)
-        return source_idx, target_idx
 
 
 """

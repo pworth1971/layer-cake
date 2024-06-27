@@ -46,7 +46,8 @@ class CSVLog:
         colums = sorted(list(kwargs.keys()))
         values = [kwargs[col_i] for col_i in colums]
         s = pd.Series(values, index=self.columns)
-        self.df = self.df.append(s, ignore_index=True)
+        #self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
+        self.df = pd.concat([self.df, s], ignore_index=True)            
         if self.autoflush: self.flush()
         self.tell(kwargs)
 

@@ -13,6 +13,8 @@ from util.metrics import *
 from time import time
 from embedding.pretrained import *
 
+import torchtext; torchtext.disable_torchtext_deprecation_warning()
+
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     net_type=opt.net

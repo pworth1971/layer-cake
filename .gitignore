@@ -1,0 +1,9 @@
+bin/.vector_cache
+src/.vector_cache
+src/data/__pycache__
+src/embedding/__pycache__
+src/model/__pycache__
+src/util/__pycache__
+/log
+/pickles
+/checkpoint
