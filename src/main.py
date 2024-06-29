@@ -1,22 +1,26 @@
 import argparse
+from time import time
+import matplotlib.pyplot as plt
+import os
+import logging
+import torchtext
+import scipy
 from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
-import scipy
+
+# custom classes 
 from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
+from embedding.pretrained import *
 from model.classification import NeuralClassifier
 from util.early_stop import EarlyStopping
 from util.common import *
-from data.dataset import *
 from util.csv_log import CSVLog
 from util.file import create_if_not_exist
 from util.metrics import *
-from time import time
-from embedding.pretrained import *
+from data.dataset import *
 
-import logging
-
-import torchtext
-torchtext.disable_torchtext_deprecation_warning()
+import warnings
+warnings.filterwarnings("ignore")
 
 # Set up logging
 logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
@@ -197,9 +201,15 @@ def init_loss(classification_type):
     return L.cuda()
 
 
+# -------------------------------------------------------------------------------------------------------------------
+#
+# main function, called from coommand line with opts
+#
+# -------------------------------------------------------------------------------------------------------------------
 def main(opt):
+
     print()
-    print("main(opt)")
+    print("...main(opt)...")
     
     method_name = set_method_name()
     logfile = init_logfile(method_name, opt)
@@ -220,6 +230,11 @@ def main(opt):
     print("vocabsize:", {vocabsize})
     pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt)
 
+    #
+    # Initialize loss tracking
+    #
+    loss_history = {'train_loss': [], 'test_loss': []}  
+
     print("setting up model...")
     model = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
@@ -230,51 +245,104 @@ def main(opt):
     create_if_not_exist(opt.checkpoint_dir)
     early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
 
-    print()
-    print("training...")
     for epoch in range(1, opt.nepochs + 1):
 
-        print("         epoch ", {epoch})
+        print()
+        print()
+        print(" -------------- EPOCH ", {epoch}, "-------------- ")    
+        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history)
         
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
 
         # validation
-        macrof1 = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va')
+        #macrof1 = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
+        
         early_stop(macrof1, epoch)
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te')
+                test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
 
         if early_stop.STOP:
             print('[early-stop]')
-            if not opt.plotmode: # with plotmode activated, early-stop is ignored
+            if not opt.plotmode:                # with plotmode activated, early-stop is ignored
                 break
 
     print()
-    print("restoring best model...")
-    
+    print("...restoring best model...")
+    print()
+
     # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
+
     logfile.add_row(epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
 
     if not opt.plotmode:
-        print('performing final evaluation')
+        print()
+        print('...performing final evaluation...')
         model = early_stop.restore_checkpoint()
 
         if opt.val_epochs>0:
             print(f'last {opt.val_epochs} epochs on the validation set')
             for val_epoch in range(1, opt.val_epochs + 1):
-                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, epoch+val_epoch, method_name)
+                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, epoch+val_epoch, method_name, loss_history)
 
         # test
         print('Training complete: testing')
-        test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te')
+        test_loss = test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
+
+    # Plot the training and testing loss after all epochs
+    plot_loss_over_epochs({
+        'epochs': np.arange(1, len(loss_history['train_loss']) + 1),
+        'train_loss': loss_history['train_loss'],
+        'test_loss': loss_history['test_loss']
+    }, method_name, '../output')
+
+# end main() ----------------------------------------------------------------------------------------------------------------------------
 
 
-def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name):
+
+def plot_loss_over_epochs(data, method_name, output_path):
+    """
+    Plots the training and testing loss over epochs.
+
+    Parameters:
+        data (dict): A dictionary containing 'epochs', 'train_loss', and 'test_loss'.
+        method_name (str): The name of the method for labeling the plot.
+        output_path (str): Path to save the plot.
+    """
+    epochs = data['epochs']
+    train_loss = data['train_loss']
+    test_loss = data['test_loss']
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(epochs, train_loss, label='Training Loss', marker='o')
+    plt.plot(epochs, test_loss, label='Testing Loss', marker='x')
+    plt.title(f'Loss Over Epochs for {method_name}')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(f'{output_path}/{method_name}_loss_over_epochs.png')
+    plt.close()
+
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------
+# train()
+#
+# --------------------------------------------------------------------------------------------------------------------------------------
+
+def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history):
+    
+    print()
+    print("... training...")
+
+    epoch_loss = 0
+    total_batches = 0
+    
     as_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
-    loss_history = []
+    
     if opt.max_epoch_length is not None: # consider an epoch over after max_epoch_length
         tr_len = len(train_index)
         train_for = opt.max_epoch_length*opt.batch_size
@@ -291,28 +359,49 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
             ytr = ytr[from_:to_]
 
     model.train()
+
     for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
         optim.zero_grad()
         loss = criterion(model(batch), target)
         loss.backward()
         clip_gradient(model)
         optim.step()
-        loss_history.append(loss.item())
+    
+        epoch_loss += loss.item()
+        total_batches += 1
 
         if idx % opt.log_interval == 0:
-            interval_loss = np.mean(loss_history[-opt.log_interval:])
+            interval_loss = loss.item()
             print(f'{opt.dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {interval_loss:.6f}')
 
     mean_loss = np.mean(interval_loss)
+    loss_history['train_loss'].append(mean_loss)
     logfile.add_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
 
     return mean_loss
 
+# end train() --------------------------------------------------------------------------------------------------------------------------
 
-def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix):
+
+# --------------------------------------------------------------------------------------------------------------------------------------
+# 
+# test()
+#
+# --------------------------------------------------------------------------------------------------------------------------------------
+#  
+def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history):
+    
+    print()
+    print("..testing...")
+
     model.eval()
     predictions = []
+
+    test_loss = 0
+    total_batches = 0
+
     target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
+    
     for batch, target in tqdm(
             batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long),
             desc='evaluation: '
@@ -321,6 +410,9 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         loss = criterion(logits, target).item()
         prediction = csr_matrix(predict(logits, classification_type=classification_type))
         predictions.append(prediction)
+
+        test_loss += loss
+        total_batches += 1
 
     yte_ = scipy.sparse.vstack(predictions)
     Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
@@ -332,10 +424,24 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
     logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
-    return Mf1
+    mean_loss = test_loss / total_batches
+    loss_history['test_loss'].append(mean_loss)
+
+    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time() - tinit)
+
+    return Mf1, mean_loss                          # Return value for use in early stopping and loss plotting
+
+# end test() ---------------------------------------------------------------------------------------------------------------------------
 
 
+
+# --------------------------------------------------------------------------------------------------------------------------------------
+#
+# command line argument, program: parser plus assertions + main(opt)
+#
+# --------------------------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
+
     available_datasets = Dataset.dataset_available
     available_dropouts = {'sup','none','full','learn'}
 
@@ -451,3 +557,5 @@ if __name__ == '__main__':
         opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
 
     main(opt)
+
+    # --------------------------------------------------------------------------------------------------------------------------------------

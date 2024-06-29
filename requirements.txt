@@ -10,3 +10,4 @@ transformers
 simpletransformers
 rdflib
 gensim
+matplotlib

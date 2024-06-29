@@ -9,3 +9,4 @@ src/util/__pycache__
 /checkpoint
 .vector_cache/
 fasttext/dataset/
+output/

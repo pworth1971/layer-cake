@@ -1,5 +1,9 @@
 import os
 import pandas as pd
+
+import warnings
+warnings.filterwarnings("ignore")
+
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
@@ -43,21 +47,25 @@ class CSVLog:
 
     def add_row(self, **kwargs):
 
+        """
         print("cvs_log::add_row()")
         print("defaults:", {self.defaults.keys})
+        """
 
         # set defaults
         for key in self.defaults.keys():
             if key not in kwargs:
-                print("key ", {key}, "not found, setting default")
+                #print("key ", {key}, "not found, setting default")
                 kwargs[key]=self.defaults[key]
 
         local_columns = sorted(list(kwargs.keys()))
         values = [kwargs[col_i] for col_i in local_columns]
 
+        """
         print(self.columns)
         print(local_columns)
         print(values)
+        """
 
         s = pd.Series(values, index=self.columns)
         self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
