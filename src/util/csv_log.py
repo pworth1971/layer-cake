@@ -11,6 +11,7 @@ class CSVLog:
         self.file = file
         self.autoflush = autoflush
         self.verbose = verbose
+            
         if os.path.exists(file) and not overwrite:
             self.tell('Loading existing file from {}'.format(file))
             self.df = pd.read_csv(file, sep='\t')
@@ -22,6 +23,7 @@ class CSVLog:
             dir = os.path.dirname(self.file)
             if dir and not os.path.exists(dir): os.makedirs(dir)
             self.df = pd.DataFrame(columns=self.columns)
+        
         self.defaults = {}
 
     def already_calculated(self, **kwargs):
@@ -40,14 +42,26 @@ class CSVLog:
         self.defaults[param] = value
 
     def add_row(self, **kwargs):
+
+        print("cvs_log::add_row()")
+        print("defaults:", {self.defaults.keys})
+
+        # set defaults
         for key in self.defaults.keys():
             if key not in kwargs:
+                print("key ", {key}, "not found, setting default")
                 kwargs[key]=self.defaults[key]
-        colums = sorted(list(kwargs.keys()))
-        values = [kwargs[col_i] for col_i in colums]
+
+        local_columns = sorted(list(kwargs.keys()))
+        values = [kwargs[col_i] for col_i in local_columns]
+
+        print(self.columns)
+        print(local_columns)
+        print(values)
+
         s = pd.Series(values, index=self.columns)
-        #self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
-        self.df = pd.concat([self.df, s], ignore_index=True)            
+        self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
+        #self.df = pd.concat([self.df, s], ignore_index=True)            
         if self.autoflush: self.flush()
         self.tell(kwargs)
 

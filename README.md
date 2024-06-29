@@ -19,7 +19,25 @@ in order to improve the performance of neural classifiers.
 * transformers
 * simpletransformers
 
+
+## Downloading Pre-Trained Word Embeddings
+
+The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following pre-trained embeddings are tested, and can be downloaded from the following URLs (as of June 2024)
+
+### Word2Vec
+https://www.kaggle.com/datasets/leadbest/googlenewsvectorsnegative300?resource=downloadn 
+
+or use this command: 'wget https://figshare.com/ndownloader/files/10798046 -O GoogleNews-vectors-negative300.bin'
+
+### GloVe
+https://nlp.stanford.edu/projects/glove/
+
+### fastText
+https://fasttext.cc/docs/en/crawl-vectors.html
+
+
 ## Generating a Word-Class Embedding matrix
+
 The script _learn_word_class_embeddings.py_ generates the WCE matrix from any dataset. The dataset must be in _fastText_ format (i.e., one already-preprocessed document for each line with labels indicated by a prefix `__label__<labelname>`). The WCE matrix is stored in disk in txt format (`<word> <dim1> <dim2> ... <dimn>\n`); support for .bin files will be added soon.
 	
 ```

@@ -7,3 +7,5 @@ src/util/__pycache__
 /log
 /pickles
 /checkpoint
+.vector_cache/
+fasttext/dataset/

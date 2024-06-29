@@ -13,10 +13,17 @@ from util.metrics import *
 from time import time
 from embedding.pretrained import *
 
-import torchtext; torchtext.disable_torchtext_deprecation_warning()
+import logging
 
+import torchtext
+torchtext.disable_torchtext_deprecation_warning()
+
+# Set up logging
+logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
+    
     net_type=opt.net
     hidden = opt.channels if net_type == 'cnn' else opt.hidden
     if opt.droptype == 'sup':
@@ -31,6 +38,8 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     print('droptype =', opt.droptype)
     print('droprange =', drop_range)
     print('dropprob =', opt.dropprob)
+
+    logging.info(f"Network initialized with dropout type: {opt.droptype}, dropout range: {drop_range}, dropout probability: {opt.dropprob}")
 
     model = NeuralClassifier(
         net_type,
@@ -75,6 +84,9 @@ def set_method_name():
 
 
 def index_dataset(dataset, pretrained=None):
+
+    logging.info(f"indexing dataset")
+
     # build the vocabulary
     word2index = dict(dataset.vocabulary)
     known_words = set(word2index.keys())
@@ -93,11 +105,16 @@ def index_dataset(dataset, pretrained=None):
     test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
 
     print('[indexing complete]')
+    logging.info(f"indexing complete")
+
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
 
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
-    print('[embedding matrix]')
+
+    print('embedding_matrix()...')
+    logging.info(f"embedding_matrix()...")
+    
     pretrained_embeddings = None
     sup_range = None
     if opt.pretrained or opt.supervised:
@@ -131,6 +148,8 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
 
     print('[embedding matrix done]')
+    logging.info(f"[embedding matrix done]")
+
     return pretrained_embeddings, sup_range
 
 
@@ -139,20 +158,35 @@ def init_optimizer(model, lr, weight_decay):
 
 
 def init_logfile(method_name, opt):
-    logfile = CSVLog(opt.log_file, ['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'])
+
+    logfile = CSVLog(
+        file=opt.log_file+"_main", 
+        columns=['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'], 
+        verbose=True, 
+        overwrite=False)
+
     logfile.set_default('dataset', opt.dataset)
     logfile.set_default('run', opt.seed)
     logfile.set_default('method', method_name)
-    assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    
+    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    
     return logfile
 
 
 def load_pretrained(opt):
+
+    print("load_pretrained...")
+    print("opt.pretrained: ", {opt.pretrained})
+
     if opt.pretrained == 'glove':
+        print("path:", {opt.glove_path})
         return GloVe(path=opt.glove_path)
     elif opt.pretrained == 'word2vec':
+        print("path:", {opt.word2vec_path})
         return Word2Vec(path=opt.word2vec_path, limit=1000000)
     elif opt.pretrained == 'fasttext':
+        print("path:", {opt.fasttext_path})
         return FastTextEmbeddings(path=opt.fasttext_path, limit=1000000)
     return None
 
@@ -164,10 +198,14 @@ def init_loss(classification_type):
 
 
 def main(opt):
+    print()
+    print("main(opt)")
+    
     method_name = set_method_name()
     logfile = init_logfile(method_name, opt)
     pretrained = load_pretrained(opt)
 
+    print("loading dataset...")
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained)
 
@@ -179,8 +217,10 @@ def main(opt):
     yte = dataset.test_target
 
     vocabsize = len(word2index) + len(out_of_vocabulary)
+    print("vocabsize:", {vocabsize})
     pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt)
 
+    print("setting up model...")
     model = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
     criterion = init_loss(dataset.classification_type)
@@ -190,7 +230,12 @@ def main(opt):
     create_if_not_exist(opt.checkpoint_dir)
     early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
 
+    print()
+    print("training...")
     for epoch in range(1, opt.nepochs + 1):
+
+        print("         epoch ", {epoch})
+        
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name)
 
         # validation
@@ -205,6 +250,9 @@ def main(opt):
             if not opt.plotmode: # with plotmode activated, early-stop is ignored
                 break
 
+    print()
+    print("restoring best model...")
+    
     # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
@@ -257,6 +305,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
     mean_loss = np.mean(interval_loss)
     logfile.add_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
+
     return mean_loss
 
 
@@ -353,7 +402,7 @@ if __name__ == '__main__':
                         metavar='str',
                         help=f'path to GoogleNews-vectors-negative300.bin pretrained vectors (used only '
                              f'with --pretrained word2vec)')
-    parser.add_argument('--glove-path', type=str, default='.vector_cache',
+    parser.add_argument('--glove-path', type=str, default='../.vector_cache',
                         metavar='PATH',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained glove)')
     parser.add_argument('--fasttext-path', type=str, default='../datasets/fastText/crawl-300d-2M.vec',
@@ -373,7 +422,10 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    
     print(f'running on {opt.device}')
+    logging.info(f'Running on {opt.device}')
+    
     assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
     torch.manual_seed(opt.seed)
 
@@ -390,10 +442,11 @@ if __name__ == '__main__':
     if opt.droptype == 'sup' and opt.supervised==False:
         opt.droptype = 'none'
         print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
+        logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
     if opt.droptype == 'learn' and opt.learnable==0:
         opt.droptype = 'none'
         print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-
+        logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
     if opt.pickle_dir:
         opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
 

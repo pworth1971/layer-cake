@@ -96,14 +96,22 @@ def main():
     method_name += '-glove' if args.pretrained else ''
     method_name += '-rand' if args.pretrained and args.learnable>0 else ''
     method_name += '-sup' if args.supervised else ''
-    logfile = CSVLog(args.log_file, ['dataset', 'method', 'lr', 'learnable', 'nepochs', 'seed', 'measure', 'value', 'timelapse'], autoflush=True)
+
+    logfile = CSVLog(
+        file=args.log_file+"_fastText", 
+        columns=['dataset', 'method', 'lr', 'learnable', 'nepochs', 'seed', 'measure', 'value', 'timelapse'], 
+        autoflush=True, 
+        verbose=True, 
+        overwrite=False)
+    
     logfile.set_default('dataset', args.dataset)
     logfile.set_default('method', method_name)
     logfile.set_default('seed', args.seed)
     logfile.set_default('lr', args.lr)
     logfile.set_default('learnable', args.learnable)
     logfile.set_default('nepochs', args.nepochs)
-    assert args.force or not logfile.already_calculated(), f'results for dataset {args.dataset} method {method_name} and run {args.seed} already calculated'
+    
+    #assert args.force or not logfile.already_calculated(), f'results for dataset {args.dataset} method {method_name} and run {args.seed} already calculated'
 
     # load dataset
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_path)

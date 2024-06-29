@@ -74,7 +74,7 @@ to handle words not found in GloVe’s vocabulary and replacing them with zeros.
 """
 class GloVe(PretrainedEmbeddings):
 
-    def __init__(self, setname='840B', path='./vector_cache', max_vectors=None):
+    def __init__(self, setname='840B', path='./../vector_cache', max_vectors=None):         # presumes running from bin directory
         super().__init__()
         print(f'Loading GloVe pretrained vectors from torchtext')
         # Initialize GloVe model from torchtext
@@ -86,7 +86,7 @@ class GloVe(PretrainedEmbeddings):
         return set(self.embed.stoi.keys())
 
     def dim(self):
-        # getting teh dimension of the embeddings
+        # getting the dimension of the embeddings
         return self.embed.dim
 
     def extract(self, words):
@@ -127,7 +127,8 @@ class Word2Vec(PretrainedEmbeddings):
         print(f'Loading word2vec format pretrained vectors from {path}')
         assert os.path.exists(path), print(f'pre-trained keyed vectors not found in {path}')
         self.embed = gensim.models.KeyedVectors.load_word2vec_format(path, binary=binary, limit=limit)
-        self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
+        #self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
+        self.word2index = {w: i for i,w in enumerate(self.embed.index_to_key)}      # gensim 4.0
         print('Done')
 
     def vocabulary(self):
