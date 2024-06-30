@@ -113,14 +113,42 @@ def index_dataset(dataset, pretrained=None):
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
-
+# ---------------------------------------------------------------------------------------------------------------------------
+# 
+# embedding_matrix(): construct the embedding matrix that model will use for input (text) representations. 
+# 
+# Pretrained Embeddings Loading: If the model configuration includes using pretrained embeddings 
+# (such as GloVe, Word2Vec, or FastText), this function extracts these embeddings based on the vocabulary 
+# of your dataset. 
+# 
+# Supervised Embeddings Construction: If your setup includes supervised embeddings, the function 
+# constructs these embeddings based on the labels associated with your data. This is typically 
+# done to integrate semantic information from the labels directly into the embeddings,  
+# improving model performance on specific tasks.
+#
+# Combination of Embeddings: If both pretrained and supervised embeddings are used, this function 
+# combines them into a single embedding matrix. This combination can be a simple concatenation along the 
+# feature dimension.
+#
+# Handling Missing Embeddings: The function also handles scenarios where certain words in the dataset 
+# vocabulary might not be covered by the pretrained embeddings. This often involves assigning a zero 
+# vector or some other form of default vector for these out-of-vocabulary (OOV) terms.
+#
+# Embedding Matrix Finalization: Finally, the function prepares the combined embedding matrix to be 
+# used by the neural network. This includes ensuring the matrix is of the correct size and format,
+# potentially converting it to a torch.Tensor if using PyTorch, and ensuring it's ready for GPU processing 
+# if necessary.
+# 
+# ---------------------------------------------------------------------------------------------------------------------------
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
 
     print('embedding_matrix()...')
+
     logging.info(f"embedding_matrix()...")
     
     pretrained_embeddings = None
     sup_range = None
+    
     if opt.pretrained or opt.supervised:
         pretrained_embeddings = []
 
@@ -192,6 +220,7 @@ def load_pretrained(opt):
     elif opt.pretrained == 'fasttext':
         print("path:", {opt.fasttext_path})
         return FastTextEmbeddings(path=opt.fasttext_path, limit=1000000)
+
     return None
 
 
@@ -219,8 +248,8 @@ def main(opt):
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained)
 
-    # dataset split tr/val/test
-    val_size = min(int(len(devel_index) * .2), 20000)
+    print("train / test data split...")
+    val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
     )
@@ -228,6 +257,9 @@ def main(opt):
 
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
+
+    # build the word embeddings based upon opt
+    print("building the embeddings...")
     pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt)
 
     #
