@@ -88,7 +88,13 @@ def embedding_matrix(dataset, pretrained=False, supervised=False, random=0):
 
 
 
-def main():
+def main(opt):
+
+    print()
+    print()
+    print("------------------------------------------- ##### MAIN LOOP ##### -------------------------------------------")
+    print()
+    print("... fastText::main(opt)... ")
 
     # init the log-file
     method_name = 'fasttext'
@@ -97,13 +103,17 @@ def main():
     method_name += '-rand' if args.pretrained and args.learnable>0 else ''
     method_name += '-sup' if args.supervised else ''
 
+    logfile = init_logfile(method_name, opt)
+
+    """
     logfile = CSVLog(
         file=args.log_file+"_fastText", 
         columns=['dataset', 'method', 'lr', 'learnable', 'nepochs', 'seed', 'measure', 'value', 'timelapse'], 
         autoflush=True, 
         verbose=True, 
         overwrite=False)
-    
+    """
+
     logfile.set_default('dataset', args.dataset)
     logfile.set_default('method', method_name)
     logfile.set_default('seed', args.seed)
@@ -133,17 +143,37 @@ def main():
     create_if_not_exist(args.dataset_dir)
     trainpath = get_input_file(train, ytr)
 
+    loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
+
     loss = 'ova' if dataset.classification_type=='multilabel' else 'softmax'
     ngrams = 2 if args.bigrams else 1
     tinit = time()
+    
+    # set up the model
     if matrix_path is None:
         model = train_supervised(
-            input=trainpath, epoch=args.nepochs, lr=args.lr, wordNgrams=ngrams, verbose=2, minCount=1, loss=loss, dim=args.learnable
+            input=trainpath, 
+            epoch=args.nepochs, 
+            lr=args.lr, 
+            wordNgrams=ngrams, 
+            verbose=2, 
+            minCount=1, 
+            loss=loss, 
+            dim=args.learnable
         )
     else:
         model = train_supervised(
-            input=trainpath, epoch=args.nepochs, lr=args.lr, wordNgrams=ngrams, verbose=2, minCount=1, loss=loss, pretrainedVectors=matrix_path, dim=dims
+            input=trainpath, 
+            epoch=args.nepochs, 
+            lr=args.lr, 
+            wordNgrams=ngrams, 
+            verbose=2, 
+            minCount=1, 
+            loss=loss, 
+            pretrainedVectors=matrix_path, 
+            dim=dims
         )
+
     tend = time()-tinit
 
     predic_and_eval(model, val, yva, 'va', dataset.classification_type, logfile, tend)
@@ -217,6 +247,11 @@ if __name__ == '__main__':
     parser.add_argument('--supervised', action='store_true', default=False, help='use supervised embeddings')
 
     args = parser.parse_args()
+
+    print()
+    print_arguments(args)
+    print()
+
     assert args.dataset in available_datasets, f'unknown dataset {args.dataset}'
 
-    main()
+    main(args)

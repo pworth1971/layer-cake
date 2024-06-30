@@ -4,13 +4,14 @@
 
 EMB="../.vector_cache"
 PY="python ../src/layer_cake.py"
-LOG="--log-file ../log/r10runs.pretrained"
+FT="python ../src/fasttext.py"
+LOG="--log-file ../log/5runs.pretrained"
 CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
 EP="10"
 
-for run in {1..5}              # 0 is for plots, 1 is already performed in hyper parameter search
+for run in {1..5}                   
 do
 
 
@@ -25,6 +26,13 @@ dataset="--dataset reuters21578"
 # CNN
 #######################################################################
 $PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP
+
+## fastText
+$PY $LOG $dataset	$CNN	--channels 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec --seed $run   --nepochs $EP
+$PY $LOG $dataset	$CNN	--channels 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec --tunable --seed $run --nepochs $EP
+$PY $LOG $dataset	$CNN	--learnable 115	--channels 256	    --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec --supervised --seed $run  --nepochs $EP
+$PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec --supervised	--tunable --seed $run   --nepochs $EP
 
 ## GloVe
 $PY $LOG $dataset	$CNN	--channels 256	--pretrained glove  --glove-path $EMB --seed $run   --nepochs $EP
@@ -46,6 +54,13 @@ $PY $LOG $dataset	$CNN	--channels 512	--pretrained word2vec --word2vec-path $EMB
 #######################################################################
 $PY $LOG $dataset	$LSTM	--learnable 200 --seed $run --nepochs $EP
 
+## fastText
+$PY $LOG $dataset	$LSTM	--hidden 256    --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --seed $run   --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 256    --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run --nepochs $EP
+$PY $LOG $dataset	$LSTM	--learnable 115	--hidden 256	    --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised --seed $run  --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised	--tunable --seed $run   --nepochs $EP
+
 ## GloVe
 $PY $LOG $dataset	$LSTM	--hidden 256    --pretrained glove  --glove-path $EMB --seed $run   --nepochs $EP
 $PY $LOG $dataset	$LSTM	--hidden 256    --pretrained glove	--glove-path $EMB --tunable --seed $run --nepochs $EP
@@ -65,6 +80,13 @@ $PY $LOG $dataset	$LSTM	--hidden 256	--pretrained word2vec --word2vec-path $EMB/
 # ATTN
 #######################################################################
 $PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256 --seed $run    --nepochs $EP
+
+## fastText
+$PY $LOG $dataset	$ATTN	--hidden 1024	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--hidden 1024	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 115	--hidden 1024       --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run --droptype learn  --nepochs $EP
+$PY $LOG $dataset	$ATTN	--sup-drop 0.2	--hidden 256        --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised	--tunable --seed $run   --nepochs $EP
 
 ## GloVe
 $PY $LOG $dataset	$ATTN	--hidden 1024	--pretrained glove  --glove-path $EMB --seed $run   --nepochs $EP
@@ -100,8 +122,15 @@ dataset="--dataset 20newsgroups"
 #######################################################################
 $PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP
 
+## fastText
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --seed $run
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$CNN	--learnable 20	--channels 128	    --pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised	--tunable --seed $run   --nepochs $EP
+
 ## GloVe
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove  --seed $run
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove  --glove-path $EMB   --seed $run
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--glove-path $EMB   --tunable --seed $run   --nepochs $EP
 $PY $LOG $dataset	$CNN	--learnable 20	--channels 128	    --pretrained glove  --glove-path $EMB --tunable --seed $run --droptype learn    --nepochs $EP
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--glove-path $EMB   --supervised --seed $run    --nepochs $EP
@@ -119,6 +148,13 @@ $PY $LOG $dataset	$CNN	--channels 128	--pretrained gword2vec --word2vec-path $EM
 # LSTM
 #######################################################################
 $PY $LOG $dataset	$LSTM	--learnable 200	--hidden 256 --seed $run    --nepochs $EP
+
+## fastText
+$PY $LOG $dataset	$LSTM	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --seed $run --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$LSTM	--learnable 20	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec   --tunable --seed $run --droptype learn  --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 2048	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$LSTM	--hidden 1024	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised	--tunable --seed $run   --nepochs $EP
 
 ## GloVe
 $PY $LOG $dataset	$LSTM	--hidden 256	--pretrained glove --glove-path $EMB    --seed $run --nepochs $EP
@@ -141,6 +177,13 @@ $PY $LOG $dataset	$LSTM	--hidden 1024	--pretrained word2vec --word2vec-path $EMB
 #######################################################################
 $PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256 --seed $run    --nepochs $EP
 
+## fastText
+$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --seed $run --nepochs $EP
+$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 20	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec   --tunable --seed $run --droptype learn  --nepochs $EP
+$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext --fasttext-path $EMB/crawl-300d-2M.vec    --supervised	--tunable --seed $run   --nepochs $EP
+
 ## GloVe
 $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained glove --glove-path $EMB    --seed $run --nepochs $EP
 $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained glove	--glove-path $EMB   --tunable --seed $run   --nepochs $EP
@@ -160,23 +203,5 @@ $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained word2vec --word2vec-path $EMB/
 # -----------------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
-
-
-
-
-
-
-# -----------------------------------------------------------------------------------------------------------------------------------------
-#
-# fastText
-#
-# -----------------------------------------------------------------------------------------------------------------------------------------
-
-common="--dataset-dir ../fasttext/dataset --log-file ../log/10runs.fasttext"
-python ../src/fasttext.py --dataset 20newsgroups	--learnable 50	--lr 0.5	--nepochs $EP	--seed $run --pickle-path ../pickles/20newsgroups.pickle
-python ../src/fasttext.py --dataset reuters21578	--learnable 200	--lr 0.5	--nepochs $EP	--seed $run --pickle-path ../pickles/reuters21578.pickle
-
-# -----------------------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------------------
 
 done

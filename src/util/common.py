@@ -1,5 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -7,6 +8,9 @@ from scipy.sparse import vstack, issparse
 from joblib import Parallel, delayed
 import multiprocessing
 import itertools
+
+from util.csv_log import CSVLog
+import matplotlib.pyplot as plt
 
 
 def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
@@ -143,3 +147,49 @@ def tokenize_parallel(documents, tokenizer, max_tokens, n_jobs=-1):
     return list(itertools.chain.from_iterable(tokens))
 
 
+def plot_loss_over_epochs(dataset, data, method_name, output_path):
+    """
+    Plots the training and testing loss over epochs.
+
+    Parameters:
+        data (dict): A dictionary containing 'epochs', 'train_loss', and 'test_loss'.
+        method_name (str): The name of the method for labeling the plot.
+        output_path (str): Path to save the plot.
+    """
+    epochs = data['epochs']
+    train_loss = data['train_loss']
+    test_loss = data['test_loss']
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(epochs, train_loss, label='Training Loss', marker='o')
+    plt.plot(epochs, test_loss, label='Testing Loss', marker='x')
+    plt.title(f'Loss Over for {method_name} - {dataset}')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(f'{output_path}/{dataset}-{method_name}_loss.png')
+    plt.close()
+
+
+def print_arguments(options):
+    print("Command Line Arguments:")
+    for arg, value in vars(options).items():
+        print(f"{arg}: {value}")
+
+
+def init_logfile(method_name, opt):
+
+    logfile = CSVLog(
+        file=opt.log_file+"_main", 
+        columns=['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'], 
+        verbose=True, 
+        overwrite=False)
+
+    logfile.set_default('dataset', opt.dataset)
+    logfile.set_default('run', opt.seed)
+    logfile.set_default('method', method_name)
+    
+    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    
+    return logfile

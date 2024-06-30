@@ -189,23 +189,6 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
 
 
-def init_logfile(method_name, opt):
-
-    logfile = CSVLog(
-        file=opt.log_file+"_main", 
-        columns=['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'], 
-        verbose=True, 
-        overwrite=False)
-
-    logfile.set_default('dataset', opt.dataset)
-    logfile.set_default('run', opt.seed)
-    logfile.set_default('method', method_name)
-    
-    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
-    
-    return logfile
-
-
 def load_pretrained(opt):
 
     print("load_pretrained...")
@@ -241,7 +224,7 @@ def main(opt):
     print()
     print("------------------------------------------- ##### MAIN LOOP ##### -------------------------------------------")
     print()
-    print("...main(opt)...")
+    print("... layer_cake::main(opt)... ")
     
     method_name = set_method_name()
     logfile = init_logfile(method_name, opt)
@@ -265,10 +248,7 @@ def main(opt):
     print("building the embeddings...")
     pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt)
 
-    #
-    # Initialize loss tracking
-    #
-    loss_history = {'train_loss': [], 'test_loss': []}  
+    loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
     print("setting up model...")
     model = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
@@ -442,38 +422,6 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 # end test() ---------------------------------------------------------------------------------------------------------------------------
 
 
-def plot_loss_over_epochs(dataset, data, method_name, output_path):
-    """
-    Plots the training and testing loss over epochs.
-
-    Parameters:
-        data (dict): A dictionary containing 'epochs', 'train_loss', and 'test_loss'.
-        method_name (str): The name of the method for labeling the plot.
-        output_path (str): Path to save the plot.
-    """
-    epochs = data['epochs']
-    train_loss = data['train_loss']
-    test_loss = data['test_loss']
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(epochs, train_loss, label='Training Loss', marker='o')
-    plt.plot(epochs, test_loss, label='Testing Loss', marker='x')
-    plt.title(f'Loss Over for {method_name} - {dataset}')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f'{output_path}/{dataset}-{method_name}_loss.png')
-    plt.close()
-
-
-
-def print_arguments(options):
-    print("Command Line Arguments:")
-    for arg, value in vars(options).items():
-        print(f"{arg}: {value}")
-
-
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
 # command line argument, program: parser plus assertions + main(opt)
@@ -543,14 +491,14 @@ if __name__ == '__main__':
     parser.add_argument('--val-epochs', type=int, default=1, metavar='int',
                         help='number of training epochs to perform on the validation set once training is '
                              'over (default 1)')
-    parser.add_argument('--word2vec-path', type=str, default='../datasets/Word2Vec/GoogleNews-vectors-negative300.bin',
+    parser.add_argument('--word2vec-path', type=str, default='../.vector_cache/GoogleNews-vectors-negative300.bin',
                         metavar='str',
                         help=f'path to GoogleNews-vectors-negative300.bin pretrained vectors (used only '
                              f'with --pretrained word2vec)')
     parser.add_argument('--glove-path', type=str, default='../.vector_cache',
                         metavar='PATH',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained glove)')
-    parser.add_argument('--fasttext-path', type=str, default='../datasets/fastText/crawl-300d-2M.vec',
+    parser.add_argument('--fasttext-path', type=str, default='../.vector_cache/crawl-300d-2M.vec',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained word2vec)')
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
@@ -567,10 +515,14 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+    print()
+    print()
+    print()
+
+    print(f'*************** NEW RUN ON DEVICE == {opt.device} ***************')
     
-    print(f'running on {opt.device}')
-    logging.info(f'Running on {opt.device}')
-    
+    print()
     print()
 
     print_arguments(opt)                # Call the function to print arguments

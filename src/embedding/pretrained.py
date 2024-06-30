@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+
 import torch, torchtext
 from torchtext.vocab import GloVe as TorchTextGloVe
+
 import gensim
 import os
 import numpy as np
+import requests
+import zipfile
 
 
 # --- PJW Comments added ---
@@ -156,20 +160,64 @@ Special Handling:
 If a binary version of the file exists, it uses that directly. If only a textual version is available, it 
 loads the text format and then saves it as a binary file for faster future loading.
 """
+
 class FastTextEmbeddings(Word2Vec):
 
     def __init__(self, path, limit=None):
+
+        pathvec = path
         pathbin = path+'.bin'
+        pathzip = pathvec+'.zip'
+
+        ft_emb_url = "https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip"
+
         if os.path.exists(pathbin):
             print('open binary file')
             super().__init__(pathbin, limit, binary=True)
-        else:
-            print('open textual file')
+        elif os.path.exists(pathvec):
+            print('open textual (.vec) file')
             super().__init__(path, limit, binary=False)
             print('saving as binary file')
             self.save_binary(pathbin)
             print('done')
+        else:
+            print("downlading embeddings from ", {ft_emb_url})
+            self.ensure_emb_binary_exists(pathvec, ft_emb_url, pathzip)
+             # After ensuring the file exists, initialize the embeddings
+            if os.path.exists(pathbin):
+                super().__init__(pathbin, limit, binary=True)
+            else:
+                super().__init__(pathvec, limit, binary=False)
+
+
+    def ensure_emb_binary_exists(self, filename, url, zip_filename):
+        """
+        Checks if the specified .vec file exists.
+        If it doesn't exist, download a .zip file from the given URL and unzip it.
+        """
+        # Check if the .vec file exists
+        if not os.path.exists(filename):
+            # If the .vec file does not exist, check if the .zip file exists
+            if not os.path.exists(zip_filename):
+                print(f"{zip_filename} not found, downloading...")
+                # Download the .zip file
+                with requests.get(url, stream=True) as r:
+                    r.raise_for_status()
+                    with open(zip_filename, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                print("Download completed!")
+            
+            # Unzip the file in the directory of 'filename' without including the file name
+            emb_dir = os.path.dirname(filename)
+            print(f"Unzipping the file to {emb_dir}...")
+            with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+                zip_ref.extractall(path=emb_dir)
+            print(f"{filename} is ready for use!")
+        else:
+            print(f"{filename} already exists!")
 
 
     def save_binary(self, path):
         self.embed.save_word2vec_format(path, binary=True)
+
