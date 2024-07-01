@@ -1,0 +1,4 @@
+dataset	measure	method	timelapse	value
+20newsgroups	te-macro-F1	SVM-glove-default	53.16515898704529	0.5911295553059044
+20newsgroups	te-micro-F1	SVM-glove-default	53.16515898704529	0.6087360594795539
+20newsgroups	te-accuracy	SVM-glove-default	53.16515898704529	0.6087360594795539

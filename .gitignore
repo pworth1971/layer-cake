@@ -10,3 +10,6 @@ src/util/__pycache__
 .vector_cache/
 fasttext/dataset/
 output/
+bin/*.out
+vector_cache/
+src/supervised_term_weighting/__pycache__/

@@ -78,8 +78,10 @@ to handle words not found in GloVe’s vocabulary and replacing them with zeros.
 """
 class GloVe(PretrainedEmbeddings):
 
-    def __init__(self, setname='840B', path='./../vector_cache', max_vectors=None):         # presumes running from bin directory
+    def __init__(self, setname='840B', path='../.vector_cache', max_vectors=None):         # presumes running from bin directory
+        
         super().__init__()
+        
         print(f'Loading GloVe pretrained vectors from torchtext')
         # Initialize GloVe model from torchtext
         self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)

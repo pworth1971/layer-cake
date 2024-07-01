@@ -230,7 +230,7 @@ def main(opt):
     logfile = init_logfile(method_name, opt)
     pretrained = load_pretrained(opt)
 
-    print("loading dataset...")
+    print("loading dataset ", {opt.dataset})
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained)
 
@@ -434,81 +434,113 @@ if __name__ == '__main__':
 
     # Training settings
     parser = argparse.ArgumentParser(description='Neural text classification with Word-Class Embeddings')
+    
     parser.add_argument('--dataset', type=str, default='reuters21578', metavar='str',
                         help=f'dataset, one in {available_datasets}')
+    
     parser.add_argument('--batch-size', type=int, default=100, metavar='int',
                         help='input batch size (default: 100)')
+    
     parser.add_argument('--batch-size-test', type=int, default=250, metavar='int',
                         help='batch size for testing (default: 250)')
+    
     parser.add_argument('--nepochs', type=int, default=100, metavar='int',
                         help='number of epochs (default: 100)')
+    
     parser.add_argument('--patience', type=int, default=10, metavar='int',
                         help='patience for early-stop (default: 10)')
+    
     parser.add_argument('--plotmode', action='store_true', default=False,
                         help='in plot mode, executes a long run in order to generate enough data to produce trend plots'
                              ' (test-each should be >0. This mode is used to produce plots, and does not perform a '
                              'final evaluation on the test set other than those performed after test-each epochs).')
+    
     parser.add_argument('--hidden', type=int, default=512, metavar='int',
                         help='hidden lstm size (default: 512)')
+    
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
+    
     parser.add_argument('--lr', type=float, default=1e-3, metavar='float',
                         help='learning rate (default: 1e-3)')
+    
     parser.add_argument('--weight_decay', type=float, default=0, metavar='float',
                         help='weight decay (default: 0)')
+    
     parser.add_argument('--droptype', type=str, default='sup', metavar='DROPTYPE',
                         help=f'chooses the type of dropout to apply after the embedding layer. Default is "sup" which '
                              f'only applies to word-class embeddings (if present). Other options include "none" which '
                              f'does not apply dropout (same as "sup" with no supervised embeddings), "full" which '
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
+    
     parser.add_argument('--dropprob', type=float, default=0.5, metavar='[0.0, 1.0]',
                         help='dropout probability (default: 0.5)')
+    
     parser.add_argument('--seed', type=int, default=1, metavar='int',
                         help='random seed (default: 1)')
+    
     parser.add_argument('--log-interval', type=int, default=10, metavar='int',
                         help='how many batches to wait before printing training status')
+    
     parser.add_argument('--log-file', type=str, default='../log/log.csv', metavar='str',
                         help='path to the log csv file')
+    
     parser.add_argument('--pickle-dir', type=str, default='../pickles', metavar='str',
                         help=f'if set, specifies the path where to save/load the dataset pickled (set to None if you '
                              f'prefer not to retain the pickle file)')
+    
     parser.add_argument('--test-each', type=int, default=0, metavar='int',
                         help='how many epochs to wait before invoking test (default: 0, only at the end)')
+    
     parser.add_argument('--checkpoint-dir', type=str, default='../checkpoint', metavar='str',
                         help='path to the directory containing checkpoints')
+    
     parser.add_argument('--net', type=str, default='lstm', metavar='str',
                         help=f'net, one in {NeuralClassifier.ALLOWED_NETS}')
+    
     parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext',
                         help='pretrained embeddings, use "glove", "word2vec", or "fasttext" (default None)')
+    
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
+    
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
+    
     parser.add_argument('--learnable', type=int, default=0, metavar='int',
                         help='dimension of the learnable embeddings (default 0)')
+    
     parser.add_argument('--val-epochs', type=int, default=1, metavar='int',
                         help='number of training epochs to perform on the validation set once training is '
                              'over (default 1)')
+    
     parser.add_argument('--word2vec-path', type=str, default='../.vector_cache/GoogleNews-vectors-negative300.bin',
                         metavar='str',
                         help=f'path to GoogleNews-vectors-negative300.bin pretrained vectors (used only '
                              f'with --pretrained word2vec)')
+    
     parser.add_argument('--glove-path', type=str, default='../.vector_cache',
                         metavar='PATH',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained glove)')
+    
     parser.add_argument('--fasttext-path', type=str, default='../.vector_cache/crawl-300d-2M.vec',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained word2vec)')
+    
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
+    
     parser.add_argument('--max-epoch-length', type=int, default=None, metavar='int',
                         help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
+    
     parser.add_argument('--force', action='store_true', default=False,
                         help='do not check if this experiment has already been run')
+    
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
 
