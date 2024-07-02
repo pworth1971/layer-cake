@@ -11,20 +11,28 @@ from sklearn.model_selection import train_test_split
 # custom classes 
 from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
 from embedding.pretrained import *
+
 from model.classification import NeuralClassifier
+
 from util.early_stop import EarlyStopping
 from util.common import *
 from util.csv_log import CSVLog
 from util.file import create_if_not_exist
 from util.metrics import *
+
 from data.dataset import *
 
 import warnings
 warnings.filterwarnings("ignore")
 
+
+
 # Set up logging
 logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)s:%(message)s')
+
+
+
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     
@@ -156,7 +164,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             word_list = get_word_list(word2index, out_of_vocabulary)
             weights = pretrained.extract(word_list)
             pretrained_embeddings.append(weights)
-            print('\t[pretrained-matrix] ', weights.shape)
+            print('\t[pretrained-matrix]', weights.shape)
             del pretrained
 
         if opt.supervised:
@@ -179,8 +187,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
 
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
 
-    print('[embedding matrix done]')
-    logging.info(f"[embedding matrix done]")
+    print('\t[final embedding matrix]\n\t', pretrained_embeddings.size())
 
     return pretrained_embeddings, sup_range
 
@@ -273,6 +280,7 @@ def main(opt):
         #macrof1 = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
         
         early_stop(macrof1, epoch)
+
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
                 test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
@@ -552,7 +560,7 @@ if __name__ == '__main__':
     print()
     print()
 
-    print(f'*************** NEW RUN ON DEVICE == {opt.device} ***************')
+    print(f'*************** RUN ON DEVICE == {opt.device} ***************')
     
     print()
     print()
@@ -566,22 +574,29 @@ if __name__ == '__main__':
 
     assert opt.dataset in available_datasets, \
         f'unknown dataset {opt.dataset}'
+    
     assert opt.pretrained in [None]+AVAILABLE_PRETRAINED, \
         f'unknown pretrained set {opt.pretrained}'
+    
     assert not opt.plotmode or opt.test_each > 0, \
         'plot mode implies --test-each>0'
+    
     assert opt.supervised_method in STWFUNCTIONS, \
         f'unknown supervised term weighting function; allowed are {STWFUNCTIONS}'
+    
     assert opt.droptype in available_dropouts, \
         f'unknown dropout type; allowed are {available_dropouts}'
+    
     if opt.droptype == 'sup' and opt.supervised==False:
         opt.droptype = 'none'
         print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
         logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
+    
     if opt.droptype == 'learn' and opt.learnable==0:
         opt.droptype = 'none'
         print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
         logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
+    
     if opt.pickle_dir:
         opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
 

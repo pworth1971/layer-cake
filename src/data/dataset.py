@@ -13,6 +13,13 @@ from tqdm import tqdm
 from os.path import join
 import re
 
+# for file download and extraction (rcv1 dataset)
+from pathlib import Path
+from urllib import request
+import tarfile
+import gzip
+import shutil
+
 
 def init_vectorizer():
     return TfidfVectorizer(min_df=5, sublinear_tf=True)
@@ -69,7 +76,27 @@ class Dataset:
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
     def _load_rcv1(self):
-        data_path = '../datasets/RCV1-v2/unprocessed_corpus' #TODO: check when missing
+
+        #
+        # TODO: this code doesnt work, data set not readily available
+        #
+        data_path = '../datasets/RCV1-v2/unprocessed_corpus'               
+
+        print('Downloading rcv1v2-ids.dat.gz...')
+        self.download_file(
+            'http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a07-rcv1-doc-ids/rcv1v2-ids.dat.gz', 
+            data_path)
+
+        print('Downloading rcv1-v2.topics.qrels.gz...')
+        self.download_file(
+            'http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a08-topic-qrels/rcv1-v2.topics.qrels.gz', 
+            data_path)
+
+        print("extractng files...")
+        self.extract_gz(data_path + '/' +  'rcv1v2-ids.dat.gz')
+        self.extract_gz(data_path + '/' + 'rcv1-v2.topics.qrels.gz')
+        self.extract_tar(data_path + '/' + 'rcv1.tar.xz')
+
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
@@ -113,6 +140,7 @@ class Dataset:
 
     def _load_20news(self):
         metadata = ('headers', 'footers', 'quotes')
+        
         devel = fetch_20newsgroups(subset='train', remove=metadata)
         test = fetch_20newsgroups(subset='test', remove=metadata)
         self.classification_type = 'singlelabel'
@@ -133,7 +161,10 @@ class Dataset:
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
     def _load_wipo(self, classmode, classlevel):
+        print("_load_wipo()")
+
         assert classmode in {'singlelabel', 'multilabel'}, 'available class_mode are sl (single-label) or ml (multi-label)'
+
         data_path = '../datasets/WIPO/wipo-gamma/en'
         data_proc = '../datasets/WIPO-extracted'
 
@@ -146,11 +177,13 @@ class Dataset:
 
         self.classification_type = classmode
         if classmode== 'multilabel':
+            print("--multilabel--")
             devel_target = [d.all_labels for d in devel]
             test_target  = [d.all_labels for d in test]
             self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel_target, test_target)
             self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         else:
+            print("--single label--")
             devel_target = [d.main_label for d in devel]
             test_target  = [d.main_label for d in test]
             # only for labels with at least one training document
@@ -177,10 +210,55 @@ class Dataset:
     def analyzer(self):
         return self._vectorizer.build_analyzer()
 
+    def download_file(self, url, path):
+        file_name = url.split('/')[-1]
+        filename_with_path = path + "/" + file_name
+
+        print("file: ", {filename_with_path})
+
+        file = Path(filename_with_path)
+
+        if not file.exists():
+            print('File %s does not exist. Downloading ...\n', file_name)
+            file_data = request.urlopen(url)
+            data_to_write = file_data.read()
+
+            with file.open('wb') as f:
+                f.write(data_to_write)
+        else:
+            print('File %s already existed.\n', file_name)
+
+    def extract_tar(self, path):
+        path = Path(path)
+        dir_name = '.'.join(path.name.split('.')[:-2])
+        dir_output = path.parent/dir_name
+        if not dir_output.exists():
+            if path.exists():
+                tf = tarfile.open(str(path))
+                tf.extractall(path.parent)
+            else:
+                print('ERROR: File %s is required. \n', path.name)
+
+    def extract_gz(self, path):
+        path = Path(path)
+        file_output_name = '.'.join(path.name.split('.')[:-1])
+        file_name = path.name
+        if not (path.parent/file_output_name).exists():
+            print('Extracting %s ...\n', file_name)
+
+            with gzip.open(str(path), 'rb') as f_in:
+                with open(str(path.parent/file_output_name), 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+
+
     @classmethod
     def load(cls, dataset_name, pickle_path=None):
 
+        print("Dataset::load()")
+
         if pickle_path:
+            print("picklepath: ", {pickle_path})
+
             if os.path.exists(pickle_path):
                 print(f'loading pickled dataset from {pickle_path}')
                 dataset = pickle.load(open(pickle_path, 'rb'))

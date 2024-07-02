@@ -74,6 +74,10 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
     
     tinit = time()
     
+    print("-- Xtr, ytr, Xte, yte shapes --")
+    print(Xtr.shape, ytr.shape, Xte.shape, yte.shape)
+    print()
+
     param_grid = {'C': np.logspace(-3, 3, 7)} if optimizeC else None
     cv = 5
     
@@ -92,16 +96,20 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
 
         print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
         
-        """
         XtrArr = np.asarray(Xtr)
         ytrArr = np.asarray(ytr)
 
         print("as arrays: ", {Xtr.shape}, {ytr.shape})
-        """
 
-        cls.fit(Xtr, ytr)
+        #cls.fit(Xtr, ytr)
+
+        cls.fit(XtrArr, ytrArr)
         
-        yte_ = cls.predict(Xte)
+        XteArr = np.asarray(Xte)
+
+        #yte_ = cls.predict(Xte)
+
+        yte_ = cls.predict(XteArr)
 
         Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
@@ -118,13 +126,13 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
 # or a combination of both.
 # --------------------------------------------------------------------------------------------------------
 def embedding_matrix(dataset, pretrained=False, supervised=False):
-    #print("embedding_matrix()")
 
     assert pretrained or supervised, 'useless call without requiring pretrained and/or supervised embeddings'
     
     vocabulary = dataset.vocabulary
     vocabulary = np.asarray(list(zip(*sorted(vocabulary.items(), key=lambda x: x[1])))[0])
 
+    print()
     print('[embedding matrix]')
     
     pretrained_embeddings = []
@@ -135,8 +143,10 @@ def embedding_matrix(dataset, pretrained=False, supervised=False):
         pretrained = GloVe()
         P = pretrained.extract(vocabulary).numpy()
 
+        print("P.shape: ", {P.shape})
+
         pretrained_embeddings.append(P)
-        #print(f'[pretrained_embeddings with GloVe embeddings] of shape={pretrained_embeddings.__len__}')
+        print(f'[GloVe pretrained embeddings count: {len(pretrained_embeddings[0])}')
 
         del pretrained
 
@@ -149,13 +159,16 @@ def embedding_matrix(dataset, pretrained=False, supervised=False):
         print(Xtr.shape, Ytr.shape)
 
         S = get_supervised_embeddings(Xtr, Ytr)
+
+        print("S.shape: ", {S.shape})
                 
         pretrained_embeddings.append(S)
-        #print(f'[pretrained_embeddings with supervised_matrix] of shape={pretrained_embeddings.shape}')
-
-    #print(f'[final embedding matrix computed] of shape={pretrained_embeddings.shape}')
+        print(f'supervised word-class embeddings count:{len(pretrained_embeddings[1])}')
 
     pretrained_embeddings = np.hstack(pretrained_embeddings)
+
+    print("-- after np.hstack(): pretrained_embeddings shape: ", {pretrained_embeddings.shape})
+    print()
 
     return vocabulary, pretrained_embeddings
 
@@ -194,6 +207,7 @@ def tsr(name):
 def main(args):
 
     logfile = CSVLog(args.log_file, ['dataset', 'method', 'measure', 'value', 'timelapse'], autoflush=True)
+
     logfile.set_default('dataset', args.dataset)
     
     learner = LinearSVC if args.learner == 'svm' else LogisticRegression
@@ -230,11 +244,12 @@ def main(args):
     else:
         Xtr, Xte = dataset.vectorize()
 
-    if mode in ['bert', 'bert-sup']:
-        # load best model and get document embeddings for the dataset
+    if mode in ['bert', 'bert-sup']:                            # load best model and get document embeddings for the dataset
         
         print("loading BERT embeddings...")
+    
         bert_filename = os.path.join(args.embedding_dir, f'{args.dataset}_BERTembeddings_{args.combine_strategy}.pickle')
+    
         if file.exists(bert_filename) and not args.force_embeddings:
             print('Loading pre-computed BERT document embeddings')
             with open(bert_filename, mode='rb') as inputfile:
@@ -263,8 +278,10 @@ def main(args):
         elif args.mode == 'glove-sup':
             pretrained, supervised = True, True
         _, F = embedding_matrix(dataset, pretrained=pretrained, supervised=supervised)
-        Xtr = Xtr.dot(F)
+        
+        Xtr = Xtr.dot(F)    
         Xte = Xte.dot(F)
+        
         sup_tend = time() - tinit
 
     # concatenating documents vectors from indexing with those from BERT model
@@ -280,6 +297,7 @@ def main(args):
     #
     # conversion due to np.matrix deprecation in numpy library
     #
+    """
     print("matrix array conversion (numpy suppoort)...")
     
     XtrArr = np.asarray(Xtr)
@@ -287,12 +305,13 @@ def main(args):
     XteArr = np.asarray(Xte)
     yteArr = np.asarray(yte)
 
-
+    print(XtrArr.shape, XteArr.shape)
     """
+
     Mf1, mf1, acc, tend = cls_performance(Xtr, ytr, Xte, yte, dataset.classification_type, args.optimc, learner,
                                           class_weight=class_weight)
-    """
     
+    """
     Mf1, mf1, acc, tend = cls_performance(
         XtrArr, 
         ytrArr, 
@@ -302,7 +321,8 @@ def main(args):
         args.optimc, 
         learner,
         class_weight=class_weight)
-    
+    """
+
     tend += sup_tend
     
     logfile.add_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
