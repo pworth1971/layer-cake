@@ -231,10 +231,10 @@ def init_layered_logfile(method_name, pretrained, opt):
     logfile.set_default('model', opt.net)
     logfile.set_default('pretrained', pretrained)
 
-    if (not opt.pretrained) or (opt.pretrained == ""):
+    if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
         logfile.set_default('embeddings', 'N/A')
     else:
-        logfile.set_default('embeddings', opt.pretrained)
+        logfile.set_default('embeddings', opt.pretrained) 
 
     logfile.set_default('wc-supervised', opt.supervised)
     logfile.set_default('params', method_name)
