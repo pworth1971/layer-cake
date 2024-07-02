@@ -186,8 +186,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             pretrained_embeddings.append(F)
 
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
-
-    print('\t[final embedding matrix]\n\t', pretrained_embeddings.size())
+        print('\t[final pretrained_embeddings]\n\t', pretrained_embeddings.shape)
 
     return pretrained_embeddings, sup_range
 
@@ -196,22 +195,27 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
 
 
+# 
+# load_pretrained()
+#
+# returns Boolean and then data structure with embeddings, None if 'opt.pretrained'
+# is not one if the acceptable values
+#
 def load_pretrained(opt):
 
-    print("load_pretrained...")
-    print("opt.pretrained: ", {opt.pretrained})
+    print("load_pretrained(opt): ", {opt.pretrained})
 
     if opt.pretrained == 'glove':
         print("path:", {opt.glove_path})
-        return GloVe(path=opt.glove_path)
+        return True, GloVe(path=opt.glove_path)
     elif opt.pretrained == 'word2vec':
         print("path:", {opt.word2vec_path})
-        return Word2Vec(path=opt.word2vec_path, limit=1000000)
+        return True, Word2Vec(path=opt.word2vec_path, limit=1000000)
     elif opt.pretrained == 'fasttext':
         print("path:", {opt.fasttext_path})
-        return FastTextEmbeddings(path=opt.fasttext_path, limit=1000000)
+        return True, FastTextEmbeddings(path=opt.fasttext_path, limit=1000000)
 
-    return None
+    return False, None
 
 
 def init_loss(classification_type):
@@ -229,17 +233,19 @@ def main(opt):
 
     print()
     print()
-    print("------------------------------------------- ##### MAIN LOOP ##### -------------------------------------------")
+    print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
     print()
     print("... layer_cake::main(opt)... ")
     
     method_name = set_method_name()
-    logfile = init_logfile(method_name, opt)
-    pretrained = load_pretrained(opt)
+    
+    pretrained, pretrained_vector = load_pretrained(opt)                # load pre-trained embeddings (vectors) from file
+
+    logfile = init_layered_logfile(method_name, pretrained, opt)        # initialize layered log file with core settings
 
     print("loading dataset ", {opt.dataset})
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained)
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
 
     print("train / test data split...")
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
@@ -253,7 +259,12 @@ def main(opt):
 
     # build the word embeddings based upon opt
     print("building the embeddings...")
-    pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt)
+    pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained_vector, vocabsize, word2index, out_of_vocabulary, opt)
+
+    if (pretrained_embeddings == None):
+        print('\t[pretrained_embeddings]\n\t', None)
+    else:
+        print('\t[pretrained_embeddings]\n\t', pretrained_embeddings.shape)
 
     loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
@@ -276,9 +287,6 @@ def main(opt):
         
         macrof1, test_loss = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
 
-        # validation
-        #macrof1 = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
-        
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
@@ -298,7 +306,11 @@ def main(opt):
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
 
-    logfile.add_row(epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+    logfile.add_layered_row(
+        epoch=stopepoch, 
+        measure=f'early-stop', 
+        value=early_stop.best_score, 
+        timelapse=stoptime)
 
     if not opt.plotmode:
         print()
@@ -372,7 +384,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
     mean_loss = np.mean(interval_loss)
     loss_history['train_loss'].append(mean_loss)
-    logfile.add_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
+    logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
 
     return mean_loss
 
@@ -415,15 +427,15 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     tend = time() - tinit
 
-    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
     mean_loss = test_loss / total_batches
     loss_history['test_loss'].append(mean_loss)
 
-    logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time() - tinit)
+    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time() - tinit)
 
     return Mf1, mean_loss                          # Return value for use in early stopping and loss plotting
 

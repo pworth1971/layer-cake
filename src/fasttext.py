@@ -197,9 +197,9 @@ def predic_and_eval(model, x, y, metric_prefix, classification_type, logfile, te
 
     Mf1, mf1, acc = evaluation(y, y_, classification_type)
     print(f'[{metric_prefix}] Macro-f1={Mf1:.3f} Micro-f1={mf1:.3f} Accuracy={acc:.3f} [took {tend}s]')
-    logfile.add_row(measure=f'{metric_prefix}-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_row(measure=f'{metric_prefix}-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_row(measure=f'{metric_prefix}-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(measure=f'{metric_prefix}-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(measure=f'{metric_prefix}-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(measure=f'{metric_prefix}-accuracy', value=acc, timelapse=tend)
 
 
 def as_fasttext_labels(y):

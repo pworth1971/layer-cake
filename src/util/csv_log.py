@@ -45,7 +45,34 @@ class CSVLog:
     def set_default(self, param, value):
         self.defaults[param] = value
 
-    def add_row(self, **kwargs):
+
+    def add_layered_row(self, **kwargs):
+
+        print("CSVLog::add_layered_row()")
+        print('--defaults--\n\t', {self.defaults.keys})
+        
+        # set defaults
+        for key in self.defaults.keys():
+            if key not in kwargs:
+                print("key ", {key}, "not found, setting default")
+                kwargs[key]=self.defaults[key]
+
+        local_columns = sorted(list(kwargs.keys()))
+        
+        values = [kwargs[col_i] for col_i in local_columns]
+
+        print(self.columns)
+        print(local_columns)
+        print(values)
+
+        s = pd.Series(values, index=self.columns)
+        self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
+        #self.df = pd.concat([self.df, s], ignore_index=True)            
+        if self.autoflush: self.flush()
+        self.tell(kwargs)
+
+
+    def add_simple_row(self, **kwargs):
 
         """
         print("cvs_log::add_row()")

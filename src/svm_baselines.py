@@ -325,9 +325,9 @@ def main(args):
 
     tend += sup_tend
     
-    logfile.add_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_row(measure='te-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_row(measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(measure='te-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(measure='te-accuracy', value=acc, timelapse=tend)
 
     print('Done!')
 

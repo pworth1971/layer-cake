@@ -178,10 +178,15 @@ def print_arguments(options):
         print(f"{arg}: {value}")
 
 
-def init_logfile(method_name, opt):
+# ------------------------------------------------------------------------------------------------------------------------------------------
+# init_logile()
+# 
+# Simple, legacy log file that included run info in 'method'
+#
+def init_simple_logfile(method_name, opt):
 
     logfile = CSVLog(
-        file=opt.log_file+"_main", 
+        file=opt.log_file, 
         columns=['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'], 
         verbose=True, 
         overwrite=False)
@@ -190,6 +195,56 @@ def init_logfile(method_name, opt):
     logfile.set_default('run', opt.seed)
     logfile.set_default('method', method_name)
     
-    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
     
+    return logfile
+
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------
+# init_layered_logile()
+# 
+# Enhanced log info to include explictly the model type, whether or not its 'supervised', ie added WC Embeddings, 
+# as well as tuning parametr and whether or not pretraiend embeddings are used and if so what type
+# 
+def init_layered_logfile(method_name, pretrained, opt):
+
+    logfile = CSVLog(
+        file=opt.log_file, 
+        columns=[
+            'dataset', 
+            'model', 
+            'pretrained', 
+            'embeddings', 
+            'wc-supervised', 
+            'params', 
+            'epoch', 
+            'tunable',
+            'measure', 
+            'value', 
+            'run', 
+            'timelapse'], 
+        verbose=True, 
+        overwrite=False)
+
+    logfile.set_default('dataset', opt.dataset)
+    logfile.set_default('model', opt.net)
+    logfile.set_default('pretrained', pretrained)
+
+    if (not opt.pretrained) or (opt.pretrained == ""):
+        logfile.set_default('embeddings', 'N/A')
+    else:
+        logfile.set_default('embeddings', opt.pretrained)
+
+    logfile.set_default('wc-supervised', opt.supervised)
+    logfile.set_default('params', method_name)
+    logfile.set_default('run', opt.seed)
+    logfile.set_default('tunable', opt.tunable)
+    
+    #
+    # TODO
+    # adapt to layered log file defaults (more sophisticated handling)
+    #
+    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+
     return logfile
