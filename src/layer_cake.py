@@ -217,7 +217,17 @@ def main(opt):
     
     pretrained, pretrained_vector = load_pretrained(opt)                # load pre-trained embeddings (vectors) from file
 
-    logfile = init_layered_logfile(method_name, pretrained, opt)        # initialize layered log file with core settings
+    embeddings_log_val ='none'
+
+    if pretrained:
+        embeddings_log_val = opt.pretrained
+    
+    # initialize layered log file with core settings
+    logfile = init_layered_logfile(
+        method_name, 
+        pretrained, 
+        embeddings_log_val, 
+        opt)    
 
     print("loading dataset ", {opt.dataset})
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
@@ -441,7 +451,7 @@ def set_method_name(opt):
         method_name+=f'-ch{opt.channels}'
     return method_name
 
-    
+
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
 # command line argument, program: parser plus assertions + main(opt)

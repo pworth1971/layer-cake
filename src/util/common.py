@@ -207,7 +207,7 @@ def init_simple_logfile(method_name, opt):
 # Enhanced log info to include explictly the model type, whether or not its 'supervised', ie added WC Embeddings, 
 # as well as tuning parametr and whether or not pretraiend embeddings are used and if so what type
 # 
-def init_layered_logfile(method_name, pretrained, opt):
+def init_layered_logfile(method_name, pretrained, embeddings, opt):
 
     logfile = CSVLog(
         file=opt.log_file, 
@@ -230,20 +230,12 @@ def init_layered_logfile(method_name, pretrained, opt):
     logfile.set_default('dataset', opt.dataset)
     logfile.set_default('model', opt.net)
     logfile.set_default('pretrained', pretrained)
-
-    if not pretrained:
-        #if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
-        logfile.set_default('embeddings', 'NA')
-    else:
-        logfile.set_default('embeddings', opt.pretrained) 
-
+    logfile.set_default('embeddings', embeddings)
     logfile.set_default('wc-supervised', opt.supervised)
     logfile.set_default('params', method_name)
     logfile.set_default('run', opt.seed)
     logfile.set_default('tunable', opt.tunable)
 
-    logfile.set_default('embeddings', 'N/A')
-    
     #
     # TODO
     # adapt to layered log file defaults (more sophisticated handling)
@@ -258,7 +250,10 @@ def init_layered_logfile(method_name, pretrained, opt):
 # 
 # Enhanced log info for svm program suport
 #
-def init_layered_logfile_svm(logfile, method_name, dataset, pretrained, model, embeddings, supervised):
+def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
+
+    print()
+    print("initializing SVM layered log file...")
 
     logfile = CSVLog(
         file=logfile, 
@@ -268,30 +263,23 @@ def init_layered_logfile_svm(logfile, method_name, dataset, pretrained, model, e
             'pretrained', 
             'embeddings', 
             'wc-supervised', 
-            'params', 
-            'epoch', 
+            'params',
             'measure', 
             'value',
             'timelapse'], 
         verbose=True, 
         overwrite=False)
 
+    print("setting defaults...")
+    print("embeddings:", embeddings)
+    
     logfile.set_default('dataset', dataset)
-    logfile.set_default('model', model)
     logfile.set_default('pretrained', pretrained)
-
-    if not pretrained:
-        #if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
-        logfile.set_default('embeddings', 'NA')
-    else:
-        logfile.set_default('embeddings', embeddings) 
-
+    logfile.set_default('model', model)
+    logfile.set_default('embeddings', embeddings)
     logfile.set_default('wc-supervised', supervised)
     logfile.set_default('params', method_name)
 
-    logfile.set_default('epochs', 'N/A')
-    logfile.set_default('embeddings', 'N/A')
-    
     #
     # TODO
     # adapt to layered log file defaults (more sophisticated handling)

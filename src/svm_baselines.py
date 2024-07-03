@@ -26,39 +26,37 @@ the Code. Sample command line argument calls:
 --------------------------------------------------------------------------------------------------------
 """
 
-
-
 import warnings
-
-from model.CustomRepresentationLearning import CustomRepresentationModel
-from util import file
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from sklearn.feature_extraction.text import CountVectorizer
-from supervised_term_weighting.supervised_vectorizer import TSRweighting
-from supervised_term_weighting.tsr_functions import *
-from util.multilabelsvm import MLSVC
 import argparse
+from time import time
 
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 
+from scipy.sparse import issparse, csr_matrix
+
+from supervised_term_weighting.supervised_vectorizer import TSRweighting
+from supervised_term_weighting.tsr_functions import *
+
+from model.CustomRepresentationLearning import CustomRepresentationModel
+
+from util import file
+from util.multilabelsvm import MLSVC
 from util.metrics import evaluation
-from data.dataset import *
+
 from util.csv_log import CSVLog
 from util.common import *
-from time import time
-from scipy.sparse import issparse, csr_matrix
+
+from data.dataset import *
 
 from embedding.pretrained import GloVe
 from embedding.supervised import get_supervised_embeddings
-
-
-
-
 
 
 # --------------------------------------------------------------------------------------------------------
@@ -83,18 +81,20 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
     if classification_type == 'multilabel':
         print("multi-label classification...")
         
-        cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight)
+        cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
-
         yte_ = cls.predict(Xte)
+
         Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
     else:
         print("single label classification...")
-        cls = estimator(class_weight=class_weight)
+        
+        #cls = estimator(class_weight=class_weight, dual=True, max_iter=10000)             
+        
+        cls = estimator(class_weight=class_weight, dual="auto")                             
         cls = GridSearchCV(cls, param_grid, cv=cv, n_jobs=-1) if optimizeC else cls
 
         print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
-        
         XtrArr = np.asarray(Xtr)
         ytrArr = np.asarray(ytr)
         XteArr = np.asarray(Xte)
@@ -219,7 +219,7 @@ def main(args):
     method_name = f'{learner_name}-{mode}-{"opC" if args.optimc else "default"}'
 
     pretrained = False
-    embeddings = "N/A"
+    embeddings ='none'
 
     if args.mode in ['bert', 'bert-sup']:
         pretrained = True
@@ -232,12 +232,14 @@ def main(args):
     if args.mode in ['sup', 'bert-sup', 'glove-sup']:
         supervised = True
 
+    print("initializing logfile embeddings value to:", {embeddings})
+    
     logfile = init_layered_logfile_svm(                             
         logfile=args.log_file,
         method_name=method_name, 
         dataset=args.dataset, 
-        pretrained=pretrained, 
         model=learner_name,
+        pretrained=pretrained, 
         embeddings=embeddings,
         supervised=supervised
         )
@@ -360,10 +362,10 @@ def main(args):
     """
 
     tend += sup_tend
-    
-    logfile.add_layered_row(epoch="N/A", measure='te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_layered_row(epoch="N/A", measure='te-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_layered_row(epoch="N/A", measure='te-accuracy', value=acc, timelapse=tend)
+
+    logfile.add_layered_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(measure='te-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(measure='te-accuracy', value=acc, timelapse=tend)
 
     print('Done!')
 

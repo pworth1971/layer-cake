@@ -58,7 +58,6 @@ class CSVLog:
                 kwargs[key]=self.defaults[key]
 
         local_columns = sorted(list(kwargs.keys()))
-        
         values = [kwargs[col_i] for col_i in local_columns]
 
         print(self.columns)

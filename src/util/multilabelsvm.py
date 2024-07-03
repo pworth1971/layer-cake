@@ -9,7 +9,6 @@ class MLSVC:
     """
     Multi-Label Support Vector Machine, with individual optimizations per binary problem.
     """
-
     def __init__(self, n_jobs=1, estimator=LinearSVC, *args, **kwargs):
         self.n_jobs = n_jobs
         self.args = args
