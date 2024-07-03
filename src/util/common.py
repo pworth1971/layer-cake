@@ -231,8 +231,9 @@ def init_layered_logfile(method_name, pretrained, opt):
     logfile.set_default('model', opt.net)
     logfile.set_default('pretrained', pretrained)
 
-    if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
-        logfile.set_default('embeddings', 'N/A')
+    if not pretrained:
+        #if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
+        logfile.set_default('embeddings', 'NA')
     else:
         logfile.set_default('embeddings', opt.pretrained) 
 
@@ -240,6 +241,56 @@ def init_layered_logfile(method_name, pretrained, opt):
     logfile.set_default('params', method_name)
     logfile.set_default('run', opt.seed)
     logfile.set_default('tunable', opt.tunable)
+
+    logfile.set_default('embeddings', 'N/A')
+    
+    #
+    # TODO
+    # adapt to layered log file defaults (more sophisticated handling)
+    #
+    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+
+    return logfile
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------
+# init_layered_logile_svm()
+# 
+# Enhanced log info for svm program suport
+#
+def init_layered_logfile_svm(logfile, method_name, dataset, pretrained, model, embeddings, supervised):
+
+    logfile = CSVLog(
+        file=logfile, 
+        columns=[
+            'dataset', 
+            'model', 
+            'pretrained', 
+            'embeddings', 
+            'wc-supervised', 
+            'params', 
+            'epoch', 
+            'measure', 
+            'value',
+            'timelapse'], 
+        verbose=True, 
+        overwrite=False)
+
+    logfile.set_default('dataset', dataset)
+    logfile.set_default('model', model)
+    logfile.set_default('pretrained', pretrained)
+
+    if not pretrained:
+        #if ((opt.pretrained is None) or ("".__eq__(opt.pretrained))):      # if pretrained option is null (None) or its the empty string
+        logfile.set_default('embeddings', 'NA')
+    else:
+        logfile.set_default('embeddings', embeddings) 
+
+    logfile.set_default('wc-supervised', supervised)
+    logfile.set_default('params', method_name)
+
+    logfile.set_default('epochs', 'N/A')
+    logfile.set_default('embeddings', 'N/A')
     
     #
     # TODO

@@ -71,30 +71,6 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     return model
 
 
-def set_method_name():
-    method_name = opt.net
-
-    if opt.pretrained:
-        method_name += f'-{opt.pretrained}'
-    if opt.learnable > 0:
-        method_name += f'-learn{opt.learnable}'
-    if opt.supervised:
-        sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
-        method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
-    if opt.dropprob > 0:
-        if opt.droptype != 'sup':
-            method_name += f'-Drop{opt.droptype}{opt.dropprob}'
-    if (opt.pretrained or opt.supervised) and opt.tunable:
-        method_name+='-tunable'
-    if opt.weight_decay > 0:
-        method_name+=f'_wd{opt.weight_decay}'
-    if opt.net in {'lstm', 'attn'}:
-        method_name+=f'-h{opt.hidden}'
-    if opt.net== 'cnn':
-        method_name+=f'-ch{opt.channels}'
-    return method_name
-
-
 def index_dataset(dataset, pretrained=None):
 
     logging.info(f"indexing dataset")
@@ -237,7 +213,7 @@ def main(opt):
     print()
     print("... layer_cake::main(opt)... ")
     
-    method_name = set_method_name()
+    method_name = set_method_name(opt)
     
     pretrained, pretrained_vector = load_pretrained(opt)                # load pre-trained embeddings (vectors) from file
 
@@ -442,6 +418,30 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 # end test() ---------------------------------------------------------------------------------------------------------------------------
 
 
+def set_method_name(opt):
+    method_name = opt.net
+
+    if opt.pretrained:
+        method_name += f'-{opt.pretrained}'
+    if opt.learnable > 0:
+        method_name += f'-learn{opt.learnable}'
+    if opt.supervised:
+        sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
+        method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
+    if opt.dropprob > 0:
+        if opt.droptype != 'sup':
+            method_name += f'-Drop{opt.droptype}{opt.dropprob}'
+    if (opt.pretrained or opt.supervised) and opt.tunable:
+        method_name+='-tunable'
+    if opt.weight_decay > 0:
+        method_name+=f'_wd{opt.weight_decay}'
+    if opt.net in {'lstm', 'attn'}:
+        method_name+=f'-h{opt.hidden}'
+    if opt.net== 'cnn':
+        method_name+=f'-ch{opt.channels}'
+    return method_name
+
+    
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
 # command line argument, program: parser plus assertions + main(opt)

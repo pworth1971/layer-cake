@@ -1,4 +1,3 @@
-
 """
 Defintition of a Python script for text classification using various embedding techniques and machine learning models, 
 structured to be highly modular and configurable via command line arguments. It supports multiple modes of operation, 
@@ -50,6 +49,7 @@ from sklearn.svm import LinearSVC
 from util.metrics import evaluation
 from data.dataset import *
 from util.csv_log import CSVLog
+from util.common import *
 from time import time
 from scipy.sparse import issparse, csr_matrix
 
@@ -67,8 +67,7 @@ from embedding.supervised import get_supervised_embeddings
 # Trains a classifier using SVM or logistic regression, optionally performing 
 # hyperparameter tuning via grid search.
 # --------------------------------------------------------------------------------------------------------
-def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC,
-                    class_weight='balanced'):
+def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, class_weight='balanced', mode='tfidf'):
     
     print('training learner...')
     
@@ -98,18 +97,15 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
         
         XtrArr = np.asarray(Xtr)
         ytrArr = np.asarray(ytr)
-
-        print("as arrays: ", {Xtr.shape}, {ytr.shape})
-
-        #cls.fit(Xtr, ytr)
-
-        cls.fit(XtrArr, ytrArr)
-        
         XteArr = np.asarray(Xte)
+        print("Xtr, ytr, Xte as arrays: ", {XtrArr.shape}, {ytrArr.shape}, {XteArr.shape})
 
-        #yte_ = cls.predict(Xte)
-
-        yte_ = cls.predict(XteArr)
+        if mode in ['tfidf']:        
+            cls.fit(Xtr, ytr)
+            yte_ = cls.predict(Xte)       
+        else: 
+            cls.fit(XtrArr, ytrArr)
+            yte_ = cls.predict(XteArr)
 
         Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
@@ -206,24 +202,54 @@ def tsr(name):
 # --------------------------------------------------------------------------------------------------------
 def main(args):
 
-    logfile = CSVLog(args.log_file, ['dataset', 'method', 'measure', 'value', 'timelapse'], autoflush=True)
-
-    logfile.set_default('dataset', args.dataset)
-    
+    print()
+    print("--- svm_baseline::main() ---")
+        
+    # set up model type
     learner = LinearSVC if args.learner == 'svm' else LogisticRegression
     learner_name = 'SVM' if args.learner == 'svm' else 'LR'
     
+    #
+    # initialize layered log file with core settings
+    #
     mode = args.mode
-    if args.mode == 'stw':
+    if args.mode == 'stw':                              # supervised term weighting (stw)
         mode += f'-{args.tsr}-{args.stwmode}'
     
     method_name = f'{learner_name}-{mode}-{"opC" if args.optimc else "default"}'
 
-    logfile.set_default('method', method_name)
+    pretrained = False
+    embeddings = "N/A"
+
+    if args.mode in ['bert', 'bert-sup']:
+        pretrained = True
+        embeddings = 'bert'
+    elif args.mode in ['glove', 'glove-sup']:
+        pretrained = True
+        embeddings = 'glove'
+
+    supervised = False
+    if args.mode in ['sup', 'bert-sup', 'glove-sup']:
+        supervised = True
+
+    logfile = init_layered_logfile_svm(                             
+        logfile=args.log_file,
+        method_name=method_name, 
+        dataset=args.dataset, 
+        pretrained=pretrained, 
+        model=learner_name,
+        embeddings=embeddings,
+        supervised=supervised
+        )
+
     #assert not logfile.already_calculated() or args.force, f'baseline {method_name} for {args.dataset} already calculated'
 
-    dataset = Dataset.load(dataset_name=args.dataset,
-                           pickle_path=os.path.join(args.pickle_dir, f'{args.dataset}.pickle'))
+    print("loading dataset...:", {args.dataset})
+
+    dataset = Dataset.load(
+        dataset_name=args.dataset,
+        pickle_path=os.path.join(args.pickle_dir, 
+        f'{args.dataset}.pickle'))
 
     class_weight = 'balanced' if args.balanced else None
     print(f'running with class_weight={class_weight}')
@@ -233,7 +259,8 @@ def main(args):
     # Xte = tfidf.transform(dataset.test_raw)
     ytr, yte = dataset.devel_target, dataset.test_target
 
-    if args.mode == 'stw':
+
+    if args.mode == 'stw':                                          # supervised term weighting config
         print('Supervised Term Weighting')
         coocurrence = CountVectorizer(vocabulary=dataset.vocabulary)
         Ctr = coocurrence.transform(dataset.devel_raw)
@@ -244,7 +271,7 @@ def main(args):
     else:
         Xtr, Xte = dataset.vectorize()
 
-    if mode in ['bert', 'bert-sup']:                            # load best model and get document embeddings for the dataset
+    if mode in ['bert', 'bert-sup']:                                # load best model and get document embeddings for the dataset
         
         print("loading BERT embeddings...")
     
@@ -308,8 +335,16 @@ def main(args):
     print(XtrArr.shape, XteArr.shape)
     """
 
-    Mf1, mf1, acc, tend = cls_performance(Xtr, ytr, Xte, yte, dataset.classification_type, args.optimc, learner,
-                                          class_weight=class_weight)
+    Mf1, mf1, acc, tend = cls_performance(
+        Xtr, 
+        ytr, 
+        Xte, 
+        yte, 
+        dataset.classification_type, 
+        args.optimc, 
+        learner,
+        class_weight=class_weight, 
+        mode=args.mode)
     
     """
     Mf1, mf1, acc, tend = cls_performance(
@@ -320,14 +355,15 @@ def main(args):
         dataset.classification_type, 
         args.optimc, 
         learner,
-        class_weight=class_weight)
+        class_weight=class_weight, 
+        mode=args.mode)
     """
 
     tend += sup_tend
     
-    logfile.add_layered_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_layered_row(measure='te-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_layered_row(measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(epoch="N/A", measure='te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(epoch="N/A", measure='te-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(epoch="N/A", measure='te-accuracy', value=acc, timelapse=tend)
 
     print('Done!')
 
