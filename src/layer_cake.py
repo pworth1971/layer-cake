@@ -193,18 +193,21 @@ def load_pretrained(opt):
         print("path:", {opt.glove_path})
         print("Loading GloVe...")
         return True, GloVe(path=opt.glove_path)
+    
     elif opt.pretrained == 'word2vec':
         print("path:", {opt.word2vec_path})
         print("Loading Word2Vec...")
         return True, Word2Vec(path=opt.word2vec_path, limit=1000000)
+    
     elif opt.pretrained == 'fasttext':
         print("path:", {opt.fasttext_path})
         print("Loading fasttext...")
         return True, FastText(path=opt.fasttext_path, limit=1000000)
+    
     elif opt.pretrained == 'bert':
         print("path:", {opt.bert_path})
         print("Loading BERT...")
-        return True, BERT()
+        return True, BERT(model_name='bert-base-uncased', dataset_name=opt.dataset)
 
     return False, None
 # ------------------------------------------------------------------------------------------------------ 

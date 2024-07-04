@@ -11,6 +11,7 @@ from torchtext.vocab import GloVe as TorchTextGloVe
 from transformers import BertModel, BertTokenizer
 from transformers import  logging as transformers_logging
 
+import joblib
 
 AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
 
@@ -248,25 +249,29 @@ input through its transformer network.
 """
 class BERT(PretrainedEmbeddings):
 
-    def __init__(self, model_name='bert-base-uncased', cache_dir=VECTOR_CACHE):
-        
+    def __init__(self, model_name='bert-base-uncased', cache_dir=VECTOR_CACHE, dataset_name='20newsgroups'):
+
         super().__init__()
         
-        # Set up transformers logging to display download and loading progress
-        # Or use transformers_logging.set_verbosity_warning() for less verbose output
-        transformers_logging.set_verbosity_info()                                   
+        transformers_logging.set_verbosity_warning()                      # Set up transformers logging      
 
-        print(f'Initializing BERT model and tokenizer...')
-        # Load tokenizer with progress bar
+        print(f'Initializing', {model_name})
+
         self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-        
-        # Load model with progress bar
-        self.model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
 
-        self.model.eval()  # Set the model to evaluation mode
+
+        self.model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
+        self.model.eval()                   # Set the model to inference mode
+       
+        self.cache_path = os.path.join(cache_dir)           # Define a path to store embeddings
+        
+        self.dataset = dataset_name
+        self.model_name = model_name
+
+        os.makedirs(self.cache_path, exist_ok=True)
         
         print('Done: BERT model and tokenizer are ready for use!')
-
+        
     def vocabulary(self):
         # Returns the tokenizer's vocabulary as a set
         return set(self.tokenizer.get_vocab().keys())
@@ -276,16 +281,22 @@ class BERT(PretrainedEmbeddings):
         return self.model.config.hidden_size
 
     def extract(self, words):
-        # This method will handle words differently than traditional embeddings
+
         print("Bert::extract()...")
-        
+
+        cache_file_name = self.model_name + '-' + self.dataset + '.pkl'
+        cache_file = os.path.join(self.cache_path, cache_file_name)
+
+        print("attempting to load embeddings from cache_file ", {cache_file})
+        if os.path.exists(cache_file):
+            return joblib.load(cache_file)
+
         inputs = self.tokenizer(words, return_tensors="pt", padding=True, truncation=True)
         with torch.no_grad():
             outputs = self.model(**inputs)
-        # Extract embeddings from the last hidden state
-        embeddings = outputs.last_hidden_state
-        # Process embeddings (e.g., take the mean across the token dimension to represent each input word)
-        embeddings = embeddings.mean(dim=1)
+        embeddings = outputs.last_hidden_state.mean(dim=1)
+
+        joblib.dump(embeddings, cache_file)                 # Save the embeddings to disk
         return embeddings
 
     @staticmethod
