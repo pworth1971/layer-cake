@@ -70,6 +70,7 @@ def pad(index_list, pad_index, max_pad_length=None):
 
 
 def get_word_list(word2index1, word2index2=None): #TODO: redo
+    print("get_word_list()")
     def extract_word_list(word2index):
         return [w for w,i in sorted(word2index.items(), key=lambda x: x[1])]
     word_list = extract_word_list(word2index1)

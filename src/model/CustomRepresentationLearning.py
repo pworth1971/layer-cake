@@ -21,7 +21,6 @@ class CustomRepresentationModel(RepresentationModel):
         :param batch_size
         :return: list of lists of sentence embeddings(if `combine_strategy=None`) OR list of sentence embeddings(if `combine_strategy!=None`)
         """
-
         self.model.to(self.device)
 
         batches = batch_iterable(text_list, batch_size=batch_size)

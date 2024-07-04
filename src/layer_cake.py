@@ -3,9 +3,12 @@ from time import time
 import matplotlib.pyplot as plt
 import os
 import logging
+
 import torchtext
+
 import scipy
 from scipy.sparse import csr_matrix
+
 from sklearn.model_selection import train_test_split
 
 # custom classes 
@@ -26,11 +29,14 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+VECTOR_CACHE = '../.vector_cache'               # assumes everything is run from /bin directory
 
-# Set up logging
+
+#
+# TODO: Set up logging
+#
 logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)s:%(message)s')
-
 
 
 
@@ -97,18 +103,20 @@ def index_dataset(dataset, pretrained=None):
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
+
+
 # ---------------------------------------------------------------------------------------------------------------------------
 # 
 # embedding_matrix(): construct the embedding matrix that model will use for input (text) representations. 
 # 
 # Pretrained Embeddings Loading: If the model configuration includes using pretrained embeddings 
-# (such as GloVe, Word2Vec, or FastText), this function extracts these embeddings based on the vocabulary 
-# of your dataset. 
+# (such as GloVe, Word2Vec, FastText or [BERT]), this function extracts these embeddings based 
+# on the vocabulary of thedataset. 
 # 
 # Supervised Embeddings Construction: If your setup includes supervised embeddings, the function 
-# constructs these embeddings based on the labels associated with your data. This is typically 
-# done to integrate semantic information from the labels directly into the embeddings,  
-# improving model performance on specific tasks.
+# constructs these embeddings based on the labels associated with the data, i.e. Word-Class Embeddings,
+# so as to integrate semantic information from the labels directly into the embeddings, improving 
+# model performance on specific tasks.
 #
 # Combination of Embeddings: If both pretrained and supervised embeddings are used, this function 
 # combines them into a single embedding matrix. This combination can be a simple concatenation along the 
@@ -171,7 +179,7 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
 
 
-# 
+# ------------------------------------------------------------------------------------------------------ 
 # load_pretrained()
 #
 # returns Boolean and then data structure with embeddings, None if 'opt.pretrained'
@@ -183,15 +191,23 @@ def load_pretrained(opt):
 
     if opt.pretrained == 'glove':
         print("path:", {opt.glove_path})
+        print("Loading GloVe...")
         return True, GloVe(path=opt.glove_path)
     elif opt.pretrained == 'word2vec':
         print("path:", {opt.word2vec_path})
+        print("Loading Word2Vec...")
         return True, Word2Vec(path=opt.word2vec_path, limit=1000000)
     elif opt.pretrained == 'fasttext':
         print("path:", {opt.fasttext_path})
-        return True, FastTextEmbeddings(path=opt.fasttext_path, limit=1000000)
+        print("Loading fasttext...")
+        return True, FastText(path=opt.fasttext_path, limit=1000000)
+    elif opt.pretrained == 'bert':
+        print("path:", {opt.bert_path})
+        print("Loading BERT...")
+        return True, BERT()
 
     return False, None
+# ------------------------------------------------------------------------------------------------------ 
 
 
 def init_loss(classification_type):
@@ -529,8 +545,8 @@ if __name__ == '__main__':
     parser.add_argument('--net', type=str, default='lstm', metavar='str',
                         help=f'net, one in {NeuralClassifier.ALLOWED_NETS}')
     
-    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext',
-                        help='pretrained embeddings, use "glove", "word2vec", or "fasttext" (default None)')
+    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert',
+                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", or "bert" (default None)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
@@ -546,18 +562,21 @@ if __name__ == '__main__':
                         help='number of training epochs to perform on the validation set once training is '
                              'over (default 1)')
     
-    parser.add_argument('--word2vec-path', type=str, default='../.vector_cache/GoogleNews-vectors-negative300.bin',
+    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/GoogleNews-vectors-negative300.bin',
                         metavar='str',
-                        help=f'path to GoogleNews-vectors-negative300.bin pretrained vectors (used only '
-                             f'with --pretrained word2vec)')
+                        help=f'path to Word2Vec pretrained vectors (GoogleNews-vectors-negative300.bin), used only '
+                             f'with --pretrained word2vec')
     
-    parser.add_argument('--glove-path', type=str, default='../.vector_cache',
+    parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained glove)')
+                        help=f'path to glove.840B.300d pretrained vectors, used only with --pretrained glove')
     
-    parser.add_argument('--fasttext-path', type=str, default='../.vector_cache/crawl-300d-2M.vec',
-                        help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained word2vec)')
+    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/crawl-300d-2M.vec',
+                        help=f'path to fastText pretrained vectors (crawl-300d-2M.vec), used only with --pretrained fasttext')
     
+    parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
+                        help=f'path to BERT pretrained vectors (xxxxx), used only with --pretrained bert')
+
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')

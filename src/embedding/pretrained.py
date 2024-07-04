@@ -1,13 +1,23 @@
 from abc import ABC, abstractmethod
 
-import torch, torchtext
-from torchtext.vocab import GloVe as TorchTextGloVe
-
 import gensim
 import os
 import numpy as np
 import requests
 import zipfile
+
+import torch, torchtext
+from torchtext.vocab import GloVe as TorchTextGloVe
+from transformers import BertModel, BertTokenizer
+from transformers import  logging as transformers_logging
+
+
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
+
+VECTOR_CACHE = '../.vector_cache'
+
+
+
 
 
 # --- PJW Comments added ---
@@ -24,10 +34,6 @@ internal to each class while presenting a consistent external interface. This mo
 allows for easy extensions and modifications, such as adding support for new types of embeddings or changing 
 the underlying library used for loading the embeddings.
 """
-
-
-
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext']
 
 
 """
@@ -78,7 +84,7 @@ to handle words not found in GloVe’s vocabulary and replacing them with zeros.
 """
 class GloVe(PretrainedEmbeddings):
 
-    def __init__(self, setname='840B', path='../.vector_cache', max_vectors=None):         # presumes running from bin directory
+    def __init__(self, setname='840B', path=VECTOR_CACHE, max_vectors=None):         # presumes running from bin directory
         
         super().__init__()
         
@@ -97,6 +103,7 @@ class GloVe(PretrainedEmbeddings):
 
     def extract(self, words):
         # Extract embeddings for a list of words
+        print("GloVe::extract()...")
         source_idx, target_idx = self.reindex(words, self.embed.stoi)
         extraction = torch.zeros((len(words), self.dim()), dtype=torch.float)
         valid_source_idx = torch.tensor(source_idx, dtype=torch.long)
@@ -130,11 +137,15 @@ class Word2Vec(PretrainedEmbeddings):
 
     def __init__(self, path, limit=None, binary=True):
         super().__init__()
+        
         print(f'Loading word2vec format pretrained vectors from {path}')
+        
         assert os.path.exists(path), print(f'pre-trained keyed vectors not found in {path}')
         self.embed = gensim.models.KeyedVectors.load_word2vec_format(path, binary=binary, limit=limit)
+        
         #self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
         self.word2index = {w: i for i,w in enumerate(self.embed.index_to_key)}      # gensim 4.0
+        
         print('Done')
 
     def vocabulary(self):
@@ -144,6 +155,7 @@ class Word2Vec(PretrainedEmbeddings):
         return self.embed.vector_size
 
     def extract(self, words):
+        print("Word2Vec::extract()...")
         source_idx, target_idx = PretrainedEmbeddings.reindex(words, self.word2index)
         extraction = np.zeros((len(words), self.dim()))
         extraction[source_idx] = self.embed.vectors[target_idx]
@@ -162,10 +174,9 @@ Special Handling:
 If a binary version of the file exists, it uses that directly. If only a textual version is available, it 
 loads the text format and then saves it as a binary file for faster future loading.
 """
+class FastText(Word2Vec):
 
-class FastTextEmbeddings(Word2Vec):
-
-    def __init__(self, path, limit=None):
+    def __init__(self, path=VECTOR_CACHE, limit=None):
 
         pathvec = path
         pathbin = path+'.bin'
@@ -223,3 +234,61 @@ class FastTextEmbeddings(Word2Vec):
     def save_binary(self, path):
         self.embed.save_word2vec_format(path, binary=True)
 
+
+"""
+BERTEmbeddings class: class that inherits from the PretrainedEmbeddings abstract base class.
+
+Initialization: Load a pre-trained BERT model and its tokenizer. BERT models work 
+with tokens that might correspond to subwords or full words, and the tokenizer converts 
+text to the format expected by the model.
+
+Methods Implementation: Implement the required methods like vocabulary, dim, extract, etc., 
+keeping in mind that BERT generates embeddings differently, typically by processing 
+input through its transformer network.
+"""
+class BERT(PretrainedEmbeddings):
+
+    def __init__(self, model_name='bert-base-uncased', cache_dir=VECTOR_CACHE):
+        
+        super().__init__()
+        
+        # Set up transformers logging to display download and loading progress
+        # Or use transformers_logging.set_verbosity_warning() for less verbose output
+        transformers_logging.set_verbosity_info()                                   
+
+        print(f'Initializing BERT model and tokenizer...')
+        # Load tokenizer with progress bar
+        self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+        
+        # Load model with progress bar
+        self.model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
+
+        self.model.eval()  # Set the model to evaluation mode
+        
+        print('Done: BERT model and tokenizer are ready for use!')
+
+    def vocabulary(self):
+        # Returns the tokenizer's vocabulary as a set
+        return set(self.tokenizer.get_vocab().keys())
+
+    def dim(self):
+        # Returns the hidden size of the BERT model
+        return self.model.config.hidden_size
+
+    def extract(self, words):
+        # This method will handle words differently than traditional embeddings
+        print("Bert::extract()...")
+        
+        inputs = self.tokenizer(words, return_tensors="pt", padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        # Extract embeddings from the last hidden state
+        embeddings = outputs.last_hidden_state
+        # Process embeddings (e.g., take the mean across the token dimension to represent each input word)
+        embeddings = embeddings.mean(dim=1)
+        return embeddings
+
+    @staticmethod
+    def reindex(words, word2index):
+        # This method might be less relevant for BERT, depending on how you choose to handle subword tokens
+        return super().reindex(words, word2index)
