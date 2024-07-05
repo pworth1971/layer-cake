@@ -44,7 +44,7 @@ def results_analysis(file_path, output_path=None):
     header_line_length = len(lines[1])
 
     # Add separators between groups based on changes in key columns (excluding 'measure')
-    grouped_lines = [lines[0], lines[1]]  # Start with header and underline
+    grouped_lines = [lines[0], lines[1], '-' * header_line_length]  # Start with header, underline, and extra separator
     last_values = None
     
     for i, row in enumerate(final_result.itertuples(index=False)):
@@ -53,7 +53,7 @@ def results_analysis(file_path, output_path=None):
         if last_values and current_values != last_values:
             grouped_lines.append('-' * header_line_length)  # Use a separator as wide as the header
         last_values = current_values
-        line_index = i + 3  # Offset to align with the actual content in lines
+        line_index = i + 3  # Offset to align with the actual content in lines, adjusted by the extra line separator
         grouped_lines.append(lines[line_index])
 
     final_formatted_table = '\n'.join(grouped_lines)
