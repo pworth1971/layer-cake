@@ -42,6 +42,8 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     
+    print()
+    print("------ init_Net() ------")
     net_type=opt.net
     hidden = opt.channels if net_type == 'cnn' else opt.hidden
     if opt.droptype == 'sup':

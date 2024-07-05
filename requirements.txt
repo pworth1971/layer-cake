@@ -11,3 +11,4 @@ simpletransformers
 rdflib
 gensim
 matplotlib
+tabulate
