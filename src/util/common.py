@@ -265,7 +265,10 @@ def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, e
             'embeddings', 
             'wc-supervised', 
             'params',
+            'epoch',
+            'tunable',
             'measure', 
+            'run',
             'value',
             'timelapse'], 
         verbose=True, 
@@ -280,6 +283,11 @@ def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, e
     logfile.set_default('embeddings', embeddings)
     logfile.set_default('wc-supervised', supervised)
     logfile.set_default('params', method_name)
+
+    # normalize data fields
+    logfile.set_default('tunable', "NA")
+    logfile.set_default('epoch', "NA")
+    logfile.set_default('run', "NA")
 
     #
     # TODO

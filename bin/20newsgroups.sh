@@ -6,7 +6,7 @@
 EMB="../.vector_cache"
 PY="python ../src/layer_cake.py"
 FT="python ../src/fasttext.py"
-LOG="--log-file ../log/layer_cake.test"
+LOG="--log-file ../log/20newsgroups.test"
 CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
@@ -25,12 +25,12 @@ dataset="--dataset 20newsgroups"
 #######################################################################
 # CNN
 #######################################################################
-$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP
+#$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP
 
 ## Word2Vec
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin --seed $run   --nepochs $EP
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin   --tunable --seed $run   --nepochs $EP
-$PY $LOG $dataset	$CNN	--learnable 20	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin --tunable --seed $run --droptype learn    --nepochs $EP
+#$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin --seed $run   --nepochs $EP
+#$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin   --tunable --seed $run   --nepochs $EP
+#$PY $LOG $dataset	$CNN	--learnable 20	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin --tunable --seed $run --droptype learn    --nepochs $EP
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin   --supervised --seed $run    --nepochs $EP
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec --word2vec-path $EMB/GoogleNews-vectors-negative300.bin --supervised	--tunable --seed $run   --nepochs $EP
 

@@ -2,28 +2,33 @@
 
 # Base components
 PY="python ../src/svm_baselines.py"
-LOG="--log-file ../log/svm_test.out"
+LOG="--log-file ../log/svm_test.test"
 dataset="--dataset 20newsgroups"
 EMB="--embedding-dir ../.vector_cache"
 
-# Define commands using function calls to ensure variable expansion
+# Define commands using function calls to ensure variable expansion and direct output
 function pg_svm_tfidf() {
+    echo "$PY $LOG $DATASET $EMB --learner svm --mode tfidf --optimc"
     $PY $LOG $DATASET $EMB --learner svm --mode tfidf --optimc
 }
 
 function pg_svm_glove() {
+    echo "$PY $LOG $DATASET $EMB --learner svm --mode glove --optimc"
     $PY $LOG $DATASET $EMB --learner svm --mode glove --optimc
 }
 
 function pg_svm_glove_sup() {
+    echo "$PY $LOG $DATASET $EMB --learner svm --mode glove-sup --optimc"
     $PY $LOG $DATASET $EMB --learner svm --mode glove-sup --optimc
 }
 
 function pg_svm_bert() {
+    echo "$PY $LOG $DATASET $EMB --learner svm --mode bert --optimc"
     $PY $LOG $DATASET $EMB --learner svm --mode bert --optimc
 }
 
 function pg_svm_bert_sup() {
+    echo "$PY $LOG $DATASET $EMB --learner svm --mode bert-sup --optimc"
     $PY $LOG $DATASET $EMB --learner svm --mode bert-sup --optimc
 }
 
@@ -46,6 +51,5 @@ commands=(
 
 # Loop through commands, echo and execute each one
 for cmd in "${commands[@]}"; do
-    echo "$cmd"
-    eval "$cmd"
+    $cmd
 done

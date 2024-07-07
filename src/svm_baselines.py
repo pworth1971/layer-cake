@@ -129,7 +129,7 @@ def embedding_matrix(dataset, pretrained=False, supervised=False):
     vocabulary = np.asarray(list(zip(*sorted(vocabulary.items(), key=lambda x: x[1])))[0])
 
     print()
-    print('[embedding matrix]')
+    print('svm_baseline::embedding_matrix()')
     
     pretrained_embeddings = []
 
@@ -149,6 +149,7 @@ def embedding_matrix(dataset, pretrained=False, supervised=False):
     if supervised:
         
         print('\t[supervised-matrix]')
+        
         Xtr, _ = dataset.vectorize()
         Ytr = dataset.devel_labelmatrix
 
@@ -363,9 +364,9 @@ def main(args):
 
     tend += sup_tend
 
-    logfile.add_layered_row(measure='te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_layered_row(measure='te-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_layered_row(measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-accuracy', value=acc, timelapse=tend)
 
     print('Done!')
 

@@ -21,18 +21,62 @@ from data.tsr_function__ import  STWFUNCTIONS
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# zscores: 
-# ----------------------------
-"""
-Normalizes an array X using z-score normalization.
+# normalize_zscore: 
+#
+# Function to compute z-scores for each feature across all samples. Replacement for 
+# zscores() below, which is not working with the new numpy libraries.
+#
+#
+# Parameters:
+#       data (numpy.ndarray): The input data array with shape (n_samples, n_features).
+# 
+# Returns:
+#       numpy.ndarray: Z-score normalized data array.
+# ----------------------------------------------------------------------------------------------------------------------
 
-Implementation: The standard deviation is calculated with a minimum clip value to prevent division by zero. 
-This normalized form ensures each feature (column if axis=0) has zero mean and unit variance.
-"""
-def zscores(x, axis=0): #scipy.stats.zscores does not avoid division by 0, which can indeed occur
-    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
-    mean = np.mean(x, axis=axis)
-    return (x - mean) / std
+def normalize_zscores(data):
+    
+    print("--- normalize_zscores() ---")
+    print("data ", {data.shape})
+
+    means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
+    stds = np.std(data, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
+    z_scores = (data - means) / stds    # Compute the z-scores: (x - mean) / std
+    
+    return z_scores
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# zscores:
+#
+# Normalizes an array X using z-score normalization.
+
+# Implementation: The standard deviation is calculated with a minimum clip value 
+# to prevent division by zero. This normalized form ensures each feature (column if axis=0) 
+# has zero mean and unit variance.
+#  
+# ----------------------------------------------------------------------------------------------------------------------
+def zscores(x, axis=0):                             #scipy.stats.zscores does not avoid division by 0
+    
+    print("\t--- zscores() ---")
+    print("x shape:", {x.shape})
+    print("x dtype:", x.dtype)              # Check data type
+    print("axis: ", {axis})
+
+    arrX = x.todense(x)
+    print("arrX shape:", {arrX.shape})
+    
+    np_std = np.std(arrX, ddof=1, axis=axis)
+    std = np.clip(np_std, 1e-5, None)
+
+    #std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
+    #mean = np.mean(x, axis=axis)
+    mean = np.mean(arrX, axis=axis)
+    
+    #return (x - mean) / std
+    return (arrX - mean) / std
+# ----------------------------------------------------------------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -112,9 +156,14 @@ applies z-score normalization and possibly PCA for dimensionality reduction if t
 label space exceeds a defined limit.
 """
 def get_supervised_embeddings(X, Y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True):
+
+    print("----- get_supervised_embeddings() -----")
+
     nC = Y.shape[1]
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')
+
+    print("method: ", {method})
 
     if method=='ppmi':
         F = supervised_embeddings_ppmi(X, Y)
@@ -129,8 +178,13 @@ def get_supervised_embeddings(X, Y, max_label_space=300, binary_structural_probl
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, Y, word_prob)
 
+    print("F:", {F.shape})
+
     if dozscore:
-        F = zscores(F, axis=0)
+        #F = zscores(F, axis=0)
+        F = normalize_zscores(F)
+
+    print("after zscore normalization:", {F.shape})
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '

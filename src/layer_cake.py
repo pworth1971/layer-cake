@@ -333,12 +333,13 @@ def main(opt):
         print('Training complete: testing')
         test_loss = test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
 
-    # Plot the training and testing loss after all epochs
-    plot_loss_over_epochs( opt.dataset, {
-        'epochs': np.arange(1, len(loss_history['train_loss']) + 1),
-        'train_loss': loss_history['train_loss'],
-        'test_loss': loss_history['test_loss']
-    }, method_name, '../output')
+
+    if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
+        plot_loss_over_epochs( opt.dataset, {
+            'epochs': np.arange(1, len(loss_history['train_loss']) + 1),
+            'train_loss': loss_history['train_loss'],
+            'test_loss': loss_history['test_loss']
+        }, method_name, '../output')
 
 # end main() ----------------------------------------------------------------------------------------------------------------------------
 
@@ -390,7 +391,9 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
             print(f'{opt.dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {interval_loss:.6f}')
 
     mean_loss = np.mean(interval_loss)
+    
     loss_history['train_loss'].append(mean_loss)
+
     logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
 
     return mean_loss
@@ -451,7 +454,6 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
 def set_method_name(opt):
     method_name = opt.net
-
     if opt.pretrained:
         method_name += f'-{opt.pretrained}'
     if opt.learnable > 0:
