@@ -12,7 +12,50 @@ import itertools
 from util.csv_log import CSVLog
 import matplotlib.pyplot as plt
 
+from embedding.pretrained import GloVe, BERT, Word2Vec, FastText
 
+
+DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
+
+VECTOR_CACHE = '../.vector_cache'                       # assumes everything is run from /bin directory
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+# load_pretrained_embeddings()
+#
+# returns Boolean and then data structure with embeddings, None if 
+# emb_model is not one if the acceptable values
+#
+# ---------------------------------------------------------------------------------------------------------------------------------------
+def load_pretrained_embeddings(dataset, model, args):
+
+    print("util.common.load_pretrained_embeddings(): ", {model})
+
+    if model=='glove':
+        print("path:", {args.glove_path})
+        print("Loading GloVe...")
+        return True, GloVe(path=args.glove_path)
+    
+    elif model=='word2vec':
+        print("path:", {args.word2vec_path})
+        print("Loading Word2Vec...")
+        return True, Word2Vec(path=args.word2vec_path, limit=1000000)
+    
+    elif model=='fasttext':
+        print("path:", {args.fasttext_path})
+        print("Loading fasttext...")
+        return True, FastText(path=args.fasttext_path, limit=1000000)
+    
+    elif model=='bert':
+        print("path:", {args.bert_path})
+        print("Loading BERT...")
+        return True, BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, cache_dir=args.bert_path, dataset_name=dataset)
+
+    return False, None
+# ---------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
 def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents
@@ -53,6 +96,7 @@ def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
         pbar.set_description(f'[unk = {unk_count}/{knw_count}={(100.*unk_count/knw_count):.2f}%]'
                              f'[out = {out_count}/{knw_count}={(100.*out_count/knw_count):.2f}%]')
     return indexes
+# ---------------------------------------------------------------------------------------------------------------------------------------
 
 
 def define_pad_length(index_list):
@@ -177,6 +221,38 @@ def print_arguments(options):
     print("Command Line Arguments:")
     for arg, value in vars(options).items():
         print(f"{arg}: {value}")
+
+
+# ---------------------------------------------------------------------------------------------------------------------------
+
+def index_dataset(dataset, pretrained=None):
+
+    print()
+    print(f"indexing dataset")
+    
+    # build the vocabulary
+    word2index = dict(dataset.vocabulary)
+    known_words = set(word2index.keys())
+    if pretrained is not None:
+        known_words.update(pretrained.vocabulary())
+
+    word2index['UNKTOKEN'] = len(word2index)
+    word2index['PADTOKEN'] = len(word2index)
+    unk_index = word2index['UNKTOKEN']
+    pad_index = word2index['PADTOKEN']
+
+    # index documents and keep track of test terms outside the development vocabulary that are in GloVe (if available)
+    out_of_vocabulary = dict()
+    analyzer = dataset.analyzer()
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
+    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
+
+    print('[indexing complete]')
+    print()
+
+    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+
+# ---------------------------------------------------------------------------------------------------------------------------
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------

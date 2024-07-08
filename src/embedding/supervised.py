@@ -157,7 +157,8 @@ label space exceeds a defined limit.
 """
 def get_supervised_embeddings(X, Y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True):
 
-    print("----- get_supervised_embeddings() -----")
+    print()
+    print("---------- get_supervised_embeddings() ----------")
 
     nC = Y.shape[1]
     if nC==2 and binary_structural_problems > nC:

@@ -29,9 +29,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-VECTOR_CACHE = '../.vector_cache'               # assumes everything is run from /bin directory
-
-
 #
 # TODO: Set up logging
 #
@@ -39,6 +36,7 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 
+# ---------------------------------------------------------------------------------------------------------------------------
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     
@@ -78,32 +76,7 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
 
     return model
 
-
-def index_dataset(dataset, pretrained=None):
-
-    logging.info(f"indexing dataset")
-
-    # build the vocabulary
-    word2index = dict(dataset.vocabulary)
-    known_words = set(word2index.keys())
-    if pretrained is not None:
-        known_words.update(pretrained.vocabulary())
-
-    word2index['UNKTOKEN'] = len(word2index)
-    word2index['PADTOKEN'] = len(word2index)
-    unk_index = word2index['UNKTOKEN']
-    pad_index = word2index['PADTOKEN']
-
-    # index documents and keep track of test terms outside the development vocabulary that are in GloVe (if available)
-    out_of_vocabulary = dict()
-    analyzer = dataset.analyzer()
-    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
-    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
-
-    print('[indexing complete]')
-    logging.info(f"indexing complete")
-
-    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+# ---------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -178,41 +151,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
 
 
 def init_optimizer(model, lr, weight_decay):
-    return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
-
-
-# ------------------------------------------------------------------------------------------------------ 
-# load_pretrained()
-#
-# returns Boolean and then data structure with embeddings, None if 'opt.pretrained'
-# is not one if the acceptable values
-#
-def load_pretrained(opt):
-
-    print("load_pretrained(opt): ", {opt.pretrained})
-
-    if opt.pretrained == 'glove':
-        print("path:", {opt.glove_path})
-        print("Loading GloVe...")
-        return True, GloVe(path=opt.glove_path)
-    
-    elif opt.pretrained == 'word2vec':
-        print("path:", {opt.word2vec_path})
-        print("Loading Word2Vec...")
-        return True, Word2Vec(path=opt.word2vec_path, limit=1000000)
-    
-    elif opt.pretrained == 'fasttext':
-        print("path:", {opt.fasttext_path})
-        print("Loading fasttext...")
-        return True, FastText(path=opt.fasttext_path, limit=1000000)
-    
-    elif opt.pretrained == 'bert':
-        print("path:", {opt.bert_path})
-        print("Loading BERT...")
-        return True, BERT(model_name='bert-base-uncased', dataset_name=opt.dataset)
-
-    return False, None
-# ------------------------------------------------------------------------------------------------------ 
+    return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay) 
 
 
 def init_loss(classification_type):
@@ -232,11 +171,19 @@ def main(opt):
     print()
     print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
     print()
-    print("... layer_cake::main(opt)... ")
+    print("\t................................ layer_cake::main(opt) ................................ ")
     
     method_name = set_method_name(opt)
     
-    pretrained, pretrained_vector = load_pretrained(opt)                # load pre-trained embeddings (vectors) from file
+    print("loading pretrained embeddings...")
+
+    #pretrained, pretrained_vector = load_pretrained_embeddings(opt)                # load pre-trained embeddings (vectors) from file
+
+    pretrained, pretrained_vector = load_pretrained_embeddings(
+        opt.dataset,
+        opt.pretrained,
+        opt
+    )
 
     embeddings_log_val ='none'
 
@@ -266,7 +213,14 @@ def main(opt):
 
     # build the word embeddings based upon opt
     print("building the embeddings...")
-    pretrained_embeddings, sup_range = embedding_matrix(dataset, pretrained_vector, vocabsize, word2index, out_of_vocabulary, opt)
+    pretrained_embeddings, sup_range = embedding_matrix(
+        dataset, 
+        pretrained_vector, 
+        vocabsize, 
+        word2index, 
+        out_of_vocabulary, 
+        opt
+        )
 
     if (pretrained_embeddings == None):
         print('\t[pretrained_embeddings]\n\t', None)
@@ -570,19 +524,22 @@ if __name__ == '__main__':
                              'over (default 1)')
     
     parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/GoogleNews-vectors-negative300.bin',
-                        metavar='str',
-                        help=f'path to Word2Vec pretrained vectors (GoogleNews-vectors-negative300.bin), used only '
+                        metavar='PATH',
+                        help=f'path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only '
                              f'with --pretrained word2vec')
     
     parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'path to glove.840B.300d pretrained vectors, used only with --pretrained glove')
+                        help=f'directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove') 
     
     parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/crawl-300d-2M.vec',
-                        help=f'path to fastText pretrained vectors (crawl-300d-2M.vec), used only with --pretrained fasttext')
+                        metavar='PATH',
+                        help=f'path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only '
+                            f'with --pretrained fasttext')
     
     parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
-                        help=f'path to BERT pretrained vectors (xxxxx), used only with --pretrained bert')
+                        metavar='PATH',
+                        help=f'directory to BERT pretrained vectors (e.g. bert-base-uncased-20newsgroups.pkl), used only with --pretrained bert')
 
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '

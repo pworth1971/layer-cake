@@ -3,41 +3,89 @@
 # Base components
 PY="python ../src/svm_baselines.py"
 LOG="--log-file ../log/svm_test.test"
-dataset="--dataset 20newsgroups"
+DATASET="--dataset 20newsgroups"
+PICK_PATH="--pickle-dir ../pickles/20newsgroups.pickle"
 EMB="--embedding-dir ../.vector_cache"
+
+GLOVE_PATH="--glove-path ../.vector_cache" 
+WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
+FASTTEXT_PATH="--fasttext-path ../.vector_cache/crawl-300d-2M.vec"
+BERT_PATH="--bert-path ../.vector_cache"
+
 
 # Define commands using function calls to ensure variable expansion and direct output
 function pg_svm_tfidf() {
-    echo "$PY $LOG $DATASET $EMB --learner svm --mode tfidf --optimc"
-    $PY $LOG $DATASET $EMB --learner svm --mode tfidf --optimc
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode tfidf --optimc"
+    echo $cmd
+    eval $cmd
 }
 
 function pg_svm_glove() {
-    echo "$PY $LOG $DATASET $EMB --learner svm --mode glove --optimc"
-    $PY $LOG $DATASET $EMB --learner svm --mode glove --optimc
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove $GLOVE_PATH --optimc"
+    echo $cmd
+    eval $cmd
 }
 
 function pg_svm_glove_sup() {
-    echo "$PY $LOG $DATASET $EMB --learner svm --mode glove-sup --optimc"
-    $PY $LOG $DATASET $EMB --learner svm --mode glove-sup --optimc
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove-sup $GLOVE_PATH --optimc"
+    echo $cmd
+    eval $cmd
+}
+
+function pg_svm_word2vec() {
+    echo
+    echo
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode word2vec $WORD2VEC_PATH --optimc"
+    echo $cmd
+    eval $cmd
+}
+
+function pg_svm_word2vec_sup() {
+    echo
+    echo
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode word2vec-sup $WORD2VEC_PATH --optimc"
+    echo $cmd
+    eval $cmd
+}
+
+function pg_svm_fasttext() {
+    echo
+    echo
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode fasttext $FASTTEXT_PATH --optimc"
+    echo $cmd
+    eval $cmd
+}
+
+function pg_svm_fasttext_sup() {
+    echo
+    echo
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode fasttext-sup $FASTTEXT_PATH --optimc"
+    echo $cmd
+    eval $cmd
 }
 
 function pg_svm_bert() {
-    echo "$PY $LOG $DATASET $EMB --learner svm --mode bert --optimc"
-    $PY $LOG $DATASET $EMB --learner svm --mode bert --optimc
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode bert $BERT_PATH --optimc"
+    echo $cmd
+    eval $cmd
 }
 
 function pg_svm_bert_sup() {
-    echo "$PY $LOG $DATASET $EMB --learner svm --mode bert-sup --optimc"
-    $PY $LOG $DATASET $EMB --learner svm --mode bert-sup --optimc
+    echo
+    echo
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode bert-sup $BERT_PATH --optimc"
+    echo $cmd
+    eval $cmd
 }
-
-
-#PG_SVM_TFIDF=$PY $LOG $dataset $EMB --learner svm --mode tfidf --optimc 
-#PG_SVM_GLOVE="python ../src/svm_baselines.py --dataset 20newsgroups --embedding-dir ../.vector_cache --log-file ../log/svm_test.out --learner svm --mode glove --optimc"
-#PG_SVM_GLOVE_SUP="python ../src/svm_baselines.py --dataset 20newsgroups --embedding-dir ../.vector_cache --log-file ../log/svm_test.out --learner svm --mode glove-sup --optimc"
-#PG_SVM_BERT="python ../src/svm_baselines.py --dataset 20newsgroups --embedding-dir ../.vector_cache --log-file ../log/svm_test.out --learner svm --mode bert --optimc"
-#PG_SVM_BERT_SUP="python ../src/svm_baselines.py --dataset 20newsgroups --embedding-dir ../.vector_cache --log-file ../log/svm_test.out --learner svm --mode bert-sup --optimc"
 
 
 # Array of function calls
@@ -45,6 +93,10 @@ commands=(
     pg_svm_tfidf
     pg_svm_glove
     pg_svm_glove_sup
+    pg_svm_word2vec
+    pg_svm_word2vec_sup
+    pg_svm_fasttext
+    pg_svm_fasttext_sup
     pg_svm_bert
     pg_svm_bert_sup
 )

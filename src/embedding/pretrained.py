@@ -258,10 +258,9 @@ class BERT(PretrainedEmbeddings):
         print(f'Initializing', {model_name})
 
         self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-
-
         self.model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
-        self.model.eval()                   # Set the model to inference mode
+
+        self.model.eval()                                   # Set the model to inference mode
        
         self.cache_path = os.path.join(cache_dir)           # Define a path to store embeddings
         
@@ -279,6 +278,7 @@ class BERT(PretrainedEmbeddings):
     def dim(self):
         # Returns the hidden size of the BERT model
         return self.model.config.hidden_size
+
 
     def extract(self, words):
 
