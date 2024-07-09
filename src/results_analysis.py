@@ -71,7 +71,7 @@ def results_analysis(file_path, output_path=None):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python process_data.py <input_file> [output_file]")
+        print("Usage: python results_analysis.py <input_file> [output_file]")
         sys.exit(1)
 
     input_file = sys.argv[1]

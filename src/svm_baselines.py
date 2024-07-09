@@ -1,9 +1,5 @@
 import warnings
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-
-
 import argparse
 from time import time
 
@@ -29,6 +25,14 @@ from util.common import *
 from data.dataset import *
 
 from embedding.supervised import get_supervised_embeddings
+
+from sklearn.svm import LinearSVC, SVC
+from sklearn.multiclass import OneVsRestClassifier
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+
 
 
 """
@@ -62,49 +66,86 @@ the Code. Sample command line argument calls:
 
 
 # --------------------------------------------------------------------------------------------------------
-# cls_performance: 
+# run_classification_model: 
 # 
 # Trains a classifier using SVM or logistic regression, optionally performing 
 # hyperparameter tuning via grid search.
 # --------------------------------------------------------------------------------------------------------
 
-def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, class_weight='balanced', mode='tfidf'):
+def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
+                        class_weight='balanced', mode='tfidf', use_sklearn=False):
     
     print()
     print()
-    print('........................ cls_performance() ........................')
+    print('........................ run_classification_model() ........................')
     
     tinit = time()
     
+    print("classification_type: ", classification_type)
+    print("estimator: ", estimator)
+    print("mode: ", mode)
+
     print("------- Xtr, ytr, Xte, yte shapes -------")
     print(Xtr.shape, ytr.shape, Xte.shape, yte.shape)
     print()
 
-    param_grid = {'C': np.logspace(-3, 3, 7)} if optimizeC else None
-    cv = 5
-    
-    if classification_type == 'multilabel':
-        print("---------***** multi-label case *****---------")
-        
-        cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
-        cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
-        yte_ = cls.predict(Xte)
-
-        Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
+    # Initialize the estimator with default settings
+    if estimator == LogisticRegression:
+        params = {'max_iter': 1000, 'class_weight': class_weight, 'solver': 'saga'}
+    elif estimator in [LinearSVC, SVC]:
+        params = {'max_iter': 1000, 'class_weight': class_weight}           # LinearSVC doesn't use solver but can use max_iter
     else:
-        print("---------***** single label case *****---------")      
-        
-        cls = estimator(class_weight=class_weight, dual="auto")                             
-        cls = GridSearchCV(cls, param_grid, cv=cv, n_jobs=-1) if optimizeC else cls
+        params = {'class_weight': class_weight}                             # Default for other estimators that might not use max_iter
 
-        print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
-                
-        cls.fit(Xtr, ytr)
-        yte_ = cls.predict(Xte)       
+    estimator_instance = estimator(**params)
+
+    # Prepare a pipeline and parameter grid
+    pipeline = Pipeline([
+        ('scaler', StandardScaler(with_mean=False)),
+        ('classifier', estimator_instance)
+    ])
+
+    # Prepare parameter grid based on the estimator
+    param_grid = {'classifier__C': np.logspace(-3, 3, 7)} if optimizeC else None
+    if estimator == LogisticRegression and optimizeC:
+        param_grid['classifier__solver'] = ['liblinear', 'saga']            # Adjusting solver for LogisticRegression
+
+    print("param_grid:", param_grid)
+
+    cv = 5
+
+    if classification_type == 'multilabel':
+
+        print("---------***** multi-label case *****---------")
+
+        if not use_sklearn:         # Use custom MLSVC class
             
-        Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
+            cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
+            cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
+        
+        else:                       # Use standard OneVsRestClassifier with the selected estimator
+            
+            base_estimator = OneVsRestClassifier(estimator(class_weight=class_weight))
+            
+            cls = GridSearchCV(base_estimator, param_grid, cv=cv, n_jobs=-1) if optimizeC else base_estimator
+            cls.fit(Xtr, _todense(ytr))
+    
+    else:
+    
+        print("---------***** single label case *****---------")      
+
+        cls = GridSearchCV(pipeline, param_grid, cv=5, n_jobs=-1) if optimizeC else pipeline
+    
+        print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
+        cls.fit(Xtr, ytr)
+
+
+    yte_ = cls.predict(Xte)
+
+    Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
+
     return Mf1, mf1, acc, tend
 
 # --------------------------------------------------------------------------------------------------------
@@ -206,57 +247,6 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
     print()
 
     return vocabulary, pretrained_embeddings
-
-# -----------------------------------------------------------------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------------------------------------------------------------
-# embedding_matrix2()
-#
-# adapted from layer_cake primary code
-#
-# -----------------------------------------------------------------------------------------------------------------------------------
-
-def embedding_matrix2(dataset, pretrained, supervised, vocabsize, word2index, out_of_vocabulary, nozscore, supervised_method, max_label_space):
-
-    print()
-    print('------------------------- embedding_matrix2() -------------------------')
-
-    pretrained_embeddings = None
-    sup_range = None
-    
-    if pretrained or supervised:
-        pretrained_embeddings = []
-
-        if pretrained is not None:
-            word_list = get_word_list(word2index, out_of_vocabulary)
-            weights = pretrained.extract(word_list)
-            pretrained_embeddings.append(weights)
-            print('\t[pretrained-matrix]', weights.shape)
-            del pretrained
-
-        if supervised:
-            Xtr, _ = dataset.vectorize()
-            Ytr = dataset.devel_labelmatrix
-            F = get_supervised_embeddings(Xtr, Ytr,
-                                          method=supervised_method,
-                                          max_label_space=max_label_space,
-                                          dozscore=(not nozscore))
-            num_missing_rows = vocabsize - F.shape[0]
-            F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))
-            F = torch.from_numpy(F).float()
-            print('\t[supervised-matrix]', F.shape)
-
-            offset = 0
-            if pretrained_embeddings:
-                offset = pretrained_embeddings[0].shape[1]
-            sup_range = [offset, offset + F.shape[1]]
-            pretrained_embeddings.append(F)
-
-        pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
-        print('\t[final pretrained_embeddings]\n\t', pretrained_embeddings.shape)
-
-    return pretrained_embeddings, sup_range
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 
@@ -380,9 +370,6 @@ def main(args):
     else:
         tinit = time()
 
-        #
-        # build the embedding matrix
-        #     
         print("building the embeddings...")
  
         _, F = embedding_matrix(
@@ -392,37 +379,21 @@ def main(args):
             supervised=supervised, 
             emb_path=emb_path
             )
-        
-        """
-        F, sup_range = embedding_matrix2(
-            dataset, 
-            pretrained_vector, 
-            supervised, 
-            vocabsize, 
-            word2index, 
-            out_of_vocabulary,
-            args.nozscore,
-            args.supervised_method,
-            args.max_label_space
-            )
-        """
 
         Xtr = Xtr.dot(F)
         Xte = Xte.dot(F)
         
         # convert to arrays
         Xtr = np.asarray(Xtr)
-        #ytr = np.asarray(ytr)
         Xte = np.asarray(Xte)
-        #yte = np.asarray(yte)    
-
+        
         sup_tend = time() - tinit
 
     
     print()        
     print('\t*** final matrix shapes (Xtr, ytr, Xte, yte) ***:', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
-    Mf1, mf1, acc, tend = cls_performance(
+    Mf1, mf1, acc, tend = run_classification_model(
         Xtr, 
         ytr, 
         Xte, 
@@ -431,7 +402,9 @@ def main(args):
         args.optimc, 
         learner,
         class_weight=class_weight, 
-        mode=args.mode)
+        mode=args.mode,
+        use_sklearn=args.sklearn
+        )
     
     tend += sup_tend
 
@@ -466,7 +439,11 @@ if __name__ == '__main__':
     
     parser.add_argument('--log-file', type=str, default='../log/svm_baseline.test', metavar='N', help='path to the application log file')
     
-    parser.add_argument('--learner', type=str, default='svm', metavar='N', help=f'learner (svm or lr)')
+    parser.add_argument('--learner', type=str, default='svm', metavar='N', 
+                        help=f'learner (svm or lr)')
+
+    parser.add_argument('--sklearn', action='store_true', default=False,
+                        help='use scikit-learn learner for multi-label classification')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
                         help=f'mode, in [tfidf, stw, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
@@ -553,5 +530,9 @@ if __name__ == '__main__':
 
     if args.combine_strategy is None:
         args.combine_strategy = 0
+
+    # disable warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
     main(args)
