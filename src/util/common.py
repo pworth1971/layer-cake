@@ -27,7 +27,7 @@ VECTOR_CACHE = '../.vector_cache'                       # assumes everything is 
 # emb_model is not one if the acceptable values
 #
 # ---------------------------------------------------------------------------------------------------------------------------------------
-def load_pretrained_embeddings(dataset, model, args):
+def load_pretrained_embeddings(model, args):
 
     print("util.common.load_pretrained_embeddings(): ", {model})
 
@@ -49,7 +49,7 @@ def load_pretrained_embeddings(dataset, model, args):
     elif model=='bert':
         print("path:", {args.bert_path})
         print("Loading BERT...")
-        return True, BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, cache_dir=args.bert_path, dataset_name=dataset)
+        return True, BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, emb_path=args.bert_path)
 
     return False, None
 # ---------------------------------------------------------------------------------------------------------------------------------------

@@ -7,7 +7,6 @@ from tabulate import tabulate
 # results_analysis()
 #
 # analyze the model performance results, print summary either to sdout or file
-#
 # ----------------------------------------------------------------------------------------------------------------------------
 
 def results_analysis(file_path, output_path=None):

@@ -249,27 +249,39 @@ input through its transformer network.
 """
 class BERT(PretrainedEmbeddings):
 
-    def __init__(self, model_name='bert-base-uncased', cache_dir=VECTOR_CACHE, dataset_name='20newsgroups'):
+    def __init__(self, model_name='bert-base-uncased', emb_path=VECTOR_CACHE):
 
         super().__init__()
         
-        transformers_logging.set_verbosity_warning()                      # Set up transformers logging      
-
-        print(f'Initializing', {model_name})
-
-        self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-        self.model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
-
-        self.model.eval()                                   # Set the model to inference mode
-       
-        self.cache_path = os.path.join(cache_dir)           # Define a path to store embeddings
+        print()
+        print("-------------------- BERT(PretrainedEmbeddings) Class Initialization --------------------")
+        print()
         
-        self.dataset = dataset_name
+        transformers_logging.set_verbosity_warning()                    # Set transformers log level      
+
+        self.cache_path = emb_path
+        os.makedirs(self.cache_path, exist_ok=True)                     # Ensure cache directory exists
+
+        print(f'Initializing model: {model_name} in cache directory: {self.cache_path}')
+
+        # Load tokenizer and model, force downloading if not found in cache
+        self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
+        
+        self.model = BertModel.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
+        self.model.eval()  # Set the model to inference mode
+        self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))  # Move model to appropriate device
+
         self.model_name = model_name
 
-        os.makedirs(self.cache_path, exist_ok=True)
+        # freeze layers to optimize mem usage
+        for param in self.model.embeddings.parameters():
+            param.requires_grad = False
         
-        print('Done: BERT model and tokenizer are ready for use!')
+        for layer in self.model.encoder.layer[:10]:                 # Freeze the first 10 layers 
+            for param in layer.parameters():
+                param.requires_grad = False
+
+        print('**** BERT model and tokenizer are ready for use ****')
         
     def vocabulary(self):
         # Returns the tokenizer's vocabulary as a set
@@ -280,24 +292,31 @@ class BERT(PretrainedEmbeddings):
         return self.model.config.hidden_size
 
 
-    def extract(self, words):
 
-        print("Bert::extract()...")
+    def extract(self, words, batch_size=1000):
 
-        cache_file_name = self.model_name + '-' + self.dataset + '.pkl'
-        cache_file = os.path.join(self.cache_path, cache_file_name)
+        print()
+        print("\t------------------ Bert::extract() ------------------")
 
-        print("attempting to load embeddings from cache_file ", {cache_file})
-        if os.path.exists(cache_file):
-            return joblib.load(cache_file)
+        # Convert numpy array to list if necessary
+        if isinstance(words, np.ndarray):
+            words = words.tolist()
 
-        inputs = self.tokenizer(words, return_tensors="pt", padding=True, truncation=True)
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-        embeddings = outputs.last_hidden_state.mean(dim=1)
+        # Processing in smaller batches
+        embeddings = []
+        for i in range(0, len(words), batch_size):
+            batch_words = words[i:i+batch_size]
+            inputs = self.tokenizer(batch_words, return_tensors="pt", padding=True, truncation=True)
+            inputs = {key: val.to(self.model.device) for key, val in inputs.items()}
 
-        joblib.dump(embeddings, cache_file)                 # Save the embeddings to disk
-        return embeddings
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+
+            batch_embeddings = outputs.last_hidden_state.mean(dim=1)
+            embeddings.append(batch_embeddings)
+
+        embeddings = torch.cat(embeddings, dim=0)               # Concatenate all batch embeddings
+        return embeddings.cpu()                                 # Move the tensor to CPU before returning
 
     @staticmethod
     def reindex(words, word2index):

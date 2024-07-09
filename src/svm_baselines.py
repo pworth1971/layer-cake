@@ -67,14 +67,16 @@ the Code. Sample command line argument calls:
 # Trains a classifier using SVM or logistic regression, optionally performing 
 # hyperparameter tuning via grid search.
 # --------------------------------------------------------------------------------------------------------
+
 def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, class_weight='balanced', mode='tfidf'):
     
     print()
-    print('........ cls_performance() ........')
+    print()
+    print('........................ cls_performance() ........................')
     
     tinit = time()
     
-    print("-- Xtr, ytr, Xte, yte shapes --")
+    print("------- Xtr, ytr, Xte, yte shapes -------")
     print(Xtr.shape, ytr.shape, Xte.shape, yte.shape)
     print()
 
@@ -82,7 +84,7 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
     cv = 5
     
     if classification_type == 'multilabel':
-        print("---------***** multi-label classification *****---------")
+        print("---------***** multi-label case *****---------")
         
         cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
@@ -90,37 +92,19 @@ def cls_performance(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, est
 
         Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
     else:
-        print("---------***** single label classification *****---------")
-        
-        #cls = estimator(class_weight=class_weight, dual=True, max_iter=10000)             
+        print("---------***** single label case *****---------")      
         
         cls = estimator(class_weight=class_weight, dual="auto")                             
         cls = GridSearchCV(cls, param_grid, cv=cv, n_jobs=-1) if optimizeC else cls
 
         print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
-        
-        if mode in ['tfidf']:        
-            cls.fit(Xtr, ytr)
-            yte_ = cls.predict(Xte)       
-        else: 
-            """
-            # convert to arrays
-            XtrArr = np.asarray(Xtr)
-            ytrArr = np.asarray(ytr)
-            XteArr = np.asarray(Xte)
-            print("Xtr, ytr, Xte as arrays: ", {XtrArr.shape}, {ytrArr.shape}, {XteArr.shape})
-
-            cls.fit(XtrArr, ytrArr)
-            yte_ = cls.predict(XteArr)
-            """
-            cls.fit(Xtr, ytr)
-            yte_ = cls.predict(Xte)
+                
+        cls.fit(Xtr, ytr)
+        yte_ = cls.predict(Xte)       
             
-
         Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
-
     return Mf1, mf1, acc, tend
 
 # --------------------------------------------------------------------------------------------------------
@@ -158,7 +142,7 @@ def tsr(name):
 # or a combination of both.
 # -----------------------------------------------------------------------------------------------------------------------------------
 
-def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised=False, vector_cache='../.vector_cache'):
+def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised=False, emb_path='../.vector_cache'):
 
     print()
     print('----------------------------------------- svm_baseline::embedding_matrix() -----------------------------------------')
@@ -172,37 +156,35 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
     
     print("pretrained:", {pretrained})
     print("supervised:", {supervised})
+    print()
 
     if pretrained:
-        
-        print()
 
         if (pretrained_type in ['glove', 'glove-sup']):
             print('\t[pretrained-matrix: GloVe]')
-            pretrained = GloVe(path=vector_cache)
+            pretrained = GloVe(path=emb_path)
 
         elif (pretrained_type in ['bert', 'bert-sup']):
             print('\t[pretrained-matrix: BERT]')
-            pretrained = BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, cache_dir=vector_cache, dataset_name=dataset)
+            pretrained = BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, emb_path=emb_path)
         
         elif (pretrained_type in ['word2vec', 'word2vec-sup']):
             print('\t[pretrained-matrix: Word2Vec]')
-            pretrained = Word2Vec(path=vector_cache)
+            pretrained = Word2Vec(path=emb_path)
         
         elif (pretrained_type in ['fasttext', 'fasttext-sup']):
             print('\t[pretrained-matrix: FastText]')
-            pretrained = FastText(path=vector_cache)
+            pretrained = FastText(path=emb_path)
 
         P = pretrained.extract(vocabulary).numpy()
-        print("P.shape: ", {P.shape})
+        print("pretrained.shape: ", {P.shape})
 
         pretrained_embeddings.append(P)
         print(f'pretrained embeddings count: {len(pretrained_embeddings[0])}')
 
 
     if supervised:
-        
-        print()
+    
         print('\t[supervised-matrix]')
 
         Xtr, _ = dataset.vectorize()
@@ -212,7 +194,7 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
 
         S = get_supervised_embeddings(Xtr, Ytr)
 
-        print("S.shape: ", {S.shape})
+        print("supervised.shape: ", {S.shape})
                 
         pretrained_embeddings.append(S)
         print(f'supervised word-class embeddings count: {len(pretrained_embeddings[1])}')
@@ -220,7 +202,7 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
     pretrained_embeddings = np.hstack(pretrained_embeddings)
 
     print()
-    print("-- after np.hstack(): pretrained_embeddings shape: ", {pretrained_embeddings.shape})
+    print("\t------------ after np.hstack(): pretrained_embeddings shape ------------\n ", {pretrained_embeddings.shape})
     print()
 
     return vocabulary, pretrained_embeddings
@@ -234,6 +216,7 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
 # adapted from layer_cake primary code
 #
 # -----------------------------------------------------------------------------------------------------------------------------------
+
 def embedding_matrix2(dataset, pretrained, supervised, vocabsize, word2index, out_of_vocabulary, nozscore, supervised_method, max_label_space):
 
     print()
@@ -289,6 +272,7 @@ def embedding_matrix2(dataset, pretrained, supervised, vocabsize, word2index, ou
 # methods (TF-IDF, BERT, GloVe, etc.). Evaluates the performance using custom metrics and logs 
 # the results.
 # --------------------------------------------------------------------------------------------------------
+
 def main(args):
 
     print()
@@ -300,6 +284,8 @@ def main(args):
     # set up model type
     learner = LinearSVC if args.learner == 'svm' else LogisticRegression
     learner_name = 'SVM' if args.learner == 'svm' else 'LR'
+
+    print("learner: ", {learner_name})
     
     mode = args.mode
     if args.mode == 'stw':                              # supervised term weighting (stw)
@@ -307,35 +293,41 @@ def main(args):
     
     method_name = f'{learner_name}-{mode}-{"opC" if args.optimc else "default"}'
 
+    print("method_name: ", {method_name})
+
     pretrained = False
     embeddings ='none'
+    emb_path = VECTOR_CACHE
 
     if args.mode in ['bert', 'bert-sup']:
         pretrained = True
         embeddings = 'bert'
+        emb_path = args.bert_path
     elif args.mode in ['glove', 'glove-sup']:
         pretrained = True
         embeddings = 'glove'
+        emb_path = args.glove_path
     elif args.mode in ['word2vec', 'word2vec-sup']:
         pretrained = True
         embeddings = 'word2vec'
+        emb_path = args.word2vec_path
     elif args.mode in ['fasttext', 'fasttext-sup']:
         pretrained = True
         embeddings = 'fasttext'
+        emb_path = args.fasttext_path
    
+    print("emb_path: ", {emb_path})
+
     supervised = False
 
     if args.mode in ['sup', 'bert-sup', 'glove-sup', 'word2vec-sup', 'fasttext-sup']:
         supervised = True
 
+    print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
+    print()
+    
     print("loading pretrained embeddings...")
-
-    # load pre-trained embeddings (vectors) 
-    pretrained, pretrained_vector = load_pretrained_embeddings(
-        args.dataset,
-        embeddings,
-        args
-        )                
+    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
 
     embeddings_log_val ='none'
 
@@ -359,17 +351,6 @@ def main(args):
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
 
-    """
-    print("train / test data split...")
-    val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
-
-    train_index, val_index, ytr, yval = train_test_split(
-        devel_index, dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
-    )
-    
-    yte = dataset.test_target
-    """
-
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
 
@@ -387,7 +368,6 @@ def main(args):
         Ctr = coocurrence.transform(dataset.devel_raw)
         Cte = coocurrence.transform(dataset.test_raw)
         stw = TSRweighting(tsr_function=tsr(args.tsr), global_policy=args.stwmode)
-        
         Xtr = stw.fit_transform(Ctr, dataset.devel_labelmatrix)
         Xte = stw.transform(Cte)
     else:
@@ -399,30 +379,21 @@ def main(args):
         sup_tend = 0
     else:
         tinit = time()
-        """
-        pretrained, supervised = False, False
-        
-        if args.mode in ['sup', 'glove-sup', 'bert-sup', 'word2vec-sup', 'fasttext-sup']:
-            supervised = True
-        elif args.mode in ['glove', 'bert', 'word2vec', 'fasttext', 'glove-sup', 'bert-sup', 'word2vec-sup', 'fasttext-sup']:
-            pretrained = True
-        """
 
         #
         # build the embedding matrix
         #     
-        """ 
+        print("building the embeddings...")
+ 
         _, F = embedding_matrix(
             dataset, 
             pretrained=pretrained, 
             pretrained_type=embeddings,
             supervised=supervised, 
-            vector_cache='../.vector_cache'
+            emb_path=emb_path
             )
+        
         """
-
-        print("building the embeddings...")
-
         F, sup_range = embedding_matrix2(
             dataset, 
             pretrained_vector, 
@@ -432,29 +403,24 @@ def main(args):
             out_of_vocabulary,
             args.nozscore,
             args.supervised_method,
-            args.max_label_space)
+            args.max_label_space
+            )
+        """
 
-        #Xtr = Xtr.dot(F)    
-        #Xte = Xte.dot(F)
+        Xtr = Xtr.dot(F)
+        Xte = Xte.dot(F)
         
+        # convert to arrays
+        Xtr = np.asarray(Xtr)
+        #ytr = np.asarray(ytr)
+        Xte = np.asarray(Xte)
+        #yte = np.asarray(yte)    
+
         sup_tend = time() - tinit
 
     
-    print(Xtr.shape, Xte.shape)
-
-    #
-    # conversion due to np.matrix deprecation in numpy library
-    #
-    """
-    print("matrix array conversion (numpy suppoort)...")
-    
-    XtrArr = np.asarray(Xtr)
-    ytrArr = np.asarray(ytr)
-    XteArr = np.asarray(Xte)
-    yteArr = np.asarray(yte)
-
-    print(XtrArr.shape, XteArr.shape)
-    """
+    print()        
+    print('\t*** final matrix shapes (Xtr, ytr, Xte, yte) ***:', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
     Mf1, mf1, acc, tend = cls_performance(
         Xtr, 
@@ -467,24 +433,14 @@ def main(args):
         class_weight=class_weight, 
         mode=args.mode)
     
-    """
-    Mf1, mf1, acc, tend = cls_performance(
-        XtrArr, 
-        ytrArr, 
-        XteArr, 
-        yteArr, 
-        dataset.classification_type, 
-        args.optimc, 
-        learner,
-        class_weight=class_weight, 
-        mode=args.mode)
-    """
-
     tend += sup_tend
 
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-macro-F1', value=Mf1, timelapse=tend)
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-accuracy', value=acc, timelapse=tend)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 def _todense(y):

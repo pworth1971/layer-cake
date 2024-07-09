@@ -90,13 +90,13 @@ function pg_svm_bert_sup() {
 
 # Array of function calls
 commands=(
-    pg_svm_tfidf
-    pg_svm_glove
-    pg_svm_glove_sup
-    pg_svm_word2vec
-    pg_svm_word2vec_sup
-    pg_svm_fasttext
-    pg_svm_fasttext_sup
+#    pg_svm_tfidf
+#    pg_svm_glove
+#    pg_svm_glove_sup
+#    pg_svm_word2vec
+#    pg_svm_word2vec_sup
+#    pg_svm_fasttext
+#    pg_svm_fasttext_sup
     pg_svm_bert
     pg_svm_bert_sup
 )
