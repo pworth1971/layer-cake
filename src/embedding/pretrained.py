@@ -92,7 +92,7 @@ class GloVe(PretrainedEmbeddings):
         print(f'Loading GloVe pretrained vectors from torchtext')
         # Initialize GloVe model from torchtext
         self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)
-        print('Done')
+        #print('Done')
 
     def vocabulary(self):
         # accessing the vocabulary
@@ -147,7 +147,7 @@ class Word2Vec(PretrainedEmbeddings):
         #self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
         self.word2index = {w: i for i,w in enumerate(self.embed.index_to_key)}      # gensim 4.0
         
-        print('Done')
+        #print('Done')
 
     def vocabulary(self):
         return set(self.word2index.keys())
@@ -161,6 +161,7 @@ class Word2Vec(PretrainedEmbeddings):
         extraction = np.zeros((len(words), self.dim()))
         extraction[source_idx] = self.embed.vectors[target_idx]
         extraction = torch.from_numpy(extraction).float()
+
         return extraction
 
 
@@ -197,7 +198,8 @@ class FastText(Word2Vec):
         else:
             print("downlading embeddings from ", {ft_emb_url})
             self.ensure_emb_binary_exists(pathvec, ft_emb_url, pathzip)
-             # After ensuring the file exists, initialize the embeddings
+            
+            # After ensuring the file exists, initialize the embeddings
             if os.path.exists(pathbin):
                 super().__init__(pathbin, limit, binary=True)
             else:
@@ -227,7 +229,7 @@ class FastText(Word2Vec):
             print(f"Unzipping the file to {emb_dir}...")
             with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
                 zip_ref.extractall(path=emb_dir)
-            print(f"{filename} is ready for use!")
+            #print(f"{filename} is ready for use!")
         else:
             print(f"{filename} already exists!")
 
@@ -253,9 +255,7 @@ class BERT(PretrainedEmbeddings):
 
         super().__init__()
         
-        print()
-        print("-------------------- BERT(PretrainedEmbeddings) Class Initialization --------------------")
-        print()
+        print("\tBERT(PretrainedEmbeddings):")
         
         transformers_logging.set_verbosity_warning()                    # Set transformers log level      
 
@@ -268,8 +268,8 @@ class BERT(PretrainedEmbeddings):
         self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
         
         self.model = BertModel.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
-        self.model.eval()  # Set the model to inference mode
-        self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))  # Move model to appropriate device
+        self.model.eval()                                                               # Set the model to inference mode
+        self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))     # Move model to appropriate device
 
         self.model_name = model_name
 
@@ -281,7 +281,7 @@ class BERT(PretrainedEmbeddings):
             for param in layer.parameters():
                 param.requires_grad = False
 
-        print('**** BERT model and tokenizer are ready for use ****')
+        #print('**** BERT model and tokenizer are ready for use ****')
         
     def vocabulary(self):
         # Returns the tokenizer's vocabulary as a set
@@ -295,8 +295,7 @@ class BERT(PretrainedEmbeddings):
 
     def extract(self, words, batch_size=1000):
 
-        print()
-        print("\t------------------ Bert::extract() ------------------")
+        #print("Bert::extract()")
 
         # Convert numpy array to list if necessary
         if isinstance(words, np.ndarray):
@@ -304,6 +303,7 @@ class BERT(PretrainedEmbeddings):
 
         # Processing in smaller batches
         embeddings = []
+        
         for i in range(0, len(words), batch_size):
             batch_words = words[i:i+batch_size]
             inputs = self.tokenizer(batch_words, return_tensors="pt", padding=True, truncation=True)
@@ -316,6 +316,7 @@ class BERT(PretrainedEmbeddings):
             embeddings.append(batch_embeddings)
 
         embeddings = torch.cat(embeddings, dim=0)               # Concatenate all batch embeddings
+        
         return embeddings.cpu()                                 # Move the tensor to CPU before returning
 
     @staticmethod

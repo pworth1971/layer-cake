@@ -172,11 +172,11 @@ def main(opt):
     print()
     print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
     print()
-    print("..................................... layer_cake::main(opt) ..................................... ")
+    print("\t ----- layer_cake::main(opt) -----")
     
     method_name = set_method_name(opt)
     
-    print("loading pretrained embeddings...")
+    #print("loading pretrained embeddings...")
 
     #pretrained, pretrained_vector = load_pretrained_embeddings(opt)                # load pre-trained embeddings (vectors) from file
 
@@ -238,6 +238,7 @@ def main(opt):
 
     for epoch in range(1, opt.nepochs + 1):
 
+        print()
         print(" -------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history)
         
@@ -300,7 +301,6 @@ def main(opt):
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history):
     
-    print()
     print("... training...")
 
     epoch_loss = 0

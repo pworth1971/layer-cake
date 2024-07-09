@@ -48,8 +48,8 @@ class CSVLog:
 
     def add_layered_row(self, **kwargs):
 
-        print("CSVLog::add_layered_row()")
-        print('--defaults--\n\t', {self.defaults.keys})
+        #print("CSVLog::add_layered_row()")
+        #print('--defaults--\n\t', {self.defaults.keys})
         
         # set defaults
         for key in self.defaults.keys():
@@ -60,9 +60,9 @@ class CSVLog:
         local_columns = sorted(list(kwargs.keys()))
         values = [kwargs[col_i] for col_i in local_columns]
 
-        print(self.columns)
-        print(local_columns)
-        print(values)
+        #print(self.columns)
+        #print(local_columns)
+        #print(values)
 
         s = pd.Series(values, index=self.columns)
         self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
