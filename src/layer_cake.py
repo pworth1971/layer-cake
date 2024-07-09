@@ -41,7 +41,8 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     
     print()
-    print("------ init_Net() ------")
+    print("------------------ init_Net() ------------------")
+
     net_type=opt.net
     hidden = opt.channels if net_type == 'cnn' else opt.hidden
     if opt.droptype == 'sup':
@@ -171,7 +172,7 @@ def main(opt):
     print()
     print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
     print()
-    print("\t................................ layer_cake::main(opt) ................................ ")
+    print("..................................... layer_cake::main(opt) ..................................... ")
     
     method_name = set_method_name(opt)
     
@@ -179,11 +180,7 @@ def main(opt):
 
     #pretrained, pretrained_vector = load_pretrained_embeddings(opt)                # load pre-trained embeddings (vectors) from file
 
-    pretrained, pretrained_vector = load_pretrained_embeddings(
-        opt.dataset,
-        opt.pretrained,
-        opt
-    )
+    pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
 
     embeddings_log_val ='none'
 
@@ -241,8 +238,6 @@ def main(opt):
 
     for epoch in range(1, opt.nepochs + 1):
 
-        print()
-        print()
         print(" -------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history)
         
@@ -260,7 +255,7 @@ def main(opt):
                 break
 
     print()
-    print("...restoring best model...")
+    print("\t...restoring best model...")
     print()
 
     # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
@@ -563,15 +558,9 @@ if __name__ == '__main__':
 
     print()
     print()
+    print(f'RUNNING ON DEVICE == {opt.device}')
     print()
-
-    print(f'*************** RUN ON DEVICE == {opt.device} ***************')
-    
-    print()
-    print()
-
     print_arguments(opt)                # Call the function to print arguments
-
     print()
 
     assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
