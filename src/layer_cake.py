@@ -172,7 +172,7 @@ def main(opt):
     print()
     print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
     print()
-    print("\t ----- layer_cake::main(opt) -----")
+    print("----- layer_cake::main(opt) -----")
     
     method_name = set_method_name(opt)
     
