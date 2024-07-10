@@ -80,7 +80,7 @@ the Code. Sample command line argument calls:
 # --------------------------------------------------------------------------------------------------------
 
 def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
-                        class_weight='balanced', mode='tfidf', use_sklearn=False):
+                        class_weight='balanced', mode='tfidf'):
 
     print()
     print('........................ run_classification_model() ........................')
@@ -93,19 +93,27 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
 
     print("------- Xtr, ytr, Xte, yte shapes -------")
     print(Xtr.shape, ytr.shape, Xte.shape, yte.shape)
-    print()
 
-    # Prepare parameter grid based on the estimator
- 
     # Initialize the estimator with default settings
     if estimator == LogisticRegression:
-        params = {'max_iter': 1000, 'class_weight': class_weight, 'solver': 'saga'}
+        estimator_instance = LogisticRegression(max_iter=1000, class_weight=class_weight, solver='saga')
     elif estimator in [LinearSVC, SVC]:
-        params = {'max_iter': 1000, 'class_weight': class_weight}           # LinearSVC doesn't use solver but can use max_iter
+        estimator_instance = estimator(max_iter=1000, class_weight=class_weight)
     else:
-        params = {'class_weight': class_weight}                             # Default for other estimators that might not use max_iter
+        estimator_instance = estimator(class_weight=class_weight)
 
-    estimator_instance = estimator(**params)
+    print("estimator_instance:", {estimator_instance})
+
+    for param, value in estimator_instance.get_params(deep=True).items():
+        print(f"{param} -> {value}")
+
+    # Setup the parameter grid
+    if optimizeC:
+        param_grid = {'C': np.logspace(-3, 3, 7)}
+        if estimator == LogisticRegression:
+            param_grid['solver'] = ['liblinear', 'saga']
+    else:
+        param_grid = None
 
     # Prepare a pipeline and parameter grid
     pipeline = Pipeline([
@@ -125,20 +133,9 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
     if classification_type == 'multilabel':
 
         print("-- multi-label --")
-
-        if not use_sklearn:         # Use custom MLSVC class
-            
-            #cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
-            cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight)
-            cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
+        cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
+        cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         
-        else:                       # Use standard OneVsRestClassifier with the selected estimator
-            
-            base_estimator = OneVsRestClassifier(estimator(class_weight=class_weight))
-            
-            cls = GridSearchCV(base_estimator, param_grid, cv=cv, n_jobs=-1) if optimizeC else base_estimator
-            cls.fit(Xtr, _todense(ytr))
-    
     else:
     
         print("-- single label --")      
@@ -413,8 +410,7 @@ def main(args):
         args.optimc, 
         learner,
         class_weight=class_weight, 
-        mode=args.mode,
-        use_sklearn=args.sklearn
+        mode=args.mode
         )
     
     tend += sup_tend
@@ -452,9 +448,6 @@ if __name__ == '__main__':
     
     parser.add_argument('--learner', type=str, default='svm', metavar='N', 
                         help=f'learner (svm or lr)')
-
-    parser.add_argument('--sklearn', action='store_true', default=False,
-                        help='use scikit-learn learner for multi-label classification')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
                         help=f'mode, in [tfidf, stw, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
