@@ -1,10 +1,14 @@
 #!/bin/bash
 
 # Base components
-PY="python ../src/svm_baselines.py"
-LOG="--log-file ../log/baseline_test.test"
-DATASET="--dataset 20newsgroups"
-PICK_PATH="--pickle-dir ../pickles/20newsgroups.pickle"
+PY="python ../src/ml_class_baselines.py"
+LOG="--log-file ../log/ml_baselines.test"
+
+#DATASET="--dataset 20newsgroups"
+#PICK_PATH="--pickle-dir ../pickles/20newsgroups.pickle"
+
+DATASET="--dataset reuters21578"
+PICK_PATH="--pickle-dir ../pickles/reuters21578.pickle"
 EMB="--embedding-dir ../.vector_cache"
 
 GLOVE_PATH="--glove-path ../.vector_cache" 

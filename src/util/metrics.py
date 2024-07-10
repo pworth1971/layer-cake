@@ -2,6 +2,16 @@ import numpy as np
 from scipy.sparse import lil_matrix, issparse
 from sklearn.metrics import f1_score, accuracy_score
 
+from scipy.sparse import csr_matrix, find
+
+
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+
+# Suppress specific sklearn warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=ConvergenceWarning)
+
 
 """
 Scikit learn provides a full set of evaluation metrics, but they treat special cases differently.
@@ -25,10 +35,69 @@ def evaluation(y_true, y_pred, classification_type):
 
 def multilabel_eval(y, y_):
 
+    if not isinstance(y, csr_matrix):
+        y = csr_matrix(y)
+    if not isinstance(y_, csr_matrix):
+        y_ = csr_matrix(y_)
+
+    # Calculate true positives
     tp = y.multiply(y_)
 
+    # Calculate false negatives
+    # `y` is true but `y_` is false (i.e., y - tp)
+    fn = y - tp
+
+    # Calculate false positives
+    # `y_` is true but `y` is false (i.e., y_ - tp)
+    fp = y_ - tp
+
+    # Compute macro F1, micro F1, and accuracy
+    # First, sum over rows to get per-label counts
+    tp_sum = np.array(tp.sum(axis=0)).flatten()
+    fn_sum = np.array(fn.sum(axis=0)).flatten()
+    fp_sum = np.array(fp.sum(axis=0)).flatten()
+
+    # Calculate precision and recall per label
+    precision = np.divide(tp_sum, tp_sum + fp_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fp_sum) > 0)
+    recall = np.divide(tp_sum, tp_sum + fn_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fn_sum) > 0)
+
+    # Calculate F1 scores
+    f1_scores = 2 * precision * recall / (precision + recall)
+    f1_scores[np.isnan(f1_scores)] = 0  # Handle division by zero if both precision and recall are zero
+
+    macro_f1 = np.mean(f1_scores)
+    micro_precision = tp_sum.sum() / (tp_sum.sum() + fp_sum.sum()) if (tp_sum.sum() + fp_sum.sum()) > 0 else 0
+    micro_recall = tp_sum.sum() / (tp_sum.sum() + fn_sum.sum()) if (tp_sum.sum() + fn_sum.sum()) > 0 else 0
+    micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
+
+    # Calculate accuracy
+    total_elements = y.shape[0] * y.shape[1]
+    correct_predictions = tp_sum.sum() + (total_elements - (tp_sum + fp_sum + fn_sum).sum())
+    accuracy = correct_predictions / total_elements
+
+    return macro_f1, micro_f1, accuracy
+
+
+def multilabel_eval_old(y, y_):
+
+    print()
+    
+    print("-- multilabel_eval() -- ")
+
+    print("y, y_ shapes: ", y.shape, y_.shape)
+
+    tp = y.multiply(y_)
+
+    print("tp: ", tp.shape)
+
     fn = lil_matrix(y.shape)
+    
+    print("fn: ", fn.shape)
+    
     true_ones = y==1
+
+    print("true_ones: ", true_ones)
+
     fn[true_ones]=1-tp[true_ones]
 
     fp = lil_matrix(y.shape)

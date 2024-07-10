@@ -54,7 +54,7 @@ class CSVLog:
         # set defaults
         for key in self.defaults.keys():
             if key not in kwargs:
-                print("key ", {key}, "not found, setting default")
+                #print("key ", {key}, "not found, setting default")
                 kwargs[key]=self.defaults[key]
 
         local_columns = sorted(list(kwargs.keys()))
