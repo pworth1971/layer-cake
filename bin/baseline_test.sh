@@ -172,11 +172,11 @@ function pg_lr_bert_sup() {
 # Array of function calls
 commands=(
     pg_svm_tfidf
-    pg_svm_glove
-    pg_svm_glove_sup
-    pg_lr_tfidf
-    pg_lr_glove
-    pg_lr_glove_sup
+    #pg_svm_glove
+    #pg_svm_glove_sup
+    #pg_lr_tfidf
+    #pg_lr_glove
+    #pg_lr_glove_sup
     #pg_svm_word2vec
     #pg_svm_word2vec_sup
     #pg_lr_word2vec
