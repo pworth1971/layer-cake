@@ -80,19 +80,18 @@ the Code. Sample command line argument calls:
 # --------------------------------------------------------------------------------------------------------
 
 def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
-                        class_weight='balanced', mode='tfidf'):
+                        class_weight='balanced', mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown'):
 
-    print()
-    print('........................ run_classification_model() ........................')
+    print('\n--- run_classification_model() ---')
+    print('training learner...')
     
     tinit = time()
-    
+
     print("classification_type: ", classification_type)
     print("estimator: ", estimator)
     print("mode: ", mode)
 
-    print("------- Xtr, ytr, Xte, yte shapes -------")
-    print(Xtr.shape, ytr.shape, Xte.shape, yte.shape)
+    print("Xtr, ytr, Xte, yte:", Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
     # Initialize the estimator with default settings
     if estimator == LogisticRegression:
@@ -104,6 +103,7 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
 
     print("estimator_instance:", {estimator_instance})
 
+    print("params:")
     for param, value in estimator_instance.get_params(deep=True).items():
         print(f"{param} -> {value}")
 
@@ -127,27 +127,33 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
     print("param_grid:", param_grid)
 
     cv = 5
-
     print()
 
     if classification_type == 'multilabel':
 
         print("-- multi-label --")
-        cls = MLSVC(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=True)
+
+        cls = MLSVC(
+            n_jobs=-1, 
+            dataset_name=dataset_name,
+            pretrained=pretrained, 
+            supervised=supervised, 
+            estimator=estimator, 
+            verbose=True
+            )
+
+        print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         
     else:
-    
         print("-- single label --")      
-
         cls = GridSearchCV(pipeline, param_grid, cv=5, n_jobs=-1) if optimizeC else pipeline
-    
         print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
         cls.fit(Xtr, ytr)
 
-
     yte_ = cls.predict(Xte)
 
+    # evaluate results
     Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
@@ -410,7 +416,10 @@ def main(args):
         args.optimc, 
         learner,
         class_weight=class_weight, 
-        mode=args.mode
+        mode=args.mode,
+        pretrained=pretrained,
+        supervised=supervised,
+        dataset_name=args.dataset
         )
     
     tend += sup_tend
