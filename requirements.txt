@@ -1,8 +1,8 @@
-#Pytorch
+#Cuda
+pytorch
 torchtext
-#Cuda==
 scikit-learn
-fastText
+fasttext
 transformers
 simpletransformers
 rdflib
@@ -10,6 +10,6 @@ gensim
 matplotlib
 tabulate
 datetime
-numpy==1.20.3
-scipy==1.12
-pandas==1.5
+numpy
+scipy
+pandas

@@ -55,7 +55,8 @@ class MLSVC:
         #self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
         self.svms = np.array([self.estimator() for _ in range(nC)])
 
-        if 'param_grid' in grid_search_params:
+        #if 'param_grid' in grid_search_params:
+        if grid_search_params and grid_search_params['param_grid']:
             self._print('grid_search activated with: {}'.format(grid_search_params))
             
             # Grid search cannot be performed if the category prevalence is less than the parameter cv.
