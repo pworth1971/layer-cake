@@ -25,9 +25,8 @@ classified all examples as negatives.
 def evaluation(y_true, y_pred, classification_type):
 
     print("-- util.metrics.evaluation() --")
-
-    print("y_true:", y_true.shape, "\n", y_true)
-    print("y_pred:", y_pred.shape, "\n", y_pred)
+    #print("y_true:", y_true.shape, "\n", y_true)
+    #print("y_pred:", y_pred.shape, "\n", y_pred)
     
     if classification_type == 'multilabel':
         eval_function = multilabel_eval
@@ -42,9 +41,8 @@ def evaluation(y_true, y_pred, classification_type):
 def multilabel_eval(y, y_):
     
     print("-- multilabel_eval() --")
-    
-    print("y:", y.shape, "\n", y)
-    print("y_:", y_.shape, "\n", y_)
+    #print("y:", y.shape, "\n", y)
+    #print("y_:", y_.shape, "\n", y_)
 
     # Ensure the matrices are in CSR format for indexing
     if not isinstance(y, csr_matrix):
@@ -52,16 +50,16 @@ def multilabel_eval(y, y_):
     if not isinstance(y_, csr_matrix):
         y_ = csr_matrix(y_)
 
-    print("-- to csr_matrices --")
-    print("y:", y.shape, "\n", y)
-    print("y_:", y_.shape, "\n", y_)
+    #print("-- to csr_matrices --")
+    #print("y:", y.shape, "\n", y)
+    #print("y_:", y_.shape, "\n", y_)
 
     #log_arrs(y.toarray(), y_.toarray())
 
     # Calculate true positives (tp): 
     # where both y and y_ have a positive label
     tp = y.multiply(y_)    
-    print("tp:", tp.shape, "\n", tp)
+    #print("tp:", tp.shape, "\n", tp)
 
     #true_ones = y==1
     #print("true_ones:", true_ones)
@@ -73,74 +71,17 @@ def multilabel_eval(y, y_):
     # False negatives: Conditions where y is 1 and y_ is 0
     # You can compute this by subtracting tp from y
     fn = y - tp
-    print("fn: ", fn.shape, "\n", fn)
+    #print("fn: ", fn.shape, "\n", fn)
 
     # Create a new CSR matrix for false positives (fp)
     # False positives: Conditions where y_ is 1 and y is 0
     # You can compute this by subtracting tp from y_
     fp = y_ - tp
-    print("fp: ", fp.shape, "\n", fp)
+    #print("fp: ", fp.shape, "\n", fp)
 
     # Note: The above computations utilize the fact that tp, y, and y_ must be in compatible formats
     # and that subtraction of two csr_matrices is directly supported.
 
-
-    #macro-f1
-    tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
-    fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()
-    fp_macro = np.asarray(fp.sum(axis=0), dtype=int).flatten()
-
-    pos_pred = tp_macro+fp_macro
-    pos_true = tp_macro+fn_macro
-    prec=np.zeros(shape=tp_macro.shape,dtype=float)
-    rec=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(tp_macro, pos_pred, out=prec, where=pos_pred>0)
-    np.divide(tp_macro, pos_true, out=rec, where=pos_true>0)
-    den=prec+rec
-
-    macrof1=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(np.multiply(prec,rec),den,out=macrof1,where=den>0)
-    macrof1 *=2
-
-    macrof1[(pos_pred==0)*(pos_true==0)]=1
-    macrof1 = np.mean(macrof1)
-
-
-    #micro-f1
-    tp_micro = tp_macro.sum()
-    fn_micro = fn_macro.sum()
-    fp_micro = fp_macro.sum()
-    pos_pred = tp_micro + fp_micro
-    pos_true = tp_micro + fn_micro
-    prec = (tp_micro / pos_pred) if pos_pred>0 else 0
-    rec  = (tp_micro / pos_true) if pos_true>0 else 0
-    den = prec+rec
-    microf1 = 2*prec*rec/den if den>0 else 0
-    if pos_pred==pos_true==0:
-        microf1=1
-
-    #accuracy
-    ndecisions = np.multiply(*y.shape)
-    tn = ndecisions - (tp_micro+fn_micro+fp_micro)
-    acc = (tp_micro+tn)/ndecisions
-
-    return macrof1,microf1,acc
-
-
-
-def multilabel_eval_orig(y, y_):
-
-    tp = y.multiply(y_)
-
-    fn = lil_matrix(y.shape)
-    true_ones = y==1
-    fn[true_ones]=1-tp[true_ones]
-
-    fp = lil_matrix(y.shape)
-    pred_ones = y_==1
-    if pred_ones.nnz>0:
-        fp[pred_ones]=1-tp[pred_ones]
-
     #macro-f1
     tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
     fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()
@@ -180,114 +121,6 @@ def multilabel_eval_orig(y, y_):
     acc = (tp_micro+tn)/ndecisions
 
     return macrof1,microf1,acc
-
-
-def multilabel_eval_new(y, y_):
-
-    print()
-    print("********** multilabel_eval() **********")
-    print("y:", y.shape, "\n", y)
-    print("y_:", y_.shape, "\n", y_)
-
-    # Ensure the matrices are in a format that supports element-wise multiplication and assignment.
-    if not isinstance(y, csr_matrix):
-        y = csr_matrix(y)
-    if not isinstance(y_, csr_matrix):
-        y_ = csr_matrix(y_)
-
-    print("-- to csr_matrices --")
-    print("y:", y.shape, "\n", y[0], y)
-
-    print("y_:", y_.shape, "\n", y_[0], y_)
-
-    # Calculate true positives (tp): 
-    # where both y and y_ have a positive label
-    tp = y.multiply(y_)
-    print("tp:", tp.shape, "\n", tp)
-
-    # false negatives (fn)
-    # where y == 0 and y_ == 1
-    fn = csr_matrix(y.shape)
-    true_ones = y==1
-    print("true_ones: ", true_ones)
-    fn[true_ones]=1-tp[true_ones]
-    print("fn: ", fn.shape, "\n", fn)
-
-    # false positives (fp):
-    # where y == 1 and y_ == 0
-    fp = csr_matrix(y.shape)
-    pred_ones = y_==1
-    print("pred_ones:", pred_ones)
-    if pred_ones.nnz>0:
-        fp[pred_ones]=1-tp[pred_ones]
-    print("fp: ", fp.shape, "\n", fp)
-
-    #macro-f1
-    tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
-    fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()
-    fp_macro = np.asarray(fp.sum(axis=0), dtype=int).flatten()
-
-    pos_pred = tp_macro+fp_macro
-    pos_true = tp_macro+fn_macro
-    prec=np.zeros(shape=tp_macro.shape,dtype=float)
-    rec=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(tp_macro, pos_pred, out=prec, where=pos_pred>0)
-    np.divide(tp_macro, pos_true, out=rec, where=pos_true>0)
-    den=prec+rec
-
-    macrof1=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(np.multiply(prec,rec),den,out=macrof1,where=den>0)
-    macrof1 *=2
-
-    macrof1[(pos_pred==0)*(pos_true==0)]=1
-    macrof1 = np.mean(macrof1)
-
-    #micro-f1
-    tp_micro = tp_macro.sum()
-    fn_micro = fn_macro.sum()
-    fp_micro = fp_macro.sum()
-    pos_pred = tp_micro + fp_micro
-    pos_true = tp_micro + fn_micro
-    prec = (tp_micro / pos_pred) if pos_pred>0 else 0
-    rec  = (tp_micro / pos_true) if pos_true>0 else 0
-    den = prec+rec
-    microf1 = 2*prec*rec/den if den>0 else 0
-    if pos_pred==pos_true==0:
-        microf1=1
-
-    #accuracy
-    ndecisions = np.multiply(*y.shape)
-    tn = ndecisions - (tp_micro+fn_micro+fp_micro)
-    acc = (tp_micro+tn)/ndecisions
-
-    return macrof1,microf1,acc
-
-
-def log_arrs(y, y_, actuals='../log/actuals.txt', preds='../log/predictions.txt'):
-    """
-    Saves two numpy arrays to two separate files with headers.
-
-    Parameters:
-        y (np.array): First array to save.
-        y_ (np.array): Second array to save.
-        actuals (str): Filename for the first array.
-        preds (str): Filename for the second array.
-    """
-    print("log_arrs...")
-    print("y:", y.shape, "\n", y)
-    print("y_:", y_.shape, "\n", y_)
-    
-    # Save first array
-    with open(actuals, 'w') as file1:
-        file1.write('Contents of the first array:\n')
-        np.savetxt(actuals, y, fmt='%f')  # Adjust format as needed
-
-    # Save second array
-    with open(preds, 'w') as file2:
-        file2.write('Contents of the second array:\n')
-        np.savetxt(preds, y_, fmt='%f')  # Adjust format as needed
-
-    print(f"Arrays saved to '{actuals}' and '{preds}'.")
 
 
 def singlelabel_eval(y, y_):

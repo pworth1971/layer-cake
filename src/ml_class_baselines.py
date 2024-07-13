@@ -1,29 +1,20 @@
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 
-# Suppress specific sklearn warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
-warnings.simplefilter(action='ignore', category=ConvergenceWarning)
-
-
-
 import argparse
 from time import time
 
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVC, SVC
 
 from scipy.sparse import issparse, csr_matrix
-
-from supervised_term_weighting.supervised_vectorizer import TSRweighting
-from supervised_term_weighting.tsr_functions import *
 
 from model.CustomRepresentationLearning import CustomRepresentationModel
 
 from util import file
-from util.multilabelsvm import MLSVC
+from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
 
 from util.csv_log import CSVLog
@@ -32,43 +23,6 @@ from util.common import *
 from data.dataset import *
 
 from embedding.supervised import get_supervised_embeddings
-
-from sklearn.svm import LinearSVC, SVC
-from sklearn.multiclass import OneVsRestClassifier
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-
-
-
-
-"""
-Defintition of a Python script for text classification using various embedding techniques and machine learning models, 
-structured to be highly modular and configurable via command line arguments. It supports multiple modes of operation, 
-including simple term frequency (TF-IDF), supervised term weighting, and embedding-based models such as GloVe and 
-BERT. 
-
-The script uses argparse to configure various options like dataset selection, learner type (SVM or 
-Logistic Regression), embedding modes, optimization flags, and more. Sample Command Line Arguments to Call 
-the Code. Sample command line argument calls:
-
-
-- Basic TF-IDF with SVM:
-'python script_name.py --dataset rcv1 --learner svm --mode tfidf'
-
-- Supervised Term Weighting with Logistic Regression:
-'python script_name.py --dataset rcv1 --learner lr --mode stw --tsr ig --stwmode wave --optimc'
-
-- Using GloVe Embeddings with SVM and Optimization:
-'python script_name.py --dataset rcv1 --learner svm --mode glove --optimc'
-
-- BERT Embeddings Combined with SVM for Document Classification:
-'python script_name.py --dataset rcv1 --learner svm --mode bert --combine-strategy mean --batch-size 256'
-
-- Forcing Re-computation of BERT Embeddings:
-'python script_name.py --dataset rcv1 --learner svm --mode bert --force-embeddings'
---------------------------------------------------------------------------------------------------------
-"""
 
 
 
@@ -80,7 +34,7 @@ the Code. Sample command line argument calls:
 # --------------------------------------------------------------------------------------------------------
 
 def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
-                        class_weight='balanced', mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown'):
+                    mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown'):
 
     print('\n--- run_classification_model() ---')
     print('training learner...')
@@ -90,61 +44,38 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
     print("classification_type: ", classification_type)
     print("estimator: ", estimator)
     print("mode: ", mode)
-
-    print("Xtr, ytr, Xte, yte:", Xtr.shape, ytr.shape, Xte.shape, yte.shape)
-
-    print("actuals (yte):", type(yte), yte)
     
+    print("Xtr", type(Xtr), Xtr.shape)
+    print("ytr", type(ytr), ytr.shape)
+    print("Xte", type(Xte), Xte.shape)
+    print("yte", type(yte), yte.shape)
+
+    # Setup the parameter grid
     param_grid = {'C': np.logspace(-3, 3, 7)} if optimizeC else None
     print("param_grid:", param_grid)
-
     cv = 5
 
     if classification_type == 'multilabel':
         print("-- multi-label --")
-        cls = MLSVC(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=True)
+        cls = MLClassifier(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=False)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
-        print("predictions (yte_):", type(yte_), yte_)
-        print("actuals (yte):", type(yte), yte)
+        #print("predictions (yte_):", type(yte_), yte_)
+        #print("actuals (yte):", type(yte), yte)
         Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
 
     else:
         print("-- single label --")      
-        cls = GridSearchCV(estimator_instance, param_grid, cv=5, n_jobs=-1) if optimizeC else cls
+        cls = estimator(dual=False)
+        cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1) if optimizeC else cls
         cls.fit(Xtr, ytr)
         yte_ = cls.predict(Xte)
-        print("predictions (yte_):", type(yte_), yte_)
-        print("actuals (yte):", type(yte), yte)
+        #print("predictions (yte_):", type(yte_), yte_)
+        #print("actuals (yte):", type(yte), yte)
         Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
     return Mf1, mf1, acc, tend
-
-# --------------------------------------------------------------------------------------------------------
-
-# --------------------------------------------------------------------------------------------------------
-# tsr: 
-#
-# Maps string identifiers to term specificity ranking (TSR) functions used for supervised term weighting.
-# --------------------------------------------------------------------------------------------------------
-
-def tsr(name):
-    name = name.lower()
-    if name == 'ig':
-        return information_gain
-    elif name == 'pmi':
-        return pointwise_mutual_information
-    elif name == 'gr':
-        return gain_ratio
-    elif name == 'chi':
-        return chi_square
-    elif name == 'rf':
-        return relevance_frequency
-    elif name == 'cw':
-        return conf_weight
-    else:
-        raise ValueError(f'unknown function {name}')
 
 # --------------------------------------------------------------------------------------------------------
 
@@ -158,7 +89,6 @@ def tsr(name):
 
 def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised=False, emb_path='../.vector_cache'):
 
-    print()
     print('----------------------------------------- svm_baseline::embedding_matrix() -----------------------------------------')
     
     assert pretrained or supervised, 'useless call without requiring pretrained and/or supervised embeddings'
@@ -170,7 +100,6 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
     
     print("pretrained:", {pretrained})
     print("supervised:", {supervised})
-    print()
 
     if pretrained:
 
@@ -236,7 +165,7 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
 
 def main(args):
 
-     # disable warnings
+    # disable warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -318,31 +247,15 @@ def main(args):
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
 
-    class_weight = 'balanced' if args.balanced else None
-    print(f'running with class_weight={class_weight}')
-
-    # tfidf = TfidfVectorizer(min_df=5)
-    # Xtr = tfidf.fit_transform(dataset.devel_raw)
-    # Xte = tfidf.transform(dataset.test_raw)
     ytr, yte = dataset.devel_target, dataset.test_target
+    #print("dev_target (ytr):", type(ytr), ytr)
+    #print("test_target (yte):", type(yte), yte)
 
-    print("dev_target (ytr):", type(ytr), ytr)
-    print("test_target (yte):", type(yte), yte)
+    Xtr, Xte = dataset.vectorize()
+    #print("Xtr:", type(Xtr), Xtr)
+    #print("Xte:", type(Xte), Xte)
 
-    if args.mode == 'stw':                                          # supervised term weighting config
-        print('Supervised Term Weighting')
-        coocurrence = CountVectorizer(vocabulary=dataset.vocabulary)
-        Ctr = coocurrence.transform(dataset.devel_raw)
-        Cte = coocurrence.transform(dataset.test_raw)
-        stw = TSRweighting(tsr_function=tsr(args.tsr), global_policy=args.stwmode)
-        Xtr = stw.fit_transform(Ctr, dataset.devel_labelmatrix)
-        Xte = stw.transform(Cte)
-    else:
-        Xtr, Xte = dataset.vectorize()
-
-    print("Xtr, Xte:", Xtr.shape, Xte.shape)
-
-    if args.mode in ['tfidf', 'stw']:
+    if args.mode in ['tfidf']:
         sup_tend = 0
     else:
         tinit = time()
@@ -367,7 +280,6 @@ def main(args):
         sup_tend = time() - tinit
      
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
-    print("actuals (yte):", type(yte), yte)
 
     Mf1, mf1, acc, tend = run_classification_model(
         Xtr, 
@@ -377,7 +289,6 @@ def main(args):
         dataset.classification_type, 
         args.optimc, 
         learner,
-        class_weight=class_weight, 
         mode=args.mode,
         pretrained=pretrained,
         supervised=supervised,
@@ -421,21 +332,7 @@ if __name__ == '__main__':
                         help=f'learner (svm or lr)')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
-                        help=f'mode, in [tfidf, stw, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
-    
-    parser.add_argument('--stwmode', type=str, default='wave', metavar='N',
-                        help=f'mode in which the term relevance will be merged (wave, ave, max). Only for --mode stw. '
-                             f'Default "wave"')
-    
-    parser.add_argument('--tsr', type=str, default='ig', metavar='TSR',
-                        help=f'indicates the accronym of the TSR function to use in supervised term weighting '
-                             f'(only if --mode stw). Valid functions are '
-                             f'ig (information gain), '
-                             f'pmi (pointwise mutual information) '
-                             f'gr (gain ratio) '
-                             f'chi (chi-square) '
-                             f'rf (relevance frequency) '
-                             f'cw (ConfWeight)')
+                        help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
@@ -446,15 +343,6 @@ if __name__ == '__main__':
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the C parameter in the SVM')
     
-    parser.add_argument('--balanced', action='store_true', default=False, help='class weight balanced')
-    
-    """
-    parser.add_argument('--combine-strategy', default=None, type=str,
-                        help='Method to determine BERT document embeddings.'
-                             'No value takes the [CLS] embedding.'
-                             '"mean" makes the mean of token embeddings.')
-    """
-
     parser.add_argument('--embedding-dir', type=str, default='../.vector_cache', metavar='str',
                         help=f'path where to load and save BERT document embeddings')
     
@@ -491,24 +379,12 @@ if __name__ == '__main__':
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
-    
-    """                        
-    parser.add_argument('--model-dir', type=str, default='../models', metavar='str',
-                        help=f'path where the BERT model is stored. Dataset name is added')
-    """
-    
+
     args = parser.parse_args()
     
-    assert args.mode in ['tfidf', 'stw', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup'], 'unknown mode'
-    assert args.mode != 'stw' or args.tsr in ['ig', 'pmi', 'gr', 'chi', 'rf', 'cw'], 'unknown tsr'
-    assert args.stwmode in ['wave', 'ave', 'max'], 'unknown stw-mode'
+    assert args.mode in ['tfidf', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup'], 'unknown mode'
+    
     assert args.learner in ['svm', 'lr'], 'unknown learner'
     
-    """
-    assert args.combine_strategy in [None, 'mean'], 'unknown combine strategy'
-
-    if args.combine_strategy is None:
-        args.combine_strategy = 0
-    """
-
+    
     main(args)

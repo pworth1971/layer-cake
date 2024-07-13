@@ -39,7 +39,7 @@ class MLClassifier:
 
     def fit(self, X, y, **grid_search_params):
 
-        print("\n---MLSVC::fit() ---")
+        print("\n---MLClassifier::fit() ---")
         print("X, y:", X.shape, y.shape)
         print("grid_search_params:", grid_search_params)
 
@@ -53,7 +53,7 @@ class MLClassifier:
         nD,nC = y.shape
         prevalence = np.sum(y, axis=0)
         #self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
-        self.svms = np.array([self.estimator(dual=False, verbose=verbose) for _ in range(nC)])
+        self.svms = np.array([self.estimator(dual=False, verbose=self.verbose) for _ in range(nC)])
 
         #if 'param_grid' in grid_search_params:
         if grid_search_params and grid_search_params['param_grid']:

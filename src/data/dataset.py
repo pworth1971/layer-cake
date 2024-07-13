@@ -1,12 +1,15 @@
 import os,sys
+
 from sklearn.datasets import get_data_home, fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
+
 from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
+
 import pickle
 import numpy as np
 from tqdm import tqdm
@@ -78,8 +81,7 @@ class Dataset:
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        #self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix_non_sparse(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
     def _load_rcv1(self):
@@ -282,14 +284,6 @@ class Dataset:
             dataset = Dataset(name=dataset_name)
 
         return dataset
-
-
-def _label_matrix_non_sparse(tr_target, te_target):
-    mlb = MultiLabelBinarizer(sparse_output=False)
-    ytr = mlb.fit_transform(tr_target)
-    yte = mlb.transform(te_target)
-    print(mlb.classes_)
-    return ytr, yte
 
 
 def _label_matrix(tr_target, te_target):
