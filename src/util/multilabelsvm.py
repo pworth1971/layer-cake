@@ -65,34 +65,36 @@ class MLSVC:
             
             assert isinstance(cv, int), 'cv must be an int (other policies are not supported yet)'
 
+            """
             scoring = {
                 'precision': make_scorer(precision_score, average='micro'),
                 'recall': make_scorer(recall_score, average='micro'),
                 'f1': make_scorer(f1_score, average='micro')
             }
-            grid_search_params.update({'scoring': scoring, 'refit': 'f1'})
+            grid_search_params.update({'scoring': scoring, 'refit': 'f1', 'verbose': True})
 
             self.svms = [GridSearchCV(svm_i, **grid_search_params) if prevalence[i]>=cv else svm_i
                         for i,svm_i in enumerate(self.svms)]
-
             """
+
             self.svms = [GridSearchCV(svm_i, refit=True, **grid_search_params) if prevalence[i]>=cv else svm_i
                          for i,svm_i in enumerate(self.svms)]
-            """
-
+            
         for i in np.argwhere(prevalence==0).flatten():
             self.svms[i] = TrivialRejector()
 
-        """
+        
         self.svms = Parallel(n_jobs=self.n_jobs)(
             delayed(self.svms[c].fit)(X,y[:,c]) for c,svm in enumerate(self.svms)
         )
-        """
+        
         
         #self._print(f"Starting parallel training with {self.n_jobs} jobs...")
+        """
         self.svms = Parallel(n_jobs=self.n_jobs)(
             delayed(self._train_and_collect)(svm, X, y[:, c], c, nC) for c, svm in enumerate(self.svms)
         )
+        """
         
         """
         for c, svm in enumerate(self.svms):

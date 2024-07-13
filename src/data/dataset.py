@@ -22,6 +22,7 @@ import shutil
 
 
 def init_vectorizer():
+    print("init_vectorizer()")
     return TfidfVectorizer(min_df=5, sublinear_tf=True)
 
 
@@ -31,7 +32,11 @@ class Dataset:
                          'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
 
     def __init__(self, name):
+
+        print("Dataset::__init__():", name)
+        
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
+
         if name=='reuters21578':
             self._load_reuters()
         elif name == '20newsgroups':
@@ -66,13 +71,15 @@ class Dataset:
         return self
 
     def _load_reuters(self):
+        print("Dataset::_load_reuters()")
         data_path = os.path.join(get_data_home(), 'reuters21578')
         devel = fetch_reuters21578(subset='train', data_path=data_path)
         test = fetch_reuters21578(subset='test', data_path=data_path)
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+        #self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix_non_sparse(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
     def _load_rcv1(self):
@@ -200,6 +207,7 @@ class Dataset:
             self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
     def vectorize(self):
+        print("Dataset::vectorize()")
         if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
             self.Xtr = self._vectorizer.transform(self.devel_raw)
             self.Xte = self._vectorizer.transform(self.test_raw)
@@ -254,7 +262,7 @@ class Dataset:
     @classmethod
     def load(cls, dataset_name, pickle_path=None):
 
-        print("Dataset::load()")
+        print("Dataset::load():", dataset_name, pickle_path)
 
         if pickle_path:
             print("picklepath: ", {pickle_path})
@@ -273,8 +281,15 @@ class Dataset:
             print(f'loading dataset {dataset_name}')
             dataset = Dataset(name=dataset_name)
 
-        print('[Done]')
         return dataset
+
+
+def _label_matrix_non_sparse(tr_target, te_target):
+    mlb = MultiLabelBinarizer(sparse_output=False)
+    ytr = mlb.fit_transform(tr_target)
+    yte = mlb.transform(te_target)
+    print(mlb.classes_)
+    return ytr, yte
 
 
 def _label_matrix(tr_target, te_target):

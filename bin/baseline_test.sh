@@ -9,6 +9,7 @@ LOG="--log-file ../log/ml_baselines.test"
 
 DATASET="--dataset reuters21578"
 PICK_PATH="--pickle-dir ../pickles/reuters21578.pickle"
+
 EMB="--embedding-dir ../.vector_cache"
 
 GLOVE_PATH="--glove-path ../.vector_cache" 
@@ -19,87 +20,97 @@ BERT_PATH="--bert-path ../.vector_cache"
 
 
 # Define commands using function calls to ensure variable expansion and direct output
+function pg_svm_stw_op_pmi() {
+    echo
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --optimc --mode stw --stwmode wave --tsr pmi"
+    echo $cmd
+    eval $cmd
+}
+
+
 function pg_svm_tfidf() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode tfidf"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode tfidf --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_svm_glove() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove $GLOVE_PATH"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove $GLOVE_PATH --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_svm_glove_sup() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove-sup $GLOVE_PATH"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove-sup $GLOVE_PATH --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_tfidf() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode tfidf"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode tfidf --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_glove() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove $GLOVE_PATH"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove $GLOVE_PATH --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_glove_sup() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove-sup $GLOVE_PATH"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove-sup $GLOVE_PATH --balanced"
     echo $cmd
     eval $cmd
 }
 
 
+
+
 function pg_svm_tfidf_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode tfidf --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode tfidf --optimc --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_svm_glove_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove $GLOVE_PATH --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove $GLOVE_PATH --optimc --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_svm_glove_sup_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove-sup $GLOVE_PATH --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner svm --mode glove-sup $GLOVE_PATH --optimc --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_tfidf_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode tfidf --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode tfidf --optimc --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_glove_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove $GLOVE_PATH --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove $GLOVE_PATH --optimc --balanced"
     echo $cmd
     eval $cmd
 }
 
 function pg_lr_glove_sup_op() {
     echo
-    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove-sup $GLOVE_PATH --optimc"
+    local cmd="$PY $LOG $DATASET $PICK_PATH $EMB --learner lr --mode glove-sup $GLOVE_PATH --optimc --balanced"
     echo $cmd
     eval $cmd
 }
@@ -223,12 +234,6 @@ function pg_lr_bert_sup() {
 
 # Array of function calls
 commands=(
-    pg_svm_tfidf
-    pg_lr_tfidf
-    pg_svm_glove
-    pg_lr_glove
-    pg_svm_glove_sup
-    pg_lr_glove_sup
     pg_svm_tfidf_op
     pg_lr_tfidf_op
     pg_svm_glove_op

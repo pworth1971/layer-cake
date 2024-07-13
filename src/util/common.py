@@ -228,8 +228,7 @@ def print_arguments(options):
 
 def index_dataset(dataset, pretrained=None):
 
-    print()
-    print(f"indexing dataset")
+    print(f"indexing dataset...")
     
     # build the vocabulary
     word2index = dict(dataset.vocabulary)
@@ -249,7 +248,6 @@ def index_dataset(dataset, pretrained=None):
     test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
 
     print('[indexing complete]')
-    print()
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 

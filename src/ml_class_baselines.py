@@ -93,71 +93,32 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
 
     print("Xtr, ytr, Xte, yte:", Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
-    # Initialize the estimator with default settings
-    if estimator == LogisticRegression:
-        estimator_instance = LogisticRegression(max_iter=1000, class_weight=class_weight, solver='saga')
-    elif estimator in [LinearSVC, SVC]:
-        estimator_instance = estimator(max_iter=1000, class_weight=class_weight)
-    else:
-        estimator_instance = estimator(class_weight=class_weight)
-
-    print("estimator_instance:", {estimator_instance})
-
-    print("params:")
-    for param, value in estimator_instance.get_params(deep=True).items():
-        print(f"{param} -> {value}")
-
-    # Setup the parameter grid
-    if optimizeC:
-        param_grid = {'C': np.logspace(-3, 3, 7)}
-        if estimator == LogisticRegression:
-            param_grid['solver'] = ['liblinear', 'saga']
-    else:
-        param_grid = None
-
-    # Prepare a pipeline and parameter grid
-    pipeline = Pipeline([
-        ('scaler', StandardScaler(with_mean=False)),
-        ('classifier', estimator_instance)
-    ])
-
-    #param_grid = {'classifier__C': np.logspace(-3, 3, 7)} if optimizeC else None
+    print("actuals (yte):", type(yte), yte)
+    
     param_grid = {'C': np.logspace(-3, 3, 7)} if optimizeC else None
- 
     print("param_grid:", param_grid)
 
     cv = 5
-    print()
 
     if classification_type == 'multilabel':
-
         print("-- multi-label --")
-
-        cls = MLSVC(
-            n_jobs=-1, 
-            dataset_name=dataset_name,
-            pretrained=pretrained, 
-            supervised=supervised, 
-            estimator=estimator, 
-            verbose=True
-            )
-
-        print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
+        cls = MLSVC(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=True)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
-        
+        yte_ = cls.predict(Xte)
+        print("predictions (yte_):", type(yte_), yte_)
+        print("actuals (yte):", type(yte), yte)
+        Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
+
     else:
         print("-- single label --")      
-        cls = GridSearchCV(pipeline, param_grid, cv=5, n_jobs=-1) if optimizeC else pipeline
-        print("fitting Xtr and ytr", {Xtr.shape}, {ytr.shape})
+        cls = GridSearchCV(estimator_instance, param_grid, cv=5, n_jobs=-1) if optimizeC else cls
         cls.fit(Xtr, ytr)
-
-    yte_ = cls.predict(Xte)
-
-    # evaluate results
-    Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
+        yte_ = cls.predict(Xte)
+        print("predictions (yte_):", type(yte_), yte_)
+        print("actuals (yte):", type(yte), yte)
+        Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
-
     return Mf1, mf1, acc, tend
 
 # --------------------------------------------------------------------------------------------------------
@@ -280,9 +241,7 @@ def main(args):
     warnings.filterwarnings("ignore", category=FutureWarning)
 
     print()
-    print()
     print("------------------------------------------- #####-- MAIN(ARGS) --##### -------------------------------------------")
-    print()
     print("........   ml_class_baselines::main(args).  ........ ")
 
     # set up model type
@@ -349,6 +308,7 @@ def main(args):
         supervised=supervised
         )
 
+    # TODO: fix this assertion with new log file format
     #assert not logfile.already_calculated() or args.force, f'baseline {method_name} for {args.dataset} already calculated'
 
     print("loading dataset ", {args.dataset})
@@ -365,6 +325,9 @@ def main(args):
     # Xtr = tfidf.fit_transform(dataset.devel_raw)
     # Xte = tfidf.transform(dataset.test_raw)
     ytr, yte = dataset.devel_target, dataset.test_target
+
+    print("dev_target (ytr):", type(ytr), ytr)
+    print("test_target (yte):", type(yte), yte)
 
     if args.mode == 'stw':                                          # supervised term weighting config
         print('Supervised Term Weighting')
@@ -402,10 +365,9 @@ def main(args):
         Xte = np.asarray(Xte)
         
         sup_tend = time() - tinit
-
-    
-    print()        
+     
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
+    print("actuals (yte):", type(yte), yte)
 
     Mf1, mf1, acc, tend = run_classification_model(
         Xtr, 
@@ -468,12 +430,12 @@ if __name__ == '__main__':
     parser.add_argument('--tsr', type=str, default='ig', metavar='TSR',
                         help=f'indicates the accronym of the TSR function to use in supervised term weighting '
                              f'(only if --mode stw). Valid functions are '
-                             f'IG (information gain), '
-                             f'PMI (pointwise mutual information) '
-                             f'GR (gain ratio) '
-                             f'CHI (chi-square) '
-                             f'RF (relevance frequency) '
-                             f'CW (ConfWeight)')
+                             f'ig (information gain), '
+                             f'pmi (pointwise mutual information) '
+                             f'gr (gain ratio) '
+                             f'chi (chi-square) '
+                             f'rf (relevance frequency) '
+                             f'cw (ConfWeight)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
@@ -486,11 +448,13 @@ if __name__ == '__main__':
     
     parser.add_argument('--balanced', action='store_true', default=False, help='class weight balanced')
     
+    """
     parser.add_argument('--combine-strategy', default=None, type=str,
                         help='Method to determine BERT document embeddings.'
                              'No value takes the [CLS] embedding.'
                              '"mean" makes the mean of token embeddings.')
-    
+    """
+
     parser.add_argument('--embedding-dir', type=str, default='../.vector_cache', metavar='str',
                         help=f'path where to load and save BERT document embeddings')
     
@@ -539,9 +503,12 @@ if __name__ == '__main__':
     assert args.mode != 'stw' or args.tsr in ['ig', 'pmi', 'gr', 'chi', 'rf', 'cw'], 'unknown tsr'
     assert args.stwmode in ['wave', 'ave', 'max'], 'unknown stw-mode'
     assert args.learner in ['svm', 'lr'], 'unknown learner'
+    
+    """
     assert args.combine_strategy in [None, 'mean'], 'unknown combine strategy'
 
     if args.combine_strategy is None:
         args.combine_strategy = 0
+    """
 
     main(args)
