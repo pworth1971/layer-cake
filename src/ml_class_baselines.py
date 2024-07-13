@@ -125,20 +125,17 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
         pretrained_embeddings.append(P)
         print(f'pretrained embeddings count: {len(pretrained_embeddings[0])}')
 
-
     if supervised:
-    
         print('\t[supervised-matrix]')
 
         Xtr, _ = dataset.vectorize()
         Ytr = dataset.devel_labelmatrix
-
-        print(Xtr.shape, Ytr.shape)
+        print("Xtr:", type(Xtr), Xtr.shape)
+        print("Ytr:", type(Ytr), Ytr.shape)
 
         S = get_supervised_embeddings(Xtr, Ytr)
-
         print("supervised.shape: ", {S.shape})
-                
+
         pretrained_embeddings.append(S)
         print(f'supervised word-class embeddings count: {len(pretrained_embeddings[1])}')
 
