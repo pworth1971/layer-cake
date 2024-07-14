@@ -34,7 +34,7 @@ from embedding.supervised import get_supervised_embeddings
 # --------------------------------------------------------------------------------------------------------
 
 def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
-                    mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown'):
+                    mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown', scoring='accuracy'):
 
     print('\n--- run_classification_model() ---')
     print('training learner...')
@@ -67,7 +67,7 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
     else:
         print("-- single label --")      
         cls = estimator(dual=False)
-        cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1) if optimizeC else cls
+        cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
         cls.fit(Xtr, ytr)
         yte_ = cls.predict(Xte)
         #print("predictions (yte_):", type(yte_), yte_)
@@ -289,7 +289,8 @@ def main(args):
         mode=args.mode,
         pretrained=pretrained,
         supervised=supervised,
-        dataset_name=args.dataset
+        dataset_name=args.dataset,
+        scoring=args.scoring
         )
     
     tend += sup_tend
@@ -376,6 +377,9 @@ if __name__ == '__main__':
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
+
+    parser.add_argument('--scoring', type=str, default='accuracy',
+                        help=f'scoring parameter to GridSearchCV sklearn call. Must be one of sklearn scoring metricsd.')
 
     args = parser.parse_args()
     

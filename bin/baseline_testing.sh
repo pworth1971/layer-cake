@@ -10,10 +10,9 @@ FASTTEXT_PATH="--fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT_PATH="--bert-path ../.vector_cache"
 OPTIMC="--optimc"
 
-
 # Arrays of datasets and corresponding pickle paths
-declare -a datasets=("20newsgroups" "reuters21578")
-declare -a pickle_paths=("../pickles/20newsgroups.pickle" "../pickles/reuters21578.pickle")
+declare -a datasets=("reuters21578" "ohsumed" "20newsgroups")
+declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickels" "../pickles/20newsgroups.pickle")
 
 # Function to run commands
 function run_command() {

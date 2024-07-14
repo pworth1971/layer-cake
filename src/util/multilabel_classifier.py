@@ -21,7 +21,7 @@ class MLClassifier:
     Multi-label, multiclass classifier. Support for LinearSVC and LogisticRegression models, with 
     individual optimizations per binary problem (binary classifier per class with results averaged).
     """    
-    def __init__(self, n_jobs=1, dataset_name='unassigned', pretrained=False, supervised=False, estimator=LinearSVC, verbose=False):
+    def __init__(self, n_jobs=1, dataset_name='unassigned', pretrained=False, supervised=False, estimator=LinearSVC, verbose=False, scoring='accuracy'):
 
         self.verbose = verbose
 
@@ -35,7 +35,7 @@ class MLClassifier:
         self.dataset_name = dataset_name
         self.pretrained = pretrained
         self.supervised = supervised
-        
+        self.scoring = scoring
 
     def fit(self, X, y, **grid_search_params):
 
@@ -65,7 +65,7 @@ class MLClassifier:
             
             assert isinstance(cv, int), 'cv must be an int (other policies are not supported yet)'
 
-            self.svms = [GridSearchCV(svm_i, refit=True, **grid_search_params) if prevalence[i]>=cv else svm_i
+            self.svms = [GridSearchCV(svm_i, refit=True, **grid_search_params, scoring=self.scoring) if prevalence[i]>=cv else svm_i
                          for i,svm_i in enumerate(self.svms)]
             
         for i in np.argwhere(prevalence==0).flatten():
