@@ -1,13 +1,9 @@
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
-
 import numpy as np
-
 from joblib import Parallel, delayed
-
 from time import time
-
 import os
 import matplotlib.pyplot as plt
 
@@ -19,8 +15,32 @@ from sklearn.exceptions import ConvergenceWarning
 class MLClassifier:
     """
     Multi-label, multiclass classifier. Support for LinearSVC and LogisticRegression models, with 
-    individual optimizations per binary problem (binary classifier per class with results averaged).
-    """    
+    individual optimizations per binary problem (binary classifier per class with results averaged 
+    across classes (see metrics.py) and functionalities for optimizing hyperparameters on a per-label basis. 
+    Technically it should work with with any classifier that adheres to the scikit-learn API but we test
+    with LinearSVC and LogisticRegression classifiers only - again classifying in a binary fashion per 
+    class and then aggregating results. This code is structured to allow detailed monitoring and modification 
+    of machine learning processes, specifically tailored for scenarios involving multiple labels and potentially 
+    sparse class distributions. The use of GridSearchCV enables optimization across different configurations, 
+    targeting best practices in model tuning.
+
+    Parameters:
+    - n_jobs (int): Number of parallel jobs to run for fitting models.
+    - dataset_name (str): Name of the dataset, used for logging and output.
+    - pretrained (bool): Indicates if pretrained embeddings or features are used.
+    - supervised (bool): Indicates if supervised learning methods like feature selection are applied.
+    - estimator (object): An instance of a scikit-learn classifier like LinearSVC or LogisticRegression.
+    - verbose (bool): Enable detailed logging if set to True.
+    - scoring (str or callable): Scoring method to use for evaluating the performance of the models.
+
+    Methods:
+    - fit(X, y, **grid_search_params): Fits the classifier on the provided dataset.
+    - predict(X): Predicts labels for the given features.
+    - predict_proba(X): Predicts class probabilities for the given features.
+    - best_params(): Returns the best parameters found by GridSearchCV for each label, if applicable.
+    """
+
+
     def __init__(self, n_jobs=1, dataset_name='unassigned', pretrained=False, supervised=False, estimator=LinearSVC, verbose=False, scoring='accuracy'):
 
         self.verbose = verbose
@@ -37,7 +57,19 @@ class MLClassifier:
         self.supervised = supervised
         self.scoring = scoring
 
+
     def fit(self, X, y, **grid_search_params):
+        """
+        Fits the classifier to the data. Can perform grid search to find the best parameters for each label's classifier.
+
+        Parameters:
+        - X (array-like): Feature matrix.
+        - y (array-like): Target label matrix.
+        - **grid_search_params (dict): Parameters for GridSearchCV like 'param_grid' and 'cv' (cross-validation strategy).
+
+        Raises:
+        - AssertionError: If the data is not in the expected multi-label binary format.
+        """
 
         print("\n---MLClassifier::fit() ---")
         print("X, y:", X.shape, y.shape)
@@ -80,23 +112,61 @@ class MLClassifier:
 
 
     def predict(self, X):
+        """
+        Makes predictions for the given data.
+
+        Parameters:
+        - X (array-like): Feature matrix to predict.
+
+        Returns:
+        - array-like: Predicted labels for each sample.
+        """
         return np.vstack(list(map(lambda svmi: svmi.predict(X), self.svms))).T
 
 
     def predict_proba(self, X):
+        """
+        Predicts class probabilities for the given data.
+
+        Parameters:
+        - X (array-like): Feature matrix.
+
+        Returns:
+        - array-like: Predicted probabilities for each class for each sample.
+        """
         return np.vstack(map(lambda svmi: svmi.predict_proba(X)[:,np.argwhere(svmi.classes_==1)[0,0]], self.svms)).T
 
 
     def _print(self, msg):
+        """
+        Prints a message to stdout if verbose is enabled.
+
+        Parameters:
+        - msg (str): The message to print.
+        """
         if self.verbose>0:
             print(msg)
 
 
     def best_params(self):
+        """
+        Returns the best parameters for each fitted model if GridSearchCV was used.
+
+        Returns:
+        - list of dicts: Best parameters for each classifier.
+        """
         return [svmi.best_params_ if isinstance(svmi, GridSearchCV) else None for svmi in self.svms]
 
 
 class TrivialRejector:
+    """
+    A trivial classifier that predicts the negative class for all samples. Used when no positive samples are available.
+
+    Methods:
+    - fit(X, y): Fits the classifier. Does nothing.
+    - predict(X): Predicts zeros for all samples.
+    - predict_proba(X): Returns zero probabilities for all samples.
+    """
     def fit(self,*args,**kwargs): return self
     def predict(self, X): return np.zeros(X.shape[0])
     def predict_proba(self, X): return np.zeros(X.shape[0])

@@ -1,40 +1,42 @@
 import warnings
 from sklearn.exceptions import ConvergenceWarning
-
 import argparse
 from time import time
-
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC, SVC
-
 from scipy.sparse import issparse, csr_matrix
-
 from model.CustomRepresentationLearning import CustomRepresentationModel
-
 from util import file
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
-
 from util.csv_log import CSVLog
 from util.common import *
-
 from data.dataset import *
-
 from embedding.supervised import get_supervised_embeddings
 
 
 
-# --------------------------------------------------------------------------------------------------------
-# run_classification_model: 
-# 
-# Trains a classifier using SVM or logistic regression, optionally performing 
-# hyperparameter tuning via grid search.
-# --------------------------------------------------------------------------------------------------------
-
 def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
                     mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown', scoring='accuracy'):
+
+    """
+    Trains a classification model using SVM or Logistic Regression, performing hyperparameter tuning if specified
+    using GridSearchCV. LinearSVC and LogisticRegression sklearn estimators are tested but technically should
+    support any standard sklearn classifier. 
+    
+    Parameters:
+    - Xtr, ytr: Training data features and labels.
+    - Xte, yte: Test data features and labels.
+    - classification_type: 'singlelabel' or 'multilabel' classification.
+    - optimizeC: Boolean flag to determine if hyperparameter tuning is needed.
+    - estimator: The machine learning estimator (model).
+    - mode: The feature extraction mode (e.g., 'tfidf').
+    - pretrained, supervised: Flags for using pretrained or supervised models.
+    - dataset_name: Name of the dataset for identification.
+    - scoring: Metric used for optimizing the model during GridSearch.
+    """
 
     print('\n--- run_classification_model() ---')
     print('training learner...')
@@ -80,16 +82,25 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
 # --------------------------------------------------------------------------------------------------------
 
 
-# -----------------------------------------------------------------------------------------------------------------------------------
-# embedding_matrix: 
-# 
-# Constructs embedding matrices either from pre-trained embeddings (like GloVe), supervised embeddings, 
-# or a combination of both.
-# -----------------------------------------------------------------------------------------------------------------------------------
-
 def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised=False, emb_path='../.vector_cache'):
+    """
+    Constructs and returns embedding matrices using either pre-trained or supervised embeddings. Support for GloVe, Word2Vec
+    FastText and BERT pre-trained embeddings supported (tested).
 
-    print('----------------------------------------- svm_baseline::embedding_matrix() -----------------------------------------')
+    
+    Parameters:
+    - dataset: The dataset object that contains vocabulary and other dataset-specific parameters.
+    - pretrained: Boolean indicating whether to use pretrained embeddings.
+    - pretrained_type: Type of pre-trained embeddings to use (e.g., 'glove', 'bert').
+    - supervised: Boolean indicating whether to use supervised embeddings.
+    - emb_path: Path to the directory containing embedding files.
+    
+    Returns:
+    - vocabulary: Sorted list of vocabulary terms.
+    - pretrained_embeddings: Numpy array of stacked embeddings from all specified sources.
+    """
+
+    print('----- embedding_matrix()-----')
     
     assert pretrained or supervised, 'useless call without requiring pretrained and/or supervised embeddings'
     
@@ -149,39 +160,37 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
 
 
 
-
-# --------------------------------------------------------------------------------------------------------
-# Main Function (main):
-# 
-# Initializes logging and sets up experiment configurations based on command line arguments.
-# Loads datasets and applies vector transformations or embeddings as specified by the mode.
-# Handles different classification scenarios (binary or multilabel) and different embedding 
-# methods (TF-IDF, BERT, GloVe, etc.). Evaluates the performance using custom metrics and logs 
-# the results.
-# --------------------------------------------------------------------------------------------------------
-
 def main(args):
+    """
+    Main function to handle model training and evaluation. Processes command line arguments to 
+    configure and initiate text classification experiments, including data loading, model configuration, 
+    training, and evaluation. Initializes logging and sets up experiment configurations based on 
+    command line arguments, loads datasets and applies vector transformations or embeddings as specified 
+    by the mode, handles different classification scenarios (binary or multilabel) and different embedding 
+    methods (TF-IDF, BERT, GloVe, etc.), and evaluates the performance using custom metrics and logs the results.
+    
+    Uses:
+    - args: Command line arguments parsed using argparse.
+    """
 
-    # disable warnings
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", category=FutureWarning)
 
     print()
-    print("------------------------------------------- #####-- MAIN(ARGS) --##### -------------------------------------------")
-    print("........   ml_class_baselines::main(args).  ........ ")
+    print("\t#####-- MAIN(ARGS) --#####")
 
     # set up model type
     learner = LinearSVC if args.learner == 'svm' else LogisticRegression
     learner_name = 'SVM' if args.learner == 'svm' else 'LR'
 
     print("learner: ", {learner_name})
-    
+
+        
+    # disable warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning)
+
     mode = args.mode
-    if args.mode == 'stw':                              # supervised term weighting (stw)
-        mode += f'-{args.tsr}-{args.stwmode}'
     
     method_name = f'{learner_name}-{mode}-{"opC" if args.optimc else "default"}'
-
     print("method_name: ", {method_name})
 
     pretrained = False
@@ -304,10 +313,12 @@ def main(args):
 
 
 def _todense(y):
+    """Convert sparse matrix to dense format as needed."""
     return y.toarray() if issparse(y) else y
 
 
 def _tosparse(y):
+    """Ensure matrix is in CSR format for efficient arithmetic operations."""
     return y if issparse(y) else csr_matrix(y)
 
 

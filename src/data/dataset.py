@@ -1,9 +1,7 @@
 import os,sys
-
 from sklearn.datasets import get_data_home, fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
-
 from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -25,16 +23,26 @@ import shutil
 
 
 def init_vectorizer():
+    """
+    Initializes and returns a TF-IDF vectorizer with specific configuration.
+    """
     print("init_vectorizer()")
     return TfidfVectorizer(min_df=5, sublinear_tf=True)
 
 
 class Dataset:
+    """
+    A class to handle loading and preparing datasets for text classification.
+    Supports multiple datasets including Reuters, 20 Newsgroups, Ohsumed, RCV1, and WIPO.
+    """
 
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed', 'jrcall',
                          'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
 
     def __init__(self, name):
+        """
+        Initializes the Dataset object by loading the appropriate dataset.
+        """
 
         print("Dataset::__init__():", name)
         
@@ -307,6 +315,9 @@ def load_fasttext_format(path):
 
 
 def mask_numbers(data, number_mask='numbermask'):
+    """
+    Masks numbers in the given text data with a placeholder.
+    """
     mask = re.compile(r'\b[0-9][0-9.,-]*\b')
     masked = []
     for text in tqdm(data, desc='masking numbers'):

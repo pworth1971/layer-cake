@@ -17,12 +17,27 @@ warnings.simplefilter(action='ignore', category=ConvergenceWarning)
 """
 Scikit learn provides a full set of evaluation metrics, but they treat special cases differently.
 I.e., when the number of true positives, false positives, and false negatives ammount to 0, all
-affected metrices (precision, recall, and thus f1) output 0 in Scikit learn.
-We adhere to the common practice of outputting 1 in this case since the classifier has correctly
+affected metrics (precision, recall, and thus f1) output 0 in Scikit learn. We adhere to the common 
+practice of outputting 1 in this case since the classifier has correctly
 classified all examples as negatives.
 """
 
 def evaluation(y_true, y_pred, classification_type):
+    """
+    Evaluates the classification performance based on the true and predicted labels.
+    It distinguishes between multilabel and singlelabel classification tasks and computes
+    appropriate metrics.
+
+    Parameters:
+    - y_true (array-like): True labels.
+    - y_pred (array-like): Predicted labels.
+    - classification_type (str): Specifies 'multilabel' or 'singlelabel'.
+
+    Returns:
+    - Mf1 (float): Macro F1 score.
+    - mf1 (float): Micro F1 score.
+    - accuracy (float): Accuracy score.
+    """
 
     print("-- util.metrics.evaluation() --")
     #print("y_true:", y_true.shape, "\n", y_true)
@@ -39,7 +54,23 @@ def evaluation(y_true, y_pred, classification_type):
 
 
 def multilabel_eval(y, y_):
-    
+    """
+    Evaluates multilabel classification performance by computing the F1 score,
+    accuracy, and providing detailed metrics per label.
+
+    Parameters:
+    - y (CSR matrix): True multilabel matrix.
+    - y_ (CSR matrix): Predicted multilabel matrix.
+
+    Outputs detailed metrics including F1 scores per class and aggregated
+    scores for true positives, false positives, and false negatives.
+
+    Returns:
+    - macro_f1 (float): Macro F1 score averaged over all classes.
+    - micro_f1 (float): Micro F1 score calculated globally.
+    - accuracy (float): Overall accuracy of the model.
+    """
+
     print("-- multilabel_eval() --")
     #print("y:", y.shape, "\n", y)
     #print("y_:", y_.shape, "\n", y_)
@@ -138,7 +169,7 @@ def multilabel_eval(y, y_):
     print("False Positives (per label):\n", fp_sum)
     print("False Negatives (per label):\n", fn_sum)
     """
-    
+
     # Print sums across all labels
     total_samples = np.sum(y.sum(axis=0) + y_.sum(axis=0) - tp.sum(axis=0))
     total_tp = np.sum(tp_sum)
@@ -189,7 +220,20 @@ def multilabel_eval(y, y_):
 
 
 def singlelabel_eval(y, y_):
+    """
+    Evaluates single label classification performance by computing the macro and micro
+    F1 scores and accuracy.
 
+    Parameters:
+    - y (array-like): True single label array.
+    - y_ (array-like): Predicted single label array.
+
+    Returns:
+    - macro_f1 (float): Macro F1 score.
+    - micro_f1 (float): Micro F1 score.
+    - accuracy (float): Overall accuracy of the model.
+    """
+    
     print("-- util.metrics.singlelabel_eval() --")
 
     if issparse(y_): y_ = y_.toarray().flatten()

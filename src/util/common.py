@@ -60,6 +60,7 @@ def load_pretrained_embeddings(model, args):
 def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents
+    
     :param data: list of string documents
     :param vocab: a fixed mapping [str]->[int] of words to indexes
     :param known_words: a set of known words (e.g., words that, despite not being included in the vocab, can be retained
