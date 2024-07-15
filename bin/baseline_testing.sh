@@ -31,7 +31,6 @@ function run_command() {
     eval $cmd
 }
 
-
 # Loop through datasets and run commands
 for i in "${!datasets[@]}"; do
     dataset=${datasets[$i]}
@@ -44,10 +43,16 @@ for i in "${!datasets[@]}"; do
     run_command $dataset $pickle_path "lr" "tfidf" ""
     run_command $dataset $pickle_path "lr" "glove" "$GLOVE_PATH"
     run_command $dataset $pickle_path "lr" "glove-sup" "$GLOVE_PATH"
-    #run_command $dataset $pickle_path "svm" "word2vec" $WORD2VEC_PATH
-    #run_command $dataset $pickle_path "svm" "word2vec-sup" $WORD2VEC_PATH
-    #run_command $dataset $pickle_path "svm" "fasttext" $FASTTEXT_PATH
-    #run_command $dataset $pickle_path "svm" "fasttext-sup" $FASTTEXT_PATH
-    #run_command $dataset $pickle_path "svm" "bert" $BERT_PATH
-    #run_command $dataset $pickle_path "svm" "bert-sup" $BERT_PATH
+    run_command $dataset $pickle_path "svm" "word2vec" "$WORD2VEC_PATH"
+    run_command $dataset $pickle_path "svm" "word2vec-sup" "$WORD2VEC_PATH"
+    run_command $dataset $pickle_path "lr" "word2vec" "$WORD2VEC_PATH"
+    run_command $dataset $pickle_path "lr" "word2vec-sup" "$WORD2VEC_PATH"
+    run_command $dataset $pickle_path "svm" "fasttext" "$FASTTEXT_PATH"
+    run_command $dataset $pickle_path "svm" "fasttext-sup" "$FASTTEXT_PATH"
+    run_command $dataset $pickle_path "lr" "fasttext" "$FASTTEXT_PATH"
+    run_command $dataset $pickle_path "lr" "fasttext-sup" "$FASTTEXT_PATH"
+    run_command $dataset $pickle_path "svm" "bert" "$BERT_PATH"
+    run_command $dataset $pickle_path "svm" "bert-sup" "$BERT_PATH"
+    run_command $dataset $pickle_path "lr" "bert" "$BERT_PATH"
+    run_command $dataset $pickle_path "lr" "bert-sup" "$BERT_PATH"
 done
