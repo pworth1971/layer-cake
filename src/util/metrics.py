@@ -1,32 +1,22 @@
 import numpy as np
-
 from scipy.sparse import lil_matrix, issparse
 from scipy.sparse import csr_matrix, find
-
 from sklearn.metrics import f1_score, accuracy_score
-
+from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard_score
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 
-# Suppress specific sklearn warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
-warnings.simplefilter(action='ignore', category=ConvergenceWarning)
-
-
-"""
-Scikit learn provides a full set of evaluation metrics, but they treat special cases differently.
-I.e., when the number of true positives, false positives, and false negatives ammount to 0, all
-affected metrics (precision, recall, and thus f1) output 0 in Scikit learn. We adhere to the common 
-practice of outputting 1 in this case since the classifier has correctly
-classified all examples as negatives.
-"""
 
 def evaluation(y_true, y_pred, classification_type):
     """
     Evaluates the classification performance based on the true and predicted labels.
     It distinguishes between multilabel and singlelabel classification tasks and computes
-    appropriate metrics.
+    appropriate metrics. While scikit-learn provides a full set of evaluation metrics, they 
+    treat special cases differently - i.e., when the number of true positives, false positives, 
+    and false negatives ammount to 0, all affected metrics (precision, recall, and thus f1) output 
+    0 in scikit-learn. Here we adhere to the common practice of outputting 1 in this case since 
+    the classifier has correctly classified all examples as negatives.
 
     Parameters:
     - y_true (array-like): True labels.
@@ -36,7 +26,11 @@ def evaluation(y_true, y_pred, classification_type):
     Returns:
     - Mf1 (float): Macro F1 score.
     - mf1 (float): Micro F1 score.
-    - accuracy (float): Accuracy score.
+    - accuracy (float): Accuracy score
+    - h_loss (float): Hamming loss
+    - precision (float): Precision
+    - recall (float): Recall
+    - j_index (float): Jacard Index
     """
 
     print("-- util.metrics.evaluation() --")
@@ -48,9 +42,10 @@ def evaluation(y_true, y_pred, classification_type):
     elif classification_type == 'singlelabel':
         eval_function = singlelabel_eval
 
-    Mf1, mf1, accuracy = eval_function(y_true, y_pred)
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = eval_function(y_true, y_pred)
 
-    return Mf1, mf1, accuracy
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
 
 
 def multilabel_eval(y, y_):
@@ -114,7 +109,6 @@ def multilabel_eval(y, y_):
     # be in compatible formats and that subtraction of two csr_matrices is directly supported.
 
 
-
     #macro-f1
     tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
     fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()
@@ -154,7 +148,6 @@ def multilabel_eval(y, y_):
     acc = (tp_micro+tn)/ndecisions
 
     print("double checking metrics...")
-
     # ----------------------------------------------------------------------------------------------------------------------------------
     # double check nunbers
     #
@@ -214,9 +207,20 @@ def multilabel_eval(y, y_):
     print("accuracy:", accuracy)
     # ----------------------------------------------------------------------------------------------------------------------------------
 
+    # Hamming Loss
+    h_loss = hamming_loss(y.toarray(), y_.toarray())
 
+    # Precision
+    precision = precision_score(y.toarray(), y_.toarray(), average='micro')
 
-    return macrof1,microf1,acc
+    # Recall
+    recall = recall_score(y.toarray(), y_.toarray(), average='micro')
+
+    # Jaccard Index
+    j_index = jaccard_score(y.toarray(), y_.toarray(), average='micro')
+
+    return macrof1, microf1, acc, h_loss, precision, recall, j_index
+
 
 
 def singlelabel_eval(y, y_):
@@ -242,6 +246,11 @@ def singlelabel_eval(y, y_):
     microf1 = f1_score(y, y_, average='micro')
     
     acc = accuracy_score(y, y_)
+
+    h_loss = hamming_loss(y, y_)
+    precision = precision_score(y, y_, average='macro')
+    recall = recall_score(y, y_, average='macro')
+    j_index = jaccard_score(y, y_, average='macro')
     
-    return macrof1, microf1, acc
+    return macrof1, microf1, acc, h_loss, precision, recall, j_index
 

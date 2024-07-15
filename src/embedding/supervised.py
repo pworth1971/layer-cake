@@ -37,11 +37,20 @@ from data.tsr_function__ import  STWFUNCTIONS
 def normalize_zscores(data):
     
     print("--- normalize_zscores() ---")
-    print("data ", {data.shape})
+    print("data:", type(data), {data.shape})
 
+    arrData = data.toarray()
+    print("arrData:", type(arrData), {arrData.shape})
+
+    """
     means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
     stds = np.std(data, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
     z_scores = (data - means) / stds    # Compute the z-scores: (x - mean) / std
+    """
+
+    means = np.mean(arrData, axis=0)       # Mean of the data (computing along the rows: axis=0)
+    stds = np.std(arrData, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
+    z_scores = (arrData - means) / stds    # Compute the z-scores: (x - mean) / std
     
     return z_scores
 # ----------------------------------------------------------------------------------------------------------------------
@@ -55,7 +64,6 @@ def normalize_zscores(data):
 # Implementation: The standard deviation is calculated with a minimum clip value 
 # to prevent division by zero. This normalized form ensures each feature (column if axis=0) 
 # has zero mean and unit variance.
-#  
 # ----------------------------------------------------------------------------------------------------------------------
 def zscores(x, axis=0):                             #scipy.stats.zscores does not avoid division by 0
     

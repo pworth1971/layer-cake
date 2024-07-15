@@ -41,21 +41,17 @@ class MLClassifier:
     """
 
 
-    def __init__(self, n_jobs=1, dataset_name='unassigned', pretrained=False, supervised=False, estimator=LinearSVC, verbose=False, scoring='accuracy'):
+    def __init__(self, n_jobs=1, estimator=LinearSVC, scoring='accuracy', *args, **kwargs):
 
-        self.verbose = verbose
-
-        self._print("MLClassifier:__init__()")
+        print("--- MLClassifier:__init__() ---")
 
         self.n_jobs = n_jobs
         self.estimator = estimator
-
-        # for the plot
-        self.performance_metrics = []
-        self.dataset_name = dataset_name
-        self.pretrained = pretrained
-        self.supervised = supervised
         self.scoring = scoring
+        self.args = args
+        self.kwargs = kwargs
+
+        self.verbose = False if 'verbose' not in self.kwargs else self.kwargs['verbose']
 
 
     def fit(self, X, y, **grid_search_params):
@@ -84,8 +80,8 @@ class MLClassifier:
         
         nD,nC = y.shape
         prevalence = np.sum(y, axis=0)
-        #self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
-        self.svms = np.array([self.estimator(dual=False, verbose=self.verbose) for _ in range(nC)])
+        self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
+        #self.svms = np.array([self.estimator(dual=False, verbose=self.verbose) for _ in range(nC)])
 
         #if 'param_grid' in grid_search_params:
         if grid_search_params and grid_search_params['param_grid']:

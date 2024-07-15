@@ -2,7 +2,7 @@
 
 # Base components
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_baselines.test"
+LOG="--log-file ../log/ml_baselines2.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
 WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -11,8 +11,8 @@ BERT_PATH="--bert-path ../.vector_cache"
 OPTIMC="--optimc"
 
 # Arrays of datasets and corresponding pickle paths
-declare -a datasets=("reuters21578" "ohsumed" "20newsgroups")
-declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickels" "../pickles/20newsgroups.pickle")
+declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" )
+declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
 
 # Function to run commands
 function run_command() {
@@ -43,16 +43,16 @@ for i in "${!datasets[@]}"; do
     run_command $dataset $pickle_path "lr" "tfidf" ""
     run_command $dataset $pickle_path "lr" "glove" "$GLOVE_PATH"
     run_command $dataset $pickle_path "lr" "glove-sup" "$GLOVE_PATH"
-    run_command $dataset $pickle_path "svm" "word2vec" "$WORD2VEC_PATH"
-    run_command $dataset $pickle_path "svm" "word2vec-sup" "$WORD2VEC_PATH"
-    run_command $dataset $pickle_path "lr" "word2vec" "$WORD2VEC_PATH"
-    run_command $dataset $pickle_path "lr" "word2vec-sup" "$WORD2VEC_PATH"
-    run_command $dataset $pickle_path "svm" "fasttext" "$FASTTEXT_PATH"
-    run_command $dataset $pickle_path "svm" "fasttext-sup" "$FASTTEXT_PATH"
-    run_command $dataset $pickle_path "lr" "fasttext" "$FASTTEXT_PATH"
-    run_command $dataset $pickle_path "lr" "fasttext-sup" "$FASTTEXT_PATH"
-    run_command $dataset $pickle_path "svm" "bert" "$BERT_PATH"
-    run_command $dataset $pickle_path "svm" "bert-sup" "$BERT_PATH"
-    run_command $dataset $pickle_path "lr" "bert" "$BERT_PATH"
-    run_command $dataset $pickle_path "lr" "bert-sup" "$BERT_PATH"
+    #run_command $dataset $pickle_path "svm" "word2vec" "$WORD2VEC_PATH"
+    #run_command $dataset $pickle_path "svm" "word2vec-sup" "$WORD2VEC_PATH"
+    #run_command $dataset $pickle_path "lr" "word2vec" "$WORD2VEC_PATH"
+    #run_command $dataset $pickle_path "lr" "word2vec-sup" "$WORD2VEC_PATH"
+    #run_command $dataset $pickle_path "svm" "fasttext" "$FASTTEXT_PATH"
+    #run_command $dataset $pickle_path "svm" "fasttext-sup" "$FASTTEXT_PATH"
+    #run_command $dataset $pickle_path "lr" "fasttext" "$FASTTEXT_PATH"
+    #run_command $dataset $pickle_path "lr" "fasttext-sup" "$FASTTEXT_PATH"
+    #run_command $dataset $pickle_path "svm" "bert" "$BERT_PATH"
+    #run_command $dataset $pickle_path "svm" "bert-sup" "$BERT_PATH"
+    #run_command $dataset $pickle_path "lr" "bert" "$BERT_PATH"
+    #run_command $dataset $pickle_path "lr" "bert-sup" "$BERT_PATH"
 done

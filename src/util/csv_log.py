@@ -30,6 +30,24 @@ class CSVLog:
         
         self.defaults = {}
 
+    def baseline_already_calculated(self, **kwargs):
+        df = self.df
+        #print("self.df:", df)
+
+        if df.shape[0] == 0:
+            return False
+        #print("kwargs:", kwargs)
+        if len(kwargs) == 0:
+            kwargs = self.defaults
+        for key,val in kwargs.items():
+            #print("key, val:", key, val)
+            df = df.loc[df[key] == val]
+            #print("df:", df)
+            if df.shape[0] == 0:
+                return False
+        return True
+
+
     def already_calculated(self, **kwargs):
         df = self.df
         if df.shape[0] == 0:
@@ -65,8 +83,8 @@ class CSVLog:
         #print(values)
 
         s = pd.Series(values, index=self.columns)
-        self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
-        #self.df = pd.concat([self.df, s], ignore_index=True)            
+        #self.df = self.df.append(s, ignore_index=True)      # Dataframe.append deprecated as of pandas 2.0
+        self.df = self.df._append(s, ignore_index=True)     
         if self.autoflush: self.flush()
         self.tell(kwargs)
 
@@ -94,7 +112,8 @@ class CSVLog:
         """
 
         s = pd.Series(values, index=self.columns)
-        self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
+        #self.df = self.df.append(s, ignore_index=True)             # deprecated as of pandas 2.0
+        self.df = self.df._append(s, ignore_index=True)             
         #self.df = pd.concat([self.df, s], ignore_index=True)            
         if self.autoflush: self.flush()
         self.tell(kwargs)

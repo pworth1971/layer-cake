@@ -1,11 +1,14 @@
 import warnings
-from sklearn.exceptions import ConvergenceWarning
 import argparse
 from time import time
+
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC, SVC
+
 from scipy.sparse import issparse, csr_matrix
 from model.CustomRepresentationLearning import CustomRepresentationModel
 from util import file
@@ -18,8 +21,8 @@ from embedding.supervised import get_supervised_embeddings
 
 
 
-def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, 
-                    mode='tfidf', pretrained=False, supervised=False, dataset_name='unknown', scoring='accuracy'):
+def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', 
+                pretrained=False, supervised=False, dataset_name='unknown', scoring='accuracy'):
 
     """
     Trains a classification model using SVM or Logistic Regression, performing hyperparameter tuning if specified
@@ -59,25 +62,51 @@ def run_classification_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=
 
     if classification_type == 'multilabel':
         print("-- multi-label --")
-        cls = MLClassifier(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=False)
+        #cls = MLClassifier(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=False)
+
+        # set up the esimator params based upon teh model type
+        if estimator==LinearSVC:
+            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
+        elif estimator==LogisticRegression:
+            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
+        elif estimator==MultiNomialNB:
+            cls = MLClassifier(n_jobs=-1, estimator=estimator)
+        else:
+            print("ERR: unsupported estimator.")
+            return
+
+        #cls = MLClassifier(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=False)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
         #print("predictions (yte_):", type(yte_), yte_)
         #print("actuals (yte):", type(yte), yte)
-        Mf1, mf1, acc = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
+        Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
 
     else:
         print("-- single label --")      
-        cls = estimator(dual=False)
+
+        # set up the esimator params based upon teh model type
+        if estimator==LinearSVC:
+            cls = estimator(dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
+        elif estimator==LogisticRegression:
+            cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
+        elif estimator==MultiNomialNB:
+            cls = estimator()
+        else:
+            print("ERR: unsupported estimator.")
+            return
+
+        #cls = estimator(dual=False)
         cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
         cls.fit(Xtr, ytr)
         yte_ = cls.predict(Xte)
         #print("predictions (yte_):", type(yte_), yte_)
         #print("actuals (yte):", type(yte), yte)
-        Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
+        Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit
-    return Mf1, mf1, acc, tend
+    
+    return Mf1, mf1, acc, h_loss, precision, recall, j_index, tend
 
 # --------------------------------------------------------------------------------------------------------
 
@@ -175,8 +204,12 @@ def main(args):
 
 
     print()
-    print("\t#####-- MAIN(ARGS) --#####")
+    print("------------------------------------------------------------------------------------ MAIN(ARGS) ------------------------------------------------------------------------------------")
 
+    # Print the full command line
+    print("Command line:", ' '.join(sys.argv))
+
+    
     # set up model type
     learner = LinearSVC if args.learner == 'svm' else LogisticRegression
     learner_name = 'SVM' if args.learner == 'svm' else 'LR'
@@ -222,7 +255,6 @@ def main(args):
         supervised = True
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
-    print()
     
     print("loading pretrained embeddings...")
     pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
@@ -233,7 +265,7 @@ def main(args):
         embeddings_log_val = args.embedding_dir
 
     #print("initializing logfile embeddings value to:", {embeddings})
-    logfile = init_layered_logfile_svm(                             
+    logfile = init_layered_baseline_logfile(                             
         logfile=args.log_file,
         method_name=method_name, 
         dataset=args.dataset, 
@@ -243,8 +275,18 @@ def main(args):
         supervised=supervised
         )
 
+    already_modelled = logfile.baseline_already_calculated(
+        embeddings=embeddings,
+        model=learner_name, 
+        params=method_name,
+        pretrained=pretrained, 
+        wc_supervised=supervised
+        )
+
+    print("already_modelled: ", already_modelled)
+
     # TODO: fix this assertion with new log file format
-    #assert not logfile.already_calculated() or args.force, f'baseline {method_name} for {args.dataset} already calculated'
+    assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
 
     print("loading dataset ", {args.dataset})
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
@@ -287,7 +329,7 @@ def main(args):
      
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
-    Mf1, mf1, acc, tend = run_classification_model(
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
         Xtr, 
         ytr, 
         Xte, 
@@ -307,9 +349,12 @@ def main(args):
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-macro-F1', value=Mf1, timelapse=tend)
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-precision', value=precision, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-recall', value=recall, timelapse=tend)
+    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-jacard-index', value=j_index, timelapse=tend)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 
 def _todense(y):

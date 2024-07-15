@@ -327,10 +327,9 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
 # 
 # Enhanced log info for svm program suport
 #
-def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
+def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
 
-    print()
-    print("initializing SVM layered log file...")
+    print("initializing baseline layered log file...")
 
     logfile = CSVLog(
         file=logfile, 
@@ -339,7 +338,7 @@ def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, e
             'model', 
             'pretrained', 
             'embeddings', 
-            'wc-supervised', 
+            'wc_supervised', 
             'params',
             'epoch',
             'tunable',
@@ -355,7 +354,7 @@ def init_layered_logfile_svm(logfile, method_name, dataset, model, pretrained, e
     
     logfile.set_default('dataset', dataset)
     logfile.set_default('pretrained', pretrained)
-    logfile.set_default('model', model)
+    logfile.set_default('model', model)                 # method in the log file
     logfile.set_default('embeddings', embeddings)
     logfile.set_default('wc-supervised', supervised)
     logfile.set_default('params', method_name)
