@@ -7,7 +7,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.svm import LinearSVC, SVC
+from sklearn.svm import LinearSVC
 
 from scipy.sparse import issparse, csr_matrix
 from model.CustomRepresentationLearning import CustomRepresentationModel
@@ -21,9 +21,7 @@ from embedding.supervised import get_supervised_embeddings
 
 
 
-def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', 
-                pretrained=False, supervised=False, dataset_name='unknown', scoring='accuracy'):
-
+def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', scoring='accuracy'):
     """
     Trains a classification model using SVM or Logistic Regression, performing hyperparameter tuning if specified
     using GridSearchCV. LinearSVC and LogisticRegression sklearn estimators are tested but technically should
@@ -41,9 +39,7 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     - scoring: Metric used for optimizing the model during GridSearch.
     """
 
-    print('\n--- run_classification_model() ---')
-    print('training learner...')
-    
+    print('\n--- run_model() ---')
     tinit = time()
 
     print("classification_type: ", classification_type)
@@ -56,26 +52,37 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     print("yte", type(yte), yte.shape)
 
     # Setup the parameter grid
-    param_grid = {'C': np.logspace(-3, 3, 7)} if optimizeC else None
+    if not optimizeC:
+        param_grid = None
+    else:
+        if estimator==LinearSVC or estimator==LogisticRegression:
+            param_grid = {'C': np.logspace(-3, 3, 7)}
+        elif estimator==MultinomialNB:
+            param_grid = {
+                'alpha': [0.001, 0.01, 0.1, 1.0, 10.0],  # Range of alpha values
+                'fit_prior': [True, False]               # Whether to learn class prior probabilities
+            }       
+        else:
+            print("Unsupported estimator, exiting...")
+            return
+    
     print("param_grid:", param_grid)
     cv = 5
 
     if classification_type == 'multilabel':
-        print("-- multi-label --")
-        #cls = MLClassifier(n_jobs=-1, dataset_name=dataset_name, pretrained=pretrained, supervised=supervised, estimator=estimator, verbose=False)
-
+        print("------- multi-label case -------")
+    
         # set up the esimator params based upon teh model type
         if estimator==LinearSVC:
             cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
             cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
-        elif estimator==MultiNomialNB:
-            cls = MLClassifier(n_jobs=-1, estimator=estimator)
+        elif estimator==MultinomialNB:
+            cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=True, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
             return
 
-        #cls = MLClassifier(n_jobs=-1, estimator=estimator, class_weight=class_weight, verbose=False)
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
         #print("predictions (yte_):", type(yte_), yte_)
@@ -83,7 +90,7 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
 
     else:
-        print("-- single label --")      
+        print("------- single label case -------")      
 
         # set up the esimator params based upon teh model type
         if estimator==LinearSVC:
@@ -91,14 +98,19 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         elif estimator==LogisticRegression:
             cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
         elif estimator==MultiNomialNB:
-            cls = estimator()
+            cls = estimator(fit_prior=True, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
             return
 
+        # Print the estimator type and parameters
+        print(f"Estimator type: {cls.__class__.__name__}")
+        print(f"Estimator params: {cls.get_params()}")
+
         #cls = estimator(dual=False)
         cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
         cls.fit(Xtr, ytr)
+
         yte_ = cls.predict(Xte)
         #print("predictions (yte_):", type(yte_), yte_)
         #print("actuals (yte):", type(yte), yte)
@@ -202,21 +214,29 @@ def main(args):
     - args: Command line arguments parsed using argparse.
     """
 
-
     print()
     print("------------------------------------------------------------------------------------ MAIN(ARGS) ------------------------------------------------------------------------------------")
 
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
 
-    
     # set up model type
-    learner = LinearSVC if args.learner == 'svm' else LogisticRegression
-    learner_name = 'SVM' if args.learner == 'svm' else 'LR'
+    if args.learner == 'svm':
+        learner = LinearSVC
+        learner_name = 'SVM' 
+    elif args.learner == 'lr':
+        learner = LogisticRegression
+        learner_name = 'LR'
+    elif args.learner == 'nb':
+        learner = MultinomialNB
+        learner_name = 'NB'
+    else:
+        print("** Unknown learner, possible values are svm, lr or nb **")
+        return
 
-    print("learner: ", {learner_name})
-
-        
+    print("learner:", learner)
+    print("learner_name: ", {learner_name})
+    
     # disable warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -255,16 +275,8 @@ def main(args):
         supervised = True
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
-    
-    print("loading pretrained embeddings...")
-    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
 
-    embeddings_log_val ='none'
-
-    if pretrained:
-        embeddings_log_val = args.embedding_dir
-
-    #print("initializing logfile embeddings value to:", {embeddings})
+     #print("initializing logfile embeddings value to:", {embeddings})
     logfile = init_layered_baseline_logfile(                             
         logfile=args.log_file,
         method_name=method_name, 
@@ -275,7 +287,9 @@ def main(args):
         supervised=supervised
         )
 
+    # check to see if the model has been run before
     already_modelled = logfile.baseline_already_calculated(
+        dataset=args.dataset,
         embeddings=embeddings,
         model=learner_name, 
         params=method_name,
@@ -285,8 +299,21 @@ def main(args):
 
     print("already_modelled: ", already_modelled)
 
-    # TODO: fix this assertion with new log file format
-    assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
+    if (already_modelled) and not (args.force):
+        print('Assertion warning: baseline {method_name} for {args.dataset} already calculated')
+        print("run with --force option to override, exiting...")
+        return
+        
+    #assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
+
+    print("new model, loading embeddings...")
+    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
+
+    """
+    embeddings_log_val ='none'
+    if pretrained:
+        embeddings_log_val = args.embedding_dir
+    """
 
     print("loading dataset ", {args.dataset})
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
@@ -329,20 +356,10 @@ def main(args):
      
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
-        Xtr, 
-        ytr, 
-        Xte, 
-        yte, 
-        dataset.classification_type, 
-        args.optimc, 
-        learner,
-        mode=args.mode,
-        pretrained=pretrained,
-        supervised=supervised,
-        dataset_name=args.dataset,
-        scoring=args.scoring
-        )
+    # run the model
+    print("running model...")
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(Xtr, ytr, Xte, yte, dataset.classification_type, 
+                        args.optimc, learner,mode=args.mode, scoring=args.scoring)
     
     tend += sup_tend
 
@@ -383,7 +400,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-file', type=str, default='../log/svm_baseline.test', metavar='N', help='path to the application log file')
     
     parser.add_argument('--learner', type=str, default='svm', metavar='N', 
-                        help=f'learner (svm or lr)')
+                        help=f'learner (svm, lr, or nb)')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
                         help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
@@ -440,8 +457,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     assert args.mode in ['tfidf', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup'], 'unknown mode'
-    
-    assert args.learner in ['svm', 'lr'], 'unknown learner'
-    
     
     main(args)

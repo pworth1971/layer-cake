@@ -1,6 +1,9 @@
 from sklearn.svm import LinearSVC
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
+
 import numpy as np
 from joblib import Parallel, delayed
 from time import time
@@ -9,6 +12,8 @@ import matplotlib.pyplot as plt
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
+
+from pprint import pprint
 
 
 
@@ -43,8 +48,8 @@ class MLClassifier:
 
     def __init__(self, n_jobs=1, estimator=LinearSVC, scoring='accuracy', *args, **kwargs):
 
-        print("--- MLClassifier:__init__() ---")
-
+        print("Initializing MLClassifier...")
+        
         self.n_jobs = n_jobs
         self.estimator = estimator
         self.scoring = scoring
@@ -53,6 +58,9 @@ class MLClassifier:
 
         self.verbose = False if 'verbose' not in self.kwargs else self.kwargs['verbose']
 
+        print("estimator type:", {self.estimator.__name__})
+        print("estimator args:", self.kwargs)
+    
 
     def fit(self, X, y, **grid_search_params):
         """
@@ -80,12 +88,13 @@ class MLClassifier:
         
         nD,nC = y.shape
         prevalence = np.sum(y, axis=0)
-        self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
-        #self.svms = np.array([self.estimator(dual=False, verbose=self.verbose) for _ in range(nC)])
 
-        #if 'param_grid' in grid_search_params:
+        print(f"Instantiating {nC} instances of {self.estimator.__name__} with kwargs: {self.kwargs}")
+
+        self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
+
         if grid_search_params and grid_search_params['param_grid']:
-            self._print('grid_search activated with: {}'.format(grid_search_params))
+            print('grid_search activated with: {}'.format(grid_search_params))
             
             # Grid search cannot be performed if the category prevalence is less than the parameter cv.
             # In those cases we place a svm instead of a gridsearchcv
@@ -98,7 +107,6 @@ class MLClassifier:
             
         for i in np.argwhere(prevalence==0).flatten():
             self.svms[i] = TrivialRejector()
-
         
         self.svms = Parallel(n_jobs=self.n_jobs)(
             delayed(self.svms[c].fit)(X,y[:,c]) for c,svm in enumerate(self.svms)

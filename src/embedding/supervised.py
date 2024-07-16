@@ -39,7 +39,13 @@ def normalize_zscores(data):
     print("--- normalize_zscores() ---")
     print("data:", type(data), {data.shape})
 
-    arrData = data.toarray()
+    if isinstance(data, np.matrix):
+        arrData = np.asarray(data)
+    elif isinstance(data, np.ndarray):
+        arrData = data
+    else:
+        arrData = data.toarray()
+    
     print("arrData:", type(arrData), {arrData.shape})
 
     """

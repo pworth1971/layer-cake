@@ -13,6 +13,8 @@ OPTIMC="--optimc"
 # Arrays of datasets and corresponding pickle paths
 declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" )
 declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
+declare -a models=("nb" "svm" "lr")
+declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 # Function to run commands
 function run_command() {
@@ -35,24 +37,20 @@ function run_command() {
 for i in "${!datasets[@]}"; do
     dataset=${datasets[$i]}
     pickle_path=${pickle_paths[$i]}
-    
-    # Define different mode commands for each dataset
-    run_command $dataset $pickle_path "svm" "tfidf" ""
-    run_command $dataset $pickle_path "svm" "glove" "$GLOVE_PATH"  
-    run_command $dataset $pickle_path "svm" "glove-sup" "$GLOVE_PATH" 
-    run_command $dataset $pickle_path "lr" "tfidf" ""
-    run_command $dataset $pickle_path "lr" "glove" "$GLOVE_PATH"
-    run_command $dataset $pickle_path "lr" "glove-sup" "$GLOVE_PATH"
-    #run_command $dataset $pickle_path "svm" "word2vec" "$WORD2VEC_PATH"
-    #run_command $dataset $pickle_path "svm" "word2vec-sup" "$WORD2VEC_PATH"
-    #run_command $dataset $pickle_path "lr" "word2vec" "$WORD2VEC_PATH"
-    #run_command $dataset $pickle_path "lr" "word2vec-sup" "$WORD2VEC_PATH"
-    #run_command $dataset $pickle_path "svm" "fasttext" "$FASTTEXT_PATH"
-    #run_command $dataset $pickle_path "svm" "fasttext-sup" "$FASTTEXT_PATH"
-    #run_command $dataset $pickle_path "lr" "fasttext" "$FASTTEXT_PATH"
-    #run_command $dataset $pickle_path "lr" "fasttext-sup" "$FASTTEXT_PATH"
-    #run_command $dataset $pickle_path "svm" "bert" "$BERT_PATH"
-    #run_command $dataset $pickle_path "svm" "bert-sup" "$BERT_PATH"
-    #run_command $dataset $pickle_path "lr" "bert" "$BERT_PATH"
-    #run_command $dataset $pickle_path "lr" "bert-sup" "$BERT_PATH"
+
+    for learner in "${models[@]}"; do
+        for mode in "${modes[@]}"; do
+            mode_path=""
+            if [[ "$mode" == "glove" || "$mode" == "glove-sup" ]]; then
+                mode_path="$GLOVE_PATH"
+            elif [[ "$mode" == "word2vec" || "$mode" == "word2vec-sup" ]]; then
+                mode_path="$WORD2VEC_PATH"
+            elif [[ "$mode" == "fasttext" || "$mode" == "fasttext-sup" ]]; then
+                mode_path="$FASTTEXT_PATH"
+            elif [[ "$mode" == "bert" || "$mode" == "bert-sup" ]]; then
+                mode_path="$BERT_PATH"
+            fi
+            run_command $dataset $pickle_path $learner $mode "$mode_path"
+        done
+    done
 done
