@@ -169,26 +169,23 @@ def init_loss(classification_type):
 def main(opt):
 
     print()
-    print("------------------------------------------------------------------------------------ MAIN(ARGS) ------------------------------------------------------------------------------------")
+    print("------------------------------------------------------------------------------------ MAIN(ARGS) ----------------------------------------------------------------------------------------------------------------")
 
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
 
     print()
-    print("----- layer_cake::main(opt) -----")
+    print("---------- layer_cake::main(opt) ----------")
     
     method_name = set_method_name(opt)
-    
-    #print("loading pretrained embeddings...")
+    print("method_name:", method_name)
 
-    #pretrained, pretrained_vector = load_pretrained_embeddings(opt)                # load pre-trained embeddings (vectors) from file
-
-    pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
-
-    embeddings_log_val ='none'
-
-    if pretrained:
+    if opt.pretrained:
+        pretrained = True
         embeddings_log_val = opt.pretrained
+    else:
+        pretrained = False
+        embeddings_log_val ='none'
     
     # initialize layered log file with core settings
     logfile = init_layered_logfile(
@@ -196,6 +193,29 @@ def main(opt):
         pretrained, 
         embeddings_log_val, 
         opt)    
+
+    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+
+    # check to see if the model has been run before
+    already_modelled = logfile.already_calculated(
+        dataset=opt.dataset,
+        embeddings=embeddings_log_val,
+        model=opt.net, 
+        params=method_name,
+        pretrained=pretrained, 
+        tunable=opt.tunable,
+        wc_supervised=opt.supervised
+        )
+
+    print("already_modelled: ", already_modelled)
+
+    if (already_modelled) and not (opt.force):
+        print('Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated.')
+        print("Run with --force option to override, exiting...")
+        return
+
+    print("loading pretrained embeddings...")
+    pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
 
     print("loading dataset ", {opt.dataset})
     dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
@@ -565,12 +585,14 @@ if __name__ == '__main__':
 
     opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+    """
     print()
     print()
     print(f'RUNNING ON DEVICE == {opt.device}')
     print()
     print_arguments(opt)                # Call the function to print arguments
     print()
+    """
 
     assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
     torch.manual_seed(opt.seed)

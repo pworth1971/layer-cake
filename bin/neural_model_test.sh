@@ -18,23 +18,16 @@ else
 fi
 
 
-#
 # command line params
 # NB: must be run from /bin directory
-#
 PY="python ../src/layer_cake.py"
 LOG="--log-file ../log/lc_test3.test"
 EP="10"
 
-
-#
 # supported neural network architecture
-#
 nets=(lstm attn cnn)
 
-#
 #supported datasets
-#
 datasets=(\
     "--dataset reuters21578 --pickle-dir ../pickles" \
     "--dataset ohsumed --pickle-dir ../pickles" \
@@ -44,12 +37,12 @@ datasets=(\
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
 
-
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache" 
 WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
 FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT="--pretrained bert --bert-path ../.vector_cache"
+
 
 # Function to execute a command and handle logging
 run_command() {
@@ -75,10 +68,10 @@ for dataset in "${datasets[@]}"; do
         
         echo
         echo "*********************** Starting runs for $net on $dataset ***********************" | tee -a "$log_file_path"
+        echo
 
         for run in {1..10}; do
             echo "------------------------ run $run for $net on $dataset ------------------------" | tee -a "$log_file_path"
-        
             # Run base Neural Net config
             run_command "$PY $LOG $dataset --net $net --learnable 200 --hidden 256 --seed $run --nepochs $EP"
 

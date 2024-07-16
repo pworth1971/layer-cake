@@ -288,7 +288,7 @@ def main(args):
         )
 
     # check to see if the model has been run before
-    already_modelled = logfile.baseline_already_calculated(
+    already_modelled = logfile.already_calculated(
         dataset=args.dataset,
         embeddings=embeddings,
         model=learner_name, 

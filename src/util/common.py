@@ -293,7 +293,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
             'model', 
             'pretrained', 
             'embeddings', 
-            'wc-supervised', 
+            'wc_supervised', 
             'params', 
             'epoch', 
             'tunable',
@@ -308,15 +308,11 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
     logfile.set_default('model', opt.net)
     logfile.set_default('pretrained', pretrained)
     logfile.set_default('embeddings', embeddings)
-    logfile.set_default('wc-supervised', opt.supervised)
+    logfile.set_default('wc_supervised', opt.supervised)
     logfile.set_default('params', method_name)
     logfile.set_default('run', opt.seed)
     logfile.set_default('tunable', opt.tunable)
 
-    #
-    # TODO
-    # adapt to layered log file defaults (more sophisticated handling)
-    #
     #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
 
     return logfile
@@ -356,7 +352,7 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
     logfile.set_default('pretrained', pretrained)
     logfile.set_default('model', model)                 # method in the log file
     logfile.set_default('embeddings', embeddings)
-    logfile.set_default('wc-supervised', supervised)
+    logfile.set_default('wc_supervised', supervised)
     logfile.set_default('params', method_name)
 
     # normalize data fields

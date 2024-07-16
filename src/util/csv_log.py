@@ -30,7 +30,7 @@ class CSVLog:
         
         self.defaults = {}
 
-    def baseline_already_calculated(self, **kwargs):
+    def already_calculated(self, **kwargs):
         df = self.df
         #print("self.df:", df)
 
@@ -48,7 +48,7 @@ class CSVLog:
         return True
 
 
-    def already_calculated(self, **kwargs):
+    def already_calculated_deprecated(self, **kwargs):
         df = self.df
         if df.shape[0] == 0:
             return False
