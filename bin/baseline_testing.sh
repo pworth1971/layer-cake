@@ -28,8 +28,6 @@ function run_command() {
     local pickle_flag="--pickle-dir ${pickle_path}"
     local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $mode_path $OPTIMC"
 
-    echo
-    echo $cmd
     eval $cmd
 }
 

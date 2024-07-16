@@ -169,8 +169,11 @@ def init_loss(classification_type):
 def main(opt):
 
     print()
-    print()
-    print("------------------------------------------- #####-- MAIN(OPT) --##### -------------------------------------------")
+    print("------------------------------------------------------------------------------------ MAIN(ARGS) ------------------------------------------------------------------------------------")
+
+    # Print the full command line
+    print("Command line:", ' '.join(sys.argv))
+
     print()
     print("----- layer_cake::main(opt) -----")
     
@@ -382,7 +385,8 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         total_batches += 1
 
     yte_ = scipy.sparse.vstack(predictions)
-    Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
+    #Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
+    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     tend = time() - tinit
 
@@ -390,6 +394,11 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
+
+    logfile.add_layered_row(epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+    logfile.add_layered_row(epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     mean_loss = test_loss / total_batches
     loss_history['test_loss'].append(mean_loss)

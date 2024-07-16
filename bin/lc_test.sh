@@ -1,20 +1,14 @@
 #!/bin/bash
 
-# Ensure the Conda environment is activated properly
-source ~/miniconda3/etc/profile.d/conda.sh
-conda init
-conda activate python38
-
 # Get script name using basename with the $0 variable, which contains the script's call path
 script_name=$(basename "$0")
-
 
 #
 # command line params
 # NB: must be run from /bin directory
 #
 PY="python ../src/layer_cake.py"
-LOG="--log-file ../log/lc_test2.test"
+LOG="--log-file ../log/lc_test3.test"
 CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
@@ -49,7 +43,7 @@ BERT="--pretrained bert --bert-path ../.vector_cache"
 
 
 # Log file for recording all outputs
-log_file_path="../log/lc_test_output_$(date +%Y%m%d%H%M%S).log"
+log_file_path="../log/lc_test3_output_$(date +%Y%m%d%H%M%S).log"
 
 # Print script name and log file path to stdout
 echo "Running script: $script_name"
@@ -64,7 +58,7 @@ for dataset in "${datasets[@]}"; do
         echo
         echo "-----------------------------------------------------------------------------------------------------------------------------------------"
         echo
-        echo "\t\t\t*********************** Starting runs for $net on $dataset ***********************" | tee -a "$log_file_path"
+        echo "*********************** Starting runs for $net on $dataset ***********************" | tee -a "$log_file_path"
         echo 
         echo "-----------------------------------------------------------------------------------------------------------------------------------------"
 
@@ -72,7 +66,7 @@ for dataset in "${datasets[@]}"; do
 
             echo
             echo
-            echo "\t\t------------------------ run $run for $net on $dataset ------------------------"  | tee -a "$log_file_path"
+            echo "------------------------ run $run for $net on $dataset ------------------------"  | tee -a "$log_file_path"
             echo 
 
             # Run base Neural Net config
