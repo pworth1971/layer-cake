@@ -1,3 +1,61 @@
+"""
+layer_cake.py:
+--------------------------------------------------------------------------------------------------------------------------------
+Driver code to test out pretrained embeddings (GloVe, Word2Vec, FastText, or BERT) and word-class embeddings as defined in 
+the relevant paper (see README) into different neural network classifiers. 
+
+Steps for Augmenting Data with Pretrained Embeddings
+
+Loading Pretrained Embeddings:
+The script loads pretrained embeddings based on the specified type (GloVe, Word2Vec, FastText, BERT) through the 
+load_pretrained_embeddings function. This function takes the embedding type specified by the opt object. 
+
+Combining Pretrained and Supervised Embeddings:
+In the embedding_matrix function, the script combines pretrained embeddings and supervised embeddings if both are specified 
+in the configuration (opt.pretrained and opt.supervised).
+
+Constructing the Embedding Matrix:
+The function embedding_matrix prepares the combined embedding matrix. This matrix is built by extracting the embeddings for the 
+vocabulary of the dataset and integrating supervised embeddings if required. The script ensures that each word in the dataset's 
+vocabulary has a corresponding embedding, and if not, it assigns a zero vector or a default vector for out-of-vocabulary terms.
+
+Initializing the Neural Network:
+The init_Net function receives the combined embedding matrix as an argument and uses it to initialize the NeuralClassifier model.
+
+Integrating Embeddings into the Model:
+The function init_Net initializes the neural network with the combined embedding matrix. The model uses these embeddings as 
+input representations for the text data. Depending on the droptype option, the embeddings may undergo dropout to prevent overfitting.
+--------------------------------------------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------
+The main() function orchestrates the training and testing processes, ensuring the model is trained on the dataset augmented with 
+the pretrained embeddings and then evaluated on the test data. pretrained_mbeddings are loaded based on the specified type and 
+integrated into the model's embedding layer. supervised_embeddings, if specified in the program arguments, are also integrated into the
+neural model, adding semantic information from the labels directly into the embeddings. If specified in the arguments, the final 
+embedding matrix can combine both pretrained and supervised embeddings, ensuring comprehensive input representations for the neural 
+network. By combining pretrained and supervised embeddings, the model leverages rich, pre-learned semantic information from large 
+corpora (via pretrained embeddings) and task-specific label information (via supervised embeddings) to enhance its performance on 
+specific tasks.
+
+The pretrained embeddings are integrated into the model in the init_Net function, which initializes the neural network. The 
+embedding_matrix function creates the combined embedding matrix by concatenating the pretrained and supervised embeddings (if both 
+are specified). This combined matrix is then returned for use in initializing the model. 
+
+Model Initialization:
+The NeuralClassifier is initialized with various parameters, including pretrained_embeddings, which is the combined matrix of 
+pretrained and possibly supervised embeddings.
+
+Embedding Layer:
+Inside the NeuralClassifier, there is likely an embedding layer that uses these pretrained embeddings as its weights. This allows 
+the model to use rich, pre-learned semantic information from these embeddings.
+
+Dropout and Fine-tuning:
+Depending on the droptype and tunable options, the embeddings may be subject to dropout to prevent overfitting, and they may also be 
+fine-tuned during training to better adapt to the specific task. By setting the pretrained parameter in the NeuralClassifier, the 
+model incorporates these embeddings into its architecture, enhancing its ability to understand and process the input text data effectively.
+--------------------------------------------------------------------------------------------------------------------------------
+"""
+
 import argparse
 from time import time
 import matplotlib.pyplot as plt
@@ -34,6 +92,7 @@ warnings.filterwarnings("ignore")
 #
 logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)s:%(message)s')
+
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
@@ -210,7 +269,7 @@ def main(opt):
     print("already_modelled: ", already_modelled)
 
     if (already_modelled) and not (opt.force):
-        print('Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated.')
+        print(f'Assertion warning: model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated.')
         print("Run with --force option to override, exiting...")
         return
 

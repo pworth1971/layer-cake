@@ -1,3 +1,84 @@
+"""
+
+The EmbeddingCustom class is responsible for handling both pretrained and learnable embeddings, and it provides 
+functionality for embedding dropout. Here’s a detailed explanation of its components:
+
+Initialization (__init__ method):
+- Pretrained Embeddings: If pretrained embeddings are provided, they are stored in a non-trainable nn.Embedding layer.
+- Learnable Embeddings: If a learnable_length is specified, an additional nn.Embedding layer is created for learnable embeddings.
+- Dropout Parameters: Handles the setup for embedding dropout based on the specified range and dropout probability.
+- Embedding Length: The total embedding length is the sum of the pretrained and learnable embedding lengths.
+
+
+Forward Pass (forward method):
+- Embedding: The input is passed through the _embed method to get the combined embeddings.
+- Dropout: The embeddings are passed through the _embedding_dropout method if dropout is specified.
+
+Embedding Dropout (_embedding_dropout and _embedding_dropout_range methods):
+- Full Dropout: If drop_embedding_range is None, dropout is applied to the entire embedding.
+- Range Dropout: If a range is specified, dropout is applied only to the specified range of the embedding dimensions.
+
+Embedding Combination (_embed method):
+Combines the pretrained and learnable embeddings based on the provided input indices.
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Pretrained Embeddings Integration
+The NeuralClassifier class uses a custom embedding layer, EmbeddingCustom, to incorporate pretrained embeddings. 
+
+Embedding Layer Initialization:
+The EmbeddingCustom class is initialized with the pretrained embeddings, if provided. The embeddings are passed 
+during the instantiation of NeuralClassifier:
+
+self.embed = EmbeddingCustom(vocab_size, learnable_length, pretrained, drop_embedding_range, drop_embedding_prop)
+
+
+Forward Pass:
+In the forward method, the input is passed through the embedding layer to get the word embeddings:
+
+def forward(self, input):
+    word_emb = self.embed(input)
+    doc_emb = self.projection(word_emb)
+    logits = self.label(doc_emb)
+    return logits
+
+
+Finetuning:
+If the tunable flag is set, the finetune_pretrained method is called to enable fine-tuning of the pretrained embeddings:
+def finetune_pretrained(self):
+    self.embed.finetune_pretrained()
+
+
+The EmbeddingCustom layer is initialized with the following parameters:
+- vocab_size: Size of the vocabulary.
+- learnable_length: Length of the learnable embeddings.
+- pretrained: The pretrained embeddings.
+- drop_embedding_range: The range for dropout in the embedding layer.
+- drop_embedding_prop: Dropout probability for the embedding layer.
+
+
+Forward Method:
+During the forward pass, the input is converted into word embeddings using the EmbeddingCustom layer.
+
+--------------------------------------------------------------------------------------------------------------------------------
+Here is the overall process:
+
+Loading Pretrained Embeddings:
+Pretrained embeddings are loaded and combined (if supervised embeddings are also used) in the embedding_matrix 
+function. This combined embedding matrix is returned to be used for model initialization.
+
+Initializing NeuralClassifier:
+The NeuralClassifier is initialized with the combined embeddings passed to the EmbeddingCustom layer. This 
+integration ensures that the pretrained embeddings are used to represent the input text data.
+
+Training and Forward Pass:
+During training and evaluation, the input data is passed through the EmbeddingCustom layer to get word embeddings, which 
+are then processed by the projection and label layers to produce logits.
+--------------------------------------------------------------------------------------------------------------------------------
+"""
+
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F

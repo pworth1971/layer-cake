@@ -3,21 +3,6 @@
 # Get script name using basename with the $0 variable, which contains the script's call path
 script_name=$(basename "$0")
 
-# Option to enable logging to a file
-LOG_TO_FILE=false
-
-# Log file for recording all outputs (used if LOG_TO_FILE is true)
-log_file_path="../log/lc_test3_output_$(date +%Y%m%d%H%M%S).log"
-
-# Print script name and log file path to stdout
-echo "Running script: $script_name"
-if $LOG_TO_FILE; then
-    echo "Logging output to: $log_file_path"
-else
-    echo "Logging output to: stdout"
-fi
-
-
 # command line params
 # NB: must be run from /bin directory
 PY="python ../src/layer_cake.py"
@@ -29,9 +14,9 @@ nets=(lstm attn cnn)
 
 #supported datasets
 datasets=(\
-    "--dataset reuters21578 --pickle-dir ../pickles" \
+    "--dataset 20newsgroups --pickle-dir ../pickles" \
     "--dataset ohsumed --pickle-dir ../pickles" \
-    "--dataset 20newsgroups --pickle-dir ../pickles"
+    "--dataset reuters21578 --pickle-dir ../pickles"
 )
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
@@ -47,18 +32,12 @@ BERT="--pretrained bert --bert-path ../.vector_cache"
 # Function to execute a command and handle logging
 run_command() {
     local command="$1"
-    if $LOG_TO_FILE; then
-        echo
-        echo "Executing: $command" | tee -a "$log_file_path"
-        $command >> "$log_file_path" 2>&1
-    else
-        echo
-        echo "Executing: $command"
-        $command
-    fi
+    echo
+    echo "Executing: $command"
+    $command
 
     if [ $? -ne 0 ]; then
-        echo "Error detected during execution." | tee -a "$log_file_path"
+        echo "Error detected during execution."
         exit 1
     fi
 }
@@ -67,11 +46,11 @@ for dataset in "${datasets[@]}"; do
     for net in "${nets[@]}"; do
         
         echo
-        echo "*********************** Starting runs for $net on $dataset ***********************" | tee -a "$log_file_path"
+        echo "*********************** Starting runs for $net on $dataset ***********************" 
         echo
 
         for run in {1..10}; do
-            echo "------------------------ run $run for $net on $dataset ------------------------" | tee -a "$log_file_path"
+            echo "------------------------ run $run for $net on $dataset ------------------------" 
             # Run base Neural Net config
             run_command "$PY $LOG $dataset --net $net --learnable 200 --hidden 256 --seed $run --nepochs $EP"
 
