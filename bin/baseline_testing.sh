@@ -13,7 +13,8 @@ OPTIMC="--optimc"
 # Arrays of datasets and corresponding pickle paths
 declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" )
 declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
-declare -a models=("nb" "svm" "lr")
+#declare -a models=("nb" "svm" "lr")
+declare -a models=("nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 # Function to run commands

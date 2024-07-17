@@ -8,6 +8,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
+from sklearn.preprocessing import MinMaxScaler
 
 from scipy.sparse import issparse, csr_matrix
 from model.CustomRepresentationLearning import CustomRepresentationModel
@@ -66,6 +67,13 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             print("Unsupported estimator, exiting...")
             return
     
+    # Normalize data to be non-negative if using Naive Bayes model
+    if estimator==MultinomialNB:
+        scaler = MinMaxScaler()
+
+        Xtr = scaler.fit_transform(Xtr)
+        Xte = scaler.transform(Xte)
+
     print("param_grid:", param_grid)
     cv = 5
 
