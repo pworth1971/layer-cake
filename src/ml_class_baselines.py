@@ -105,7 +105,7 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             cls = estimator(dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
             cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
-        elif estimator==MultiNomialNB:
+        elif estimator==MultinomialNB:
             cls = estimator(fit_prior=True, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
@@ -314,6 +314,9 @@ def main(args):
         
     #assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
 
+    print("new model, loading embeddings...")
+    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)           
+
     print("loading dataset ", {args.dataset})
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
@@ -326,11 +329,8 @@ def main(args):
     #print("test_target (yte):", type(yte), yte)
 
     Xtr, Xte = dataset.vectorize()
-    #print("Xtr:", type(Xtr), Xtr)
-    #print("Xte:", type(Xte), Xte)
-
-    print("new model, loading embeddings...")
-    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
+    print("Xtr:", type(Xtr), Xtr)
+    print("Xte:", type(Xte), Xte)     
 
     if args.mode in ['tfidf']:
         sup_tend = 0
@@ -349,13 +349,14 @@ def main(args):
 
         Xtr = Xtr.dot(F)
         Xte = Xte.dot(F)
-        
-        # convert to arrays
-        Xtr = np.asarray(Xtr)
-        Xte = np.asarray(Xte)
-        
+
         sup_tend = time() - tinit
-     
+    
+    # convert to arrays
+    Xtr = _todense(Xtr)
+    Xte = _todense(Xte)
+    
+    print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
     # run the model
