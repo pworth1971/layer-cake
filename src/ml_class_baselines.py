@@ -329,8 +329,8 @@ def main(args):
     #print("test_target (yte):", type(yte), yte)
 
     Xtr, Xte = dataset.vectorize()
-    print("Xtr:", type(Xtr), Xtr)
-    print("Xte:", type(Xte), Xte)     
+    #print("Xtr:", type(Xtr), Xtr)
+    #print("Xte:", type(Xte), Xte)     
 
     if args.mode in ['tfidf']:
         sup_tend = 0
