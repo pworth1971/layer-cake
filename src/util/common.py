@@ -29,8 +29,7 @@ VECTOR_CACHE = '../.vector_cache'                       # assumes everything is 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 def load_pretrained_embeddings(model, args):
 
-    print()
-    print("----- util.common.load_pretrained_embeddings() -----", {model})
+    print("loading pretrained embeddings for model type:", {model})
 
     if model=='glove':
         print("path:", {args.glove_path})

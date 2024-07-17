@@ -228,13 +228,11 @@ def init_loss(classification_type):
 def main(opt):
 
     print()
-    print("------------------------------------------------------------------------------------ MAIN(ARGS) ----------------------------------------------------------------------------------------------------------------")
-
+    
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
 
-    print()
-    print("---------- layer_cake::main(opt) ----------")
+    print("-------------------------------------------------- layer_cake::main(opt) --------------------------------------------------")
     
     method_name = set_method_name(opt)
     print("method_name:", method_name)

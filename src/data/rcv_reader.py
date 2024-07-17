@@ -58,6 +58,9 @@ def parse_document(xml_content, valid_id_range=None):
 
 def fetch_RCV1(data_path, subset='all'):
 
+    print("fetch_RVCV1(data_path):", data_path)
+    print("subset:", subset)
+
     assert subset in ['train', 'test', 'all'], 'split should either be "train", "test", or "all"'
 
     request = []
@@ -99,7 +102,6 @@ def fetch_RCV1(data_path, subset='all'):
             if read_documents == expected: break
         if read_documents == expected: break
 
-    print()
     # print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
 
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))

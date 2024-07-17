@@ -1,7 +1,11 @@
 import os,sys
+
 from sklearn.datasets import get_data_home, fetch_20newsgroups
+from sklearn.datasets import fetch_rcv1
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
+
 from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -21,6 +25,9 @@ import tarfile
 import gzip
 import shutil
 
+from scipy.sparse import coo_matrix, csr_matrix
+
+
 
 def init_vectorizer():
     """
@@ -36,9 +43,13 @@ class Dataset:
     Supports multiple datasets including Reuters, 20 Newsgroups, Ohsumed, RCV1, and WIPO.
     """
 
+    dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed'}
+
+    """
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed', 'jrcall',
                          'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
-
+    """
+    
     def __init__(self, name):
         """
         Initializes the Dataset object by loading the appropriate dataset.
@@ -53,7 +64,8 @@ class Dataset:
         elif name == '20newsgroups':
             self._load_20news()
         elif name == 'rcv1':
-            self._load_rcv1()
+            #self._load_rcv1()
+            self._load_rcv1_skl()
         elif name == 'ohsumed':
             self._load_ohsumed()
         elif name == 'jrcall':
@@ -68,7 +80,12 @@ class Dataset:
             self._load_wipo('multilabel', 'subclass')
 
         self.nC = self.devel_labelmatrix.shape[1]
+        print("nC:", self.nC)
+
         self._vectorizer = init_vectorizer()
+
+        print("fitting training data... devel_raw:", type(self.devel_raw), self.devel_raw)
+
         self._vectorizer.fit(self.devel_raw)
         self.vocabulary = self._vectorizer.vocabulary_
 
@@ -92,13 +109,68 @@ class Dataset:
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
+
+
+    def _load_20news(self):
+        metadata = ('headers', 'footers', 'quotes')
+        
+        devel = fetch_20newsgroups(subset='train', remove=metadata)
+        test = fetch_20newsgroups(subset='test', remove=metadata)
+
+        self.classification_type = 'singlelabel'
+        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+        self.devel_target, self.test_target = devel.target, test.target
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+
+
+    def _load_rcv1_skl(self):
+
+        print("Dataset::_load_rcv1_skl()")
+        #data_path = os.path.join(get_data_home(), 'rcv1')
+
+        print("Fetching RCV1 dataset...")
+        train_data, train_target = fetch_rcv1(subset='train', return_X_y=True, data_home='../datasets/RCV1-v2')
+        test_data, test_target = fetch_rcv1(subset='test', return_X_y=True)
+
+        # data is in sparse format (csr_matrix) so must be converted for processing
+        sparse_train_data = train_data
+        sparse_train_target = train_target
+        sparse_test_data = test_data
+        sparse_test_target = test_target
+
+        self.classification_type = 'multilabel'
+
+        print("sparse_train_data:", type(sparse_train_data), sparse_train_data.shape, sparse_train_data[0])
+        print("sparse_train_target:", type(sparse_train_target), sparse_train_target.shape, sparse_train_target[0])
+
+        print("sparse_test_data:", type(sparse_test_data), sparse_test_data.shape, sparse_test_data[0])
+        print("sparse_test_target:", type(sparse_test_target), sparse_test_target.shape, sparse_test_target[0])
+
+        """
+        print("converting data to arrays of strings...")
+        dev_data_arr = devel.data.toarray()
+        test_data_arr = test.data.toarray()
+        
+        dev_data_arr_str = dev_data_arr.astype(str)
+        test_data_arr_str = test_data_arr.astype(str)
+        """
+
+        print("Masking numbers in the dataset...")
+        self.devel_raw, self.test_raw = mask_numbers(train_data), mask_numbers(test_data)
+        self.devel_target, self.test_target = train_target, test_target
+        
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+
     def _load_rcv1(self):
 
-        #
-        # TODO: this code doesnt work, data set not readily available
-        #
-        data_path = '../datasets/RCV1-v2/unprocessed_corpus'               
+        data_path = '../datasets/RCV1-v2/'               
 
+        print("Dataset::_load_rcv1() from data_path ", data_path)
+
+        # we presume tar balls are downloaded into this directory already
+        """
         print('Downloading rcv1v2-ids.dat.gz...')
         self.download_file(
             'http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a07-rcv1-doc-ids/rcv1v2-ids.dat.gz', 
@@ -108,19 +180,33 @@ class Dataset:
         self.download_file(
             'http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a08-topic-qrels/rcv1-v2.topics.qrels.gz', 
             data_path)
+        """
 
-        print("extractng files...")
+        print("extracting files...")
         self.extract_gz(data_path + '/' +  'rcv1v2-ids.dat.gz')
         self.extract_gz(data_path + '/' + 'rcv1-v2.topics.qrels.gz')
-        self.extract_tar(data_path + '/' + 'rcv1.tar.xz')
+        #self.extract_tar(data_path + '/' + 'rcv1.tar.xz')
+        self.extract_tar(data_path + '/' + 'RCV1.tar.bz2')
 
+        print("fetching training and test data...")
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
+        print("training data:", type(devel))
+        print("training data:", type(devel.data), len(devel.data))
+        print("training targets:", type(devel.target), len(devel.target))
+
+        print("testing data:", type(test))
+        print("testing data:", type(test.data), len(test.data))
+        print("testing targets:", type(test.target), len(test.target))
+
         self.classification_type = 'multilabel'
+
+        print("masking numbers...")
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+
 
     def _load_jrc(self, version):
         assert version in ['300','all'], 'allowed versions are "300" or "all"'
@@ -145,6 +231,7 @@ class Dataset:
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel_target, test_target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
+
     def _load_ohsumed(self):
         data_path = os.path.join(get_data_home(), 'ohsumed50k')
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
@@ -155,15 +242,8 @@ class Dataset:
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
-    def _load_20news(self):
-        metadata = ('headers', 'footers', 'quotes')
-        
-        devel = fetch_20newsgroups(subset='train', remove=metadata)
-        test = fetch_20newsgroups(subset='test', remove=metadata)
-        self.classification_type = 'singlelabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_target, self.test_target = devel.target, test.target
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+    
 
     def _load_fasttext_data(self,name):
         data_path='../datasets/fastText'
@@ -176,6 +256,7 @@ class Dataset:
         self.devel_raw = mask_numbers(self.devel_raw)
         self.test_raw = mask_numbers(self.test_raw)
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
+
 
     def _load_wipo(self, classmode, classlevel):
         print("_load_wipo()")
@@ -216,6 +297,7 @@ class Dataset:
             self.devel_target, self.test_target = devel_target, test_target
             self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
+
     def vectorize(self):
         print("Dataset::vectorize()")
         if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
@@ -225,8 +307,10 @@ class Dataset:
             self.Xte.sort_indices()
         return self.Xtr, self.Xte
 
+
     def analyzer(self):
         return self._vectorizer.build_analyzer()
+
 
     def download_file(self, url, path):
         file_name = url.split('/')[-1]
@@ -246,6 +330,7 @@ class Dataset:
         else:
             print('File %s already existed.\n', file_name)
 
+
     def extract_tar(self, path):
         path = Path(path)
         dir_name = '.'.join(path.name.split('.')[:-2])
@@ -256,6 +341,7 @@ class Dataset:
                 tf.extractall(path.parent)
             else:
                 print('ERROR: File %s is required. \n', path.name)
+
 
     def extract_gz(self, path):
         path = Path(path)
@@ -318,10 +404,11 @@ def mask_numbers(data, number_mask='numbermask'):
     """
     Masks numbers in the given text data with a placeholder.
     """
+    print("masking numbers...")
+
     mask = re.compile(r'\b[0-9][0-9.,-]*\b')
     masked = []
     for text in tqdm(data, desc='masking numbers'):
         masked.append(mask.sub(number_mask, text))
     return masked
-
 

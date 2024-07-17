@@ -314,15 +314,6 @@ def main(args):
         
     #assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
 
-    print("new model, loading embeddings...")
-    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
-
-    """
-    embeddings_log_val ='none'
-    if pretrained:
-        embeddings_log_val = args.embedding_dir
-    """
-
     print("loading dataset ", {args.dataset})
     dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
@@ -337,6 +328,9 @@ def main(args):
     Xtr, Xte = dataset.vectorize()
     #print("Xtr:", type(Xtr), Xtr)
     #print("Xte:", type(Xte), Xte)
+
+    print("new model, loading embeddings...")
+    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)                
 
     if args.mode in ['tfidf']:
         sup_tend = 0
