@@ -3,7 +3,7 @@ import os,sys
 from sklearn.datasets import get_data_home, fetch_20newsgroups
 from sklearn.datasets import fetch_rcv1
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
@@ -29,12 +29,19 @@ from scipy.sparse import coo_matrix, csr_matrix
 
 
 
-def init_vectorizer():
+def init_tfidf_vectorizer():
     """
-    Initializes and returns a TF-IDF vectorizer with specific configuration.
+    Initializes and returns a sklearn TFIDFVectorizer with specific configuration.
     """
-    print("init_vectorizer()")
+    print("init_tfidf_vectorizer()")
     return TfidfVectorizer(min_df=5, sublinear_tf=True)
+
+def init_count_vectorizer():
+    """
+    Initializes and returns a sklearn CountVectorizer with specific configuration.
+    """
+    print("init_count_vectorizer()")
+    return CountVectorizer(stop_words='english', min_df=5)
 
 
 class Dataset:
@@ -50,12 +57,12 @@ class Dataset:
                          'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
     """
     
-    def __init__(self, name):
+    def __init__(self, name=None, vectorization_type='tfidf'):
         """
         Initializes the Dataset object by loading the appropriate dataset.
         """
 
-        print("Dataset::__init__():", name)
+        print("initializing dataset with name and vectorization_type:", name, vectorization_type)
         
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
 
@@ -82,12 +89,22 @@ class Dataset:
         self.nC = self.devel_labelmatrix.shape[1]
         print("nC:", self.nC)
 
-        self._vectorizer = init_vectorizer()
+        if (vectorization_type=='tfidf'):
+            print("initializing tfidf vectors...")
+            self._vectorizer = init_tfidf_vectorizer()
+        elif (vectorization_type=='count'):
+            print("initializing count vectors...")
+            self._vectorizer = init_count_vectorizer()
+        else:
+            print("WARNING: unknown vectorization_type, initializing tf-idf vectorizer...")
+            self._vectorizer = init_tfidf_vectorizer()
 
-        print("fitting training data... devel_raw:", type(self.devel_raw), self.devel_raw)
-
+        print("fitting training data... devel_raw type and length:", type(self.devel_raw), len(self.devel_raw))
         self._vectorizer.fit(self.devel_raw)
+
+        print("setting vocabulary...")
         self.vocabulary = self._vectorizer.vocabulary_
+
 
     def show(self):
         nTr_docs = len(self.devel_raw)
@@ -99,16 +116,19 @@ class Dataset:
         return self
 
     def _load_reuters(self):
-        print("Dataset::_load_reuters()")
+
+        print("-- Dataset::_load_reuters() --")
         data_path = os.path.join(get_data_home(), 'reuters21578')
         devel = fetch_reuters21578(subset='train', data_path=data_path)
         test = fetch_reuters21578(subset='test', data_path=data_path)
+
+        #print("devel:", type(devel), devel.data, devel.target)
+        #print("test:", type(test), test.data, test.target)
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
-
 
 
     def _load_20news(self):
@@ -356,7 +376,7 @@ class Dataset:
 
 
     @classmethod
-    def load(cls, dataset_name, pickle_path=None):
+    def load(cls, dataset_name, vectorization_type='tfidf', pickle_path=None):
 
         print("Dataset::load():", dataset_name, pickle_path)
 
@@ -368,14 +388,14 @@ class Dataset:
                 dataset = pickle.load(open(pickle_path, 'rb'))
             else:
                 print(f'fetching dataset and dumping it into {pickle_path}')
-                dataset = Dataset(name=dataset_name)
+                dataset = Dataset(name=dataset_name, vectorization_type=vectorization_type)
                 print('vectorizing for faster processing')
                 dataset.vectorize()
                 print('dumping')
                 pickle.dump(dataset, open(pickle_path, 'wb', pickle.HIGHEST_PROTOCOL))
         else:
             print(f'loading dataset {dataset_name}')
-            dataset = Dataset(name=dataset_name)
+            dataset = Dataset(name=dataset_name, vectorization_type=vectorization_type)
 
         return dataset
 
@@ -404,7 +424,7 @@ def mask_numbers(data, number_mask='numbermask'):
     """
     Masks numbers in the given text data with a placeholder.
     """
-    print("masking numbers...")
+    #print("masking numbers...")
 
     mask = re.compile(r'\b[0-9][0-9.,-]*\b')
     masked = []

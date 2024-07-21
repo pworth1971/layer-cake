@@ -57,11 +57,12 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         param_grid = None
     else:
         if estimator==LinearSVC or estimator==LogisticRegression:
+            #param_grid = {'C': [0.0001, 0.001, 0.1, 1, 10, 100, 1000]}
             param_grid = {'C': np.logspace(-3, 3, 7)}
         elif estimator==MultinomialNB:
             param_grid = {
-                'alpha': [0.001, 0.01, 0.1, 1.0, 10.0],  # Range of alpha values
-                'fit_prior': [True, False]               # Whether to learn class prior probabilities
+                'alpha': [0.00001, 0.0001, 0.001, 0.1, 1, 10, 100, 1000],           # Range of alpha values
+                'fit_prior': [True, False]                                          # Whether to learn class prior probabilities
             }       
         else:
             print("Unsupported estimator, exiting...")
@@ -86,16 +87,23 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         elif estimator==LogisticRegression:
             cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
         elif estimator==MultinomialNB:
-            cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=True, class_prior=None)
+            cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=False, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
             return
 
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
-        #print("predictions (yte_):", type(yte_), yte_)
-        #print("actuals (yte):", type(yte), yte)
-        Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(_tosparse(yte), _tosparse(yte_), classification_type)
+        
+        print("predictions (yte_):", type(yte_), yte_)
+        print("actuals (yte):", type(yte), yte)
+        
+        Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(
+            _tosparse(yte), 
+            _tosparse(yte_), 
+            classification_type, 
+            debug=True
+            )
 
     else:
         print("------- single label case -------")      
@@ -131,7 +139,7 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
 # --------------------------------------------------------------------------------------------------------
 
 
-def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised=False, emb_path='../.vector_cache'):
+def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained_vectors=None, supervised=False, emb_path='../.vector_cache'):
     """
     Constructs and returns embedding matrices using either pre-trained or supervised embeddings. Support for GloVe, Word2Vec
     FastText and BERT pre-trained embeddings supported (tested).
@@ -161,8 +169,15 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
     print("pretrained:", {pretrained})
     print("supervised:", {supervised})
 
-    if pretrained:
+    if pretrained and pretrained_vectors:
 
+        #
+        # NB: embeddings should be already loaded and sent in as a param in this case
+        #
+
+        print("pretrained and pretrained_vectors, extracting vocab and building pretrained embeddings...")
+        
+        """
         if (pretrained_type in ['glove', 'glove-sup']):
             print('\t[pretrained-matrix: GloVe]')
             pretrained = GloVe(path=emb_path)
@@ -178,30 +193,34 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, supervised
         elif (pretrained_type in ['fasttext', 'fasttext-sup']):
             print('\t[pretrained-matrix: FastText]')
             pretrained = FastText(path=emb_path)
-
+        
         P = pretrained.extract(vocabulary).numpy()
-        print("pretrained.shape: ", {P.shape})
+        """
+
+        P = pretrained_vectors.extract(vocabulary).numpy()
+        print("pretrained_vectors: ", type(P), {P.shape})
 
         pretrained_embeddings.append(P)
-        print(f'pretrained embeddings count: {len(pretrained_embeddings[0])}')
+        print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
 
     if supervised:
         print('\t[supervised-matrix]')
 
         Xtr, _ = dataset.vectorize()
         Ytr = dataset.devel_labelmatrix
+
         print("Xtr:", type(Xtr), Xtr.shape)
         print("Ytr:", type(Ytr), Ytr.shape)
 
         S = get_supervised_embeddings(Xtr, Ytr)
-        print("supervised.shape: ", {S.shape})
+        print("supervised_embeddings:", type(S), {S.shape})
 
         pretrained_embeddings.append(S)
-        print(f'supervised word-class embeddings count: {len(pretrained_embeddings[1])}')
+        print(f'pretrained embeddings count after appending supervised: {len(pretrained_embeddings[1])}')
 
     pretrained_embeddings = np.hstack(pretrained_embeddings)
 
-    print("after np.hstack(): pretrained_embeddings shape:", {pretrained_embeddings.shape})
+    print("after np.hstack(): pretrained_embeddings:", type(pretrained_embeddings), {pretrained_embeddings.shape})
 
     return vocabulary, pretrained_embeddings
 
@@ -251,7 +270,12 @@ def main(args):
 
     mode = args.mode
     
-    method_name = f'{learner_name}-{mode}-{"opC" if args.optimc else "default"}'
+    if args.count:
+        vtype = 'count'
+    else:
+        vtype = 'tfidf'             # default to tfidf
+
+    method_name = f'{learner_name}-{mode}-{vtype}-{"opC" if args.optimc else "default"}'
     print("method_name: ", {method_name})
 
     pretrained = False
@@ -312,13 +336,23 @@ def main(args):
         print("run with --force option to override, exiting...")
         return
         
-    #assert not already_modelled or args.force, f'baseline {method_name} for {args.dataset} already calculated'
-
     print("new model, loading embeddings...")
     pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)           
 
+    
+
     print("loading dataset ", {args.dataset})
-    dataset = Dataset.load(dataset_name=args.dataset, pickle_path=args.pickle_dir).show()
+    
+    #dataset = Dataset.load(dataset_name=args.dataset, vectorization_type=vtype, pickle_path=args.pickle_dir).show()
+    
+    # here we force the load and vectorization of the Dataset every time
+    # to ensure we use the specified vectorization method (Count or TFIDF)
+    dataset = Dataset.load(
+        dataset_name=args.dataset, 
+        vectorization_type=vtype, 
+        pickle_path=None
+        ).show()        
+    
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
 
     vocabsize = len(word2index) + len(out_of_vocabulary)
@@ -329,10 +363,15 @@ def main(args):
     #print("test_target (yte):", type(yte), yte)
 
     Xtr, Xte = dataset.vectorize()
+    
     #print("Xtr:", type(Xtr), Xtr)
     #print("Xte:", type(Xte), Xte)     
 
-    if args.mode in ['tfidf']:
+    # convert to arrays if need be
+    Xtr = _todense(Xtr)
+    Xte = _todense(Xte)
+
+    if args.mode in ['count', 'tfidf']:
         sup_tend = 0
     else:
         tinit = time()
@@ -343,26 +382,39 @@ def main(args):
             dataset, 
             pretrained=pretrained, 
             pretrained_type=embeddings,
+            pretrained_vectors=pretrained_vector,
             supervised=supervised, 
             emb_path=emb_path
             )
 
+        print("before matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+        
         Xtr = Xtr.dot(F)
         Xte = Xte.dot(F)
 
+        print("after matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+
         sup_tend = time() - tinit
     
-    # convert to arrays
-    Xtr = _todense(Xtr)
-    Xte = _todense(Xte)
+    ytr = _todense(ytr)
+    yte = _todense(yte)
     
     print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
     # run the model
     print("running model...")
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(Xtr, ytr, Xte, yte, dataset.classification_type, 
-                        args.optimc, learner,mode=args.mode, scoring=args.scoring)
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
+        Xtr, 
+        ytr, 
+        Xte, 
+        yte, 
+        dataset.classification_type, 
+        args.optimc, 
+        learner,
+        mode=args.mode, 
+        scoring=args.scoring
+        )
     
     tend += sup_tend
 
@@ -407,6 +459,9 @@ if __name__ == '__main__':
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
                         help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
+
+    parser.add_argument('--count', action='store_true', default=False,
+                        help='use CountVectorizer')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')

@@ -2,7 +2,8 @@
 
 # Base components
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_baselines2.test"
+#LOG="--log-file ../log/ml_baselines2.test"
+LOG="--log-file ../log/ml_baselines2.1.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
 WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -11,11 +12,15 @@ BERT_PATH="--bert-path ../.vector_cache"
 OPTIMC="--optimc"
 
 # Arrays of datasets and corresponding pickle paths
-declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" )
-declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
+#declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
 #declare -a models=("nb" "svm" "lr")
-declare -a models=("nb")
-declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
+#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
+
+declare -a datasets=("reuters21578")
+declare -a pickle_paths=("../pickles/reuters21578.pickle")
+declare -a models=("nb" "lr")
+declare -a modes=("tfidf" "glove" "glove-sup" "bert" "bert-sup")
 
 # Function to run commands
 function run_command() {
@@ -29,7 +34,14 @@ function run_command() {
     local pickle_flag="--pickle-dir ${pickle_path}"
     local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $mode_path $OPTIMC"
 
+    # Execute the base command
+    echo "Running command: $cmd"
     eval $cmd
+
+    # Execute the command with the --count argument
+    local cmd_count="$cmd --count"
+    echo "Running command with count: $cmd_count"
+    eval $cmd_count
 }
 
 # Loop through datasets and run commands
