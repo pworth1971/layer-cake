@@ -40,7 +40,7 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     - scoring: Metric used for optimizing the model during GridSearch.
     """
 
-    print('\n--- run_model() ---')
+    print('--- run_model() ---')
     tinit = time()
 
     print("classification_type: ", classification_type)
@@ -52,7 +52,9 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     print("Xte", type(Xte), Xte.shape)
     print("yte", type(yte), yte.shape)
 
-    # Setup the parameter grid
+    #
+    # Setup the parameter grid for LinearSVC and LogisticRegression optimization
+    #
     if not optimizeC:
         param_grid = None
     else:
@@ -68,7 +70,9 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             print("Unsupported estimator, exiting...")
             return
     
+    #
     # Normalize data to be non-negative if using Naive Bayes model
+    #
     if estimator==MultinomialNB:
         scaler = MinMaxScaler()
 
@@ -81,11 +85,12 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     if classification_type == 'multilabel':
         print("------- multi-label case -------")
     
-        # set up the esimator params based upon teh model type
+        # set up the esimator params based upon the model type
         if estimator==LinearSVC:
             cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
-            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
+            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
+            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
         elif estimator==MultinomialNB:
             cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=False, class_prior=None)
         else:
@@ -108,13 +113,13 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     else:
         print("------- single label case -------")      
 
-        # set up the esimator params based upon teh model type
+        # set up the esimator params based upon the model type
         if estimator==LinearSVC:
             cls = estimator(dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
-            cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
+            cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
         elif estimator==MultinomialNB:
-            cls = estimator(fit_prior=True, class_prior=None)
+            cls = estimator(fit_prior=False, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
             return
@@ -128,8 +133,9 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         cls.fit(Xtr, ytr)
 
         yte_ = cls.predict(Xte)
-        #print("predictions (yte_):", type(yte_), yte_)
-        #print("actuals (yte):", type(yte), yte)
+        print("predictions (yte_):", type(yte_), yte_)
+        print("actuals (yte):", type(yte), yte)
+        
         Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
 
     tend = time() - tinit

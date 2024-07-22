@@ -1,8 +1,9 @@
 #!/bin/bash
 
+#
 # Base components
+#
 PY="python ../src/ml_class_baselines.py"
-#LOG="--log-file ../log/ml_baselines2.test"
 LOG="--log-file ../log/ml_baselines2.1.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
@@ -11,16 +12,22 @@ FASTTEXT_PATH="--fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT_PATH="--bert-path ../.vector_cache"
 OPTIMC="--optimc"
 
-# Arrays of datasets and corresponding pickle paths
+#
+# Full Arrays of datasets and corresponding pickle paths
+#
 #declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
 #declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
-#declare -a models=("nb" "svm" "lr")
-#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
-declare -a datasets=("reuters21578")
-declare -a pickle_paths=("../pickles/reuters21578.pickle")
-declare -a models=("nb" "lr")
-declare -a modes=("tfidf" "glove" "glove-sup" "bert" "bert-sup")
+#ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                # 20_newsgroups (single label, 20 classes)
+#ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                    # ohsumed (multi-label, 23 classes)
+#reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
+#rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
+
+
+declare -a datasets=("20newsgroups" "ohsumed")
+declare -a pickle_paths=("../pickles/20newsgroups.pickle" "../pickels")
+declare -a models=("svm" "lr" "nb")
+declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 # Function to run commands
 function run_command() {
