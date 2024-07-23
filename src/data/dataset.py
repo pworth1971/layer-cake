@@ -1,7 +1,7 @@
 import os,sys
 
 from sklearn.datasets import get_data_home, fetch_20newsgroups
-from sklearn.datasets import fetch_rcv1
+#from sklearn.datasets import fetch_rcv1
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -71,8 +71,8 @@ class Dataset:
         elif name == '20newsgroups':
             self._load_20news()
         elif name == 'rcv1':
-            #self._load_rcv1()
-            self._load_rcv1_skl()
+            self._load_rcv1()
+            #self._load_rcv1_skl()
         elif name == 'ohsumed':
             self._load_ohsumed()
         elif name == 'jrcall':
@@ -185,7 +185,7 @@ class Dataset:
 
     def _load_rcv1(self):
 
-        data_path = '../datasets/RCV1-v2/'               
+        data_path = '../datasets/RCV1-v2/rcv1/'               
 
         print("Dataset::_load_rcv1() from data_path ", data_path)
 
@@ -202,11 +202,15 @@ class Dataset:
             data_path)
         """
 
+        # we only do this once
+        """
         print("extracting files...")
         self.extract_gz(data_path + '/' +  'rcv1v2-ids.dat.gz')
         self.extract_gz(data_path + '/' + 'rcv1-v2.topics.qrels.gz')
-        #self.extract_tar(data_path + '/' + 'rcv1.tar.xz')
+        self.extract_tar(data_path + '/' + 'rcv1.tar.xz')
         self.extract_tar(data_path + '/' + 'RCV1.tar.bz2')
+        """
+        # ----------------------------------------------------------------
 
         print("fetching training and test data...")
         devel = fetch_RCV1(subset='train', data_path=data_path)

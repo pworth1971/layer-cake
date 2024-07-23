@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_baselines2.1.test"
+LOG="--log-file ../log/ml_baselines_rcv1.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
 WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -24,7 +24,7 @@ OPTIMC="--optimc"
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 
-declare -a datasets=("ohsumed")
+declare -a datasets=("rcv1")
 declare -a pickle_paths=("../pickels")
 declare -a models=("svm" "lr" "nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")

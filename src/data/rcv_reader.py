@@ -5,6 +5,7 @@ from util.file import list_files
 from os.path import join, exists
 from util.file import download_file_if_not_exists
 import re
+import os
 from collections import Counter
 
 RCV1_TOPICHIER_URL = "http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a02-orig-topics-hierarchy/rcv1.topics.hier.orig"
@@ -80,6 +81,59 @@ def fetch_RCV1(data_path, subset='all'):
         split_range = (26151, 810596)
         expected = test_documents
 
+    # Scan for directories matching the required pattern
+    for dir_name in os.listdir(data_path):                                          # list all the directories 
+        if re.match('199\d{5}$', dir_name):                                         # if they start with '199*' and are 8 digits long
+            target_dir = os.path.join(data_path, dir_name)
+            #print("parsing xml files in target_dir...")
+            for file_name in os.listdir(target_dir):                                # for each file in directory
+                if file_name.endswith('.xml'):
+                    xmlfile_path = os.path.join(target_dir, file_name)
+                    with open(xmlfile_path, 'r') as file:
+                        #print("\nparsing ", xmlfile_path, "...")
+                        xmlcontent = file.read()
+                        try:
+                            doc = parse_document(xmlcontent, valid_id_range=split_range)
+                            labels.update(doc.categories)
+                            request.append(doc)
+                            read_documents += 1
+                        except (IDRangeException, ValueError) as e:
+                            pass
+                        print('\r[{}] read {} documents'.format(dir_name, len(request)), end='')
+                        if read_documents == expected:
+                            break
+            if read_documents == expected:
+                break
+
+    # print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
+
+    return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
+
+
+def fetch_RCV1_deprecated(data_path, subset='all'):
+
+    print("fetch_RVCV1(data_path):", data_path)
+    print("subset:", subset)
+
+    assert subset in ['train', 'test', 'all'], 'split should either be "train", "test", or "all"'
+
+    request = []
+    labels = set()
+    read_documents = 0
+
+    training_documents = 23149
+    test_documents = 781265
+
+    if subset == 'all':
+        split_range = (2286, 810596)
+        expected = training_documents+test_documents
+    elif subset == 'train':
+        split_range = (2286, 26150)
+        expected = training_documents
+    else:
+        split_range = (26151, 810596)
+        expected = test_documents
+
     # global nwords
     # nwords=[]
     for part in list_files(data_path):
@@ -105,6 +159,8 @@ def fetch_RCV1(data_path, subset='all'):
     # print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
 
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
+
+
 
 
 
