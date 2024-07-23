@@ -57,7 +57,7 @@ def parse_document(xml_content, valid_id_range=None):
     return RCV_Document(id=doc_id, text=text, categories=doc_categories, date=doc_date)
 
 
-def fetch_RCV1(data_path, subset='all'):
+def fetch_RCV1_raw(data_path, subset='all'):
 
     print("fetch_RVCV1(data_path):", data_path)
     print("subset:", subset)
@@ -110,10 +110,11 @@ def fetch_RCV1(data_path, subset='all'):
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
 
 
-def fetch_RCV1_deprecated(data_path, subset='all'):
+def fetch_RCV1(data_path, subset='all', debug=False):
 
-    print("fetch_RVCV1(data_path):", data_path)
-    print("subset:", subset)
+    if (debug):
+        print("fetch_RVCV1(data_path):", data_path)
+        print("subset:", subset)
 
     assert subset in ['train', 'test', 'all'], 'split should either be "train", "test", or "all"'
 
@@ -139,11 +140,17 @@ def fetch_RCV1_deprecated(data_path, subset='all'):
     for part in list_files(data_path):
         if not re.match('\d+\.zip', part): continue
         target_file = join(data_path, part)
+        if (debug):
+            print("target_file:", target_file)
         assert exists(target_file), \
             "You don't seem to have the file "+part+" in " + data_path + ", and the RCV1 corpus can not be downloaded"+\
             " w/o a formal permission. Please, refer to " + RCV1_BASE_URL + " for more information."
         zipfile = ZipFile(target_file)
+        if (debug):
+            print("zipfile:", zipfile)
         for xmlfile in zipfile.namelist():
+            if (debug):
+                print("xmlfile:", xmlfile)
             xmlcontent = zipfile.open(xmlfile).read()
             try:
                 doc = parse_document(xmlcontent, valid_id_range=split_range)
@@ -156,7 +163,8 @@ def fetch_RCV1_deprecated(data_path, subset='all'):
             if read_documents == expected: break
         if read_documents == expected: break
 
-    # print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
+    if (debug):
+        print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
 
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
 

@@ -25,8 +25,9 @@ OPTIMC="--optimc"
 
 
 declare -a datasets=("ohsumed")
-declare -a pickle_paths=("../pickels")
-declare -a models=("svm" "lr" "nb")
+declare -a pickle_paths=("../pickles")
+#declare -a models=("svm" "lr" "nb")
+declare -a models=("lr" "nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 # Function to run commands

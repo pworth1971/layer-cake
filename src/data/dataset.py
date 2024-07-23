@@ -187,9 +187,8 @@ class Dataset:
 
         data_path = '../datasets/RCV1-v2/rcv1/'               
 
-        print("Dataset::_load_rcv1() from data_path ", data_path)
+        print("loading rcv1 Dataset (_load_rcv1) from path:", data_path)
 
-        # we presume tar balls are downloaded into this directory already
         """
         print('Downloading rcv1v2-ids.dat.gz...')
         self.download_file(
@@ -202,8 +201,10 @@ class Dataset:
             data_path)
         """
 
-        # we only do this once
         """
+        # we presume tar balls are downloaded into this directory already
+        # -- we only do this once --
+        
         print("extracting files...")
         self.extract_gz(data_path + '/' +  'rcv1v2-ids.dat.gz')
         self.extract_gz(data_path + '/' + 'rcv1-v2.topics.qrels.gz')
@@ -213,8 +214,8 @@ class Dataset:
         # ----------------------------------------------------------------
 
         print("fetching training and test data...")
-        devel = fetch_RCV1(subset='train', data_path=data_path)
-        test = fetch_RCV1(subset='test', data_path=data_path)
+        devel = fetch_RCV1(subset='train', data_path=data_path, debug=True)
+        test = fetch_RCV1(subset='test', data_path=data_path, debug=True)
 
         print("training data:", type(devel))
         print("training data:", type(devel.data), len(devel.data))
@@ -380,23 +381,45 @@ class Dataset:
 
 
     @classmethod
-    def load(cls, dataset_name, vectorization_type='tfidf', pickle_path=None):
+    def load(cls, dataset_name, vectorization_type='tfidf', base_pickle_path=None):
 
-        print("Dataset::load():", dataset_name, pickle_path)
+        print("Dataset::load():", dataset_name, base_pickle_path)
 
-        if pickle_path:
-            print("picklepath: ", {pickle_path})
+        # Create a pickle path that includes the vectorization type
+        # NB we assume the /pickles directory exists already
+        if base_pickle_path:
+            full_pickle_path = f"{base_pickle_path}{'/'}{dataset_name}_{vectorization_type}.pkl"
+            pickle_file_name = f"{dataset_name}_{vectorization_type}.pkl"
+        else:
+            full_pickle_path = None
+            pickle_file_name = None
 
-            if os.path.exists(pickle_path):
-                print(f'loading pickled dataset from {pickle_path}')
-                dataset = pickle.load(open(pickle_path, 'rb'))
-            else:
-                print(f'fetching dataset and dumping it into {pickle_path}')
+        print("pickle_file_name:", pickle_file_name)
+
+        # not None so we are going to create the pickle file, 
+        # by dataset and vectorization type
+        if full_pickle_path:
+            print("full_pickle_path: ", {full_pickle_path})
+
+            if os.path.exists(full_pickle_path):                                        # pickle file exists, load it
+                print(f'loading pickled dataset from {full_pickle_path}')
+                dataset = pickle.load(open(full_pickle_path, 'rb'))
+            else:                                                                       # pickle file does not exist, create it, load it, and dump it
+                print(f'fetching dataset and dumping it into {full_pickle_path}')
                 dataset = Dataset(name=dataset_name, vectorization_type=vectorization_type)
                 print('vectorizing for faster processing')
                 dataset.vectorize()
+                
                 print('dumping')
-                pickle.dump(dataset, open(pickle_path, 'wb', pickle.HIGHEST_PROTOCOL))
+                #pickle.dump(dataset, open(pickle_path, 'wb', pickle.HIGHEST_PROTOCOL))
+                # Open the file for writing and write the pickle data
+                try:
+                    with open(full_pickle_path, 'wb', pickle.HIGHEST_PROTOCOL) as file:
+                        pickle.dump(dataset, file)
+                    print("data successfully pickled at:", full_pickle_path)
+                except Exception as e:
+                    print("Exception raised, failed to pickle data: {e}")
+
         else:
             print(f'loading dataset {dataset_name}')
             dataset = Dataset(name=dataset_name, vectorization_type=vectorization_type)

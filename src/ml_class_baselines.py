@@ -248,7 +248,7 @@ def main(args):
     """
 
     print()
-    print("\t\t\t------------------------------------------------------------------------------------ MAIN(ARGS) -----------------------------------------------------------------------------------------------------------------------")
+    print("\n------------------------------------------------------------------------------------------------------------------- MAIN(ARGS) ------------------------------------------------------------------------------------------------------------------")
 
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
@@ -345,18 +345,23 @@ def main(args):
     print("new model, loading embeddings...")
     pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)           
 
-    
-
     print("loading dataset ", {args.dataset})
     
-    #dataset = Dataset.load(dataset_name=args.dataset, vectorization_type=vtype, pickle_path=args.pickle_dir).show()
+    """
+    here we force the load and vectorization of the Dataset every time
+    to ensure we use the specified vectorization method (Count or TFIDF)
     
-    # here we force the load and vectorization of the Dataset every time
-    # to ensure we use the specified vectorization method (Count or TFIDF)
     dataset = Dataset.load(
         dataset_name=args.dataset, 
         vectorization_type=vtype, 
-        pickle_path=None
+        base_pickle_path=None
+        ).show()       
+    """
+
+    dataset = Dataset.load(
+        dataset_name=args.dataset, 
+        vectorization_type=vtype,                   # TFIDF or Count
+        base_pickle_path=args.pickle_dir
         ).show()        
     
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
