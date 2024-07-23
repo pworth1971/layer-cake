@@ -8,8 +8,12 @@ import re
 import os
 from collections import Counter
 
+
+
+
 RCV1_TOPICHIER_URL = "http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a02-orig-topics-hierarchy/rcv1.topics.hier.orig"
 RCV1_BASE_URL = "http://www.daviddlewis.com/resources/testcollections/rcv1/"
+
 
 rcv1_test_data_gz = ['lyrl2004_tokens_test_pt0.dat.gz',
              'lyrl2004_tokens_test_pt1.dat.gz',
@@ -105,8 +109,6 @@ def fetch_RCV1_raw(data_path, subset='all'):
             if read_documents == expected:
                 break
 
-    # print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
-
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
 
 
@@ -141,7 +143,7 @@ def fetch_RCV1(data_path, subset='all', debug=False):
         if not re.match('\d+\.zip', part): continue
         target_file = join(data_path, part)
         if (debug):
-            print("target_file:", target_file)
+            print("\ntarget_file:", target_file)
         assert exists(target_file), \
             "You don't seem to have the file "+part+" in " + data_path + ", and the RCV1 corpus can not be downloaded"+\
             " w/o a formal permission. Please, refer to " + RCV1_BASE_URL + " for more information."
@@ -149,8 +151,10 @@ def fetch_RCV1(data_path, subset='all', debug=False):
         if (debug):
             print("zipfile:", zipfile)
         for xmlfile in zipfile.namelist():
+            """
             if (debug):
-                print("xmlfile:", xmlfile)
+                print("\nxmlfile:", xmlfile)
+            """
             xmlcontent = zipfile.open(xmlfile).read()
             try:
                 doc = parse_document(xmlcontent, valid_id_range=split_range)
@@ -162,9 +166,6 @@ def fetch_RCV1(data_path, subset='all', debug=False):
             print('\r[{}] read {} documents'.format(part, len(request)), end='')
             if read_documents == expected: break
         if read_documents == expected: break
-
-    if (debug):
-        print('ave:{} std {} min {} max {}'.format(np.mean(nwords), np.std(nwords), np.min(nwords), np.max(nwords)))
 
     return LabelledDocuments(data=[d.text for d in request], target=[d.categories for d in request], target_names=list(labels))
 

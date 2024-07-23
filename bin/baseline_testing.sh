@@ -15,19 +15,15 @@ OPTIMC="--optimc"
 #
 # Full Arrays of datasets and corresponding pickle paths
 #
-#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
-#declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
-
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                    # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 
-declare -a datasets=("ohsumed")
-declare -a pickle_paths=("../pickles")
-#declare -a models=("svm" "lr" "nb")
-declare -a models=("lr" "nb")
+declare -a datasets=("ohsumed" "reuters21578" "20newsgroups")
+declare -a pickle_paths=("../pickles" "../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle")
+declare -a models=("svm" "lr" "nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 # Function to run commands
@@ -43,6 +39,7 @@ function run_command() {
     local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $mode_path $OPTIMC"
 
     # Execute the base command
+    echo
     echo "Running command: $cmd"
     eval $cmd
 

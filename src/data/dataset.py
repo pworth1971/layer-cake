@@ -214,8 +214,8 @@ class Dataset:
         # ----------------------------------------------------------------
 
         print("fetching training and test data...")
-        devel = fetch_RCV1(subset='train', data_path=data_path, debug=True)
-        test = fetch_RCV1(subset='test', data_path=data_path, debug=True)
+        devel = fetch_RCV1(subset='train', data_path=data_path, debug=False)
+        test = fetch_RCV1(subset='test', data_path=data_path, debug=False)
 
         print("training data:", type(devel))
         print("training data:", type(devel.data), len(devel.data))
@@ -324,7 +324,11 @@ class Dataset:
 
 
     def vectorize(self):
-        print("Dataset::vectorize()")
+        print("vectorizing dataset...")
+        
+        print("Xtr:", type(Xtr, Xtr.shape))
+        print("Xte:", type(Xte), Xte.shape)
+        
         if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
             self.Xtr = self._vectorizer.transform(self.devel_raw)
             self.Xte = self._vectorizer.transform(self.test_raw)
