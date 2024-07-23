@@ -36,6 +36,8 @@ def init_tfidf_vectorizer():
     print("init_tfidf_vectorizer()")
     return TfidfVectorizer(min_df=5, sublinear_tf=True)
 
+
+
 def init_count_vectorizer():
     """
     Initializes and returns a sklearn CountVectorizer with specific configuration.
@@ -324,16 +326,21 @@ class Dataset:
 
 
     def vectorize(self):
+
         print("vectorizing dataset...")
         
-        print("Xtr:", type(Xtr, Xtr.shape))
-        print("Xte:", type(Xte), Xte.shape)
-        
         if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
+
+            print("self does not have Xtr or Xte attributes, transforming and sorting...")
+
             self.Xtr = self._vectorizer.transform(self.devel_raw)
             self.Xte = self._vectorizer.transform(self.test_raw)
             self.Xtr.sort_indices()
             self.Xte.sort_indices()
+        
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        
         return self.Xtr, self.Xte
 
 

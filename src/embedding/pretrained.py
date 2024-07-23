@@ -8,20 +8,26 @@ import zipfile
 
 import torch, torchtext
 from torchtext.vocab import GloVe as TorchTextGloVe
+
 from transformers import BertModel, BertTokenizer
+from transformers import LlamaModel, LlamaTokenizer
 from transformers import  logging as transformers_logging
+
 
 import joblib
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'llama']
 
 VECTOR_CACHE = '../.vector_cache'
 
 
+from huggingface_hub import login
+
+HF_TOKEN = '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'
+HF_TOKEN2 = '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'
 
 
 
-# --- PJW Comments added ---
 """
 Python module for handling pretrained word embeddings, structured using an object-oriented approach. Includes classes for 
 managing embeddings from GloVe, Word2Vec, and FastText, each subclassing an abstract base class defined for generalized 
@@ -37,20 +43,18 @@ the underlying library used for loading the embeddings.
 """
 
 
-"""
-PretrainedEmbeddings Abstract Base Class: Serves as an abstract base class for all 
-specific embedding classes, ensuring they implement required methods.
-
-Methods:
-- vocabulary(): An abstract method that subclasses must implement to return their vocabulary.
-
-- dim(): An abstract method to return the dimensionality of the embeddings.
-
-- reindex(cls, words, word2index): A class method to align indices of words in a given list 
-with their indices in a pretrained model's vocabulary. This helps in efficiently extracting 
-embedding vectors for a specific subset of words.
-"""
 class PretrainedEmbeddings(ABC):
+    """
+    PretrainedEmbeddings Abstract Base Class: Serves as an abstract base class for all 
+    specific embedding classes, ensuring they implement required methods.
+
+    Methods:
+    - vocabulary(): An abstract method that subclasses must implement to return their vocabulary.
+    - dim(): An abstract method to return the dimensionality of the embeddings.
+    - reindex(cls, words, word2index): A class method to align indices of words in a given list 
+    with their indices in a pretrained model's vocabulary. This helps in efficiently extracting 
+    embedding vectors for a specific subset of words.
+    """
 
     def __init__(self):
         super().__init__()
@@ -323,3 +327,55 @@ class BERT(PretrainedEmbeddings):
     def reindex(words, word2index):
         # This method might be less relevant for BERT, depending on how you choose to handle subword tokens
         return super().reindex(words, word2index)
+
+
+class LLaMA(PretrainedEmbeddings):
+
+    def __init__(self, model_name='llama-2-13b', emb_path=VECTOR_CACHE):
+        super().__init__()
+
+        transformers_logging.set_verbosity_warning()
+
+        #self.cache_path = emb_path + '/' + model_name + '/'
+        self.cache_path = emb_path
+
+        os.makedirs(self.cache_path, exist_ok=True)
+
+        print(f'Initializing LLaMA model: {model_name} in cache directory: {self.cache_path}')
+
+        login(token=HF_TOKEN2)
+
+        # Load tokenizer and model
+        self.tokenizer = LlamaTokenizer.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True, token=HF_TOKEN2)
+        self.model = LlamaModel.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True, token=HF_TOKEN2)
+        
+        #self.tokenizer = LlamaTokenizer.from_pretrained(self.cache_path)
+        #self.model = LlamaModel.from_pretrained(self.cache_path)
+        
+        self.model.eval()
+        self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+        self.model_name = model_name
+
+        # Optionally, freeze layers
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+    def vocabulary(self):
+        return set(self.tokenizer.get_vocab().keys())
+
+    def dim(self):
+        return self.model.config.hidden_size
+
+    def extract(self, words, batch_size=1000):
+        embeddings = []
+        for i in range(0, len(words), batch_size):
+            batch_words = words[i:i+batch_size]
+            inputs = self.tokenizer(batch_words, return_tensors="pt", padding=True, truncation=True)
+            inputs = {key: val.to(self.model.device) for key, val in inputs.items()}
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+            batch_embeddings = outputs.last_hidden_state.mean(dim=1)
+            embeddings.append(batch_embeddings)
+        embeddings = torch.cat(embeddings, dim=0)
+        return embeddings.cpu()

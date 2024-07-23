@@ -24,7 +24,9 @@ OPTIMC="--optimc"
 declare -a datasets=("ohsumed" "reuters21578" "20newsgroups")
 declare -a pickle_paths=("../pickles" "../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle")
 declare -a models=("svm" "lr" "nb")
-declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
+declare -a modes=("llama" "llama-sup" )
+#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
+
 
 # Function to run commands
 function run_command() {
@@ -40,11 +42,14 @@ function run_command() {
 
     # Execute the base command
     echo
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
     echo "Running command: $cmd"
     eval $cmd
 
     # Execute the command with the --count argument
     local cmd_count="$cmd --count"
+    echo
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
     echo "Running command with count: $cmd_count"
     eval $cmd_count
 }

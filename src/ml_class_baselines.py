@@ -21,6 +21,7 @@ from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
 
 
+NUM_JOBS = 20
 
 def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', scoring='accuracy'):
     """
@@ -83,16 +84,20 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     cv = 5
 
     if classification_type == 'multilabel':
+
         print("------- multi-label case -------")
     
         # set up the esimator params based upon the model type
         if estimator==LinearSVC:
-            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
+            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
+            cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
             #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
-            cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
+            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
+            cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
         elif estimator==MultinomialNB:
-            cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=False, class_prior=None)
+            #cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=False, class_prior=None)
+            cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, fit_prior=False, class_prior=None)
         else:
             print("ERR: unsupported estimator.")
             return
@@ -129,7 +134,10 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         print(f"Estimator params: {cls.get_params()}")
 
         #cls = estimator(dual=False)
-        cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
+        #cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
+
+        cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=NUM_JOBS, scoring=scoring) if optimizeC else cls
+
         cls.fit(Xtr, ytr)
 
         yte_ = cls.predict(Xte)
@@ -247,8 +255,7 @@ def main(args):
     - args: Command line arguments parsed using argparse.
     """
 
-    print()
-    print("\n------------------------------------------------------------------------------------------------------------------- MAIN(ARGS) ------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------------- MAIN(ARGS) ---------------------------------------------------------------------------------------------------------------")
 
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
@@ -304,17 +311,21 @@ def main(args):
         pretrained = True
         embeddings = 'fasttext'
         emb_path = args.fasttext_path
-   
+    elif args.mode in ['llama', 'llama-sup']:
+        pretrained = True
+        embeddings = 'llama'
+        emb_path = args.llama_path
+
     print("emb_path: ", {emb_path})
 
     supervised = False
 
-    if args.mode in ['sup', 'bert-sup', 'glove-sup', 'word2vec-sup', 'fasttext-sup']:
+    if args.mode in ['sup', 'bert-sup', 'glove-sup', 'word2vec-sup', 'fasttext-sup', 'llama-sup']:
         supervised = True
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
 
-     #print("initializing logfile embeddings value to:", {embeddings})
+    #print("initializing logfile embeddings value to:", {embeddings})
     logfile = init_layered_baseline_logfile(                             
         logfile=args.log_file,
         method_name=method_name, 
@@ -335,29 +346,17 @@ def main(args):
         wc_supervised=supervised
         )
 
-    print("already_modelled: ", already_modelled)
+    print("already_modelled:", already_modelled)
 
     if (already_modelled) and not (args.force):
-        print('Assertion warning: baseline {method_name} for {args.dataset} already calculated')
+        print(f'*** Assertion warning *** baseline {method_name} for {args.dataset} already calculated')
         print("run with --force option to override, exiting...")
         return
         
     print("new model, loading embeddings...")
     pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)           
 
-    print("loading dataset ", {args.dataset})
-    
-    """
-    here we force the load and vectorization of the Dataset every time
-    to ensure we use the specified vectorization method (Count or TFIDF)
-    
-    dataset = Dataset.load(
-        dataset_name=args.dataset, 
-        vectorization_type=vtype, 
-        base_pickle_path=None
-        ).show()       
-    """
-
+    print("loading dataset", {args.dataset}, "...")
     dataset = Dataset.load(
         dataset_name=args.dataset, 
         vectorization_type=vtype,                   # TFIDF or Count
@@ -469,7 +468,7 @@ if __name__ == '__main__':
                         help=f'learner (svm, lr, or nb)')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
-                        help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup]')
+                        help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup, llama, llama-sup]')
 
     parser.add_argument('--count', action='store_true', default=False,
                         help='use CountVectorizer')
@@ -502,7 +501,11 @@ if __name__ == '__main__':
     
     parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'directory to BERT pretrained vectors (e.g. bert-base-uncased-20newsgroups.pkl), used only with --pretrained bert')
+                        help=f'directory to BERT pretrained vectors, used only with --pretrained bert')
+    
+    parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to LLaMA pretrained vectors, used only with --pretrained llama')
 
     parser.add_argument('--force-embeddings', action='store_true', default=False,
                         help='force the computation of embeddings even if a precomputed version is available')
@@ -525,6 +528,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    assert args.mode in ['tfidf', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup'], 'unknown mode'
+    assert args.mode in ['tfidf', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup', 'llama', 'llama-sup'], 'unknown mode'
     
     main(args)

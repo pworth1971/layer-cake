@@ -15,8 +15,6 @@ from sklearn.exceptions import ConvergenceWarning
 
 from pprint import pprint
 
-
-
 class MLClassifier:
     """
     Multi-label, multiclass classifier. Support for LinearSVC and LogisticRegression models, with 
@@ -51,6 +49,9 @@ class MLClassifier:
         print("Initializing MLClassifier...")
         
         self.n_jobs = n_jobs
+
+        print("n_jobs:", self.n_jobs)
+        
         self.estimator = estimator
         self.scoring = scoring
         self.args = args
@@ -75,7 +76,8 @@ class MLClassifier:
         - AssertionError: If the data is not in the expected multi-label binary format.
         """
 
-        print("\n---MLClassifier::fit() ---")
+        print("fitting ML Classifier...")
+        
         print("X, y:", X.shape, y.shape)
         print("grid_search_params:", grid_search_params)
 
@@ -94,6 +96,7 @@ class MLClassifier:
         self.svms = np.array([self.estimator(*self.args, **self.kwargs) for _ in range(nC)])
 
         if grid_search_params and grid_search_params['param_grid']:
+        
             print('grid_search activated with: {}'.format(grid_search_params))
             
             # Grid search cannot be performed if the category prevalence is less than the parameter cv.

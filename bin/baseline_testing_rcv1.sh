@@ -42,11 +42,15 @@ function run_command() {
     local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $mode_path $OPTIMC"
 
     # Execute the base command
+    echo
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
     echo "Running command: $cmd"
     eval $cmd
 
     # Execute the command with the --count argument
     local cmd_count="$cmd --count"
+    echo
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
     echo "Running command with count: $cmd_count"
     eval $cmd_count
 }

@@ -12,10 +12,10 @@ import itertools
 from util.csv_log import CSVLog
 import matplotlib.pyplot as plt
 
-from embedding.pretrained import GloVe, BERT, Word2Vec, FastText
-
+from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
+DEFAULT_LLAMA_PRETRAINED_MODEL = 'meta-llama/Llama-2-7b-hf'
 
 VECTOR_CACHE = '../.vector_cache'                       # assumes everything is run from /bin directory
 
@@ -33,23 +33,28 @@ def load_pretrained_embeddings(model, args):
 
     if model=='glove':
         print("path:", {args.glove_path})
-        print("Loading GloVe...")
+        print("Loading GloVe pretrained embeddings...")
         return True, GloVe(path=args.glove_path)
     
     elif model=='word2vec':
         print("path:", {args.word2vec_path})
-        print("Loading Word2Vec...")
+        print("Loading Word2Vec pretrained embeddings...")
         return True, Word2Vec(path=args.word2vec_path, limit=1000000)
     
     elif model=='fasttext':
         print("path:", {args.fasttext_path})
-        print("Loading fasttext...")
+        print("Loading fastText pretrained embeddings...")
         return True, FastText(path=args.fasttext_path, limit=1000000)
     
     elif model=='bert':
         print("path:", {args.bert_path})
-        print("Loading BERT...")
+        print("Loading BERT pretrained embeddings...")
         return True, BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, emb_path=args.bert_path)
+
+    elif model=='llama':
+        print("path:", {args.llama_path})
+        print("Loading LLaMA pretrained embeddings...")
+        return True, LLaMA(model_name=DEFAULT_LLAMA_PRETRAINED_MODEL, emb_path=args.llama_path)
 
     return False, None
 # ---------------------------------------------------------------------------------------------------------------------------------------
