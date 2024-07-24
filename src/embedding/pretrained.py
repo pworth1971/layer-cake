@@ -242,19 +242,19 @@ class FastText(Word2Vec):
         self.embed.save_word2vec_format(path, binary=True)
 
 
-"""
-BERTEmbeddings class: class that inherits from the PretrainedEmbeddings abstract base class.
 
-Initialization: Load a pre-trained BERT model and its tokenizer. BERT models work 
-with tokens that might correspond to subwords or full words, and the tokenizer converts 
-text to the format expected by the model.
-
-Methods Implementation: Implement the required methods like vocabulary, dim, extract, etc., 
-keeping in mind that BERT generates embeddings differently, typically by processing 
-input through its transformer network.
-"""
 class BERT(PretrainedEmbeddings):
+    """
+    BERTEmbeddings class: class that inherits from the PretrainedEmbeddings abstract base class.
 
+    Initialization: Load a pre-trained BERT model and its tokenizer. BERT models work 
+    with tokens that might correspond to subwords or full words, and the tokenizer converts 
+    text to the format expected by the model.
+
+    Methods Implementation: Implement the required methods like vocabulary, dim, extract, etc., 
+    keeping in mind that BERT generates embeddings differently, typically by processing 
+    input through its transformer network.
+    """
     def __init__(self, model_name='bert-base-uncased', emb_path=VECTOR_CACHE):
 
         super().__init__()
@@ -272,6 +272,7 @@ class BERT(PretrainedEmbeddings):
         self.tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
         
         self.model = BertModel.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True)
+
         self.model.eval()                                                               # Set the model to inference mode
         self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))     # Move model to appropriate device
 
@@ -299,7 +300,7 @@ class BERT(PretrainedEmbeddings):
 
     def extract(self, words, batch_size=1000):
 
-        #print("Bert::extract()")
+        print("BERT::extract()")
 
         # Convert numpy array to list if necessary
         if isinstance(words, np.ndarray):
@@ -329,8 +330,13 @@ class BERT(PretrainedEmbeddings):
         return super().reindex(words, word2index)
 
 
-class LLaMA(PretrainedEmbeddings):
 
+
+class LLaMA(PretrainedEmbeddings):
+    """
+    LLaMA pretrained embeddings class
+    """
+    
     def __init__(self, model_name='llama-2-13b', emb_path=VECTOR_CACHE):
         super().__init__()
 
@@ -348,10 +354,12 @@ class LLaMA(PretrainedEmbeddings):
         # Load tokenizer and model
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True, token=HF_TOKEN2)
         self.model = LlamaModel.from_pretrained(model_name, cache_dir=self.cache_path, force_download=True, token=HF_TOKEN2)
-        
-        #self.tokenizer = LlamaTokenizer.from_pretrained(self.cache_path)
-        #self.model = LlamaModel.from_pretrained(self.cache_path)
-        
+
+        # we also update  "pad_token": "[PAD]" in tokenizer_config.json
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            self.model.resize_token_embeddings(len(self.tokenizer))
+           
         self.model.eval()
         self.model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -361,21 +369,39 @@ class LLaMA(PretrainedEmbeddings):
         for param in self.model.parameters():
             param.requires_grad = False
 
+
     def vocabulary(self):
         return set(self.tokenizer.get_vocab().keys())
+
 
     def dim(self):
         return self.model.config.hidden_size
 
+
     def extract(self, words, batch_size=1000):
+
+        print("LLaMA::extract()...")
+
+        # Convert numpy array to list if necessary
+        if isinstance(words, np.ndarray):
+            words = words.tolist()
+
+        # Processing in smaller batches
         embeddings = []
+
         for i in range(0, len(words), batch_size):
+        
             batch_words = words[i:i+batch_size]
+        
             inputs = self.tokenizer(batch_words, return_tensors="pt", padding=True, truncation=True)
             inputs = {key: val.to(self.model.device) for key, val in inputs.items()}
+        
             with torch.no_grad():
                 outputs = self.model(**inputs)
+        
             batch_embeddings = outputs.last_hidden_state.mean(dim=1)
             embeddings.append(batch_embeddings)
-        embeddings = torch.cat(embeddings, dim=0)
-        return embeddings.cpu()
+        
+        embeddings = torch.cat(embeddings, dim=0)           # concatenate all batch embeddings
+
+        return embeddings.cpu()                             # move the tensor to CPU before returning

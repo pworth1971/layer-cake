@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_baselines2.1.test"
+LOG="--log-file ../log/ml_baselines_llama.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
 WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -24,7 +24,8 @@ OPTIMC="--optimc"
 declare -a datasets=("ohsumed" "reuters21578" "20newsgroups")
 declare -a pickle_paths=("../pickles" "../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle")
 declare -a models=("svm" "lr" "nb")
-declare -a modes=("llama" "llama-sup" )
+declare -a modes=("llama" "llama-sup")
+
 #declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
 
 

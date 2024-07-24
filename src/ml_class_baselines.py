@@ -21,7 +21,7 @@ from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
 
 
-NUM_JOBS = 20
+NUM_JOBS = -1          # important to manage CUDA memory allocation
 
 def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', scoring='accuracy'):
     """
