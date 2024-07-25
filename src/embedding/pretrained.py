@@ -5,6 +5,7 @@ import os
 import numpy as np
 import requests
 import zipfile
+from tqdm import tqdm
 
 import torch, torchtext
 from torchtext.vocab import GloVe as TorchTextGloVe
@@ -13,8 +14,9 @@ from transformers import BertModel, BertTokenizer
 from transformers import LlamaModel, LlamaTokenizer
 from transformers import  logging as transformers_logging
 
-
 import joblib
+
+
 
 AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'llama']
 
@@ -27,24 +29,25 @@ HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
 
+GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 
-"""
-Python module for handling pretrained word embeddings, structured using an object-oriented approach. Includes classes for 
-managing embeddings from GloVe, Word2Vec, and FastText, each subclassing an abstract base class defined for generalized 
-pretrained embeddings.
 
-General Usage and Functionality
-These classes are designed to make it easy to integrate different types of word embeddings into various NLP models.
-They provide a uniform interface to access the embeddings’ vocabulary, dimensionality, and actual vector representations.
-The design follows the principle of encapsulation, keeping embedding-specific loading and access mechanisms 
-internal to each class while presenting a consistent external interface. This modular and abstracted approach 
-allows for easy extensions and modifications, such as adding support for new types of embeddings or changing 
-the underlying library used for loading the embeddings.
-"""
 
 
 class PretrainedEmbeddings(ABC):
     """
+    Python module for handling pretrained word embeddings, structured using an object-oriented approach. Includes classes for 
+    managing embeddings from GloVe, Word2Vec, and FastText, each subclassing an abstract base class defined for generalized 
+    pretrained embeddings.
+
+    General Usage and Functionality
+    These classes are designed to make it easy to integrate different types of word embeddings into various NLP models.
+    They provide a uniform interface to access the embeddings’ vocabulary, dimensionality, and actual vector representations.
+    The design follows the principle of encapsulation, keeping embedding-specific loading and access mechanisms 
+    internal to each class while presenting a consistent external interface. This modular and abstracted approach 
+    allows for easy extensions and modifications, such as adding support for new types of embeddings or changing 
+    the underlying library used for loading the embeddings.
+
     PretrainedEmbeddings Abstract Base Class: Serves as an abstract base class for all 
     specific embedding classes, ensuring they implement required methods.
 
@@ -92,11 +95,63 @@ class GloVe(PretrainedEmbeddings):
     def __init__(self, setname='840B', path=VECTOR_CACHE, max_vectors=None):         # presumes running from bin directory
         
         super().__init__()
+
+        print(f'Initializing GloVe class, loading GloVe pretrained vectors...')
+        try:    
+            embeddings_file = self.get_embeddings_file(path, GLOVE_840B_300d_URL)                                 # check to make sure GloVe embeddings are downloaded
+            if (embeddings_file):
+                 # Initialize GloVe model from torchtext
+                print(f'embeddings file found at {embeddings_file}, loading embeddings using torchtext...')
+                self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)     
+            else:
+                print(f'Error loading GloVe embeddings, cannot find embeddings file at {path}]')
+                return
+        except Exception as e:
+            print(f"Error when trying to load GloVe embeddings from {path}. Error: {e}")
+            raise
+
+
+    def get_embeddings_file(self, target_dir, glove_url):
         
-        print(f'Loading GloVe pretrained vectors from torchtext')
-        # Initialize GloVe model from torchtext
-        self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)
-        #print('Done')
+        print("GloVe::get_embeddings_file...")
+
+        os.makedirs(target_dir, exist_ok=True)
+        
+        local_filename = os.path.join(target_dir, glove_url.split('/')[-1])
+
+        print("local_filename:", local_filename)
+        
+        if not os.path.exists(local_filename.replace('.zip', '.txt')):
+
+            print(f"GloVe embeddings not found locally. Downloading from {glove_url}...")
+            
+            response = requests.get(glove_url, stream=True)
+
+            total_size = int(response.headers.get('content-length', 0))
+            block_size = 1024  # 1 Kibibyte
+            progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
+
+            with open(local_filename, 'wb') as f:
+                for data in response.iter_content(block_size):
+                    progress_bar.update(len(data))
+                    f.write(data)
+            progress_bar.close()
+
+            if total_size != 0 and progress_bar.n != total_size:
+                print("ERROR, something went wrong")
+                return None
+        
+            print("Download complete. Extracting files...")
+            with ZipFile(local_filename, 'r') as zip_ref:
+                zip_ref.extractall(target_dir)
+
+            print("Files extracted.")
+            
+        else:
+            print("GloVe embeddings (txt file) found locally.")
+
+        return local_filename.replace('.zip', '.txt')           # return text file, unzipped embeddings
+
 
     def vocabulary(self):
         # accessing the vocabulary
@@ -107,14 +162,26 @@ class GloVe(PretrainedEmbeddings):
         return self.embed.dim
 
     def extract(self, words):
+        print("GloVe::extract()...")
+        
+        source_idx, target_idx = PretrainedEmbeddings.reindex(words, self.embed.stoi)
+        extraction = torch.zeros((len(words), self.dim()))
+        extraction[source_idx] = self.embed.vectors[target_idx]
+        return extraction
+
+
+    def extract_new(self, words):
         # Extract embeddings for a list of words
         print("GloVe::extract()...")
+
         source_idx, target_idx = self.reindex(words, self.embed.stoi)
         extraction = torch.zeros((len(words), self.dim()), dtype=torch.float)
         valid_source_idx = torch.tensor(source_idx, dtype=torch.long)
         valid_target_idx = torch.tensor(target_idx, dtype=torch.long)
         extraction[valid_source_idx] = self.embed.vectors[valid_target_idx]
+        
         return extraction
+
 
     @staticmethod
     def reindex(words, word2index):

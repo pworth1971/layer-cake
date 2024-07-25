@@ -15,8 +15,11 @@ OPTIMC="--optimc"
 #
 # Full Arrays of datasets and corresponding pickle paths
 #
-#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
-#declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels")
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
+#declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels" "../pickels")
+#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+#declare -a models=("svm" "lr" "nb")
+
 
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                    # ohsumed (multi-label, 23 classes)

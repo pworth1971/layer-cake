@@ -21,7 +21,13 @@ from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
 
 
-NUM_JOBS = -1          # important to manage CUDA memory allocation
+#NUM_JOBS = -1          # important to manage CUDA memory allocation
+NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
+
+
+
+
+
 
 def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', scoring='accuracy'):
     """
@@ -105,14 +111,13 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
         
-        print("predictions (yte_):", type(yte_), yte_)
-        print("actuals (yte):", type(yte), yte)
+        print("predictions (yte_):", type(yte_), yte_.shape)
+        print("actuals (yte):", type(yte), yte.shape)
         
         Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(
             _tosparse(yte), 
             _tosparse(yte_), 
-            classification_type, 
-            debug=True
+            classification_type
             )
 
     else:
@@ -133,16 +138,12 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         print(f"Estimator type: {cls.__class__.__name__}")
         print(f"Estimator params: {cls.get_params()}")
 
-        #cls = estimator(dual=False)
-        #cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=-1, scoring=scoring) if optimizeC else cls
-
         cls = GridSearchCV(cls, param_grid, cv=5, n_jobs=NUM_JOBS, scoring=scoring) if optimizeC else cls
-
         cls.fit(Xtr, ytr)
 
         yte_ = cls.predict(Xte)
-        print("predictions (yte_):", type(yte_), yte_)
-        print("actuals (yte):", type(yte), yte)
+        print("predictions (yte_):", type(yte_), yte_.shape)
+        print("actuals (yte):", type(yte), yte.shape)
         
         Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
 
@@ -183,33 +184,11 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained
     print("pretrained:", {pretrained})
     print("supervised:", {supervised})
 
+    # NB: embeddings should be already loaded and sent in as a param in this case
+
     if pretrained and pretrained_vectors:
 
-        #
-        # NB: embeddings should be already loaded and sent in as a param in this case
-        #
-
         print("pretrained and pretrained_vectors, extracting vocab and building pretrained embeddings...")
-        
-        """
-        if (pretrained_type in ['glove', 'glove-sup']):
-            print('\t[pretrained-matrix: GloVe]')
-            pretrained = GloVe(path=emb_path)
-
-        elif (pretrained_type in ['bert', 'bert-sup']):
-            print('\t[pretrained-matrix: BERT]')
-            pretrained = BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, emb_path=emb_path)
-        
-        elif (pretrained_type in ['word2vec', 'word2vec-sup']):
-            print('\t[pretrained-matrix: Word2Vec]')
-            pretrained = Word2Vec(path=emb_path)
-        
-        elif (pretrained_type in ['fasttext', 'fasttext-sup']):
-            print('\t[pretrained-matrix: FastText]')
-            pretrained = FastText(path=emb_path)
-        
-        P = pretrained.extract(vocabulary).numpy()
-        """
 
         P = pretrained_vectors.extract(vocabulary).numpy()
         print("pretrained_vectors: ", type(P), {P.shape})
@@ -233,7 +212,6 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained
         print(f'pretrained embeddings count after appending supervised: {len(pretrained_embeddings[1])}')
 
     pretrained_embeddings = np.hstack(pretrained_embeddings)
-
     print("after np.hstack(): pretrained_embeddings:", type(pretrained_embeddings), {pretrained_embeddings.shape})
 
     return vocabulary, pretrained_embeddings
@@ -369,17 +347,22 @@ def main(args):
     print("vocabsize:", {vocabsize})
 
     ytr, yte = dataset.devel_target, dataset.test_target
-    #print("dev_target (ytr):", type(ytr), ytr)
-    #print("test_target (yte):", type(yte), yte)
+    print("dev_target (ytr):", type(ytr), ytr.shape)
+    print("test_target (yte):", type(yte), yte.shape)
 
     Xtr, Xte = dataset.vectorize()
-    
-    #print("Xtr:", type(Xtr), Xtr)
-    #print("Xte:", type(Xte), Xte)     
+    #print("Xtr:", type(Xtr), Xtr.shape)
+    #print("Xte:", type(Xte), Xte.shape)     
 
+    """
     # convert to arrays if need be
     Xtr = _todense(Xtr)
     Xte = _todense(Xte)
+
+    print("after _todense...")
+    print("Xtr:", type(Xtr), Xtr.shape)
+    print("Xte:", type(Xte), Xte.shape)     
+    """
 
     if args.mode in ['count', 'tfidf']:
         sup_tend = 0
@@ -406,8 +389,8 @@ def main(args):
 
         sup_tend = time() - tinit
     
-    ytr = _todense(ytr)
-    yte = _todense(yte)
+    #ytr = _todense(ytr)
+    #yte = _todense(yte)
     
     print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
