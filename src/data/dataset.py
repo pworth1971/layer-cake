@@ -145,46 +145,6 @@ class Dataset:
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
 
 
-
-    def _load_rcv1_skl(self):
-
-        print("Dataset::_load_rcv1_skl()")
-        #data_path = os.path.join(get_data_home(), 'rcv1')
-
-        print("Fetching RCV1 dataset...")
-        train_data, train_target = fetch_rcv1(subset='train', return_X_y=True, data_home='../datasets/RCV1-v2')
-        test_data, test_target = fetch_rcv1(subset='test', return_X_y=True)
-
-        # data is in sparse format (csr_matrix) so must be converted for processing
-        sparse_train_data = train_data
-        sparse_train_target = train_target
-        sparse_test_data = test_data
-        sparse_test_target = test_target
-
-        self.classification_type = 'multilabel'
-
-        print("sparse_train_data:", type(sparse_train_data), sparse_train_data.shape, sparse_train_data[0])
-        print("sparse_train_target:", type(sparse_train_target), sparse_train_target.shape, sparse_train_target[0])
-
-        print("sparse_test_data:", type(sparse_test_data), sparse_test_data.shape, sparse_test_data[0])
-        print("sparse_test_target:", type(sparse_test_target), sparse_test_target.shape, sparse_test_target[0])
-
-        """
-        print("converting data to arrays of strings...")
-        dev_data_arr = devel.data.toarray()
-        test_data_arr = test.data.toarray()
-        
-        dev_data_arr_str = dev_data_arr.astype(str)
-        test_data_arr_str = test_data_arr.astype(str)
-        """
-
-        print("Masking numbers in the dataset...")
-        self.devel_raw, self.test_raw = mask_numbers(train_data), mask_numbers(test_data)
-        self.devel_target, self.test_target = train_target, test_target
-        
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
-
-
     def _load_rcv1(self):
 
         data_path = '../datasets/RCV1-v2/rcv1/'               
@@ -203,10 +163,10 @@ class Dataset:
             data_path)
         """
 
-        """
+        # ----------------------------------------------------------------
         # we presume tar balls are downloaded into this directory already
-        # -- we only do this once --
-        
+        # NB: we only do this once
+        """
         print("extracting files...")
         self.extract_gz(data_path + '/' +  'rcv1v2-ids.dat.gz')
         self.extract_gz(data_path + '/' + 'rcv1-v2.topics.qrels.gz')

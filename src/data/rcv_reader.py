@@ -8,12 +8,8 @@ import re
 import os
 from collections import Counter
 
-
-
-
 RCV1_TOPICHIER_URL = "http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a02-orig-topics-hierarchy/rcv1.topics.hier.orig"
 RCV1_BASE_URL = "http://www.daviddlewis.com/resources/testcollections/rcv1/"
-
 
 rcv1_test_data_gz = ['lyrl2004_tokens_test_pt0.dat.gz',
              'lyrl2004_tokens_test_pt1.dat.gz',
@@ -137,8 +133,11 @@ def fetch_RCV1(data_path, subset='all', debug=False):
         split_range = (26151, 810596)
         expected = test_documents
 
-    # global nwords
-    # nwords=[]
+    #
+    # NB: we assume that all of the XML files and their associated parent directories
+    # are zipped up in the root folder, ie the parent directory under which
+    # all of the XML file directories live
+    #
     for part in list_files(data_path):
         if not re.match('\d+\.zip', part): continue
         target_file = join(data_path, part)
