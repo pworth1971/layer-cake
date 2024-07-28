@@ -77,11 +77,13 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     # Normalize data to be non-negative if using Naive Bayes model
     #
     if estimator==MultinomialNB:
-        #scaler = MinMaxScaler()
-        scaler = MaxAbsScaler()                 # to support sparse input
+        scaler = MinMaxScaler()
+        
+        Xtr = scaler.fit_transform(_todense(Xtr))
+        Xte = scaler.transform(_todense(Xte))
 
-        Xtr = scaler.fit_transform(Xtr)
-        Xte = scaler.transform(Xte)
+        Xtr = _tosparse(Xtr)
+        Xte = _tosparse(Xte)
 
     print("param_grid:", param_grid)
     cv = 5
