@@ -12,21 +12,25 @@ FASTTEXT_PATH="--fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT_PATH="--bert-path ../.vector_cache"
 OPTIMC="--optimc"
 
+
 #
 # Full Arrays of datasets and corresponding pickle paths
 #
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
+#declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickels" "../pickels")
+#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+#declare -a models=("svm" "lr" "nb")
+
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                    # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-
-declare -a datasets=("ohsumed" "reuters21578" "20newsgroups")
-declare -a pickle_paths=("../pickles" "../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle")
+declare -a datasets=("reuters21578" "20newsgroups" "rcv1" "ohsumed")
+declare -a pickle_paths=("../pickles/reuters21578.pickle" "../pickles/20newsgroups.pickle" "../pickles" "../pickles")
 declare -a models=("svm" "lr" "nb")
-declare -a modes=("llama" "llama-sup")
-
 #declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
+declare -a modes=("tfidf" "glove" "glove-sup" "llama" "llama-sup")
 
 
 # Function to run commands

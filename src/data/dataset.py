@@ -129,7 +129,7 @@ class Dataset:
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
@@ -142,7 +142,7 @@ class Dataset:
         self.classification_type = 'singlelabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_target, self.test_target = devel.target, test.target
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
 
 
     def _load_rcv1(self):
@@ -191,7 +191,7 @@ class Dataset:
 
         print("masking numbers...")
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
@@ -215,7 +215,7 @@ class Dataset:
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel_data), mask_numbers(test_data)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel_target, test_target)
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel_target, test_target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
@@ -226,11 +226,9 @@ class Dataset:
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
-
-    
 
     def _load_fasttext_data(self,name):
         data_path='../datasets/fastText'
@@ -242,7 +240,7 @@ class Dataset:
         self.test_raw, self.test_target = load_fasttext_format(join(data_path, f'{name}.test'))
         self.devel_raw = mask_numbers(self.devel_raw)
         self.test_raw = mask_numbers(self.test_raw)
-        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
 
     def _load_wipo(self, classmode, classlevel):
@@ -265,7 +263,7 @@ class Dataset:
             print("--multilabel--")
             devel_target = [d.all_labels for d in devel]
             test_target  = [d.all_labels for d in test]
-            self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel_target, test_target)
+            self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel_target, test_target)
             self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         else:
             print("--single label--")
@@ -282,8 +280,13 @@ class Dataset:
                 test_target = test_target[keep_pos]
             test_target=test_target.astype(int)
             self.devel_target, self.test_target = devel_target, test_target
-            self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
+            self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
+    def get_labels(self):
+        """
+        Returns the labels associated with the dataset. Useful for plotting confusion matrices and more.
+        """
+        return self.labels if hasattr(self, 'labels') else None
 
     def vectorize(self):
 
@@ -403,7 +406,7 @@ def _label_matrix(tr_target, te_target):
     ytr = mlb.fit_transform(tr_target)
     yte = mlb.transform(te_target)
     print(mlb.classes_)
-    return ytr, yte
+    return ytr, yte, mlb.classes_
 
 
 def load_fasttext_format(path):

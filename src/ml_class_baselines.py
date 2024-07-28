@@ -21,12 +21,8 @@ from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
 
 
-#NUM_JOBS = -1          # important to manage CUDA memory allocation
-NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
-
-
-
-
+NUM_JOBS = -1          # important to manage CUDA memory allocation
+#NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
 
 
 def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator=LinearSVC, mode='tfidf', scoring='accuracy'):
@@ -50,9 +46,9 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     print('--- run_model() ---')
     tinit = time()
 
-    print("classification_type: ", classification_type)
-    print("estimator: ", estimator)
-    print("mode: ", mode)
+    print("classification_type:", classification_type)
+    print("estimator:", estimator)
+    print("mode:", mode)
     
     print("Xtr", type(Xtr), Xtr.shape)
     print("ytr", type(ytr), ytr.shape)
@@ -350,6 +346,9 @@ def main(args):
     print("dev_target (ytr):", type(ytr), ytr.shape)
     print("test_target (yte):", type(yte), yte.shape)
 
+    labels = dataset.get_labels()           # retrieve labels
+    print("labels:", labels)
+    
     Xtr, Xte = dataset.vectorize()
     #print("Xtr:", type(Xtr), Xtr.shape)
     #print("Xte:", type(Xte), Xte.shape)     

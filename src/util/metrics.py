@@ -1,8 +1,14 @@
 import numpy as np
+
 from scipy.sparse import lil_matrix, issparse
-from scipy.sparse import csr_matrix, find
+from scipy.sparse import csr_matrix, find, issparse
+
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard_score
+from sklearn.metrics import confusion_matrix
+
+import os
+import pandas as pd
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -34,18 +40,44 @@ def evaluation(y_true, y_pred, classification_type, debug=False):
     """
 
     print("-- util.metrics.evaluation() --")
-    #print("y_true:", y_true.shape, "\n", y_true)
-    #print("y_pred:", y_pred.shape, "\n", y_pred)
+    #print("y_true:", type(y_true), y_true.shape)
+    #print("y_pred:", type(y_pred), y_pred.shape)
     
     if classification_type == 'multilabel':
         eval_function = multilabel_eval
     elif classification_type == 'singlelabel':
         eval_function = singlelabel_eval
 
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = eval_function(y_true, y_pred, debug=debug)
+    # get metrics
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = eval_function(y_true, y_pred, debug=debug)    
 
+
+    """
+    # --------------------------------------------------------------------------------
+    # Calculate the confusion matrix
+    # need to support multi-label format
+    #
+    print("computing confusion matrix...")
+
+    # Convert to dense format if the labels are in sparse format
+    if issparse(y_true):
+        y_true = y_true.toarray()
+    if issparse(y_pred):
+        y_pred = y_pred.toarray()
+
+    if classification_type == 'multilabel':        
+        # Compute and save a confusion matrix for each label
+        num_labels = y_true.shape[1]
+        for label_index in range(num_labels):
+            cm = confusion_matrix(y_true[:, label_index], y_pred[:, label_index])
+            save_confusion_matrix(cm, f"{classification_type}_label{label_index}")
+    else:                                           # single label case
+        cm = confusion_matrix(y_true, y_pred)
+        save_confusion_matrix(cm, classification_type)
+    # --------------------------------------------------------------------------------
+    """
+    
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
-
 
 
 def multilabel_eval(y, y_, debug=False):
@@ -260,4 +292,28 @@ def singlelabel_eval(y, y_, debug=False):
     j_index = jaccard_score(y, y_, average='macro')
     
     return macrof1, microf1, acc, h_loss, precision, recall, j_index
+
+
+def save_confusion_matrix(cm, classification_type, labels=None):
+    """
+    Saves the confusion matrix to a CSV file in the specified directory.
+    """
+    output_dir = '../output'
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+    filename = os.path.join(output_dir, f'confusion_matrix_{classification_type}.csv')
+
+
+    # Create a DataFrame for better visualization and saving
+    if labels is None:
+        labels = [f'Class {i}' for i in range(len(cm))]
+    df = pd.DataFrame(cm, index=labels, columns=labels)
+    
+    # Save the confusion matrix to a file
+    df.to_csv(filename)
+    print(f"Confusion matrix for {classification_type} saved to {filename}")
+
+    # Print the confusion matrix
+    print(f"Confusion Matrix for {classification_type}:")
+    print(df)
+
 

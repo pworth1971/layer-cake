@@ -180,6 +180,7 @@ def fetch_reuters21578(data_path=None, subset='train'):
 
     data = [(u'{title}\n{body}\n{unproc}'.format(**doc), doc['topics']) for doc in requested_subset['documents']]
     text_data, topics = zip(*data)
+    
     return LabelledDocuments(data=text_data, target=topics, target_names=requested_subset['categories'])
 
 
