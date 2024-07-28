@@ -29,7 +29,6 @@ OPTIMC="--optimc"
 #declare -a datasets=("reuters21578" "20newsgroups" "rcv1" "ohsumed")
 declare -a datasets=("ohsumed" "rcv1" "20newsgroups" "reuters21578")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
-#declare -a models=("svm" "lr" "nb")
 declare -a models=("nb" "lr" "svm")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
 

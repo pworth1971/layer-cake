@@ -148,10 +148,6 @@ class Dataset:
 
         return self.label_names
 
-
-    def get_labels(self):
-        return self.labels, self.label_names
-
     def _load_20news(self):
         metadata = ('headers', 'footers', 'quotes')
         
@@ -323,7 +319,13 @@ class Dataset:
         if hasattr(self, 'label_names'):
             return self.label_names
 
+    def get_labels(self):
+        if hasattr(self, 'labels'):
+            return self.labels
+        else:
+            return None
 
+            
     def vectorize(self):
 
         print("vectorizing dataset...")

@@ -8,7 +8,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler
 
 from scipy.sparse import issparse, csr_matrix
 from model.CustomRepresentationLearning import CustomRepresentationModel
@@ -77,7 +77,8 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     # Normalize data to be non-negative if using Naive Bayes model
     #
     if estimator==MultinomialNB:
-        scaler = MinMaxScaler()
+        #scaler = MinMaxScaler()
+        scaler = MaxAbsScaler()                 # to support sparse input
 
         Xtr = scaler.fit_transform(Xtr)
         Xte = scaler.transform(Xte)
@@ -346,23 +347,15 @@ def main(args):
     print("dev_target (ytr):", type(ytr), ytr.shape)
     print("test_target (yte):", type(yte), yte.shape)
 
-    labels, label_names = dataset.get_labels()           # retrieve labels
+    labels = dataset.get_labels()                           # retrieve labels
+    label_names = dataset.get_label_names()                 # retrieve label names
+    
     print("labels:", labels)
     print("label_names:", label_names)
 
     Xtr, Xte = dataset.vectorize()
     #print("Xtr:", type(Xtr), Xtr.shape)
     #print("Xte:", type(Xte), Xte.shape)     
-
-    """
-    # convert to arrays if need be
-    Xtr = _todense(Xtr)
-    Xte = _todense(Xte)
-
-    print("after _todense...")
-    print("Xtr:", type(Xtr), Xtr.shape)
-    print("Xte:", type(Xte), Xte.shape)     
-    """
 
     if args.mode in ['count', 'tfidf']:
         sup_tend = 0
@@ -388,9 +381,6 @@ def main(args):
         print("after matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
 
         sup_tend = time() - tinit
-    
-    #ytr = _todense(ytr)
-    #yte = _todense(yte)
     
     print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
     print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
