@@ -121,15 +121,23 @@ class Dataset:
 
         print("-- Dataset::_load_reuters() --")
         data_path = os.path.join(get_data_home(), 'reuters21578')
+        
         devel = fetch_reuters21578(subset='train', data_path=data_path)
         test = fetch_reuters21578(subset='test', data_path=data_path)
 
-        #print("devel:", type(devel), devel.data, devel.target)
-        #print("test:", type(test), test.data, test.target)
+        print("dev target names:", type(devel), devel.target_names)
+        print("test target names:", type(test), test.target_names)
 
         self.classification_type = 'multilabel'
+
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
+
+        self.label_names = devel.target_names           # set self.labels to the class label names
+
+        print("num labels:", len(self.labels))
+        print("num label names:", len(self.label_names))
+
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
@@ -282,11 +290,15 @@ class Dataset:
             self.devel_target, self.test_target = devel_target, test_target
             self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
-    def get_labels(self):
+
+    def get_label_names(self):
         """
-        Returns the labels associated with the dataset. Useful for plotting confusion matrices and more.
+        Returns the labels and their associated names (catgeories) associated with t
+        he dataset. Useful for plotting confusion matrices and more.
         """
-        return self.labels if hasattr(self, 'labels') else None
+        if hasattr(self, 'label_names'):
+            return self.label_names
+
 
     def vectorize(self):
 
@@ -402,10 +414,15 @@ class Dataset:
 
 
 def _label_matrix(tr_target, te_target):
+    
+    print("_label_matrix...")
+
     mlb = MultiLabelBinarizer(sparse_output=True)
     ytr = mlb.fit_transform(tr_target)
     yte = mlb.transform(te_target)
-    print(mlb.classes_)
+
+    print("MultiLabelBinarizer.classes_:", mlb.classes_)
+
     return ytr, yte, mlb.classes_
 
 

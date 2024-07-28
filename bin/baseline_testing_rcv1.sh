@@ -27,7 +27,7 @@ OPTIMC="--optimc"
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 
-declare -a datasets=("rcv1")
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
 declare -a pickle_paths=("../pickles")
 declare -a models=("svm" "lr" "nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup")
