@@ -34,7 +34,7 @@ def init_tfidf_vectorizer():
     Initializes and returns a sklearn TFIDFVectorizer with specific configuration.
     """
     print("init_tfidf_vectorizer()")
-    return TfidfVectorizer(min_df=5, sublinear_tf=True)
+    return TfidfVectorizer(stop_words='english', min_df=3, sublinear_tf=True)
 
 
 
@@ -43,7 +43,7 @@ def init_count_vectorizer():
     Initializes and returns a sklearn CountVectorizer with specific configuration.
     """
     print("init_count_vectorizer()")
-    return CountVectorizer(stop_words='english', min_df=5)
+    return CountVectorizer(stop_words='english', min_df=3)
 
 
 class Dataset:
@@ -125,8 +125,8 @@ class Dataset:
         devel = fetch_reuters21578(subset='train', data_path=data_path)
         test = fetch_reuters21578(subset='test', data_path=data_path)
 
-        print("dev target names:", type(devel), devel.target_names)
-        print("test target names:", type(test), test.target_names)
+        #print("dev target names:", type(devel), devel.target_names)
+        #print("test target names:", type(test), test.target_names)
 
         self.classification_type = 'multilabel'
 
@@ -135,11 +135,22 @@ class Dataset:
 
         self.label_names = devel.target_names           # set self.labels to the class label names
 
-        print("num labels:", len(self.labels))
-        print("num label names:", len(self.label_names))
-
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
+        num_labels = len(self.labels)
+        num_label_names = len(self.label_names)
+
+        print("# labels, # label_names:", num_labels, num_label_names)
+        
+        if (num_labels != num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        return self.label_names
+
+
+    def get_labels(self):
+        return self.labels, self.label_names
 
     def _load_20news(self):
         metadata = ('headers', 'footers', 'quotes')
@@ -151,6 +162,19 @@ class Dataset:
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_target, self.test_target = devel.target, test.target
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+        self.label_names = devel.target_names           # set self.labels to the class label names
+
+        num_labels = len(self.labels)
+        num_label_names = len(self.label_names)
+
+        print("# labels, # label_names:", num_labels, num_label_names)
+        
+        if (num_labels != num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        return self.label_names
 
 
     def _load_rcv1(self):
@@ -404,7 +428,7 @@ class Dataset:
                         pickle.dump(dataset, file)
                     print("data successfully pickled at:", full_pickle_path)
                 except Exception as e:
-                    print("Exception raised, failed to pickle data: {e}")
+                    print(f'Exception raised, failed to pickle data: {e}')
 
         else:
             print(f'loading dataset {dataset_name}')
@@ -421,7 +445,7 @@ def _label_matrix(tr_target, te_target):
     ytr = mlb.fit_transform(tr_target)
     yte = mlb.transform(te_target)
 
-    print("MultiLabelBinarizer.classes_:", mlb.classes_)
+    #print("MultiLabelBinarizer.classes_:", mlb.classes_)
 
     return ytr, yte, mlb.classes_
 

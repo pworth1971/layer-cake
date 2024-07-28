@@ -346,9 +346,10 @@ def main(args):
     print("dev_target (ytr):", type(ytr), ytr.shape)
     print("test_target (yte):", type(yte), yte.shape)
 
-    labels = dataset.get_labels()           # retrieve labels
+    labels, label_names = dataset.get_labels()           # retrieve labels
     print("labels:", labels)
-    
+    print("label_names:", label_names)
+
     Xtr, Xte = dataset.vectorize()
     #print("Xtr:", type(Xtr), Xtr.shape)
     #print("Xte:", type(Xte), Xte.shape)     
