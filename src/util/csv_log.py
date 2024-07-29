@@ -64,6 +64,10 @@ class CSVLog:
         self.defaults[param] = value
 
 
+
+
+    # ----------------------------------------------------------------------------------------------------------
+    
     def add_layered_row(self, **kwargs):
 
         #print("CSVLog::add_layered_row()")
@@ -87,6 +91,8 @@ class CSVLog:
         self.df = self.df._append(s, ignore_index=True)     
         if self.autoflush: self.flush()
         self.tell(kwargs)
+    
+    # ----------------------------------------------------------------------------------------------------------
 
 
     def add_simple_row(self, **kwargs):

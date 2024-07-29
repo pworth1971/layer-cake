@@ -1,6 +1,6 @@
 #Cuda
-pytorch==1.13.1
-torchtext==0.18.0
+pytorch
+torchtext
 scikit-learn
 fasttext
 transformers
@@ -11,5 +11,7 @@ matplotlib
 tabulate
 datetime
 numpy
-scipy==1.10
+scipy
 pandas
+psutil
+GPUtil

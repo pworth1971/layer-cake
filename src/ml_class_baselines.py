@@ -11,14 +11,19 @@ from sklearn.svm import LinearSVC
 from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler
 
 from scipy.sparse import issparse, csr_matrix
+
 from model.CustomRepresentationLearning import CustomRepresentationModel
+
 from util import file
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
 from util.csv_log import CSVLog
 from util.common import *
+
 from data.dataset import *
+
 from embedding.supervised import get_supervised_embeddings
+
 
 
 NUM_JOBS = -1          # important to manage CUDA memory allocation
@@ -237,6 +242,17 @@ def main(args):
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
 
+    # get system info to be used for logging below
+    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
+
+    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
+    mem = total_memory
+    if (num_cuda_devices >0):
+        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
+    else:
+        gpus = 'None'
+
     # set up model type
     if args.learner == 'svm':
         learner = LinearSVC
@@ -403,16 +419,15 @@ def main(args):
     
     tend += sup_tend
 
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-accuracy', value=acc, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-precision', value=precision, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-recall', value=recall, timelapse=tend)
-    logfile.add_layered_row(epoch=0, tunable=False, run=0, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-macro-F1', value=Mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-micro-F1', value=mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-hamming-loss', value=h_loss, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 def _todense(y):
     """Convert sparse matrix to dense format as needed."""

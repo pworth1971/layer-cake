@@ -226,14 +226,23 @@ def init_loss(classification_type):
 #
 # -------------------------------------------------------------------------------------------------------------------
 def main(opt):
-
-    print()
     
     # Print the full command line
     print("Command line:", ' '.join(sys.argv))
 
     print("-------------------------------------------------- layer_cake::main(opt) --------------------------------------------------")
-    
+
+    # get system info to be used for logging below
+    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
+
+    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
+    mem = total_memory
+    if (num_cuda_devices >0):
+        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
+    else:
+        gpus = 'None'
+
     method_name = set_method_name(opt)
     print("method_name:", method_name)
 
@@ -249,7 +258,10 @@ def main(opt):
         method_name, 
         pretrained, 
         embeddings_log_val, 
-        opt)    
+        opt, 
+        cpus, 
+        mem, 
+        gpus)    
 
     #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
 
@@ -275,7 +287,7 @@ def main(opt):
     pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
 
     print("loading dataset ", {opt.dataset})
-    dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
+    dataset = Dataset.load(dataset_name=opt.dataset, base_pickle_path=opt.pickle_dir).show()
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
 
     print("train / test data split...")

@@ -14,10 +14,20 @@ import matplotlib.pyplot as plt
 
 from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
+# pretrained model types
 DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
 DEFAULT_LLAMA_PRETRAINED_MODEL = 'meta-llama/Llama-2-7b-hf'
 
-VECTOR_CACHE = '../.vector_cache'                       # assumes everything is run from /bin directory
+# embedding cache directory
+VECTOR_CACHE = '../.vector_cache'                                   # assumes everything is run from /bin directory
+
+
+# metrics reporting
+import psutil
+import torch
+import GPUtil
+
+
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -229,6 +239,55 @@ def print_arguments(options):
         print(f"{arg}: {value}")
 
 
+def get_sysinfo():
+
+    print("--SYSTEM INFO--")
+    
+    # Get CPU information
+    num_physical_cores = psutil.cpu_count(logical=False)
+    num_logical_cores = psutil.cpu_count(logical=True)
+
+    print("CPU Physical Cores:", num_physical_cores)
+    print("CPU Logical Cores:", num_logical_cores)
+    #print("CPU Usage Per Core:", psutil.cpu_percent(percpu=True, interval=1))
+
+    # Get memory information
+    memory = psutil.virtual_memory()
+
+    total_memory = memory.total
+    avail_mem = memory.available
+
+    print("Total Memory:", total_memory)
+    print("Available Memory:", avail_mem)
+    print("Memory Usage %:", memory.percent)
+
+    num_cuda_devices = 0
+    cuda_devices = []                   # initialize cuda device list
+
+    print("GPU Info...")
+    if torch.cuda.is_available():
+        num_cuda_devices = torch.cuda.device_count()
+        print("Total CUDA devices:", num_cuda_devices)
+        for i in range(num_cuda_devices):
+            device_info = {
+                "name": torch.cuda.get_device_name(i),
+                "memory": torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)  # Convert bytes to MB
+            }
+            cuda_devices.append(device_info)
+            print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
+            #print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
+    else:
+        print("CUDA is not available")
+
+    """
+    gpus = GPUtil.getGPUs()
+    for gpu in gpus:
+        print(f"GPU: {gpu.name}, Memory Free: {gpu.memoryFree}MB, Memory Used: {gpu.memoryUsed}MB, Memory Total: {gpu.memoryTotal}MB")
+    """
+
+    return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
+
+
 # ---------------------------------------------------------------------------------------------------------------------------
 
 def index_dataset(dataset, pretrained=None):
@@ -288,7 +347,7 @@ def init_simple_logfile(method_name, opt):
 # Enhanced log info to include explictly the model type, whether or not its 'supervised', ie added WC Embeddings, 
 # as well as tuning parametr and whether or not pretraiend embeddings are used and if so what type
 # 
-def init_layered_logfile(method_name, pretrained, embeddings, opt):
+def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gpus):
 
     logfile = CSVLog(
         file=opt.log_file, 
@@ -304,7 +363,10 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
             'measure', 
             'value', 
             'run', 
-            'timelapse'], 
+            'timelapse',
+            'cpus',
+            'mem',
+            'gpus'], 
         verbose=True, 
         overwrite=False)
 
@@ -317,7 +379,10 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
     logfile.set_default('run', opt.seed)
     logfile.set_default('tunable', opt.tunable)
 
-    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    # add system info
+    logfile.set_default('cpus', cpus)
+    logfile.set_default('mem', mem)
+    logfile.set_default('gpus', gpus)
 
     return logfile
 
@@ -325,7 +390,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt):
 # ------------------------------------------------------------------------------------------------------------------------------------------
 # init_layered_logile_svm()
 # 
-# Enhanced log info for svm program suport
+# Enhanced log info for ML baseline (layer cake) program suport
 #
 def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
 
@@ -345,7 +410,10 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
             'measure', 
             'run',
             'value',
-            'timelapse'], 
+            'timelapse',
+            'cpus',
+            'mem',
+            'gpus'], 
         verbose=True, 
         overwrite=False)
 
@@ -361,13 +429,7 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
 
     # normalize data fields
     logfile.set_default('tunable', "NA")
-    logfile.set_default('epoch', "NA")
-    logfile.set_default('run', "NA")
-
-    #
-    # TODO
-    # adapt to layered log file defaults (more sophisticated handling)
-    #
-    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
+    logfile.set_default('epoch', -1)
+    logfile.set_default('run', -1)
 
     return logfile

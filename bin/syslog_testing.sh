@@ -5,7 +5,7 @@
 #
 PY="python ../src/ml_class_baselines.py"
 
-LOG="--log-file ../log/ml_baselines_final.test"
+LOG="--log-file ../log/syslog_testing.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
@@ -30,8 +30,10 @@ OPTIMC="--optimc"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
+#declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+declare -a datasets=("20newsgroups")
+declare -a pickle_paths=("../pickles")
 declare -a models=("svm" "lr" "nb")
 declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
 
