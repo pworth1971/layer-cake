@@ -16,6 +16,8 @@ from transformers import  logging as transformers_logging
 
 import joblib
 
+
+
 AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'llama']
 
 VECTOR_CACHE = '../.vector_cache'
@@ -26,7 +28,9 @@ from huggingface_hub import login
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
+
 GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
+
 
 
 
