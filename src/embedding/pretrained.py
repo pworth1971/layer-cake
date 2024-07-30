@@ -445,7 +445,7 @@ class LLaMA(PretrainedEmbeddings):
         return self.model.config.hidden_size
 
 
-    def extract(self, words, batch_size=1000):
+    def extract(self, words, batch_size=500):
 
         print("LLaMA::extract()...")
 
