@@ -35,7 +35,7 @@ OPTIMC="--optimc"
 declare -a datasets=("rcv1")
 declare -a pickle_paths=("../pickles")
 declare -a models=("svm" "lr" "nb")
-declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+declare -a modes=("llama-sup")
 
 # Function to run commands
 function run_command() {
