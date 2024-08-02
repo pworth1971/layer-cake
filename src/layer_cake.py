@@ -272,7 +272,8 @@ def main(opt):
         params=method_name,
         pretrained=pretrained, 
         tunable=opt.tunable,
-        wc_supervised=opt.supervised
+        wc_supervised=opt.supervised,
+        run=opt.seed
         )
 
     print("already_modelled:", already_modelled)
@@ -329,8 +330,7 @@ def main(opt):
 
     for epoch in range(1, opt.nepochs + 1):
 
-        print()
-        print(" -------------- EPOCH ", {epoch}, "-------------- ")    
+        print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history)
         
         macrof1, test_loss = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
@@ -346,9 +346,7 @@ def main(opt):
             if not opt.plotmode:                # with plotmode activated, early-stop is ignored
                 break
 
-    print()
     print("\t...restoring best model...")
-    print()
 
     # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
     stoptime = early_stop.stop_time - tinit
@@ -449,7 +447,6 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 #  
 def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history):
     
-    print()
     print("..testing...")
 
     model.eval()
@@ -473,16 +470,23 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         total_batches += 1
 
     yte_ = scipy.sparse.vstack(predictions)
+    
+    print("evaluating test run...")
+    
     #Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
     Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
+    
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
+    
     tend = time() - tinit
 
+    """
     if classification_type == 'multilabel':
         Mf1_orig, mf1_orig, acc_orig = multilabel_eval_orig(yte, yte_)
         print("--original calc--")
         print(f'[{measure_prefix}] Macro-F1={Mf1_orig:.3f} Micro-F1={mf1_orig:.3f} Accuracy={acc_orig:.3f}')
-        
+    """
+
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)

@@ -39,10 +39,12 @@ def evaluation(y_true, y_pred, classification_type, debug=False):
     - j_index (float): Jacard Index
     """
 
+    """
     print("-- util.metrics.evaluation() --")
-    #print("y_true:", type(y_true), y_true.shape)
-    #print("y_pred:", type(y_pred), y_pred.shape)
-    
+    print("y_true:", type(y_true), y_true.shape)
+    print("y_pred:", type(y_pred), y_pred.shape)
+    """
+
     if classification_type == 'multilabel':
         eval_function = multilabel_eval
     elif classification_type == 'singlelabel':
@@ -53,8 +55,9 @@ def evaluation(y_true, y_pred, classification_type, debug=False):
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
-
-
+#
+# original code, for testing & validation purposes
+#
 def multilabel_eval_orig(y, y_):
 
     tp = y.multiply(y_)
@@ -127,9 +130,8 @@ def multilabel_eval(y, y_, debug=False):
     - accuracy (float): Overall accuracy of the model.
     """
     
-    print("-- multilabel_eval() --")
-        
     if (debug):
+        print("-- multilabel_eval() --")
         print("y:", y.shape, "\n", y)
         print("y_:", y_.shape, "\n", y_)
 
@@ -213,65 +215,61 @@ def multilabel_eval(y, y_, debug=False):
     tn = ndecisions - (tp_micro+fn_micro+fp_micro)
     acc = (tp_micro+tn)/ndecisions
 
-    print("double checking metrics...")
     # ----------------------------------------------------------------------------------------------------------------------------------
     # double check nunbers
     #
-    # Aggregate counts across all labels
-    tp_sum = np.array(tp.sum(axis=0)).flatten()  # True Positives
-    fn_sum = np.array(fn.sum(axis=0)).flatten()  # False Negatives
-    fp_sum = np.array(fp.sum(axis=0)).flatten()  # False Positives
-
     if (debug):
+        print("double checking metrics...")
+            
+        # Aggregate counts across all labels
+        tp_sum = np.array(tp.sum(axis=0)).flatten()  # True Positives
+        fn_sum = np.array(fn.sum(axis=0)).flatten()  # False Negatives
+        fp_sum = np.array(fp.sum(axis=0)).flatten()  # False Positives
+
         print("Total samples (per label):\n", np.array(y.sum(axis=0) + y_.sum(axis=0) - tp.sum(axis=0)).flatten())
         print("True Positives (per label):\n", tp_sum)
         print("False Positives (per label):\n", fp_sum)
         print("False Negatives (per label):\n", fn_sum)
     
-    # Print sums across all labels
-    total_samples = np.sum(y.sum(axis=0) + y_.sum(axis=0) - tp.sum(axis=0))
-    total_tp = np.sum(tp_sum)
-    total_fp = np.sum(fp_sum)
-    total_fn = np.sum(fn_sum)
+        # Print sums across all labels
+        total_samples = np.sum(y.sum(axis=0) + y_.sum(axis=0) - tp.sum(axis=0))
+        total_tp = np.sum(tp_sum)
+        total_fp = np.sum(fp_sum)
+        total_fn = np.sum(fn_sum)
 
-    if (debug):
         print("Total samples (across all labels):", total_samples)
         print("Total True Positives (across all labels):", total_tp)
         print("Total False Positives (across all labels):", total_fp)
         print("Total False Negatives (across all labels):", total_fn)
 
-    # Calculate precision and recall for each class
-    precision = np.divide(tp_sum, tp_sum + fp_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fp_sum) > 0)
-    recall = np.divide(tp_sum, tp_sum + fn_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fn_sum) > 0)
+        # Calculate precision and recall for each class
+        precision = np.divide(tp_sum, tp_sum + fp_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fp_sum) > 0)
+        recall = np.divide(tp_sum, tp_sum + fn_sum, out=np.zeros_like(tp_sum, dtype=float), where=(tp_sum + fn_sum) > 0)
 
-    # Calculate F1 for each class
-    f1 = np.divide(2 * precision * recall, precision + recall, out=np.zeros_like(precision, dtype=float), where=(precision + recall) > 0)
-    f1[(tp_sum + fp_sum == 0) & (tp_sum + fn_sum == 0)] = 1  # Handle case where there are no positive cases
+        # Calculate F1 for each class
+        f1 = np.divide(2 * precision * recall, precision + recall, out=np.zeros_like(precision, dtype=float), where=(precision + recall) > 0)
+        f1[(tp_sum + fp_sum == 0) & (tp_sum + fn_sum == 0)] = 1  # Handle case where there are no positive cases
 
-    # Calculate macro F1 score
-    macro_f1 = f1.mean()
+        # Calculate macro F1 score
+        macro_f1 = f1.mean()
 
-    # Print detailed information
-    if (debug):
+        # Print detailed information
         print("F1 Scores per class:")
         for i, score in enumerate(f1):
-            print(f"Class {i}: F1 Score = {score:.3f}")
-    
+            print(f"Class {i}: F1 Score = {score:.3f}")    
+
         print(f"macro_f1: {macro_f1:.3f}")
 
-
-    # Claculate Micro F1 score
-    micro_precision = np.sum(tp_sum) / np.sum(tp_sum + fp_sum) if np.sum(tp_sum + fp_sum) > 0 else 0
-    micro_recall = np.sum(tp_sum) / np.sum(tp_sum + fn_sum) if np.sum(tp_sum + fn_sum) > 0 else 0
-    micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
-    if (debug):
+        # Claculate Micro F1 score
+        micro_precision = np.sum(tp_sum) / np.sum(tp_sum + fp_sum) if np.sum(tp_sum + fp_sum) > 0 else 0
+        micro_recall = np.sum(tp_sum) / np.sum(tp_sum + fn_sum) if np.sum(tp_sum + fn_sum) > 0 else 0
+        micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
         print("micro_f1:", micro_f1)
 
-    # Calculate accuracy
-    total_elements = y.shape[0] * y.shape[1]
-    correct_predictions = np.sum(tp_sum) + (total_elements - np.sum(tp_sum + fp_sum + fn_sum))
-    accuracy = correct_predictions / total_elements
-    if (debug):
+        # Calculate accuracy
+        total_elements = y.shape[0] * y.shape[1]
+        correct_predictions = np.sum(tp_sum) + (total_elements - np.sum(tp_sum + fp_sum + fn_sum))
+        accuracy = correct_predictions / total_elements
         print("accuracy:", accuracy)
     # ----------------------------------------------------------------------------------------------------------------------------------
 
