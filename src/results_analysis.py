@@ -21,7 +21,7 @@ def results_analysis(file_path, output_path=None):
     unique_result = merged_result.drop_duplicates(subset=['dataset', 'embeddings', 'model', 'wc-supervised', 'measure', 'value'])
 
     # Specify the column order
-    columns_order = ['dataset', 'model', 'pretrained', 'embeddings', 'wc-supervised', 'measure', 'params', 'tunable', 'value', 'run', 'epoch']
+    columns_order = ['dataset', 'model', 'pretrained', 'embeddings', 'wc-supervised', 'measure', 'params', 'tunable', 'value', 'run', 'epoch', 'cpus', 'gpus', 'mem', 'timelapse']
 
     # Ensure all specified columns exist in the DataFrame
     missing_columns = [col for col in columns_order if col not in unique_result.columns]
@@ -54,6 +54,9 @@ def results_analysis(file_path, output_path=None):
         last_values = current_values
         line_index = i + 3  # Offset to align with the actual content in lines, adjusted by the extra line separator
         grouped_lines.append(lines[line_index])
+
+    # Add a final border line
+    grouped_lines.append('-' * header_line_length)
 
     final_formatted_table = '\n'.join(grouped_lines)
 

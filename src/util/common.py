@@ -259,7 +259,7 @@ def get_sysinfo():
 
     print("Total Memory:", total_memory)
     print("Available Memory:", avail_mem)
-    print("Memory Usage %:", memory.percent)
+    #print("Memory Usage %:", memory.percent)
 
     num_cuda_devices = 0
     cuda_devices = []                   # initialize cuda device list
@@ -274,7 +274,7 @@ def get_sysinfo():
                 "memory": torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)  # Convert bytes to MB
             }
             cuda_devices.append(device_info)
-            print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
+            #print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
             #print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
     else:
         print("CUDA is not available")

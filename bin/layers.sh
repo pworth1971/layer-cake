@@ -78,7 +78,9 @@ run_network() {
             $PY $LOG $dataset --net $net --learnable 200 --hidden 256 --seed $run --nepochs $EP                                             >> "$net_log_file" 2>&1
             
             # Iterate over embeddings
-            for emb in "$GLOVE" "$WORD2VEC" "$FASTTEXT" "$BERT" "$LLAMA"; do
+            # for emb in "$GLOVE" "$WORD2VEC" "$FASTTEXT" "$BERT" "$LLAMA"; do
+            for emb in "$LLAMA"; do
+ 
                 $PY $LOG $dataset --net $net --hidden 256 $emb --seed $run --nepochs $EP                                                    >> "$net_log_file" 2>&1
                 $PY $LOG $dataset --net $net --hidden 256 $emb --tunable --seed $run --nepochs $EP                                          >> "$net_log_file" 2>&1
                 $PY $LOG $dataset --net $net --learnable 20 --hidden 256 $emb --tunable --seed $run --droptype learn --nepochs $EP          >> "$net_log_file" 2>&1

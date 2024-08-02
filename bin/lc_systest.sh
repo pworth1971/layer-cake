@@ -5,12 +5,16 @@
 #
 
 PY="python ../src/layer_cake.py"
-LOG="--log-file ../log/syslog_testing.test"
+LOG="--log-file ../log/lc_systest_reuters2.test"
 
+# supported networks, drop probability included
+#CNN="--net cnn --dropprob .2"
+#LSTM="--net lstm --dropprob .2"
+#ATTN="--net attn --dropprob .2"
 CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
-EP="10"
+EP="200"
 
 GLOVE="--pretrained glove --glove-path ../.vector_cache" 
 WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -18,7 +22,7 @@ FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.v
 BERT="--pretrained bert --bert-path ../.vector_cache"
 LLAMA="--pretrained llama --llama-path ../.vector_cache"
 
-for run in {1..10}                   
+for run in {1..4}                   
 do
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -31,13 +35,14 @@ do
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                            # RCV1-v2 (multi-label, 101 classes)
 
-dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     
-
+#dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     
+dataset="--dataset reuters21578 --pickle-dir ../pickles"
 
 #######################################################################
 # LSTM
 #######################################################################
-$PY $LOG $dataset	$LSTM	--learnable 200	--hidden 256 --seed $run    --nepochs $EP
+$PY $LOG $dataset	$LSTM	--learnable 200	--hidden 256    --seed $run    --nepochs $EP
+$PY $LOG $dataset	$LSTM	--learnable 200	--hidden 256    --supervised   --seed $run    --nepochs $EP 
 
 ## GloVe
 $PY $LOG $dataset	$LSTM	--hidden 256	$GLOVE    --seed $run --nepochs $EP
@@ -79,6 +84,7 @@ $PY $LOG $dataset	$LSTM	--channels 128	$LLAMA  --supervised	--tunable --seed $ru
 # ATTN
 #######################################################################
 $PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256 --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256 --seed $run    --nepochs $EP   --supervised
 
 ## GloVe
 $PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE    --seed $run --nepochs $EP
@@ -120,6 +126,7 @@ $PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --supervised	--tunable --seed $ru
 # CNN
 #######################################################################
 $PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP
+$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run  --nepochs $EP   --supervised
 
 ## GloVe
 $PY $LOG $dataset	$CNN	--channels 128	$GLOVE      --seed $run
@@ -157,10 +164,6 @@ $PY $LOG $dataset	$CNN	--channels 128	$LLAMA --supervised --seed $run    --nepoc
 $PY $LOG $dataset	$CNN	--channels 128	$LLAMA  --supervised	--tunable --seed $run   --nepochs $EP
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------------------
-
 
 
 done

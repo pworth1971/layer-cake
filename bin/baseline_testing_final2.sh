@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_baselines_final2.test"
+LOG="--log-file ../log/ml_baselines_final2_sys.test"
 EMB="--embedding-dir ../.vector_cache"
 GLOVE_PATH="--glove-path ../.vector_cache" 
 WORD2VEC_PATH="--word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
@@ -27,10 +27,15 @@ OPTIMC="--optimc"
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 #declare -a datasets=("reuters21578" "20newsgroups" "rcv1" "ohsumed")
-declare -a datasets=("ohsumed" "rcv1" "20newsgroups" "reuters21578")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
-declare -a models=("nb" "lr" "svm")
-declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+#declare -a datasets=("ohsumed" "rcv1" "20newsgroups" "reuters21578")
+#declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+#declare -a models=("nb" "lr" "svm")
+#declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+
+declare -a datasets=("ohsumed")
+declare -a pickle_paths=("../pickles")
+declare -a models=("svm")
+declare -a modes=("llama-sup")
 
 
 # Function to run commands

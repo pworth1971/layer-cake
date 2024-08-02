@@ -4,13 +4,10 @@ src/data/__pycache__
 src/embedding/__pycache__
 src/model/__pycache__
 src/util/__pycache__
+/.vector_cache
 /log
 /pickles
 /checkpoint
-.vector_cache/
-fasttext/dataset/
-output/
-bin/*.out
-vector_cache/
-src/supervised_term_weighting/__pycache__/
-datasets/RCV1-v2/
+datasets/
+datasets/
+.DS_Store
