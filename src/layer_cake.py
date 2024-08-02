@@ -99,7 +99,6 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
 
 def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
     
-    print()
     print("------------------ init_Net() ------------------")
 
     net_type=opt.net
@@ -171,7 +170,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
 
     print('embedding_matrix()...')
 
-    logging.info(f"embedding_matrix()...")
+    #logging.info(f"embedding_matrix()...")
     
     pretrained_embeddings = None
     sup_range = None

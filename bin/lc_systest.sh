@@ -22,7 +22,7 @@ FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.v
 BERT="--pretrained bert --bert-path ../.vector_cache"
 LLAMA="--pretrained llama --llama-path ../.vector_cache"
 
-for run in {1..4}                   
+for run in {1..2}                   
 do
 
 # -----------------------------------------------------------------------------------------------------------------------------------------

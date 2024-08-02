@@ -14,14 +14,14 @@ def results_analysis(file_path, output_path=None):
     print("Columns in the file:", df.columns)
 
     # Group data by 'dataset', 'embedding', 'model', 'wc-supervised', 'measure' and get the maximum 'value'
-    result = df.groupby(['dataset', 'embeddings', 'model', 'wc-supervised', 'measure'])['value'].max().reset_index()
+    result = df.groupby(['dataset', 'embeddings', 'model', 'wc_supervised', 'measure'])['value'].max().reset_index()
 
     # Merge the original data to fetch all corresponding column values
-    merged_result = pd.merge(df, result, how='inner', on=['dataset', 'embeddings', 'model', 'wc-supervised', 'measure', 'value'])
-    unique_result = merged_result.drop_duplicates(subset=['dataset', 'embeddings', 'model', 'wc-supervised', 'measure', 'value'])
+    merged_result = pd.merge(df, result, how='inner', on=['dataset', 'embeddings', 'model', 'wc_supervised', 'measure', 'value'])
+    unique_result = merged_result.drop_duplicates(subset=['dataset', 'embeddings', 'model', 'wc_supervised', 'measure', 'value'])
 
     # Specify the column order
-    columns_order = ['dataset', 'model', 'pretrained', 'embeddings', 'wc-supervised', 'measure', 'params', 'tunable', 'value', 'run', 'epoch', 'cpus', 'gpus', 'mem', 'timelapse']
+    columns_order = ['dataset', 'model', 'pretrained', 'embeddings', 'wc_supervised', 'measure', 'params', 'tunable', 'value', 'run', 'epoch', 'cpus', 'gpus', 'mem', 'timelapse']
 
     # Ensure all specified columns exist in the DataFrame
     missing_columns = [col for col in columns_order if col not in unique_result.columns]
@@ -31,7 +31,7 @@ def results_analysis(file_path, output_path=None):
 
     # Sort the DataFrame
     final_result = unique_result[columns_order].copy()
-    final_result.sort_values(by=['dataset', 'model', 'pretrained', 'embeddings', 'wc-supervised', 'measure'], inplace=True)
+    final_result.sort_values(by=['dataset', 'model', 'pretrained', 'embeddings', 'wc_supervised', 'measure'], inplace=True)
 
     # Format the table
     formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)

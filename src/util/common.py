@@ -311,7 +311,7 @@ def index_dataset(dataset, pretrained=None):
     devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
     test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
 
-    print('[indexing complete]')
+    #print('[indexing complete]')
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
