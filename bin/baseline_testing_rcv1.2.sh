@@ -4,9 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_class_baselines.py"
-
 LOG="--log-file ../log/ml_baselines_rcv1.test"
-
 EMB="--embedding-dir ../.vector_cache"
 
 GLOVE_PATH="--glove-path ../.vector_cache" 
@@ -34,8 +32,9 @@ OPTIMC="--optimc"
 #declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a datasets=("rcv1")
 declare -a pickle_paths=("../pickles")
-declare -a models=("svm" "lr" "nb")
-declare -a modes=("llama-sup")
+#declare -a models=("svm" "lr" "nb")
+declare -a modes=("tfidf" "glove" "glove-sup" "word2vec" "word2vec-sup" "fasttext" "fasttext-sup" "bert" "bert-sup" "llama" "llama-sup")
+declare -a models=("lr" "nb")
 
 # Function to run commands
 function run_command() {
@@ -57,10 +56,10 @@ function run_command() {
 
     # Execute the command with the --count argument
     local cmd_count="$cmd --count"
-    echo
-    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running command with count: $cmd_count"
-    eval $cmd_count
+    #echo
+    #echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+    #echo "Running command with count: $cmd_count"
+    #eval $cmd_count
 }
 
 # Loop through datasets and run commands

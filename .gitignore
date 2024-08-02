@@ -11,3 +11,5 @@ src/util/__pycache__
 datasets/
 datasets/
 .DS_Store
+fasttext/
+src/supervised_term_weighting/__pycache__/
