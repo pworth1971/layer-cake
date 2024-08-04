@@ -1,14 +1,12 @@
 #!/bin/bash
 
-# 
+# -----------------------------------------------------------------------------------------------------------------------------------------
+# CONFIG INFO
 # NB: must be run from /bin directory
-#
 
 # Set the CUDA device for all processes
-export CUDA_VISIBLE_DEVICES=0  # Change to your specific GPU ID as needed
+export CUDA_VISIBLE_DEVICES=0                   # Change to your specific GPU ID as needed
 
-
-# -----------------------------------------------------------------------------------------------------------------------------------------
 # supported networks, drop probability included
 #CNN="--net cnn --dropprob .2"
 #LSTM="--net lstm --dropprob .2"
@@ -17,31 +15,27 @@ export CUDA_VISIBLE_DEVICES=0  # Change to your specific GPU ID as needed
 CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
-EP="200"
 
+EP="200"                # number of epochs
+
+# embedding config
 GLOVE="--pretrained glove --glove-path ../.vector_cache" 
 WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
 FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT="--pretrained bert --bert-path ../.vector_cache"
 LLAMA="--pretrained llama --llama-path ../.vector_cache"
 
+PY="python ../src/layer_cake.py"                                # source file
+#LOG="--log-file ../log/nn_cnn_reuters.test"                    # output log file for metrics
+LOG="--log-file ../log/lc_systest_ohsumed.test"
+
+# dataset config
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                            # RCV1-v2 (multi-label, 101 classes)
 
-#dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     
-dataset="--dataset reuters21578 --pickle-dir ../pickles"
-PY="python ../src/layer_cake.py"
-LOG="--log-file ../log/nn_cnn_reuters.test"
-
-#ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
-#ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
-#reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
-#rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                            # RCV1-v2 (multi-label, 101 classes)
-
-#dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     
-dataset="--dataset reuters21578 --pickle-dir ../pickles"
+dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
 
