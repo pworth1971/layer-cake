@@ -5,7 +5,7 @@
 # NB: must be run from /bin directory
 
 # Set the CUDA device for all processes
-export CUDA_VISIBLE_DEVICES=0                   # Change to your specific GPU ID as needed
+export CUDA_VISIBLE_DEVICES=2                   # Change to your specific GPU ID as needed
 
 # supported networks, drop probability included
 #CNN="--net cnn --dropprob .2"

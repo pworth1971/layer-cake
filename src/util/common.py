@@ -275,7 +275,7 @@ def get_sysinfo():
             }
             cuda_devices.append(device_info)
             #print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
-            #print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
+            print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
     else:
         print("CUDA is not available")
 
