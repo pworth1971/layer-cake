@@ -68,6 +68,8 @@ class Dataset:
         
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
 
+        self.loaded = False
+
         if name=='reuters21578':
             self._load_reuters()
         elif name == '20newsgroups':
@@ -106,6 +108,8 @@ class Dataset:
 
         print("setting vocabulary...")
         self.vocabulary = self._vectorizer.vocabulary_
+
+        self.loaded = True
 
 
     def show(self):
@@ -325,7 +329,12 @@ class Dataset:
         else:
             return None
 
-            
+    def is_loaded(self):
+        if hasattr(self, 'loaded'):
+            return self.loaded
+        else:
+            return False
+        
     def vectorize(self):
 
         print("vectorizing dataset...")

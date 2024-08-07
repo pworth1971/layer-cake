@@ -1,0 +1,1 @@
+python ../src/layer_cake.py --batch-file ./lc_batch_attn_rcv1.cfg

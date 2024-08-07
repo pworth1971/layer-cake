@@ -1,3 +1,44 @@
+import argparse
+from time import time
+import matplotlib.pyplot as plt
+import os
+import logging
+
+import torchtext
+
+import scipy
+from scipy.sparse import csr_matrix
+
+from sklearn.model_selection import train_test_split
+
+# custom classes 
+from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
+from embedding.pretrained import *
+
+from model.classification import NeuralClassifier
+
+from util.early_stop import EarlyStopping
+from util.common import *
+from util.csv_log import CSVLog
+from util.file import create_if_not_exist
+from util.metrics import *
+
+from data.dataset import *
+from collections import defaultdict
+import argparse
+import copy
+
+import warnings
+warnings.filterwarnings("ignore")
+
+
+#
+# TODO: Set up logging
+#
+logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
+
 """
 layer_cake.py:
 --------------------------------------------------------------------------------------------------------------------------------
@@ -55,44 +96,6 @@ fine-tuned during training to better adapt to the specific task. By setting the 
 model incorporates these embeddings into its architecture, enhancing its ability to understand and process the input text data effectively.
 --------------------------------------------------------------------------------------------------------------------------------
 """
-
-import argparse
-from time import time
-import matplotlib.pyplot as plt
-import os
-import logging
-
-import torchtext
-
-import scipy
-from scipy.sparse import csr_matrix
-
-from sklearn.model_selection import train_test_split
-
-# custom classes 
-from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
-from embedding.pretrained import *
-
-from model.classification import NeuralClassifier
-
-from util.early_stop import EarlyStopping
-from util.common import *
-from util.csv_log import CSVLog
-from util.file import create_if_not_exist
-from util.metrics import *
-
-from data.dataset import *
-
-import warnings
-warnings.filterwarnings("ignore")
-
-
-#
-# TODO: Set up logging
-#
-logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
-
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
@@ -221,14 +224,21 @@ def init_loss(classification_type):
 
 # -------------------------------------------------------------------------------------------------------------------
 #
-# main function, called from coommand line with opts
+# layer_cake() method. 
+# 
+# main driver method for all logic, called from the __main__ method after args are parsed
+# input is a dict{} of arguments that the program was run with, i.e. opts or args
 #
 # -------------------------------------------------------------------------------------------------------------------
-def main(opt):
+def layer_cake(opt):
     
-    print("\n------------------------------------------------------------------------------------------------------------------------------ layer_cake::main(opt) ------------------------------------------------------------------------------------------------------------------------------")
+    #print("\n------------------------------------------------------------------------------------------------------------------------------ layer_cake::main(opt) ------------------------------------------------------------------------------------------------------------------------------")
 
-    print("Command line:", ' '.join(sys.argv))                  # Print the full command line
+    #print("Command line:", ' '.join(sys.argv))                  # Print the full command line
+
+    print("opt:", type(opt), opt)
+
+    return
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
@@ -529,6 +539,68 @@ def set_method_name(opt):
     return method_name
 
 
+def parse_config_file(config_file, parser):
+    # Create a default Namespace from parser
+    args_defaults = argparse.Namespace(**{action.dest: action.default for action in parser._actions})
+
+    print("args_defaults:", type(args_defaults), args_defaults)
+
+    configurations = []
+
+    with open(config_file, 'r') as file:
+
+        for line_number, line in enumerate(file, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue  # Skip empty lines and comments
+
+            print("line:", line)
+            # Make a deepcopy of the default arguments for each configuration
+            current_args = copy.deepcopy(args_defaults)
+            
+            args_dict = {}
+            for pair in line.split(","):  # Assuming each argument pair is separated by a comma
+                key, value = map(str.strip, pair.split(':'))
+                args_dict[key.replace('-', '_')] = value  # Replace dashes with underscores
+
+            # Update the Namespace with arguments from the line
+            for key, value in args_dict.items():
+                if hasattr(current_args, key):
+                    setattr(current_args, key, value)
+
+            # Store the fully updated Namespace for later use or directly call layer_cake
+            configurations.append(current_args)
+
+    # After collecting all configurations, process them
+    for config in configurations:
+        print("config:", type(config), config)
+        layer_cake(config)  # Config is already a Namespace
+        
+
+
+
+def parse_arguments_draft(file_path):
+
+    args_list = []                              # List to store all argument dictionaries
+    
+    with open(file_path, 'r') as file:
+        
+        for line in file:
+
+            # Strip whitespace and ignore empty or commented out lines
+            clean_line = line.strip()
+            if not clean_line or clean_line.startswith('#'):
+                continue
+
+            args_dict = {}
+            arguments = line.strip().split(' ')
+            for arg in arguments:
+                key, value = arg.split(':')
+                args_dict[key] = value
+            args_list.append(args_dict)
+    
+    return args_list            # return list of dict{}, each containing the arguments for a single run
+
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
 # command line argument, program: parser plus assertions + main(opt)
@@ -660,44 +732,95 @@ if __name__ == '__main__':
     
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
+    
+    parser.add_argument('--batch-file', type=str, default='./lc_batch.config', metavar='str',
+                        help='path to the config file used for batch processing of multiple experiments')
 
     opt = parser.parse_args()
 
-    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    print("opt:", type(opt), opt)
 
-    print(f'RUNNING ON DEVICE == {opt.device}')
+    #
+    # we are in batch mode so we build the array of dictionary arguments
+    # for all of the batch runs
+    #
+    if (opt.batch_file):
 
-    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
-    torch.manual_seed(opt.seed)
+        print("batch processing, reading from file:", opt.batch_file)
 
-    assert opt.dataset in available_datasets, \
-        f'unknown dataset {opt.dataset}'
-    
-    assert opt.pretrained in [None]+AVAILABLE_PRETRAINED, \
-        f'unknown pretrained set {opt.pretrained}'
-    
-    assert not opt.plotmode or opt.test_each > 0, \
-        'plot mode implies --test-each>0'
-    
-    assert opt.supervised_method in STWFUNCTIONS, \
-        f'unknown supervised term weighting function; allowed are {STWFUNCTIONS}'
-    
-    assert opt.droptype in available_dropouts, \
-        f'unknown dropout type; allowed are {available_dropouts}'
-    
-    if opt.droptype == 'sup' and opt.supervised==False:
-        opt.droptype = 'none'
-        print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
-        logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
-    
-    if opt.droptype == 'learn' and opt.learnable==0:
-        opt.droptype = 'none'
-        print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-        logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
-    
-    if opt.pickle_dir:
-        opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
+        #args = vars(parser.parse_args([]))  # Get default values as a dictionary
 
-    main(opt)
+        #all_args = parse_arguments(opt.batch_file)
+
+        #parse_arguments(opt.batch_file, args)
+
+        """
+        for opt in all_args:
+            print("opt:", type(opt), opt)
+        """
+
+        parse_config_file(opt.batch_file, parser)
+
+        """
+        # Sort and group by dataset
+        grouped_args = defaultdict(list)
+        for args in args:
+            grouped_args[args['dataset']].append(args)
+
+        # Here, default_args will have either the default values or overwritten by file configuration
+        print("Final configuration:", args)
+
+        # Execute the main logic for each group of arguments by dataset
+        for dataset, args_list in grouped_args.items():
+            print(f"Processing dataset: {dataset}")
+            print("args:", args_list)
+
+            for args in args_list:
+                print(f"Running with args: {args}")
+                # Here you would call your main program logic, e.g., run_model(**args)
+                # run_model might be your function that takes these parameters and executes logic
+                layer_cake(**args)
+        """
+
+    else:
+        print("single run processing...")
+
+
+        opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        print(f'RUNNING ON DEVICE == {opt.device}')
+
+        assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
+        torch.manual_seed(opt.seed)
+
+        assert opt.dataset in available_datasets, \
+            f'unknown dataset {opt.dataset}'
+        
+        assert opt.pretrained in [None]+AVAILABLE_PRETRAINED, \
+            f'unknown pretrained set {opt.pretrained}'
+        
+        assert not opt.plotmode or opt.test_each > 0, \
+            'plot mode implies --test-each>0'
+        
+        assert opt.supervised_method in STWFUNCTIONS, \
+            f'unknown supervised term weighting function; allowed are {STWFUNCTIONS}'
+        
+        assert opt.droptype in available_dropouts, \
+            f'unknown dropout type; allowed are {available_dropouts}'
+        
+        if opt.droptype == 'sup' and opt.supervised==False:
+            opt.droptype = 'none'
+            print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
+            logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
+        
+        if opt.droptype == 'learn' and opt.learnable==0:
+            opt.droptype = 'none'
+            print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
+            logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
+        
+        if opt.pickle_dir:
+            opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
+
+        layer_cake(opt)
 
     # --------------------------------------------------------------------------------------------------------------------------------------
