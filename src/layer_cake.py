@@ -510,7 +510,7 @@ def parse_config_file(config_file, parser):
             if not line or line.startswith('#'):
                 continue  # Skip empty lines and comments
 
-            print("line:", line)
+            #print("line:", line)
             # Make a deepcopy of the default arguments for each configuration
             current_args = copy.deepcopy(args_defaults)
 
@@ -530,7 +530,7 @@ def parse_config_file(config_file, parser):
                         value = type_info[key](value)
                     except ValueError:
                         raise ValueError(f"Error converting value for {key} on line {line_number}: expected type {type_info[key]}")
-                        
+
                 args_dict[key] = value
 
             # Update the Namespace with arguments from the line
@@ -830,8 +830,6 @@ if __name__ == '__main__':
         pretrained = False
         pretrained_vector = None
         dataset = None
-        
-        print()
 
         for current_config in configurations:
 
@@ -839,7 +837,7 @@ if __name__ == '__main__':
             current_config.device = opt.device
             current_config.batch_file = opt.batch_file
 
-            print(f'--------------------- processing line #: {line_num} ---------------------')
+            print(f'\n\t--------------------- processing batch configuration file line #: {line_num} ---------------------')
 
             print(f'current_config: {type(current_config)}: {current_config}')
             print(f'last_config: {type(last_config)}: {last_config}')
