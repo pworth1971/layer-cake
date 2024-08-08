@@ -281,7 +281,7 @@ def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset
     for epoch in range(1, opt.nepochs + 1):
 
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history)
+        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
         macrof1, test_loss = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
 
@@ -316,7 +316,7 @@ def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset
         if opt.val_epochs>0:
             print(f'last {opt.val_epochs} epochs on the validation set')
             for val_epoch in range(1, opt.val_epochs + 1):
-                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, epoch+val_epoch, method_name, loss_history)
+                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch+val_epoch, method_name, loss_history)
 
         # test
         print('Training complete: testing')
@@ -338,7 +338,7 @@ def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset
 #
 # --------------------------------------------------------------------------------------------------------------------------------------
 
-def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name, loss_history):
+def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
     
     print("... training...")
 
@@ -376,7 +376,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
         if idx % opt.log_interval == 0:
             interval_loss = loss.item()
-            print(f'{opt.dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {interval_loss:.6f}')
+            print(f'{dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {interval_loss:.6f}')
 
     mean_loss = np.mean(interval_loss)
     
