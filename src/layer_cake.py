@@ -100,7 +100,7 @@ model incorporates these embeddings into its architecture, enhancing its ability
 
 # ---------------------------------------------------------------------------------------------------------------------------
 
-def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, device):
+def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range, device):
     
     print("------------------ init_Net() ------------------")
 
@@ -227,75 +227,18 @@ def init_loss(classification_type):
 # layer_cake() method. 
 # 
 # main driver method for all logic, called from the __main__ method after args are parsed
-# input is a dict{} of arguments that the program was run with, i.e. opts or args
+# input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
+# from a config batch file with all the arguments if being run in batch mode
 #
 # -------------------------------------------------------------------------------------------------------------------
-def layer_cake(opt):
+
+def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset, word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index):
     
-    print("\n------------------------------------------------------------------------------------------------------------------------------ layer_cake::main(opt) ------------------------------------------------------------------------------------------------------------------------------")
+    print("\t-- layer_cake() -- ")
 
     #print("Command line:", ' '.join(sys.argv))                  # Print the full command line
 
     print("opt:", type(opt), opt)
-
-    # get system info to be used for logging below
-    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
-
-    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
-    mem = total_memory
-    if (num_cuda_devices >0):
-        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
-        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
-    else:
-        gpus = 'None'
-
-    method_name = set_method_name(opt)
-    print("method_name:", method_name)
-
-    if opt.pretrained:
-        pretrained = True
-        embeddings_log_val = opt.pretrained
-    else:
-        pretrained = False
-        embeddings_log_val ='none'
-    
-    # initialize layered log file with core settings
-    logfile = init_layered_logfile(
-        method_name, 
-        pretrained, 
-        embeddings_log_val, 
-        opt, 
-        cpus, 
-        mem, 
-        gpus)    
-
-    #assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
-
-    # check to see if the model has been run before
-    already_modelled = logfile.already_calculated(
-        dataset=opt.dataset,
-        embeddings=embeddings_log_val,
-        model=opt.net, 
-        params=method_name,
-        pretrained=pretrained, 
-        tunable=opt.tunable,
-        wc_supervised=opt.supervised,
-        run=opt.seed
-        )
-
-    print("already_modelled:", already_modelled)
-
-    if (already_modelled) and not (opt.force):
-        print(f'Assertion warning: model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated.')
-        print("Run with --force option to override, exiting...")
-        return
-
-    print("loading pretrained embeddings...")
-    pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
-
-    print("loading dataset", {opt.dataset})
-    dataset = Dataset.load(dataset_name=opt.dataset, base_pickle_path=opt.pickle_dir).show()
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
 
     print("train / test data split...")
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
@@ -326,7 +269,7 @@ def layer_cake(opt):
     loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
     print("setting up model...")
-    model = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
+    model = init_Net(opt, dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
     criterion = init_loss(dataset.classification_type)
 
@@ -538,8 +481,23 @@ def set_method_name(opt):
 
 
 def parse_config_file(config_file, parser):
+
+    print("parse_config_file:", config_file)
+
+    """
     # Create a default Namespace from parser
     args_defaults = argparse.Namespace(**{action.dest: action.default for action in parser._actions})
+
+    print("args_defaults:", type(args_defaults), args_defaults)
+    """
+
+    # Create a default Namespace from parser
+    # Collect default values and expected types
+    args_defaults = argparse.Namespace()
+    type_info = {}
+    for action in parser._actions:
+        setattr(args_defaults, action.dest, action.default)
+        type_info[action.dest] = action.type if action.type else str
 
     print("args_defaults:", type(args_defaults), args_defaults)
 
@@ -555,49 +513,88 @@ def parse_config_file(config_file, parser):
             print("line:", line)
             # Make a deepcopy of the default arguments for each configuration
             current_args = copy.deepcopy(args_defaults)
-            
+
             args_dict = {}
             for pair in line.split(","):  # Assuming each argument pair is separated by a comma
                 key, value = map(str.strip, pair.split(':'))
-                args_dict[key.replace('-', '_')] = value  # Replace dashes with underscores
+                key = key.replace('-', '_')  # Normalize the key to match Namespace attribute
+
+                # Handle boolean values
+                if value.lower() == 'true':
+                    value = True
+                elif value.lower() == 'false':
+                    value = False
+                elif key in type_info:
+                    # Convert value to the correct type
+                    try:
+                        value = type_info[key](value)
+                    except ValueError:
+                        raise ValueError(f"Error converting value for {key} on line {line_number}: expected type {type_info[key]}")
+                        
+                args_dict[key] = value
 
             # Update the Namespace with arguments from the line
             for key, value in args_dict.items():
-                if hasattr(current_args, key):
-                    setattr(current_args, key, value)
+                setattr(current_args, key, value)
 
             # Store the fully updated Namespace for later use or directly call layer_cake
             configurations.append(current_args)
 
-    # After collecting all configurations, process them
-    for config in configurations:
-        print("config:", type(config), config)
-        layer_cake(config)  # Config is already a Namespace
-        
+    return configurations        
 
 
+def initialize_logfile(opt):
 
-def parse_arguments_draft(file_path):
+    print("initializing log file...")
 
-    args_list = []                              # List to store all argument dictionaries
+    # get system info to be used for logging below
+    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
+
+    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
+    mem = total_memory
+    if (num_cuda_devices >0):
+        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
+    else:
+        gpus = 'None'
+
+    method_name = set_method_name(opt)
+    print("method_name:", method_name)
+
+    if opt.pretrained:
+        pretrained = True
+        embeddings_log_val = opt.pretrained
+    else:
+        pretrained = False
+        embeddings_log_val ='none'
     
-    with open(file_path, 'r') as file:
-        
-        for line in file:
+    # initialize layered log file with core settings
+    logfile = init_layered_logfile(
+        method_name, 
+        pretrained, 
+        embeddings_log_val, 
+        opt, 
+        cpus, 
+        mem, 
+        gpus)    
 
-            # Strip whitespace and ignore empty or commented out lines
-            clean_line = line.strip()
-            if not clean_line or clean_line.startswith('#'):
-                continue
+    # check to see if the model has been run before
+    already_modelled = logfile.already_calculated(
+        dataset=opt.dataset,
+        embeddings=embeddings_log_val,
+        model=opt.net, 
+        params=method_name,
+        pretrained=pretrained, 
+        tunable=opt.tunable,
+        wc_supervised=opt.supervised,
+        run=opt.seed
+        )
 
-            args_dict = {}
-            arguments = line.strip().split(' ')
-            for arg in arguments:
-                key, value = arg.split(':')
-                args_dict[key] = value
-            args_list.append(args_dict)
-    
-    return args_list            # return list of dict{}, each containing the arguments for a single run
+    print("already_modelled:", already_modelled)
+
+    return already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val
+
+
 
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
@@ -731,65 +728,23 @@ if __name__ == '__main__':
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
     
-    parser.add_argument('--batch-file', type=str, default='./lc_batch.config', metavar='str',
+    parser.add_argument('--batch-file', type=str, default=None, metavar='str',
                         help='path to the config file used for batch processing of multiple experiments')
 
     opt = parser.parse_args()
-
     print("opt:", type(opt), opt)
 
-    #
-    # we are in batch mode so we build the array of dictionary arguments
-    # for all of the batch runs
-    #
-    if (opt.batch_file):
+    # set device and seed
+    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    print(f'RUNNING ON DEVICE == {opt.device}')
 
-        print("batch processing, reading from file:", opt.batch_file)
+    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
+    torch.manual_seed(opt.seed)
 
-        #args = vars(parser.parse_args([]))  # Get default values as a dictionary
+    # single run case
+    if (opt.batch_file is None):                        # running single command 
 
-        #all_args = parse_arguments(opt.batch_file)
-
-        #parse_arguments(opt.batch_file, args)
-
-        """
-        for opt in all_args:
-            print("opt:", type(opt), opt)
-        """
-
-        parse_config_file(opt.batch_file, parser)
-
-        """
-        # Sort and group by dataset
-        grouped_args = defaultdict(list)
-        for args in args:
-            grouped_args[args['dataset']].append(args)
-
-        # Here, default_args will have either the default values or overwritten by file configuration
-        print("Final configuration:", args)
-
-        # Execute the main logic for each group of arguments by dataset
-        for dataset, args_list in grouped_args.items():
-            print(f"Processing dataset: {dataset}")
-            print("args:", args_list)
-
-            for args in args_list:
-                print(f"Running with args: {args}")
-                # Here you would call your main program logic, e.g., run_model(**args)
-                # run_model might be your function that takes these parameters and executes logic
-                layer_cake(**args)
-        """
-
-    else:
         print("single run processing...")
-
-
-        opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-        print(f'RUNNING ON DEVICE == {opt.device}')
-
-        assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
-        torch.manual_seed(opt.seed)
 
         assert opt.dataset in available_datasets, \
             f'unknown dataset {opt.dataset}'
@@ -819,6 +774,161 @@ if __name__ == '__main__':
         if opt.pickle_dir:
             opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
 
-        layer_cake(opt)
+        # initialize log file
+        already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(opt)
+
+        # check to see if model params have been computed already
+        assert already_modelled and not opt.force, \
+            f'--- model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---'
+            
+        pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
+
+        print(f"initializing dataset: {opt.dataset}")
+        dataset = Dataset.load(dataset_name=opt.dataset, base_pickle_path=opt.pickle_dir).show()
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
+
+        # run layer_cake
+        layer_cake(
+            opt, 
+            logfile,
+            pretrained, 
+            pretrained_vector, 
+            methd_name,
+            dataset, 
+            word2index, 
+            out_of_vocabulary, 
+            unk_index, 
+            pad_index, 
+            devel_index, 
+            test_index)
+
+    else: 
+
+        #
+        # we are in batch mode so we build the array of args Namespace 
+        # arguments for all of the batch runs from config file
+        #
+        print("batch processing, reading from file:", opt.batch_file)
+
+        #args = vars(parser.parse_args([]))  # Get default values as a dictionary
+
+        #all_args = parse_arguments(opt.batch_file)
+
+        #parse_arguments(opt.batch_file, args)
+
+        """
+        for opt in all_args:
+            print("opt:", type(opt), opt)
+        """
+
+        # get batch config params
+        configurations = parse_config_file(opt.batch_file, parser)
+
+        line_num = 1
+
+        last_config = None
+        pretrained = False
+        pretrained_vector = None
+        dataset = None
+        
+        print()
+
+        for current_config in configurations:
+
+            # roll these two argument params over to all current_configs
+            current_config.device = opt.device
+            current_config.batch_file = opt.batch_file
+
+            print(f'--------------------- processing line #: {line_num} ---------------------')
+
+            print(f'current_config: {type(current_config)}: {current_config}')
+            print(f'last_config: {type(last_config)}: {last_config}')
+
+            # -------------------------------------------------------------------------------------------------------------
+            # check argument parameters
+            # -------------------------------------------------------------------------------------------------------------
+            if (current_config.dataset not in available_datasets):
+                print(f'unknown dataset in config file line # {line_num}', current_config['dataset'])
+                line_num += 1
+                continue
+        
+            if (current_config.pretrained not in [None]+AVAILABLE_PRETRAINED):
+                print(f'unknown pretrained set in config file line # {line_num}', current_config['pretrained'])
+                line_num += 1
+                continue
+        
+            if (current_config.plotmode and current_config.test_each <= 0):
+                print(f'plot mode implies --test-each>0, config file line # {line_num}')
+                line_num += 1
+                continue
+        
+            if (current_config.supervised_method not in STWFUNCTIONS):
+                print(f'unknown supervised term weighting function in config file line # {line_num}, permitted values are {STWFUNCTIONS}')
+                line_num += 1
+                continue
+        
+            if (current_config.droptype not in available_dropouts):
+                print(f'unknown dropout type in config file line # {line_num}, permitted values are {available_dropouts}')
+                line_num += 1
+                continue
+        
+            if (current_config.droptype == 'sup' and current_config.supervised == False):
+                current_config.droptype = 'none'
+                print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
+                logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
+        
+            if (current_config.droptype == 'learn' and current_config.learnable == 0):
+                current_config.droptype = 'none'
+                print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
+                logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
+
+            if current_config.pickle_dir:
+                current_config.pickle_path = join(current_config.pickle_dir, current_config.dataset + '.pickle')
+            # -------------------------------------------------------------------------------------------------------------
+
+            already_modelled = False
+
+            # initialize log file
+            already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(current_config)
+
+            # check to see if model params have been computed already
+            if (already_modelled) and not (current_config.force):
+                print(f'Assertion warning: model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {current_config.tunable}, and wc_supervised == {current_config.supervised} for {current_config.dataset} already calculated.')
+                print("Run with --force option to override, continuing...")
+                line_num += 1
+                continue
+
+            # initialize embeddings if need be
+            if 'pretrained' in current_config and (not last_config or current_config.pretrained != last_config.pretrained):
+                print(f"loading pretrained embeddings: {current_config.pretrained}")
+                pretrained, pretrained_vector = load_pretrained_embeddings(current_config.pretrained, current_config)
+
+            # initialize dataset if need be
+            if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
+                print(f"initializing dataset: {current_config.dataset}")
+
+                dataset = Dataset.load(dataset_name=current_config.dataset, base_pickle_path=current_config.pickle_dir).show()
+                word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
+
+            # run layer_cake
+            layer_cake(
+                current_config,                         # current_onfig is already a Namespace
+                logfile, 
+                pretrained, 
+                pretrained_vector, 
+                method_name,
+                dataset, 
+                word2index, 
+                out_of_vocabulary, 
+                unk_index, 
+                pad_index, 
+                devel_index, 
+                test_index)
+            
+            last_config = current_config  # Update last_config to current for next iteration check
+
+            line_num += 1
+
+
 
     # --------------------------------------------------------------------------------------------------------------------------------------

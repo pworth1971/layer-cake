@@ -68,8 +68,6 @@ class Dataset:
         
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
 
-        self.loaded = False
-
         if name=='reuters21578':
             self._load_reuters()
         elif name == '20newsgroups':
@@ -79,6 +77,8 @@ class Dataset:
             #self._load_rcv1_skl()
         elif name == 'ohsumed':
             self._load_ohsumed()
+        
+        """
         elif name == 'jrcall':
             self._load_jrc(version='all')
         elif name == 'wipo-sl-mg':
@@ -89,6 +89,7 @@ class Dataset:
             self._load_wipo('singlelabel', 'subclass')
         elif name == 'wipo-ml-sc':
             self._load_wipo('multilabel', 'subclass')
+        """
 
         self.nC = self.devel_labelmatrix.shape[1]
         print("nC:", self.nC)
@@ -110,6 +111,7 @@ class Dataset:
         self.vocabulary = self._vectorizer.vocabulary_
 
         self.loaded = True
+        self.name = name
 
 
     def show(self):
