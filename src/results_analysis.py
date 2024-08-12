@@ -1,6 +1,18 @@
 import pandas as pd
 import sys
 from tabulate import tabulate
+import matplotlib.pyplot as plt
+import os
+
+
+def read_file(file_path):
+
+    df = pd.read_csv(file_path, sep='\t')  # Load data from a CSV file (tab delimited)
+
+    print("Columns in the file:", df.columns)
+
+    return df
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -10,8 +22,8 @@ from tabulate import tabulate
 # ----------------------------------------------------------------------------------------------------------------------------
 
 def results_analysis(file_path, output_path=None):
-    df = pd.read_csv(file_path, sep='\t')  # Load data from a CSV file (tab delimited)
-    print("Columns in the file:", df.columns)
+
+    df = read_file(file_path=file_path)
 
     # Group data by 'dataset', 'embedding', 'model', 'wc-supervised', 'measure' and get the maximum 'value'
     result = df.groupby(['dataset', 'embeddings', 'model', 'wc_supervised', 'measure'])['value'].max().reset_index()
@@ -69,6 +81,64 @@ def results_analysis(file_path, output_path=None):
         print(final_formatted_table)
 
     
+
+def generate_charts(file_path, output_path=None):
+
+    df = read_file(file_path=file_path)
+
+    # List of measures to analyze
+    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'te-hamming-loss', 'te-jacard-index']
+
+    # Define colors for differentiation
+    colors = ['lightblue', 'lightgreen', 'salmon', 'wheat', 'lightgrey', 'cyan', 'magenta', 'yellow', 'orange', 'lime']
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    for measure in measures:
+        fig, ax = plt.subplots(figsize=(14, 7))  # Adjust the figure size
+
+        legend_labels = []
+
+        for idx, supervised in enumerate([False, True]):  # Ensure False is first for consistent order
+            # Filter the DataFrame for the current measure and wc_supervised status
+            measure_df = df[(df['measure'] == measure) & (df['wc_supervised'] == supervised)]
+
+            # Check if the measure data is empty
+            if measure_df.empty:
+                print(f"No data available for {measure} with wc_supervised={supervised}")
+                continue
+
+            # Group data by 'model' and 'embeddings' and calculate the average of the 'value'
+            result = measure_df.groupby(['model', 'embeddings'])['value'].mean().unstack()
+
+            # Plotting side by side within the same subplot
+            bars = result.plot(kind='bar', ax=ax, legend=False, color=colors[idx*len(colors)//2:(idx+1)*len(colors)//2], position=idx, width=0.35)
+
+            # Append legend labels for each embedding type
+            for embedding in result.columns:
+                legend_labels.append(f'{embedding} ({"Supervised" if supervised else "Not Supervised"})')
+
+        ax.set_title(f'Comparison of {measure} by Model and Embeddings')
+        ax.set_ylabel('Value')
+        ax.set_xlabel('Model')
+
+        # Set custom legend on the left side outside the plot
+        ax.legend(legend_labels, title="Embeddings and Supervision", bbox_to_anchor=(-0.15, 0.5), loc='center left', fontsize='small', borderaxespad=0.)
+
+        # Save each plot in the specified output directory
+        if output_path:
+            plot_file = os.path.join(output_path, f"{measure}_comparison.png")
+            plt.savefig(plot_file, bbox_inches='tight')  # Ensure everything is included in the saved image
+            print(f"Saved plot for {measure} at {plot_file}")
+
+        # Show plot
+        plt.show()
+
+        plt.close()
+
+
 # ----------------------------------------------------------------------------------------------------------------------------
 #     
 
@@ -80,7 +150,10 @@ def main():
     input_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
     
-    results_analysis(input_file, output_file)
+    #results_analysis(input_file, output_file)
+
+    generate_charts(input_file, output_file)
+
 
 if __name__ == "__main__":
     main()
