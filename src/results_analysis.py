@@ -3,6 +3,8 @@ import sys
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 import os
+import seaborn as sns
+import plotly.express as px
 
 
 def read_file(file_path):
@@ -81,6 +83,52 @@ def results_analysis(file_path, output_path=None):
         print(final_formatted_table)
 
     
+def generate_charts_seaborn(file_path, output_path=None):
+    df = read_file(file_path=file_path)
+
+    # List of measures to analyze
+    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'te-hamming-loss', 'te-jacard-index']
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Define a vibrant and distinct color palette
+    color_palette = sns.color_palette("husl", n_colors=10)  # 'husl' palette is vibrant and better spaced
+
+    for measure in measures:
+        for supervised in sorted(df['wc_supervised'].unique(), reverse=True):
+            plt.figure(figsize=(14, 7))  # Adjust the figure size
+
+            # Filter the DataFrame for the current measure and wc_supervised status
+            subset_df = df[(df['measure'] == measure) & (df['wc_supervised'] == supervised)]
+
+            # Check if the subset DataFrame is empty
+            if subset_df.empty:
+                print(f"No data available for {measure} with wc_supervised={supervised}")
+                continue
+
+            # Create the plot using Seaborn's barplot
+            sns.barplot(data=subset_df, x='model', y='value', hue='embeddings', palette=color_palette,
+                        ci=None, edgecolor='gray', linewidth=0.5)
+
+            plt.title(f'Comparison of {measure} by Model and Embeddings - {"Supervised" if supervised else "Not Supervised"}')
+            plt.ylabel('Value')
+            plt.xlabel('Model')
+            plt.legend(title="Embeddings", loc='upper right', bbox_to_anchor=(1.15, 1), borderaxespad=0.)
+
+            # Save each plot in the specified output directory
+            if output_path:
+                plot_file_name = f"{measure}_{'supervised' if supervised else 'unsupervised'}_comparison_seaborn.png"
+                plot_file = os.path.join(output_path, plot_file_name)
+                plt.savefig(plot_file, bbox_inches='tight')  # Ensure everything is included in the saved image
+                print(f"Saved plot for {measure} at {plot_file}")
+
+            # Show plot
+            plt.show()
+
+            plt.close()
+
 
 def generate_charts(file_path, output_path=None):
 
@@ -139,6 +187,55 @@ def generate_charts(file_path, output_path=None):
         plt.close()
 
 
+def generate_charts_plotly(file_path, output_path=None):
+    df = read_file(file_path=file_path)
+
+    # Filter to only include specific measures
+    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    df = df[df['measure'].isin(measures)]
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Using a color-blind-friendly palette
+    color_palette = px.colors.qualitative.Safe
+
+    for measure in measures:
+        for supervised in sorted(df['wc_supervised'].unique(), reverse=True):
+            # Filter the DataFrame for the current measure and wc_supervised status
+            subset_df = df[(df['measure'] == measure) & (df['wc_supervised'] == supervised)]
+
+            # Check if the subset DataFrame is empty
+            if subset_df.empty:
+                print(f"No data available for {measure} with wc_supervised={supervised}")
+                continue
+
+            # Aggregate to find the maximum value per model and embeddings
+            max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
+
+            # Create the plot using Plotly Express
+            fig = px.bar(max_df, x='model', y='value', color='embeddings', barmode='group',
+                         title=f'Maximum Value Comparison of {measure} by Model and Embeddings - {"Supervised" if supervised else "Not Supervised"}',
+                         labels={"value": "Max Value", "model": "Model"},
+                         color_discrete_sequence=color_palette,
+                         hover_data=['model', 'embeddings'])
+
+            fig.update_layout(legend_title_text='Embeddings')
+            fig.update_xaxes(title_text='Model')
+            fig.update_yaxes(title_text='Maximum Measure Value', range=[0, max_df['value'].max() * 1.1])  # Adjust the y-axis range to fit max value
+
+            # Save each plot in the specified output directory and show it
+            if output_path:
+                plot_file_name = f"max_{measure}_{'supervised' if supervised else 'unsupervised'}_comparison_plotly.html"
+                plot_file = os.path.join(output_path, plot_file_name)
+                fig.write_html(plot_file)  # Save as HTML to retain interactivity
+                print(f"Saved interactive plot for {measure} at {plot_file}")
+
+            fig.show()  # This will display the plot in the notebook or a web browser
+
+
+
 # ----------------------------------------------------------------------------------------------------------------------------
 #     
 
@@ -152,7 +249,11 @@ def main():
     
     #results_analysis(input_file, output_file)
 
-    generate_charts(input_file, output_file)
+    #generate_charts(input_file, output_file)
+
+    #generate_charts_seaborn(input_file, output_file)
+
+    generate_charts_plotly(input_file, output_file)
 
 
 if __name__ == "__main__":
