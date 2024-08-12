@@ -156,12 +156,22 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                     fig.show()              # This will display the plot in the notebook or a web browser
 
 
+# ----------------------------------------------------------------------------------------------------------------------------
+# read_data_file()
+#
+# read data file and put it in a DataFrame object. If doesn't exist, return null 
+# ----------------------------------------------------------------------------------------------------------------------------
 
-def read_file(file_path):
+def read_data_file(file_path=None, debug=False):
 
+    if not (os.path.exists(file_path)):
+        print("Error: File not found:", file_path) 
+        return None
+       
     df = pd.read_csv(file_path, sep='\t')  # Load data from a CSV file (tab delimited)
 
-    #print("Columns in the file:", df.columns)
+    if (debug):
+        print("Columns in the file:", df.columns)
 
     return df
 
@@ -191,13 +201,15 @@ def main():
     if not (args.charts or args.summary):
         parser.error("No action requested, add -c for charts or -s for summary")
 
-    df = read_file(args.file_path)
+    df = read_data_file(args.file_path)
 
-    if args.summary:
-        results_analysis(df, args.output_dir)
+    if df is not None:
+        if args.summary:
+            results_analysis(df, args.output_dir)
 
-    if args.charts:
-        generate_charts_plotly(df, args.output_dir, show_charts=args.show)
+        if args.charts:
+            generate_charts_plotly(df, args.output_dir, show_charts=args.show)
+            
 
 if __name__ == "__main__":
     main()
