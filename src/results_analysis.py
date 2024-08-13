@@ -17,6 +17,8 @@ import argparse
 
 def results_analysis(df, output_path='../out'):
 
+    print("analyzing results...")
+
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -86,8 +88,13 @@ def results_analysis(df, output_path='../out'):
 
 def generate_charts_plotly(df, output_path='../out', show_charts=False):
     
+    print("generating charts to output directory:", output_path)
+
     # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'te-macro-F1', 'te-micro-F1']
+
+    print("filtering for measures:", measures)
+
     df = df[df['measure'].isin(measures)]
 
     # Create output directory if it doesn't exist
@@ -101,6 +108,8 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
 
         for dataset in df['dataset'].unique():  # Loop through each dataset
         
+            print(f"generating plots for {measure} in dataset {dataset}...")
+
             for supervised in sorted(df['wc_supervised'].unique(), reverse=True):
                 # Filter the DataFrame for the current measure, dataset, and wc_supervised status
                 subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['wc_supervised'] == supervised)]
@@ -145,6 +154,9 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
 
                 # Save each plot in the specified output directory and show it
                 if output_path:
+
+                    print(f"Generating interactive plot for {measure} in dataset {dataset} with wc_supervised={supervised}...")
+
                     plot_file_name = f"{dataset}_{measure}_{'pretrained+supervised' if supervised else 'pretrained'}.html"
                     plot_file = os.path.join(output_path, plot_file_name)
                     
@@ -163,6 +175,9 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
 # ----------------------------------------------------------------------------------------------------------------------------
 
 def read_data_file(file_path=None, debug=False):
+
+    if (debug):
+        print("Reading data file:", file_path)
 
     if not (os.path.exists(file_path)):
         print("Error: File not found:", file_path) 
@@ -185,6 +200,8 @@ def read_data_file(file_path=None, debug=False):
 
 def main():
 
+    print("----- Results Analysis -----")
+    
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
@@ -192,6 +209,7 @@ def main():
     
     parser.add_argument('-c', '--charts', action='store_true', help='Generate charts')
     parser.add_argument('-s', '--summary', action='store_true', help='Generate summary')
+    parser.add_argument('-d', action='store_true', default=False, help='debug mode')
     
     parser.add_argument('--show', action='store_true', help='Display charts interactively (requires -c)')
 
@@ -201,15 +219,27 @@ def main():
     if not (args.charts or args.summary):
         parser.error("No action requested, add -c for charts or -s for summary")
 
-    df = read_data_file(args.file_path)
+    debug = args.d
+    print("debug mode:", debug)
+
+    df = read_data_file(args.file_path, debug=debug)
+
+    print("Data file read successfully")
 
     if df is not None:
+
+        print("df:", df.shape)
+
         if args.summary:
+            #print("generating summary...")
             results_analysis(df, args.output_dir)
 
         if args.charts:
+            #print("generating charts...")
             generate_charts_plotly(df, args.output_dir, show_charts=args.show)
-            
+    else:
+        print("Error: Data file not found or empty")
+
 
 if __name__ == "__main__":
     main()
