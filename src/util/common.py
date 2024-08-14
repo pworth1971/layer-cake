@@ -25,9 +25,10 @@ VECTOR_CACHE = '../.vector_cache'                                   # assumes ev
 # metrics reporting
 import psutil
 import torch
-import GPUtil
 
+import argparse
 
+from scipy.sparse import issparse, csr_matrix
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -277,6 +278,7 @@ def get_sysinfo():
             #print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
             print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
     else:
+        num_cuda_devices = 0
         print("CUDA is not available")
 
     """
@@ -392,7 +394,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
 # 
 # Enhanced log info for ML baseline (layer cake) program suport
 #
-def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
+def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised, cpus, mem, gpus):
 
     print("initializing baseline layered log file...")
 
@@ -432,4 +434,91 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
     logfile.set_default('epoch', -1)
     logfile.set_default('run', -1)
 
+    # add system info
+    logfile.set_default('cpus', cpus)
+    logfile.set_default('mem', mem)
+    logfile.set_default('gpus', gpus)
+
     return logfile
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------
+# parse_config_file()
+# 
+# Parses a config file of command line arguments for batch processing, used by both layer_cake and ml_baseline code
+# 
+def parse_config_file(config_file, parser):
+
+    print("parse_config_file:", config_file)
+
+    """
+    # Create a default Namespace from parser
+    args_defaults = argparse.Namespace(**{action.dest: action.default for action in parser._actions})
+
+    print("args_defaults:", type(args_defaults), args_defaults)
+    """
+
+    # Create a default Namespace from parser
+    # Collect default values and expected types
+    args_defaults = argparse.Namespace()
+    type_info = {}
+    for action in parser._actions:
+        setattr(args_defaults, action.dest, action.default)
+        type_info[action.dest] = action.type if action.type else str
+
+    print("args_defaults:", type(args_defaults), args_defaults)
+
+    configurations = []
+
+    with open(config_file, 'r') as file:
+
+        for line_number, line in enumerate(file, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue  # Skip empty lines and comments
+
+            #print("line:", line)
+            # Make a deepcopy of the default arguments for each configuration
+            current_args = copy.deepcopy(args_defaults)
+
+            args_dict = {}
+            for pair in line.split(","):  # Assuming each argument pair is separated by a comma
+                key, value = map(str.strip, pair.split(':'))
+                key = key.replace('-', '_')  # Normalize the key to match Namespace attribute
+
+                # Handle boolean values
+                if value.lower() == 'true':
+                    value = True
+                elif value.lower() == 'false':
+                    value = False
+                elif key in type_info:
+                    # Convert value to the correct type
+                    try:
+                        value = type_info[key](value)
+                    except ValueError:
+                        raise ValueError(f"Error converting value for {key} on line {line_number}: expected type {type_info[key]}")
+
+                args_dict[key] = value
+
+            # Update the Namespace with arguments from the line
+            for key, value in args_dict.items():
+                setattr(current_args, key, value)
+
+            # Store the fully updated Namespace for later use or directly call layer_cake
+            configurations.append(current_args)
+
+    return configurations        
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+def todense(y):
+    """Convert sparse matrix to dense format as needed."""
+    return y.toarray() if issparse(y) else y
+
+
+def tosparse(y):
+    """Ensure matrix is in CSR format for efficient arithmetic operations."""
+    return y if issparse(y) else csr_matrix(y)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------

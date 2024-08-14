@@ -1,5 +1,6 @@
 import warnings
 import argparse
+
 from time import time
 
 from sklearn.exceptions import ConvergenceWarning
@@ -10,11 +11,8 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
 from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler
 
-from scipy.sparse import issparse, csr_matrix
-
 from model.CustomRepresentationLearning import CustomRepresentationModel
 
-from util import file
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
 from util.csv_log import CSVLog
@@ -84,11 +82,11 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
     if estimator==MultinomialNB:
         scaler = MinMaxScaler()
         
-        Xtr = scaler.fit_transform(_todense(Xtr))
-        Xte = scaler.transform(_todense(Xte))
+        Xtr = scaler.fit_transform(todense(Xtr))
+        Xte = scaler.transform(todense(Xte))
 
-        Xtr = _tosparse(Xtr)
-        Xte = _tosparse(Xte)
+        Xtr = tosparse(Xtr)
+        Xte = tosparse(Xte)
 
     print("param_grid:", param_grid)
     cv = 5
@@ -112,15 +110,15 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             print("ERR: unsupported estimator.")
             return
 
-        cls.fit(Xtr, _todense(ytr), param_grid=param_grid, cv=cv)
+        cls.fit(Xtr, todense(ytr), param_grid=param_grid, cv=cv)
         yte_ = cls.predict(Xte)
         
         print("predictions (yte_):", type(yte_), yte_.shape)
         print("actuals (yte):", type(yte), yte.shape)
         
         Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(
-            _tosparse(yte), 
-            _tosparse(yte_), 
+            tosparse(yte), 
+            tosparse(yte_), 
             classification_type
             )
 
@@ -158,7 +156,8 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
 # --------------------------------------------------------------------------------------------------------
 
 
-def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained_vectors=None, supervised=False, emb_path='../.vector_cache'):
+def embedding_matrix(dataset, pretrained=False, pretrained_vectors=None, supervised=False):
+    
     """
     Constructs and returns embedding matrices using either pre-trained or supervised embeddings. Support for GloVe, Word2Vec
     FastText and BERT pre-trained embeddings supported (tested).
@@ -182,6 +181,8 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained
     
     vocabulary = dataset.vocabulary
     vocabulary = np.asarray(list(zip(*sorted(vocabulary.items(), key=lambda x: x[1])))[0])
+
+    print("vocabulary:", type(vocabulary), vocabulary.shape)
 
     pretrained_embeddings = []
     
@@ -223,24 +224,119 @@ def embedding_matrix(dataset, pretrained=False, pretrained_type=None, pretrained
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 
+# -----------------------------------------------------------------------------------------------------------------------------------
+# classify()
+# 
+# Main function to handle model training and evaluation. Takes command line arguments (args) and uses them to 
+# configure and initiate text classification experiments, including data loading, model configuration, training, and 
+# evaluation. Initializes logging and sets up experiment configurations based on input parameters (in args and other). 
+# Supports different classification scenarios (binary or multilabel), different models (SVM, LR, NB) and different feature 
+# preparation (TF-IDF, BERT, GloVe, etc.), and evaluates the performance using custom metrics and logs the results.
+#
+# -----------------------------------------------------------------------------------------------------------------------------------   
 
-def main(args):
-    """
-    Main function to handle model training and evaluation. Processes command line arguments to 
-    configure and initiate text classification experiments, including data loading, model configuration, 
-    training, and evaluation. Initializes logging and sets up experiment configurations based on 
-    command line arguments, loads datasets and applies vector transformations or embeddings as specified 
-    by the mode, handles different classification scenarios (binary or multilabel) and different embedding 
-    methods (TF-IDF, BERT, GloVe, etc.), and evaluates the performance using custom metrics and logs the results.
+def classify(args, learner, pretrained, pretrained_vectors, embeddings, supervised, emb_path, logfile):
+
+    print("\t-- classify() -- ")
+
+    print("args:", type(args), args)
+
+    vocabsize = len(word2index) + len(out_of_vocabulary)
+    print("vocabsize:", {vocabsize})
+
+    ytr, yte = dataset.devel_target, dataset.test_target
+    print("dev_target (ytr):", type(ytr), ytr.shape)
+    print("test_target (yte):", type(yte), yte.shape)
+
+    labels = dataset.get_labels()                           # retrieve labels
+    label_names = dataset.get_label_names()                 # retrieve label names
+    print("labels:", labels)
+    print("label_names:", label_names)
+
+    Xtr, Xte = dataset.vectorize()
+    print("Xtr:", type(Xtr), Xtr.shape)
+    print("Xte:", type(Xte), Xte.shape)     
+
+    if (args.pretrained is None) and (args.supervised == False):        # no embeddings in this case
+        sup_tend = 0
+    else:                                                               # embeddings are present
+        tinit = time()
+
+        print("building the embeddings...")
+ 
+        _, F = embedding_matrix(
+            dataset, 
+            pretrained=pretrained, 
+            pretrained_vectors=pretrained_vectors,
+            supervised=supervised, 
+            )
+
+        print("before matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+        
+        Xtr = Xtr.dot(F)
+        Xte = Xte.dot(F)
+
+        print("after matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+
+        sup_tend = time() - tinit
     
-    Uses:
-    - args: Command line arguments parsed using argparse.
+
+    print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
+    print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
+
+    # run the model
+    print("running model...")
+    
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
+        Xtr, 
+        ytr, 
+        Xte, 
+        yte, 
+        dataset.classification_type, 
+        args.optimc, 
+        learner,
+        mode=args.mode, 
+        scoring=args.scoring
+        )
+    
+    tend += sup_tend
+
+    """
+    logfile.add_layered_row(tunable=False, measure='final-te-macro-F1', value=Mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='final-te-micro-F1', value=mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-hamming-loss', value=h_loss, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
+    logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
     """
 
-    print("--------------------------------------------------------------------------------------------------------------- MAIN(ARGS) ---------------------------------------------------------------------------------------------------------------")
+    logfile.add_layered_row(tunable=False, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='final-te-micro-F1', value=mf1, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend)
+    logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend)
 
-    # Print the full command line
-    print("Command line:", ' '.join(sys.argv))
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def set_method_name(opt):
+
+    method_name = f'{opt.learner}-{opt.mode}-{"opC" if args.optimc else "default"}'
+
+    if opt.pretrained:
+        method_name += f'-{opt.pretrained}'
+    if opt.supervised:
+        method_name += f'-supervised-{opt.supervised_method}'
+
+    return method_name
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def initialize(opt):
+
+    print("initializing...")
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
@@ -276,35 +372,36 @@ def main(args):
 
     mode = args.mode
     
-    if args.count:
+    if args.mode == 'count':
         vtype = 'count'
     else:
         vtype = 'tfidf'             # default to tfidf
 
-    method_name = f'{learner_name}-{mode}-{vtype}-{"opC" if args.optimc else "default"}'
+    #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
+    method_name = set_method_name(args)
     print("method_name: ", {method_name})
 
     pretrained = False
     embeddings ='none'
     emb_path = VECTOR_CACHE
 
-    if args.mode in ['bert', 'bert-sup']:
+    if args.pretrained == 'bert':
         pretrained = True
         embeddings = 'bert'
         emb_path = args.bert_path
-    elif args.mode in ['glove', 'glove-sup']:
+    elif args.pretrained == 'glove':
         pretrained = True
         embeddings = 'glove'
         emb_path = args.glove_path
-    elif args.mode in ['word2vec', 'word2vec-sup']:
+    elif args.pretrained == 'word2vec':
         pretrained = True
         embeddings = 'word2vec'
         emb_path = args.word2vec_path
-    elif args.mode in ['fasttext', 'fasttext-sup']:
+    elif args.pretrained == 'fasttext':
         pretrained = True
         embeddings = 'fasttext'
         emb_path = args.fasttext_path
-    elif args.mode in ['llama', 'llama-sup']:
+    elif args.pretrained == 'llama':
         pretrained = True
         embeddings = 'llama'
         emb_path = args.llama_path
@@ -312,8 +409,7 @@ def main(args):
     print("emb_path: ", {emb_path})
 
     supervised = False
-
-    if args.mode in ['sup', 'bert-sup', 'glove-sup', 'word2vec-sup', 'fasttext-sup', 'llama-sup']:
+    if args.supervised:
         supervised = True
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
@@ -326,7 +422,10 @@ def main(args):
         model=learner_name,
         pretrained=pretrained, 
         embeddings=embeddings,
-        supervised=supervised
+        supervised=supervised,
+        cpus=cpus,
+        mem=mem,
+        gpus=gpus
         )
 
     # check to see if the model has been run before
@@ -341,107 +440,15 @@ def main(args):
 
     print("already_modelled:", already_modelled)
 
-    if (already_modelled) and not (args.force):
-        print(f'*** Assertion warning *** baseline {method_name} for {args.dataset} already calculated')
-        print("run with --force option to override, exiting...")
-        return
-        
-    print("new model, loading embeddings...")
-    pretrained, pretrained_vector = load_pretrained_embeddings(embeddings, args)           
-
-    print("loading dataset", {args.dataset}, "...")
-    dataset = Dataset.load(
-        dataset_name=args.dataset, 
-        vectorization_type=vtype,                   # TFIDF or Count
-        base_pickle_path=args.pickle_dir
-        ).show()        
-    
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
-
-    vocabsize = len(word2index) + len(out_of_vocabulary)
-    print("vocabsize:", {vocabsize})
-
-    ytr, yte = dataset.devel_target, dataset.test_target
-    print("dev_target (ytr):", type(ytr), ytr.shape)
-    print("test_target (yte):", type(yte), yte.shape)
-
-    labels = dataset.get_labels()                           # retrieve labels
-    label_names = dataset.get_label_names()                 # retrieve label names
-    
-    print("labels:", labels)
-    print("label_names:", label_names)
-
-    Xtr, Xte = dataset.vectorize()
-    #print("Xtr:", type(Xtr), Xtr.shape)
-    #print("Xte:", type(Xte), Xte.shape)     
-
-    if args.mode in ['count', 'tfidf']:
-        sup_tend = 0
-    else:
-        tinit = time()
-
-        print("building the embeddings...")
- 
-        _, F = embedding_matrix(
-            dataset, 
-            pretrained=pretrained, 
-            pretrained_type=embeddings,
-            pretrained_vectors=pretrained_vector,
-            supervised=supervised, 
-            emb_path=emb_path
-            )
-
-        print("before matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
-        
-        Xtr = Xtr.dot(F)
-        Xte = Xte.dot(F)
-
-        print("after matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
-
-        sup_tend = time() - tinit
-    
-    print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
-    print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
-
-    # run the model
-    print("running model...")
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
-        Xtr, 
-        ytr, 
-        Xte, 
-        yte, 
-        dataset.classification_type, 
-        args.optimc, 
-        learner,
-        mode=args.mode, 
-        scoring=args.scoring
-        )
-    
-    tend += sup_tend
-
-    logfile.add_layered_row(tunable=False, measure='te-macro-F1', value=Mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-micro-F1', value=mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-hamming-loss', value=h_loss, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-
+    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-
-def _todense(y):
-    """Convert sparse matrix to dense format as needed."""
-    return y.toarray() if issparse(y) else y
-
-
-def _tosparse(y):
-    """Ensure matrix is in CSR format for efficient arithmetic operations."""
-    return y if issparse(y) else csr_matrix(y)
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
+
+    available_datasets = Dataset.dataset_available
 
     # Training settings
     parser = argparse.ArgumentParser(description='Text Classification with Embeddings')
@@ -458,14 +465,14 @@ if __name__ == '__main__':
                         help=f'learner (svm, lr, or nb)')
     
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N',
-                        help=f'mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup, llama, llama-sup]')
+                        help=f'mode, in [tfidf, count]')
 
-    parser.add_argument('--count', action='store_true', default=False,
-                        help='use CountVectorizer')
+    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|llama',
+                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", or "llama" (default None)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
-                        
+    
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
@@ -515,9 +522,159 @@ if __name__ == '__main__':
 
     parser.add_argument('--scoring', type=str, default='accuracy',
                         help=f'scoring parameter to GridSearchCV sklearn call. Must be one of sklearn scoring metricsd.')
+    
+    parser.add_argument('--batch-file', type=str, default=None, metavar='str',
+                        help='path to the config file used for batch processing of multiple experiments')
 
     args = parser.parse_args()
+
+    print("\n ---------------------------- Layer Cake: ML baseline classification code: main() ----------------------------")
     
-    assert args.mode in ['tfidf', 'sup', 'glove', 'glove-sup', 'word2vec', 'word2vec-sup', 'fasttext', 'fasttext-sup', 'bert', 'bert-sup', 'llama', 'llama-sup'], 'unknown mode'
+    print("args:", type(args), args)
+
+
+    # single run case
+    if (args.batch_file is None):                        # running single command 
+
+        print("single run processing...")
+
+        # check dataset
+        assert args.dataset in available_datasets, \
+            f'unknown dataset {args.dataset}'
+
+        # check mode
+        assert args.mode in ['tfidf', 'count'], 'unknown mode'
     
-    main(args)
+        # initialize log file and run params
+        already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile = initialize(args)
+    
+        # check to see if model params have been computed already
+        if (already_modelled) and not (args.force):
+            print(f'Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained} and wc_supervised == {args.supervised} for {args.dataset} already calculated.')
+            print("Run with --force option to override, returning...")
+            exit(0)
+            
+        print("new model, loading embeddings...")
+        pretrained, pretrained_vectors = load_pretrained_embeddings(embeddings, args)           
+
+        print("loading dataset", {args.dataset}, "...")
+        dataset = Dataset.load(
+            dataset_name=args.dataset, 
+            vectorization_type=vtype,                   # TFIDF or Count
+            base_pickle_path=args.pickle_dir
+            ).show()        
+    
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
+
+        # classify the dataset
+        classify(
+            args, 
+            learner, 
+            pretrained, 
+            pretrained_vectors, 
+            embeddings, 
+            supervised, 
+            emb_path, 
+            logfile
+            )
+
+    else: 
+
+        #
+        # we are in batch mode so we build the array of args Namespace 
+        # arguments for all of the batch runs from config file
+        #
+        print("batch processing, reading from file:", args.batch_file)
+
+        #args = vars(parser.parse_args([]))  # Get default values as a dictionary
+
+        #all_args = parse_arguments(opt.batch_file)
+
+        #parse_arguments(opt.batch_file, args)
+
+        """
+        for opt in all_args:
+            print("opt:", type(opt), opt)
+        """
+
+        # get batch config params
+        configurations = parse_config_file(args.batch_file, parser)
+
+        line_num = 1
+
+        last_config = None
+        pretrained = False
+        pretrained_vector = None
+        dataset = None
+
+        for current_config in configurations:
+
+            # roll these two argument params over to all current_configs
+            #current_config.device = opt.device
+            current_config.batch_file = args.batch_file
+
+            print(f'\n\t--------------------- processing batch configuration file line #: {line_num} ---------------------')
+
+            print(f'current_config: {type(current_config)}: {current_config}')
+            print(f'last_config: {type(last_config)}: {last_config}')
+
+            # -------------------------------------------------------------------------------------------------------------
+            # check argument parameters
+            # -------------------------------------------------------------------------------------------------------------
+            if (current_config.dataset not in available_datasets):
+                print(f'unknown dataset in config file line # {line_num}', current_config['dataset'])
+                line_num += 1
+                continue
+        
+            if (current_config.mode not in ['tfidf', 'count']):
+                print(f'unknown mode in config file line # {line_num}', current_config['mode'])
+                line_num += 1
+                continue
+        
+            """
+            if current_config.pickle_dir:
+                current_config.pickle_path = join(current_config.pickle_dir, current_config.dataset + '.pickle')
+            """
+            # -------------------------------------------------------------------------------------------------------------
+
+            already_modelled = False
+
+            # initialize log file and run params
+            already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile = initialize(args)
+    
+            # check to see if model params have been computed already
+            if (already_modelled) and not (current_config.force):
+                print(f'Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained} and wc_supervised == {current_config.supervised} for {current_config.dataset} already calculated.')
+                print("Run with --force option to override, continuing...")
+                line_num += 1
+                continue
+
+            # initialize embeddings if need be
+            if 'pretrained' in current_config and (not last_config or current_config.pretrained != last_config.pretrained):
+                print(f"loading pretrained embeddings: {current_config.pretrained}")
+                pretrained, pretrained_vectors = load_pretrained_embeddings(current_config.pretrained, current_config)
+
+            # initialize dataset if need be
+            if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
+                print(f"initializing dataset: {current_config.dataset}")
+
+                dataset = Dataset.load(dataset_name=current_config.dataset, vectorization_type=vtype, base_pickle_path=current_config.pickle_dir).show()
+                word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
+
+            # run layer_cake
+            classify(
+                current_config,                         # current_onfig is already a Namespace
+                learner, 
+                pretrained, 
+                pretrained_vectors, 
+                embeddings,
+                supervised, 
+                emb_path,
+                logfile, 
+                )
+            
+            last_config = current_config  # Update last_config to current for next iteration check
+
+            line_num += 1
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------

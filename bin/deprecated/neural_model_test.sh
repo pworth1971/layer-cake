@@ -29,6 +29,7 @@ GLOVE="--pretrained glove --glove-path ../.vector_cache"
 WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
 FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT="--pretrained bert --bert-path ../.vector_cache"
+LLAMA="--pretrained llama --llama-path ../.vector_cache"
 
 
 # Function to execute a command and handle logging

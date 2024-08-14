@@ -36,11 +36,11 @@ class CSVLog:
 
         if df.shape[0] == 0:
             return False
-        print("kwargs:", kwargs)
+        #print("kwargs:", kwargs)
         if len(kwargs) == 0:
             kwargs = self.defaults
         for key,val in kwargs.items():
-            print("key, val:", key, val)
+            #print("key, val:", key, val)
             # Convert to string and to lower case only if the column exists and is of type string
             if df[key].dtype == 'object':  # Typically, 'object' dtype in pandas means string
                 if isinstance(val, str):  # Check if the value is a string
@@ -52,7 +52,7 @@ class CSVLog:
                 df = df[df[key] == val]  # Direct comparison without conversion if not string
             #print("df:", df)
             #print("df size:", df.size)
-            print("df.shape[0]:", df.shape[0])
+            #print("df.shape[0]:", df.shape[0])
             if df.shape[0] == 0:
                 return False
         return True

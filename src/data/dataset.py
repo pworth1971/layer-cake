@@ -337,6 +337,7 @@ class Dataset:
         else:
             return False
         
+
     def vectorize(self):
 
         print("vectorizing dataset...")
@@ -354,6 +355,7 @@ class Dataset:
         print("self.Xte:", type(self.Xte), self.Xte.shape)
         
         return self.Xtr, self.Xte
+
 
 
     def analyzer(self):

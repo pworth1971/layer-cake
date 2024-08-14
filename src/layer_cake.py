@@ -223,16 +223,14 @@ def init_loss(classification_type):
 
 
 # -------------------------------------------------------------------------------------------------------------------
-#
 # layer_cake() method. 
 # 
 # main driver method for all logic, called from the __main__ method after args are parsed
 # input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
 # from a config batch file with all the arguments if being run in batch mode
-#
 # -------------------------------------------------------------------------------------------------------------------
 
-def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset, word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index):
+def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2index, out_of_vocabulary, pad_index, devel_index, test_index):
     
     print("\t-- layer_cake() -- ")
 
@@ -254,7 +252,7 @@ def layer_cake(opt, logfile, pretrained, pretrained_vector, method_name, dataset
     print("building the embeddings...")
     pretrained_embeddings, sup_range = embedding_matrix(
         dataset, 
-        pretrained_vector, 
+        pretrained_vectors, 
         vocabsize, 
         word2index, 
         out_of_vocabulary, 
@@ -480,69 +478,6 @@ def set_method_name(opt):
     return method_name
 
 
-def parse_config_file(config_file, parser):
-
-    print("parse_config_file:", config_file)
-
-    """
-    # Create a default Namespace from parser
-    args_defaults = argparse.Namespace(**{action.dest: action.default for action in parser._actions})
-
-    print("args_defaults:", type(args_defaults), args_defaults)
-    """
-
-    # Create a default Namespace from parser
-    # Collect default values and expected types
-    args_defaults = argparse.Namespace()
-    type_info = {}
-    for action in parser._actions:
-        setattr(args_defaults, action.dest, action.default)
-        type_info[action.dest] = action.type if action.type else str
-
-    print("args_defaults:", type(args_defaults), args_defaults)
-
-    configurations = []
-
-    with open(config_file, 'r') as file:
-
-        for line_number, line in enumerate(file, 1):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue  # Skip empty lines and comments
-
-            #print("line:", line)
-            # Make a deepcopy of the default arguments for each configuration
-            current_args = copy.deepcopy(args_defaults)
-
-            args_dict = {}
-            for pair in line.split(","):  # Assuming each argument pair is separated by a comma
-                key, value = map(str.strip, pair.split(':'))
-                key = key.replace('-', '_')  # Normalize the key to match Namespace attribute
-
-                # Handle boolean values
-                if value.lower() == 'true':
-                    value = True
-                elif value.lower() == 'false':
-                    value = False
-                elif key in type_info:
-                    # Convert value to the correct type
-                    try:
-                        value = type_info[key](value)
-                    except ValueError:
-                        raise ValueError(f"Error converting value for {key} on line {line_number}: expected type {type_info[key]}")
-
-                args_dict[key] = value
-
-            # Update the Namespace with arguments from the line
-            for key, value in args_dict.items():
-                setattr(current_args, key, value)
-
-            # Store the fully updated Namespace for later use or directly call layer_cake
-            configurations.append(current_args)
-
-    return configurations        
-
-
 def initialize_logfile(opt):
 
     print("initializing log file...")
@@ -673,7 +608,7 @@ if __name__ == '__main__':
     parser.add_argument('--net', type=str, default='lstm', metavar='str',
                         help=f'net, one in {NeuralClassifier.ALLOWED_NETS}')
     
-    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert',
+    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|llama',
                         help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", or "llama" (default None)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
@@ -771,8 +706,10 @@ if __name__ == '__main__':
             print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
             logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
         
+        """
         if opt.pickle_dir:
             opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
+        """
 
         # initialize log file
         already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(opt)
@@ -781,23 +718,21 @@ if __name__ == '__main__':
         assert already_modelled and not opt.force, \
             f'--- model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---'
             
-        pretrained, pretrained_vector = load_pretrained_embeddings(opt.pretrained, opt)
+        pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
 
         print(f"initializing dataset: {opt.dataset}")
-        dataset = Dataset.load(dataset_name=opt.dataset, base_pickle_path=opt.pickle_dir).show()
-        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
+        dataset = Dataset.load(dataset_name=opt.dataset, vectorization_type='tfidf', base_pickle_path=opt.pickle_dir).show()
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
 
         # run layer_cake
         layer_cake(
             opt, 
             logfile,
-            pretrained, 
-            pretrained_vector, 
-            methd_name,
+            pretrained_vectors, 
+            method_name,
             dataset, 
             word2index, 
             out_of_vocabulary, 
-            unk_index, 
             pad_index, 
             devel_index, 
             test_index)
@@ -899,26 +834,24 @@ if __name__ == '__main__':
             # initialize embeddings if need be
             if 'pretrained' in current_config and (not last_config or current_config.pretrained != last_config.pretrained):
                 print(f"loading pretrained embeddings: {current_config.pretrained}")
-                pretrained, pretrained_vector = load_pretrained_embeddings(current_config.pretrained, current_config)
+                pretrained, pretrained_vectors = load_pretrained_embeddings(current_config.pretrained, current_config)
 
             # initialize dataset if need be
             if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
                 print(f"initializing dataset: {current_config.dataset}")
 
                 dataset = Dataset.load(dataset_name=current_config.dataset, base_pickle_path=current_config.pickle_dir).show()
-                word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vector)
+                word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
 
             # run layer_cake
             layer_cake(
                 current_config,                         # current_onfig is already a Namespace
                 logfile, 
-                pretrained, 
-                pretrained_vector, 
+                pretrained_vectors, 
                 method_name,
                 dataset, 
                 word2index, 
-                out_of_vocabulary, 
-                unk_index, 
+                out_of_vocabulary,  
                 pad_index, 
                 devel_index, 
                 test_index)

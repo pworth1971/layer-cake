@@ -37,7 +37,7 @@ def results_analysis(df, output_path='../out'):
     missing_columns = [col for col in columns_order if col not in unique_result.columns]
     if missing_columns:
         print(f"Missing columns in DataFrame: {missing_columns}")
-        return  # Exit the function if there are missing columns
+        return  
 
     # Sort the DataFrame
     final_result = unique_result[columns_order].copy()
@@ -72,9 +72,13 @@ def results_analysis(df, output_path='../out'):
 
     # Generate output
     if output_path:
+
+        file_name = "results_analysis.out"
         output_file = os.path.join(output_path, "results_analysis.out")
+        
         with open(output_file, 'w') as f:
             f.write(final_formatted_table)
+        
         print(f"Output saved to {output_file}")
     else:
         print(final_formatted_table)
@@ -91,7 +95,7 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
     print("generating charts to output directory:", output_path)
 
     # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'te-macro-F1', 'te-micro-F1']
+    measures = ['final-te-macro-F1', 'final-te-micro-F1']
 
     print("filtering for measures:", measures)
 
@@ -224,21 +228,19 @@ def main():
 
     df = read_data_file(args.file_path, debug=debug)
 
-    print("Data file read successfully")
-
     if df is not None:
 
-        print("df:", df.shape)
+        if (debug):
+            print("Data file read successfully, df:", df.shape)
 
         if args.summary:
-            #print("generating summary...")
             results_analysis(df, args.output_dir)
 
         if args.charts:
-            #print("generating charts...")
             generate_charts_plotly(df, args.output_dir, show_charts=args.show)
     else:
         print("Error: Data file not found or empty")
+
 
 
 if __name__ == "__main__":
