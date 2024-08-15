@@ -101,6 +101,13 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
 
     df = df[df['measure'].isin(measures)]
 
+    print("df shape after filtering:", df.shape)
+    print("df:", df.head())
+
+    if (df.empty):
+        print("Error: No data available for the specified measures")
+        return  
+
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -108,10 +115,10 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
     # Using a color-blind-friendly palette
     color_palette = px.colors.qualitative.Safe
 
-    for measure in measures:
+    for measure in measures:                                                        # Loop through each measure
 
-        for dataset in df['dataset'].unique():  # Loop through each dataset
-        
+        for dataset in df['dataset'].unique():                                          # Loop through each dataset
+            
             print(f"generating plots for {measure} in dataset {dataset}...")
 
             for supervised in sorted(df['wc_supervised'].unique(), reverse=True):

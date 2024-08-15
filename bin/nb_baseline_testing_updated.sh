@@ -27,7 +27,8 @@ declare -a datasets=("20newsgroups")
 declare -a pickle_paths=("../pickles")
 #declare -a models=("svm" "lr" "nb")
 declare -a models=("svm" "lr" "nb")
-declare -a modes=("tfidf" "count")
+#declare -a modes=("tfidf" "count")
+declare -a modes=("tfidf")
 #declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "llama")
 
 
