@@ -1,25 +1,19 @@
 import warnings
 import argparse
-
 from time import time
 
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from sklearn.svm import LinearSVC
 from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler
-
-from model.CustomRepresentationLearning import CustomRepresentationModel
 
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
 from util.csv_log import CSVLog
 from util.common import *
-
 from data.dataset import *
-
 from embedding.supervised import get_supervised_embeddings
 
 
@@ -72,12 +66,18 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
                 'alpha': [0.00001, 0.0001, 0.001, 0.1, 1, 10, 100, 1000],           # Range of alpha values
                 'fit_prior': [True, False]                                          # Whether to learn class prior probabilities
             }       
+        elif estimator==GaussianNB:
+            param_grid = {
+                'var_smoothing': np.logspace(0,-9, num=100)                         # Range of var_smoothing values
+            }       
         else:
             print("Unsupported estimator, exiting...")
             return
     
-    #
-    # Normalize data to be non-negative if using Naive Bayes model
+    # --------------------------------------------------------------------------------------------
+    # Normalize data to be non-negative if using Naive Bayes Multinomial model so as
+    # to remove negative values from the data. This is a requirement for the MultinomialNB model.
+    # NB: This model has problems with BERT and LLAMA embeddings for some reason
     #
     if estimator==MultinomialNB:
         scaler = MinMaxScaler()
@@ -87,25 +87,26 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
 
         Xtr = tosparse(Xtr)
         Xte = tosparse(Xte)
+    # --------------------------------------------------------------------------------------------
 
     print("param_grid:", param_grid)
     cv = 5
 
-    if classification_type == 'multilabel':
+    if classification_type == 'multilabel':                 # multi-label case
 
         print("------- multi-label case -------")
     
         # set up the esimator params based upon the model type
         if estimator==LinearSVC:
-            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
             cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, dual='auto', class_weight='balanced', verbose=False, max_iter=1000)
         elif estimator==LogisticRegression:
-            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='saga', max_iter=1000)
-            #cls = MLClassifier(n_jobs=-1, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
             cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
         elif estimator==MultinomialNB:
-            #cls = MLClassifier(n_jobs=-1, estimator=estimator, fit_prior=False, class_prior=None)
             cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, fit_prior=False, class_prior=None)
+        elif estimator==GaussianNB:
+            Xtr = Xtr.toarray()
+            Xte = Xte.toarray()
+            cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator)
         else:
             print("ERR: unsupported estimator.")
             return
@@ -122,7 +123,8 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             classification_type
             )
 
-    else:
+    else:                           # single label case     
+
         print("------- single label case -------")      
 
         # set up the esimator params based upon the model type
@@ -132,6 +134,10 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             cls = estimator(dual=False, class_weight='balanced', verbose=False, solver='lbfgs', max_iter=1000)
         elif estimator==MultinomialNB:
             cls = estimator(fit_prior=False, class_prior=None)
+        elif estimator==GaussianNB:
+            Xtr = Xtr.toarray()
+            Xte = Xte.toarray()
+            cls = estimator()
         else:
             print("ERR: unsupported estimator.")
             return
@@ -365,7 +371,8 @@ def initialize(opt):
         learner = LogisticRegression
         learner_name = 'LR'
     elif args.learner == 'nb':
-        learner = MultinomialNB
+        #learner = MultinomialNB
+        learner = GaussianNB
         learner_name = 'NB'
     else:
         print("** Unknown learner, possible values are svm, lr or nb **")
