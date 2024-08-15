@@ -394,7 +394,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
 # 
 # Enhanced log info for ML baseline (layer cake) program suport
 #
-def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised, cpus, mem, gpus):
+def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
 
     print("initializing baseline layered log file...")
 
@@ -433,11 +433,6 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
     logfile.set_default('tunable', "NA")
     logfile.set_default('epoch', -1)
     logfile.set_default('run', -1)
-
-    # add system info
-    logfile.set_default('cpus', cpus)
-    logfile.set_default('mem', mem)
-    logfile.set_default('gpus', gpus)
 
     return logfile
 

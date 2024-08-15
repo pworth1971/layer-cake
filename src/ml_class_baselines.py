@@ -235,7 +235,7 @@ def embedding_matrix(dataset, pretrained=False, pretrained_vectors=None, supervi
 #
 # -----------------------------------------------------------------------------------------------------------------------------------   
 
-def classify(args, learner, pretrained, pretrained_vectors, embeddings, supervised, emb_path, logfile):
+def classify(args, learner, pretrained, pretrained_vectors, supervised, logfile, cpus, mem, gpus):
 
     print("\t-- classify() -- ")
 
@@ -301,7 +301,7 @@ def classify(args, learner, pretrained, pretrained_vectors, embeddings, supervis
     
     tend += sup_tend
 
-    """
+    
     logfile.add_layered_row(tunable=False, measure='final-te-macro-F1', value=Mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
     logfile.add_layered_row(tunable=False, measure='final-te-micro-F1', value=mf1, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
     logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
@@ -309,8 +309,8 @@ def classify(args, learner, pretrained, pretrained_vectors, embeddings, supervis
     logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
     logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
     logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, cpus=cpus, mem=mem, gpus=gpus)
-    """
 
+    """
     logfile.add_layered_row(tunable=False, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
     logfile.add_layered_row(tunable=False, measure='final-te-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend)
@@ -318,7 +318,7 @@ def classify(args, learner, pretrained, pretrained_vectors, embeddings, supervis
     logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend)
     logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend)
     logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend)
-
+    """
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def set_method_name(opt):
@@ -333,22 +333,30 @@ def set_method_name(opt):
     return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize(opt):
 
-    print("initializing...")
+def get_sysyem_resources():
+
+    print("get system info...")
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
 
     cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
     mem = total_memory
+
+    gpus = 'None'
     if (num_cuda_devices >0):
         #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
         gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
-    else:
-        gpus = 'None'
 
+    return cpus, mem, gpus
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def initialize(opt):
+
+    print("initializing...")
+    
     # set up model type
     if args.learner == 'svm':
         learner = LinearSVC
@@ -422,10 +430,7 @@ def initialize(opt):
         model=learner_name,
         pretrained=pretrained, 
         embeddings=embeddings,
-        supervised=supervised,
-        cpus=cpus,
-        mem=mem,
-        gpus=gpus
+        supervised=supervised
         )
 
     # check to see if the model has been run before
@@ -529,9 +534,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("\n ---------------------------- Layer Cake: ML baseline classification code: main() ----------------------------")
-    
-    print("args:", type(args), args)
 
+    print("args:", type(args), args)
 
     # single run case
     if (args.batch_file is None):                        # running single command 
@@ -547,13 +551,15 @@ if __name__ == '__main__':
     
         # initialize log file and run params
         already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile = initialize(args)
-    
+
         # check to see if model params have been computed already
         if (already_modelled) and not (args.force):
             print(f'Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained} and wc_supervised == {args.supervised} for {args.dataset} already calculated.')
             print("Run with --force option to override, returning...")
             exit(0)
             
+        cpus, mem, gpus = get_sysyem_resources()
+
         print("new model, loading embeddings...")
         pretrained, pretrained_vectors = load_pretrained_embeddings(embeddings, args)           
 
@@ -572,12 +578,12 @@ if __name__ == '__main__':
             learner, 
             pretrained, 
             pretrained_vectors, 
-            embeddings, 
             supervised, 
-            emb_path, 
-            logfile
+            logfile,
+            cpus,
+            mem,
+            gpus
             )
-
     else: 
 
         #
@@ -607,6 +613,8 @@ if __name__ == '__main__':
         pretrained_vector = None
         dataset = None
 
+        cpus, mem, gpus = get_sysyem_resources()
+        
         for current_config in configurations:
 
             # roll these two argument params over to all current_configs
@@ -641,7 +649,7 @@ if __name__ == '__main__':
 
             # initialize log file and run params
             already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile = initialize(args)
-    
+
             # check to see if model params have been computed already
             if (already_modelled) and not (current_config.force):
                 print(f'Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained} and wc_supervised == {current_config.supervised} for {current_config.dataset} already calculated.')
@@ -667,10 +675,11 @@ if __name__ == '__main__':
                 learner, 
                 pretrained, 
                 pretrained_vectors, 
-                embeddings,
                 supervised, 
-                emb_path,
                 logfile, 
+                cpus,
+                mem,
+                gpus
                 )
             
             last_config = current_config  # Update last_config to current for next iteration check
