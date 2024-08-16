@@ -77,7 +77,7 @@ for i in "${!datasets[@]}"; do
         for mode in "${modes[@]}"; do
 
             # run without pretrainmed embeddings
-            run_command $dataset $pickle_path $learner $mode
+            #run_command $dataset $pickle_path $learner $mode
             
             # Run the command for each embedding type
             run_command $dataset $pickle_path $learner $mode "$GLOVE"

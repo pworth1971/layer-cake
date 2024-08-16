@@ -68,7 +68,9 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
             }       
         elif estimator==GaussianNB:
             param_grid = {
-                'var_smoothing': np.logspace(0,-9, num=100)                         # Range of var_smoothing values
+                #'var_smoothing': np.logspace(0,-9, num=100)                        # Range of var_smoothing values
+                'var_smoothing': [1e-9, 1e-8, 1e-7, 1e-6],                          # Range of var_smoothing values
+                'priors': [None]                                                    # Prior probabilities of the classes
             }       
         else:
             print("Unsupported estimator, exiting...")
@@ -104,8 +106,8 @@ def run_model(Xtr, ytr, Xte, yte, classification_type, optimizeC=True, estimator
         elif estimator==MultinomialNB:
             cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator, fit_prior=False, class_prior=None)
         elif estimator==GaussianNB:
-            Xtr = Xtr.toarray()
-            Xte = Xte.toarray()
+            Xtr = todense(Xtr)
+            Xte = todense(Xte)
             cls = MLClassifier(n_jobs=NUM_JOBS, estimator=estimator)
         else:
             print("ERR: unsupported estimator.")
