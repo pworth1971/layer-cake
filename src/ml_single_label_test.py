@@ -71,6 +71,165 @@ DATASET_DIR = '../datasets/'
 #dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1'}
 dataset_available = {'20newsgroups', 'bbc-news'}
 
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
+
+    print("Creating confusion matrix...")
+
+    # Assuming y_test and y_pred_best are already defined
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Plotting the confusion matrix as a table with numbers
+    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
+
+    # Hide axes
+    ax.xaxis.set_visible(False) 
+    ax.yaxis.set_visible(False)
+    ax.set_frame_on(False)
+
+    # Create the table with smaller font sizes and adjusted scale
+    table = ax.table(
+        cellText=conf_matrix,
+        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
+        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
+        cellLoc='center',
+        loc='center'
+    )
+
+    # Adjust the font size and layout
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)  # Reduced font size for better fitting
+    table.scale(1.2, 1.2)
+
+    # Add a title with centered text
+    plt.title(title, fontsize=16, pad=20)
+
+    # Adjust layout to add more padding around the plot
+    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
+
+    # Save the plot to a file
+    confusion_matrix_filename = file_name
+    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
+    plt.show()
+
+    print(f"Confusion matrix saved as {confusion_matrix_filename}")
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # Plain text explanation of the confusion matrix
+    if debug:
+        print("\nHow to read this confusion matrix:")
+        print("------------------------------------------------------")
+        print("The confusion matrix shows the performance of the classification model.")
+        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
+        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
+        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
+        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
+        
+        print("\nConfusion Matrix Values:")
+        for i in range(len(conf_matrix)):
+            print(f"Actual class {i}:")
+            for j in range(len(conf_matrix[i])):
+                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+# --------------------------------------------------------------------------------------------------------------
+#
+# Utility functions for preprocessing data
+#
+# --------------------------------------------------------------------------------------------------------------
+def missing_values(df):
+    """
+    Calculate the percentage of missing values for each column in a DataFrame.
+    
+    Args:
+    df (pd.DataFrame): The input DataFrame to analyze.
+    
+    Returns:
+    pd.DataFrame: A DataFrame containing the total count and percentage of missing values for each column.
+    """
+    # Calculate total missing values and their percentage
+    total = df.isnull().sum()
+    percent = (total / len(df) * 100)
+    
+    # Create a DataFrame with the results
+    missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
+    
+    # Sort the DataFrame by percentage of missing values (descending)
+    missing_data = missing_data.sort_values('Percent', ascending=False)
+    
+    # Filter out columns with no missing values
+    missing_data = missing_data[missing_data['Total'] > 0]
+    
+    print("Columns with missing values:")
+    print(missing_data)
+    
+    return missing_data
+
+
+def remove_punctuation(x):
+    punctuationfree="".join([i for i in x if i not in string.punctuation])
+    return punctuationfree
+
+
+# Function to lemmatize text with memory optimization
+def lemmatization(texts, chunk_size=1000):
+    lmtzr = WordNetLemmatizer()
+    
+    num_chunks = len(texts) // chunk_size + 1
+    #print(f"Number of chunks: {num_chunks}")
+    for i in range(num_chunks):
+        chunk = texts[i*chunk_size:(i+1)*chunk_size]
+        texts[i*chunk_size:(i+1)*chunk_size] = [' '.join([lmtzr.lemmatize(word) for word in text.split()]) for text in chunk]
+    
+    return texts
+
+
+def preprocessDataset(train_text):
+    # Ensure input is string
+    train_text = str(train_text)
+    
+    # Word tokenization using NLTK's word_tokenize
+    tokenized_train_set = word_tokenize(train_text.lower())
+    
+    # Stop word removal
+    stop_words = set(stopwords.words('english'))
+    stopwordremove = [i for i in tokenized_train_set if i not in stop_words]
+    
+    # Join words into sentence
+    stopwordremove_text = ' '.join(stopwordremove)
+    
+    # Remove numbers
+    numberremove_text = ''.join(c for c in stopwordremove_text if not c.isdigit())
+    
+    # Stemming using NLTK's PorterStemmer
+    stemmer = PorterStemmer()
+    stem_input = word_tokenize(numberremove_text)
+    stem_text = ' '.join([stemmer.stem(word) for word in stem_input])
+    
+    # Lemmatization using NLTK's WordNetLemmatizer
+    lemmatizer = WordNetLemmatizer()
+    
+    def get_wordnet_pos(word):
+        """Map POS tag to first character lemmatize() accepts"""
+        tag = nltk.pos_tag([word])[0][1][0].upper()
+        tag_dict = {"J": wordnet.ADJ,
+                    "N": wordnet.NOUN,
+                    "V": wordnet.VERB,
+                    "R": wordnet.ADV}
+        return tag_dict.get(tag, wordnet.NOUN)
+    
+    lem_input = word_tokenize(stem_text)
+    lem_text = ' '.join([lemmatizer.lemmatize(w, get_wordnet_pos(w)) for w in lem_input])
+    
+    return lem_text
+
+# --------------------------------------------------------------------------------------------------------------
+
 
 def load_data(dataset='20newsgroups'):
 
@@ -284,6 +443,8 @@ def classify(dataset='20newsgrouops', args=None):
 
     if (dataset == '20newsgroups'):
 
+        print("classifying 20 newsgroups...")
+
         """
         # POS Tagging and Counting
         tagged_titles = df['text'].apply(lambda x: nltk.pos_tag(nltk.word_tokenize(x)))
@@ -317,70 +478,115 @@ def classify(dataset='20newsgrouops', args=None):
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=44)
 
-        print("Vectorizing...")
-        vectorizer = TfidfVectorizer(ngram_range=(1,3), sublinear_tf=True, use_idf=True)
-        X_tfidf = vectorizer.fit_transform(X_train)
-        X_test_tfidf = vectorizer.transform(X_test)
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+        
+        print("Y_train:", type(y_train), y_train.shape)
+        print("Y_test:", type(y_test), y_test.shape)
 
-        print("Fitting the model...")
+        print("Running model...")
 
-        print("X_tfidf:", X_tfidf.shape)
-        print("y_train:", y_train.shape)
+        run_model(X_train, X_test, y_train, y_test, args)
+    
+    elif (dataset == 'bbc-news'):
 
-        svm = LinearSVC(class_weight='balanced', max_iter=1000)
-        clf = svm.fit(X_tfidf, y_train)
+        print(f'classifying bbc-news...')
+        
+        X_train, X_test, y_train, y_test = train_test_split(
+            df['Text'],
+            df['Category'], 
+            test_size = 0.3, 
+            random_state = 60,
+            shuffle=True, 
+            stratify=df['Category']
+            )
 
-        print("Predicting...")
-        print("X_test_tfidf:", X_test_tfidf.shape)
-        print("y_test:", y_test.shape)
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+        
+        print("Y_train:", type(y_train), y_train.shape)
+        print("Y_test:", type(y_test), y_test.shape)
 
-        y_pred = model_selection.cross_val_predict(svm, X_test_tfidf, y_test, cv=10)
-        print("Accuracy for SVM :", metrics.accuracy_score(y_test, y_pred))
-        print(classification_report(y_true=y_test, y_pred=y_pred, digits=4))
+        print("Running model...")
 
-        if (args.optimc):
+        run_model(X_train, X_test, y_train, y_test, args)
 
-            print("Using GridSearchCV...")
-            svm_classifier = LinearSVC(class_weight='balanced', max_iter=1000)
+# -------------------------------------------------------------------------------------------------------------------------------------------------
 
-            parameter_grid = {
-                'class_weight': [None, 'balanced'],
-                'C': np.logspace(-3, 3, 7)
-                }
-            
-            cross_validation = StratifiedKFold()
+def run_svm_model(X_train, X_test, y_train, y_test, args):
 
-            #scoring = ['accuracy', 'precision', 'recall', 'f1', 'f1_macro', 'f1_micro', 'f1_weighted']
-            #from sklearn.metrics import accuracy_score, f1_score, fbeta_score, recall_score, precision_score, hamming_loss, jaccard_score, 
+    print("Training default Support Vector Machine model...")
+    
+    default_pipeline = Pipeline([
+        ('tfidf', TfidfVectorizer()),
+        ('lr', LinearSVC(max_iter=1000))
+    ])
 
-            scorers = {
-                'accuracy_score': make_scorer(accuracy_score),
-                'f1_score': make_scorer(f1_score, average='micro'),
-                'recall_score': make_scorer(recall_score, average='micro'),
-                'precision_score': make_scorer(precision_score, average='micro'),
-                'hamming_loss': make_scorer(hamming_loss),
-                'jaccard_score': make_scorer(jaccard_score, average='micro')
-                }
+    default_pipeline.fit(X_train, y_train)
+    y_pred_default = default_pipeline.predict(X_test)
 
-            grid_search = GridSearchCV(
-                n_jobs=-1, 
-                estimator=svm_classifier,
-                refit='f1_score',
-                param_grid=parameter_grid,
-                cv=cross_validation,
-                #scoring=scoring
-                scoring=scorers,
-                return_train_score=True         # ensure train scores are calculated
-                )
+    print("\nDefault Support Vector Mechine Model Performance:")
+    print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+    print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
 
-            grid_search.fit(X_tfidf, y_train)
+    if (args.optimc):
 
-            print('Best parameters: {}'.format(grid_search.best_params_))
-            print("best_estimator:", grid_search.best_estimator_)
-            print('Best score: {}'.format(grid_search.best_score_))
-            print("cv_results_:", grid_search.cv_results_)
+        # Optimize Support Vector Machine with GridSearchCV
+        print("Optimizing Support Vector Machine model with GridSearchCV...")
 
-            results = grid_search.cv_results_
+        # Define the pipeline
+        pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('svm', LinearSVC(max_iter=1000))
+        ])
+
+        # Define the parameter grid
+        param_grid = {
+            'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],     # Unigrams, bigrams, or trigrams
+            'tfidf__use_idf': [True, False],                    # Whether to use IDF
+            'tfidf__sublinear_tf': [True, False],               # Sublinear term frequency
+            'svm__penalty': ['l1', 'l2'],                       # Regularization method
+            'svm__loss': ['hinge', 'squared_hinge'],            # Loss function
+            'svm__multi_class': ['ovr', 'crammer_singer'],      # Multi-class strategy
+            'svm__class_weight': [None, 'balanced'],            # Class weights
+            'svm__C': np.logspace(-3, 3, 7)                     # Regularization parameter   
+        }
+
+        print("param_grid:", param_grid)
+
+        cross_validation = StratifiedKFold()
+
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro'),
+            'precision_score': make_scorer(precision_score, average='micro'),
+            'hamming_loss': make_scorer(hamming_loss),
+            'jaccard_score': make_scorer(jaccard_score, average='micro')
+            }
+
+        grid_search = GridSearchCV(
+            n_jobs=-1, 
+            estimator=pipeline,
+            refit='f1_score',
+            param_grid=param_grid,
+            cv=cross_validation,
+            #scoring=scoring
+            scoring=scorers,
+            return_train_score=True         # ensure train scores are calculated
+            )
+
+        # Fit the model
+        grid_search.fit(X_train, y_train)
+
+        print('Best parameters: {}'.format(grid_search.best_params_))
+        print("best_estimator:", grid_search.best_estimator_)
+        print('Best score: {}'.format(grid_search.best_score_))
+        print("cv_results_:", grid_search.cv_results_)
+
+        results = grid_search.cv_results_
+
+        if (args.plot):
 
             print("Plotting the results...")
 
@@ -445,421 +651,247 @@ def classify(dataset='20newsgrouops', args=None):
 
                 print(f"Saved plot for {metric} as {filename}")
 
-            # Extract the best estimator from the GridSearchCV
-            best_model = grid_search.best_estimator_
+        # Extract the best estimator from the GridSearchCV
+        best_model = grid_search.best_estimator_
 
-            # Predict on the test set using the best model
-            y_pred_best = best_model.predict(X_test_tfidf)
+        # Predict on the test set using the best model
+        y_pred_best = best_model.predict(X_test)
 
-            print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
-            print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
+        print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
+
+
+def run_lr_model(X_train, X_test, y_train, y_test, args):
+
+    # Default Logistic Regression Model
+    print("Training default Logistic Regression model...")
+    default_pipeline = Pipeline([
+        ('tfidf', TfidfVectorizer()),
+        ('lr', LogisticRegression(max_iter=1000))
+    ])
+
+    default_pipeline.fit(X_train, y_train)
+    y_pred_default = default_pipeline.predict(X_test)
+
+    print("\nDefault Logistic Regression Model Performance:")
+    print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+    print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+
+    if (args.optimc):
+        # Optimize Logistic Regression with GridSearchCV
+        print("Optimizing Logistic Regression model with GridSearchCV...")
+
+        # Define the pipeline
+        pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('lr', LogisticRegression(max_iter=1000))
+        ])
+
+        # Define the parameter grid
+        param_grid = {
+            'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],     # Unigrams, bigrams, or trigrams
+            'tfidf__use_idf': [True, False],                    # Whether to use IDF
+            'tfidf__sublinear_tf': [True, False],               # Sublinear term frequency
+            'lr__C': [0.01, 0.1, 1, 10, 100],                   # Inverse of regularization strength
+            'lr__penalty': ['l2'],                              # Regularization method (L2 Ridge)
+            'lr__solver': ['liblinear', 'lbfgs']                # Solver types
+        }
+
+        print("param_grid:", param_grid)
+
+        # Define scorers
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro'),
+            'precision_score': make_scorer(precision_score, average='micro')
+        }
+
+        # Initialize GridSearchCV
+        grid_search = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            scoring=scorers,
+            refit='f1_score',  # Optimize on F1 Score
+            cv=StratifiedKFold(n_splits=5),
+            n_jobs=-1,
+            return_train_score=True
+        )
+
+        # Fit the model
+        grid_search.fit(X_train, y_train)
+
+        # Display the best parameters
+        print('Best parameters found by GridSearchCV:')
+        print(grid_search.best_params_)
+
+        # Evaluate on the test set
+        y_pred_optimized = grid_search.best_estimator_.predict(X_test)
+
+        print("\nOptimized Logistic Regression Model Performance:")
+        print(f"Accuracy: {accuracy_score(y_test, y_pred_optimized):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_optimized, digits=4))
+
+    if (args.cm):
+        # Optionally, plot confusion matrix for the optimized model
+        create_confusion_matrix(
+            y_test, 
+            y_pred_optimized, 
+            title='Confusion Matrix for Optimized Logistic Regression Model',
+            file_name=OUT_DIR+'bbc_news_logistic_regression_confusion_matrix.png',
+            debug=False
+        )
+
+
+def run_nb_model(X_train, X_test, y_train, y_test, args):
+
+    print("Building default Naive Bayes Classifier...")
+
+    nb = Pipeline([
+        ('tfidf', TfidfVectorizer()),
+        ('clf', MultinomialNB())
+        ])
+    
+    nb.fit(X_train,y_train)
+
+    test_predict = nb.predict(X_test)
+
+    train_accuracy = round(nb.score(X_train,y_train)*100)
+    test_accuracy =round(accuracy_score(test_predict, y_test)*100)
+
+    print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
+    print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
+    print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
+
+    if (args.optimc):
+
+        print("Optimizing the model using GridSearchCV...")
+
+        # Define a pipeline
+        pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('nb', MultinomialNB())
+        ])
+
+        # Define the parameter grid
+        param_grid = {
+            'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],         # Unigrams, bigrams, or trigrams
+            'tfidf__use_idf': [True, False],                        # Whether to use IDF
+            'tfidf__sublinear_tf': [True, False],                   # Sublinear term frequency
+            'nb__alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
+        }
+
+        print("param_grid:", param_grid)
+
+        # Define scorers
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro'),
+            'precision_score': make_scorer(precision_score, average='micro'),
+            'hamming_loss': make_scorer(hamming_loss),
+            'jaccard_score': make_scorer(jaccard_score, average='micro')
+        }
+
+        # Initialize GridSearchCV
+        grid_search = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            scoring=scorers,
+            refit='f1_score',                           # Optimize on F1 Score
+            cv=StratifiedKFold(n_splits=5),
+            n_jobs=-1,
+            return_train_score=True
+        )
+
+        # Fit the model
+        grid_search.fit(X_train, y_train)
+
+        # Display the best parameters
+        print('Best parameters found by GridSearchCV:')
+        print(grid_search.best_params_)
+
+        # Evaluate on the test set
+        y_pred = grid_search.best_estimator_.predict(X_test)
+
+        print("\nBest Estimator's Test Set Performance:")
+        print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+        print(f"F1 Score: {f1_score(y_test, y_pred, average='micro'):.4f}")
+        print(f"Recall: {recall_score(y_test, y_pred, average='micro'):.4f}")
+        print(f"Precision: {precision_score(y_test, y_pred, average='micro'):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred, digits=4))
 
         if (args.cm):
+            # Optionally, plot confusion matrix
             create_confusion_matrix(
                 y_test, 
-                y_pred_best, 
-                title=f'Confusion Matrix for Best Model ({grid_search.best_params_})', 
-                file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', 
+                y_pred, 
+                title='Confusion Matrix for Optimized Naive Bayes Model',
+                file_name=OUT_DIR+'bbc_news_naive_bayes_confusion_matrix.png',
                 debug=False
-                )
-    
-    elif (dataset == 'bbc-news'):
-
-        print(f'classifying {dataset}...')
-
-        print("Splitting the dataset...")
-        
-        #X_train, X_test, Y_train, Y_test = train_test_split(text,category, test_size = 0.3, random_state = 60,shuffle=True, stratify=category)
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            df['Text'],
-            df['Category'], 
-            test_size = 0.3, 
-            random_state = 60,
-            shuffle=True, 
-            stratify=df['Category']
             )
 
-        print("X_train:", type(X_train), X_train.shape)
-        print("X_test:", type(X_test), X_test.shape)
-        
-        print("Y_train:", type(y_train), y_train.shape)
-        print("Y_test:", type(y_test), y_test.shape)
 
-        #
-        # Logistic Regression Classifier
-        #
-        if (args.learner == 'lr'):
+def run_model(X_train, X_test, y_train, y_test, args):
 
-            # Default Logistic Regression Model
-            print("Training default Logistic Regression model...")
-            default_pipeline = Pipeline([
-                ('tfidf', TfidfVectorizer()),
-                ('lr', LogisticRegression(max_iter=1000))
+    print("Running model...")
+
+    # Support Vector Machine Classifier
+    if (args.learner == 'svm'):
+        run_svm_model(X_train, X_test, y_train, y_test, args)
+
+    # Logistic Regression Classifier
+    elif (args.learner == 'lr'):
+        run_lr_model(X_train, X_test, y_train, y_test, args)
+
+    # Naive Bayes (MultinomialNB) Classifier
+    elif (args.learner == 'nb'):
+        run_nb_model(X_train, X_test, y_train, y_test, args)
+
+    elif (args.learner == 'dt'):
+        print("Decision Tree Classifier")
+        dt = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('dt', DecisionTreeClassifier())
             ])
 
-            default_pipeline.fit(X_train, y_train)
-            y_pred_default = default_pipeline.predict(X_test)
+        dt.fit(X_train, y_train)
 
-            print("\nDefault Logistic Regression Model Performance:")
-            print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-            print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+        test_predict = dt.predict(X_test)
 
-            if (args.optimc):
-                # Optimize Logistic Regression with GridSearchCV
-                print("Optimizing Logistic Regression model with GridSearchCV...")
+        train_accuracy = round(dt.score(X_train, y_train)*100)
+        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
 
-                # Define the pipeline
-                pipeline = Pipeline([
-                    ('tfidf', TfidfVectorizer()),
-                    ('lr', LogisticRegression(max_iter=1000))
-                ])
+        print("Decision Tree Train Accuracy Score : {}% ".format(train_accuracy ))
+        print("Decision Tree Test Accuracy Score  : {}% ".format(test_accuracy ))
+        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
 
-                # Define the parameter grid
-                param_grid = {
-                    'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],     # Unigrams, bigrams, or trigrams
-                    'tfidf__use_idf': [True, False],                    # Whether to use IDF
-                    'tfidf__sublinear_tf': [True, False],               # Sublinear term frequency
-                    'lr__C': [0.01, 0.1, 1, 10, 100],                   # Inverse of regularization strength
-                    'lr__penalty': ['l2'],                              # Regularization method (L2 Ridge)
-                    'lr__solver': ['liblinear', 'lbfgs']                # Solver types
-                }
+    elif (args.learner == 'rf'):
 
-                print("param_grid:", param_grid)
+        print("Random Forest Classifier")
+        rfc = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('rfc', RandomForestClassifier(n_estimators=100))
+            ])
 
-                # Define scorers
-                scorers = {
-                    'accuracy_score': make_scorer(accuracy_score),
-                    'f1_score': make_scorer(f1_score, average='micro'),
-                    'recall_score': make_scorer(recall_score, average='micro'),
-                    'precision_score': make_scorer(precision_score, average='micro')
-                }
+        rfc.fit(X_train, y_train)
 
-                # Initialize GridSearchCV
-                grid_search = GridSearchCV(
-                    estimator=pipeline,
-                    param_grid=param_grid,
-                    scoring=scorers,
-                    refit='f1_score',  # Optimize on F1 Score
-                    cv=StratifiedKFold(n_splits=5),
-                    n_jobs=-1,
-                    return_train_score=True
-                )
+        test_predict = rfc.predict(X_test)
 
-                # Fit the model
-                grid_search.fit(X_train, y_train)
+        train_accuracy = round(rfc.score(X_train, y_train)*100)
+        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
 
-                # Display the best parameters
-                print('Best parameters found by GridSearchCV:')
-                print(grid_search.best_params_)
+        print("K-Nearest Neighbour Train Accuracy Score : {}% ".format(train_accuracy ))
+        print("K-Nearest Neighbour Test Accuracy Score  : {}% ".format(test_accuracy ))
+        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
 
-                # Evaluate on the test set
-                y_pred_optimized = grid_search.best_estimator_.predict(X_test)
+    else:
+        print(f"Invalid learner '{args.learner}'")
+        return
 
-                print("\nOptimized Logistic Regression Model Performance:")
-                print(f"Accuracy: {accuracy_score(y_test, y_pred_optimized):.4f}")
-                print(classification_report(y_true=y_test, y_pred=y_pred_optimized, digits=4))
-
-            if (args.cm):
-                # Optionally, plot confusion matrix for the optimized model
-                create_confusion_matrix(
-                    y_test, 
-                    y_pred_optimized, 
-                    title='Confusion Matrix for Optimized Logistic Regression Model',
-                    file_name=OUT_DIR+'bbc_news_logistic_regression_confusion_matrix.png',
-                    debug=False
-                )
-
-        #
-        # Naive Bayes (MultinomialNB) Classifier
-        #
-        elif (args.learner == 'nb'):
-
-            print("Naive Bayes Classifier")
-            nb = Pipeline([
-                ('tfidf', TfidfVectorizer()),
-                ('clf', MultinomialNB())
-                ])
-            
-            nb.fit(X_train,y_train)
-
-            test_predict = nb.predict(X_test)
-
-            train_accuracy = round(nb.score(X_train,y_train)*100)
-            test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-            print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
-            print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
-            print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-            if (args.optimc):
-
-                print("Optimizing the model using GridSearchCV...")
-
-                # Define a pipeline
-                pipeline = Pipeline([
-                    ('tfidf', TfidfVectorizer()),
-                    ('nb', MultinomialNB())
-                ])
-
-                # Define the parameter grid
-                param_grid = {
-                    'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],         # Unigrams, bigrams, or trigrams
-                    'tfidf__use_idf': [True, False],                        # Whether to use IDF
-                    'tfidf__sublinear_tf': [True, False],                   # Sublinear term frequency
-                    'nb__alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
-                }
-
-                print("param_grid:", param_grid)
-
-                # Define scorers
-                scorers = {
-                    'accuracy_score': make_scorer(accuracy_score),
-                    'f1_score': make_scorer(f1_score, average='micro'),
-                    'recall_score': make_scorer(recall_score, average='micro'),
-                    'precision_score': make_scorer(precision_score, average='micro'),
-                    'hamming_loss': make_scorer(hamming_loss),
-                    'jaccard_score': make_scorer(jaccard_score, average='micro')
-                }
-
-                # Initialize GridSearchCV
-                grid_search = GridSearchCV(
-                    estimator=pipeline,
-                    param_grid=param_grid,
-                    scoring=scorers,
-                    refit='f1_score',                           # Optimize on F1 Score
-                    cv=StratifiedKFold(n_splits=5),
-                    n_jobs=-1,
-                    return_train_score=True
-                )
-
-                # Fit the model
-                grid_search.fit(X_train, y_train)
-
-                # Display the best parameters
-                print('Best parameters found by GridSearchCV:')
-                print(grid_search.best_params_)
-
-                # Evaluate on the test set
-                y_pred = grid_search.best_estimator_.predict(X_test)
-
-                print("\nBest Estimator's Test Set Performance:")
-                print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-                print(f"F1 Score: {f1_score(y_test, y_pred, average='micro'):.4f}")
-                print(f"Recall: {recall_score(y_test, y_pred, average='micro'):.4f}")
-                print(f"Precision: {precision_score(y_test, y_pred, average='micro'):.4f}")
-                print(classification_report(y_true=y_test, y_pred=y_pred, digits=4))
-
-                if (args.cm):
-                    # Optionally, plot confusion matrix
-                    create_confusion_matrix(
-                        y_test, 
-                        y_pred, 
-                        title='Confusion Matrix for Optimized Naive Bayes Model',
-                        file_name=OUT_DIR+'bbc_news_naive_bayes_confusion_matrix.png',
-                        debug=False
-                    )
-
-        elif (args.learner == 'dt'):
-            print("Decision Tree Classifier")
-            dt = Pipeline([
-                ('tfidf', TfidfVectorizer()),
-                ('dt', DecisionTreeClassifier())
-                ])
-
-            dt.fit(X_train, y_train)
-
-            test_predict = dt.predict(X_test)
-
-            train_accuracy = round(dt.score(X_train, y_train)*100)
-            test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-            print("Decision Tree Train Accuracy Score : {}% ".format(train_accuracy ))
-            print("Decision Tree Test Accuracy Score  : {}% ".format(test_accuracy ))
-            print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-        elif (args.learner == 'rf'):
-
-            print("Random Forest Classifier")
-            rfc = Pipeline([
-                ('tfidf', TfidfVectorizer()),
-                ('rfc', RandomForestClassifier(n_estimators=100))
-                ])
-
-            rfc.fit(X_train, y_train)
-
-            test_predict = rfc.predict(X_test)
-
-            train_accuracy = round(rfc.score(X_train, y_train)*100)
-            test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-            print("K-Nearest Neighbour Train Accuracy Score : {}% ".format(train_accuracy ))
-            print("K-Nearest Neighbour Test Accuracy Score  : {}% ".format(test_accuracy ))
-            print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-        else:
-            print(f"Invalid learner '{args.learner}'")
-            return
 
     
-# --------------------------------------------------------------------------------------------------------------------------------------------
 
-def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
-
-    print("Creating confusion matrix...")
-
-    # Assuming y_test and y_pred_best are already defined
-    conf_matrix = confusion_matrix(y_test, y_pred)
-
-    # Plotting the confusion matrix as a table with numbers
-    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
-
-    # Hide axes
-    ax.xaxis.set_visible(False) 
-    ax.yaxis.set_visible(False)
-    ax.set_frame_on(False)
-
-    # Create the table with smaller font sizes and adjusted scale
-    table = ax.table(
-        cellText=conf_matrix,
-        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
-        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
-        cellLoc='center',
-        loc='center'
-    )
-
-    # Adjust the font size and layout
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)  # Reduced font size for better fitting
-    table.scale(1.2, 1.2)
-
-    # Add a title with centered text
-    plt.title(title, fontsize=16, pad=20)
-
-    # Adjust layout to add more padding around the plot
-    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
-
-    # Save the plot to a file
-    confusion_matrix_filename = file_name
-    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
-    plt.show()
-
-    print(f"Confusion matrix saved as {confusion_matrix_filename}")
-
-    accuracy = accuracy_score(y_test, y_pred)
-
-    # Plain text explanation of the confusion matrix
-    if debug:
-        print("\nHow to read this confusion matrix:")
-        print("------------------------------------------------------")
-        print("The confusion matrix shows the performance of the classification model.")
-        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
-        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
-        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
-        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
-        
-        print("\nConfusion Matrix Values:")
-        for i in range(len(conf_matrix)):
-            print(f"Actual class {i}:")
-            for j in range(len(conf_matrix[i])):
-                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
-
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-# --------------------------------------------------------------------------------------------------------------
-#
-# Utility functions for preprocessing data
-#
-# --------------------------------------------------------------------------------------------------------------
-def missing_values(df):
-    """
-    Calculate the percentage of missing values for each column in a DataFrame.
-    
-    Args:
-    df (pd.DataFrame): The input DataFrame to analyze.
-    
-    Returns:
-    pd.DataFrame: A DataFrame containing the total count and percentage of missing values for each column.
-    """
-    # Calculate total missing values and their percentage
-    total = df.isnull().sum()
-    percent = (total / len(df) * 100)
-    
-    # Create a DataFrame with the results
-    missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
-    
-    # Sort the DataFrame by percentage of missing values (descending)
-    missing_data = missing_data.sort_values('Percent', ascending=False)
-    
-    # Filter out columns with no missing values
-    missing_data = missing_data[missing_data['Total'] > 0]
-    
-    print("Columns with missing values:")
-    print(missing_data)
-    
-    return missing_data
-
-
-def remove_punctuation(x):
-    punctuationfree="".join([i for i in x if i not in string.punctuation])
-    return punctuationfree
-
-
-# Function to lemmatize text with memory optimization
-def lemmatization(texts, chunk_size=1000):
-    lmtzr = WordNetLemmatizer()
-    
-    num_chunks = len(texts) // chunk_size + 1
-    #print(f"Number of chunks: {num_chunks}")
-    for i in range(num_chunks):
-        chunk = texts[i*chunk_size:(i+1)*chunk_size]
-        texts[i*chunk_size:(i+1)*chunk_size] = [' '.join([lmtzr.lemmatize(word) for word in text.split()]) for text in chunk]
-    
-    return texts
-
-
-def preprocessDataset(train_text):
-    # Ensure input is string
-    train_text = str(train_text)
-    
-    # Word tokenization using NLTK's word_tokenize
-    tokenized_train_set = word_tokenize(train_text.lower())
-    
-    # Stop word removal
-    stop_words = set(stopwords.words('english'))
-    stopwordremove = [i for i in tokenized_train_set if i not in stop_words]
-    
-    # Join words into sentence
-    stopwordremove_text = ' '.join(stopwordremove)
-    
-    # Remove numbers
-    numberremove_text = ''.join(c for c in stopwordremove_text if not c.isdigit())
-    
-    # Stemming using NLTK's PorterStemmer
-    stemmer = PorterStemmer()
-    stem_input = word_tokenize(numberremove_text)
-    stem_text = ' '.join([stemmer.stem(word) for word in stem_input])
-    
-    # Lemmatization using NLTK's WordNetLemmatizer
-    lemmatizer = WordNetLemmatizer()
-    
-    def get_wordnet_pos(word):
-        """Map POS tag to first character lemmatize() accepts"""
-        tag = nltk.pos_tag([word])[0][1][0].upper()
-        tag_dict = {"J": wordnet.ADJ,
-                    "N": wordnet.NOUN,
-                    "V": wordnet.VERB,
-                    "R": wordnet.ADV}
-        return tag_dict.get(tag, wordnet.NOUN)
-    
-    lem_input = word_tokenize(stem_text)
-    lem_text = ' '.join([lemmatizer.lemmatize(w, get_wordnet_pos(w)) for w in lem_input])
-    
-    return lem_text
-
-# --------------------------------------------------------------------------------------------------------------
 
 
 
@@ -881,6 +913,8 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='tfidf', metavar='N', help=f'mode, in [tfidf, count]')
 
     parser.add_argument('--cm', action='store_true', default=False, help=f'create confusion matrix')
+
+    parser.add_argument('--plot', action='store_true', default=False, help=f'create plots of GridSearchCV metrics (if --optimc is True)')
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the model using relevant models params')
     
