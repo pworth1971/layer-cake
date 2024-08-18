@@ -6,8 +6,8 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
-from sklearn.svm import LinearSVC
-from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler
+from sklearn.svm import LinearSVC # type: ignore
+from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler # type: ignore
 
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
