@@ -17,7 +17,7 @@ from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
 
 
-
+VECTOR_CACHE = '../.vector_cache'
 NUM_JOBS = -1          # important to manage CUDA memory allocation
 #NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
 

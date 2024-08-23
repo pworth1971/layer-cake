@@ -66,82 +66,21 @@ warnings.filterwarnings('ignore')
 PICKLE_DIR = '../pickles/'
 OUT_DIR = '../out/'
 DATASET_DIR = '../datasets/'
+VECTOR_CACHE = '../.vector_cache'
+
+NUM_JOBS = -1          # important to manage CUDA memory allocation
+#NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
 
 
 #dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1'}
 dataset_available = {'20newsgroups', 'bbc-news'}
 
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
-def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
-
-    print("Creating confusion matrix...")
-
-    # Assuming y_test and y_pred_best are already defined
-    conf_matrix = confusion_matrix(y_test, y_pred)
-
-    # Plotting the confusion matrix as a table with numbers
-    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
-
-    # Hide axes
-    ax.xaxis.set_visible(False) 
-    ax.yaxis.set_visible(False)
-    ax.set_frame_on(False)
-
-    # Create the table with smaller font sizes and adjusted scale
-    table = ax.table(
-        cellText=conf_matrix,
-        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
-        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
-        cellLoc='center',
-        loc='center'
-    )
-
-    # Adjust the font size and layout
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)  # Reduced font size for better fitting
-    table.scale(1.2, 1.2)
-
-    # Add a title with centered text
-    plt.title(title, fontsize=16, pad=20)
-
-    # Adjust layout to add more padding around the plot
-    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
-
-    # Save the plot to a file
-    confusion_matrix_filename = file_name
-    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
-    plt.show()
-
-    print(f"Confusion matrix saved as {confusion_matrix_filename}")
-
-    accuracy = accuracy_score(y_test, y_pred)
-
-    # Plain text explanation of the confusion matrix
-    if debug:
-        print("\nHow to read this confusion matrix:")
-        print("------------------------------------------------------")
-        print("The confusion matrix shows the performance of the classification model.")
-        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
-        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
-        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
-        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
-        
-        print("\nConfusion Matrix Values:")
-        for i in range(len(conf_matrix)):
-            print(f"Actual class {i}:")
-            for j in range(len(conf_matrix[i])):
-                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
-
-# --------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
-# --------------------------------------------------------------------------------------------------------------
-#
+# ------------------------------------------------------------------------------------------------------------------------
 # Utility functions for preprocessing data
 #
-# --------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------
 def missing_values(df):
     """
     Calculate the percentage of missing values for each column in a DataFrame.
@@ -189,7 +128,12 @@ def lemmatization(texts, chunk_size=1000):
     return texts
 
 
+# ------------------------------------------------------------------------------------------------------------------------
+
 def preprocessDataset(train_text):
+    
+    #print("preprocessing...")
+    
     # Ensure input is string
     train_text = str(train_text)
     
@@ -228,143 +172,162 @@ def preprocessDataset(train_text):
     
     return lem_text
 
-# --------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------
 
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+# load_20newsgroups()
+#
+# ------------------------------------------------------------------------------------------------------------------------
+
+def load_20newsgroups():
+    
+    print("loading 20 newsgroups dataset...")
+
+    # Fetch the 20 newsgroups dataset
+    newsgroups = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'))
+
+    # Create a DataFrame from the Bunch object
+    df = pd.DataFrame({
+        'text': newsgroups.data,
+        'category': newsgroups.target
+    })
+
+    # Add category names
+    df['category_name'] = [newsgroups.target_names[i] for i in df['category']]
+
+    print(f"Number of documents: {len(df)}")
+    print(f"Number of categories: {len(df['category'].unique())}")
+    print(f"Number of category names: {len(df['category_name'].unique())}")
+    #pprint(list(df.target_names))
+    #pprint(list(df.category_name))
+
+    #df = df['category'].unique()    
+
+    missing_values_df = missing_values(df)
+    print(f"missing values:", missing_values_df)
+
+    ### Start of Text Pre-processing
+    print("preproccessing...")
+
+    nltk.download('punkt')
+    nltk.download('averaged_perceptron_tagger')
+    nltk.download('wordnet')
+    nltk.download('omw-1.4')
+
+    string.punctuation
+
+    ### 2. To LowerCase
+
+    df['CleanedText'] = (df.text.apply(lambda x: x.lower()))
+
+    ### 3. Removing Numbers and Special Characters including XXXXXX
+
+    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('\W+', ' ', x)))
+    regex = re.compile('[' + re.escape(string.punctuation) + '0-9\\r\\t\\n]')
+
+    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub(regex, '', x)))
+    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xxxx', '', x)))
+    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xx', '', x)))
+
+    print("removing punctuation...")
+
+    df['CleanedText'] =  (df.CleanedText.apply(lambda x: remove_punctuation(x)))
+
+    ### 5. Tokenization
+    #data['TokenizedText'] =  (data.CleanedText.apply(lambda x: re.split('W+',x)))
+
+    print("removing stopwords...")
+    from nltk.corpus import stopwords
+    nltk.download('stopwords')
+    stopwords = set(stopwords.words("english"))
+    df['CleanedText'] = df.CleanedText.apply(lambda x: " ".join(x for x in x.split() if x not in stopwords))
+    print("Stopwords removed")
+    #print(df['CleanedText'][0])
+
+    ## TFIDF already tokenizes the text so no need to tokenize it here
+    # from nltk.tokenize import sent_tokenize, word_tokenize
+    # data2['TokenizedText'] = data2.CleanedText.apply(word_tokenize)
+
+
+    ### 7. Text Normalization  [Lemmatization] -->better than Stemming since it returns actual words
+    ## lemmatization is an intelligent operation that uses dictionaries
+
+    print("Lemmatizing...")
+
+    df['LemmatizedText'] = lemmatization(df['CleanedText'])
+
+    print("Lemmatized")
+    #print(df['CleanedText'][0])
+    #print(df['LemmatizedText'][0])
+
+    print("Tokenizing...")
+    
+    # Tokenize the text data
+    df['tokenized'] = df['text'].str.lower().apply(nltk.word_tokenize)
+
+    #return df, df['category'].unique()
+    return df
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+# load_bbc_news()
+#
+# ------------------------------------------------------------------------------------------------------------------------
+
+def load_bbc_news():
+    
+    print("Loading BBC News dataset...")
+
+    for dirname, _, filenames in os.walk(DATASET_DIR+'bbc-news'):
+        for filename in filenames:
+            print(os.path.join(dirname, filename))
+
+    train_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Train.csv')
+    test_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Test.csv')
+
+    print("train_set:", train_set.shape)
+    #print(train_set.head())
+    print("test_set:", test_set.shape)
+    #print(test_set.head())
+
+    target_category = train_set['Category'].unique()
+    print("target categories:", target_category)
+
+    train_set['categoryId'] = train_set['Category'].factorize()[0]
+    
+    category = train_set[["Category","categoryId"]].drop_duplicates().sort_values('categoryId')
+    #print("after de-duping:", category)
+
+    print(train_set.groupby('Category').categoryId.count())
+
+    text = train_set["Text"] 
+    #print("text:\n", text.head())
+
+    category = train_set["Category"]
+    #print("categories:\n", category.head())
+
+    print("preprocessing...")
+    train_set['Text'] = train_set['Text'].apply(preprocessDataset)
+    text = train_set['Text']
+    category = train_set['Category']
+    print("text:", type(text), text.shape)
+    #print(text.head())
+
+    #return text, category
+    return train_set
+
+# ------------------------------------------------------------------------------------------------------------------------
 
 def load_data(dataset='20newsgroups'):
 
     print(f"Loading data set {dataset}...")
 
     if (dataset == '20newsgroups'):
-        
-        print("Loading 20 newsgroups dataset...")
-
-        # Fetch the 20 newsgroups dataset
-        newsgroups = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'))
-
-        # Create a DataFrame from the Bunch object
-        df = pd.DataFrame({
-            'text': newsgroups.data,
-            'category': newsgroups.target
-        })
-
-        # Add category names
-        df['category_name'] = [newsgroups.target_names[i] for i in df['category']]
-
-        print(f"Number of documents: {len(df)}")
-        print(f"Number of categories: {len(df['category'].unique())}")
-        print(f"Number of category names: {len(df['category_name'].unique())}")
-        #pprint(list(df.target_names))
-        #pprint(list(df.category_name))
-
-        #df = df['category'].unique()    
-
-        missing_values_df = missing_values(df)
-        print(f"missing values:", missing_values_df)
-
-        ### Start of Text Pre-processing
-        print("preproccessing...")
-
-        nltk.download('punkt')
-        nltk.download('averaged_perceptron_tagger')
-        nltk.download('wordnet')
-        nltk.download('omw-1.4')
-
-        string.punctuation
-
-        ### 2. To LowerCase
-
-        df['CleanedText'] = (df.text.apply(lambda x: x.lower()))
-
-        ### 3. Removing Numbers and Special Characters including XXXXXX
-
-        df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('\W+', ' ', x)))
-        regex = re.compile('[' + re.escape(string.punctuation) + '0-9\\r\\t\\n]')
-
-        df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub(regex, '', x)))
-        df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xxxx', '', x)))
-        df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xx', '', x)))
-
-        print("removing punctuation...")
-
-        df['CleanedText'] =  (df.CleanedText.apply(lambda x: remove_punctuation(x)))
-
-        ### 5. Tokenization
-        #data['TokenizedText'] =  (data.CleanedText.apply(lambda x: re.split('W+',x)))
-
-        print("removing stopwords...")
-        from nltk.corpus import stopwords
-        nltk.download('stopwords')
-        stopwords = set(stopwords.words("english"))
-        df['CleanedText'] = df.CleanedText.apply(lambda x: " ".join(x for x in x.split() if x not in stopwords))
-        print("Stopwords removed")
-        #print(df['CleanedText'][0])
-
-        ## TFIDF already tokenizes the text so no need to tokenize it here
-        # from nltk.tokenize import sent_tokenize, word_tokenize
-        # data2['TokenizedText'] = data2.CleanedText.apply(word_tokenize)
-
-
-        ### 7. Text Normalization  [Lemmatization] -->better than Stemming since it returns actual words
-        ## lemmatization is an intelligent operation that uses dictionaries
-
-        print("Lemmatizing...")
-
-        df['LemmatizedText'] = lemmatization(df['CleanedText'])
-
-        print("Lemmatized")
-        #print(df['CleanedText'][0])
-        #print(df['LemmatizedText'][0])
-
-        print("Tokenizing...")
-        
-        # Tokenize the text data
-        df['tokenized'] = df['text'].str.lower().apply(nltk.word_tokenize)
-
-        #return df, df['category'].unique()
-        return df
-    
+        return load_20newsgroups()
     elif (dataset == 'bbc-news'):
-
-        print("Loading BBC News dataset...")
-
-        for dirname, _, filenames in os.walk(DATASET_DIR+'bbc-news'):
-            for filename in filenames:
-                print(os.path.join(dirname, filename))
-
-        train_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Train.csv')
-        test_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Test.csv')
-
-        print("train_set:", train_set.shape)
-        print(train_set.head())
-        print("test_set:", test_set.shape)
-        print(test_set.head())
-
-        target_category = train_set['Category'].unique()
-        print("target categories:", target_category)
-
-        train_set['categoryId'] = train_set['Category'].factorize()[0]
-        
-        category = train_set[["Category","categoryId"]].drop_duplicates().sort_values('categoryId')
-        print("after de-duping:", category)
-
-        print(train_set.groupby('Category').categoryId.count())
-
-        text = train_set["Text"] 
-        print("text:\n", text.head())
-
-        category = train_set["Category"]
-        print("categories:\n", category.head())
-
-        print("preprocessing...")
-        train_set['Text'] = train_set['Text'].apply(preprocessDataset)
-        text = train_set['Text']
-        category = train_set['Category']
-        print("text:\n", type(text), text.shape)
-        print(text.head())
-
-        #return text, category
-        return train_set
+        return load_bbc_news()
     else:
         print(f"Dataset '{dataset}' not available.")
         return None
@@ -436,7 +399,7 @@ def classify(dataset='20newsgrouops', args=None):
                 #pickle.dump(df, f)
 
     print("Tokenized data loaded, df:", df.shape)
-    print(df.head())
+    #print(df.head())
     #print("categories:", categories)
 
     print("Processing data...")
@@ -484,7 +447,7 @@ def classify(dataset='20newsgrouops', args=None):
         print("Y_train:", type(y_train), y_train.shape)
         print("Y_test:", type(y_test), y_test.shape)
 
-        print("Running model...")
+        #print("Running model...")
 
         run_model(X_train, X_test, y_train, y_test, args)
     
@@ -507,33 +470,46 @@ def classify(dataset='20newsgrouops', args=None):
         print("Y_train:", type(y_train), y_train.shape)
         print("Y_test:", type(y_test), y_test.shape)
 
-        print("Running model...")
+        #print("Running model...")
 
         run_model(X_train, X_test, y_train, y_test, args)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_svm_model()
+#
+# ---------------------------------------------------------------------------------------------------------------------
 def run_svm_model(X_train, X_test, y_train, y_test, args):
 
-    print("Training default Support Vector Machine model...")
-    
-    default_pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer()),
-        ('lr', LinearSVC(max_iter=1000))
-    ])
+    if (not args.optimc):
+        
+        print("Training default Support Vector Machine model...")
+        
+        """
+        default_pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('lr', LinearSVC(max_iter=1000))
+        ])
 
-    default_pipeline.fit(X_train, y_train)
-    y_pred_default = default_pipeline.predict(X_test)
+        default_pipeline.fit(X_train, y_train)
+        y_pred_default = default_pipeline.predict(X_test)
+        """
 
-    print("\nDefault Support Vector Mechine Model Performance:")
-    print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-    print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+        svc = LinearSVC(max_iter=1000)
+        svc.fit(X_train, y_train)
+        y_pred_default = svc.predict(X_test)
+        
+        print("\nDefault Support Vector Mechine Model Performance:")
+        print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
 
-    if (args.optimc):
+    elif (args.optimc):                             # Optimize Support Vector Machine with GridSearchCV
 
-        # Optimize Support Vector Machine with GridSearchCV
         print("Optimizing Support Vector Machine model with GridSearchCV...")
 
+        """
         # Define the pipeline
         pipeline = Pipeline([
             ('tfidf', TfidfVectorizer()),
@@ -551,7 +527,15 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
             'svm__class_weight': [None, 'balanced'],            # Class weights
             'svm__C': np.logspace(-3, 3, 7)                     # Regularization parameter   
         }
-
+        """
+        param_grid = {
+            'penalty': ['l1', 'l2'],                       # Regularization method
+            'loss': ['hinge', 'squared_hinge'],            # Loss function
+            'multi_class': ['ovr', 'crammer_singer'],      # Multi-class strategy
+            'class_weight': [None, 'balanced'],            # Class weights
+            'C': np.logspace(-3, 3, 7)                     # Regularization parameter   
+        }
+        
         print("param_grid:", param_grid)
 
         cross_validation = StratifiedKFold()
@@ -567,7 +551,8 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
 
         grid_search = GridSearchCV(
             n_jobs=-1, 
-            estimator=pipeline,
+            #estimator=pipeline,
+            estimator=LinearSVC(max_iter=1000),
             refit='f1_score',
             param_grid=param_grid,
             cv=cross_validation,
@@ -582,7 +567,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
         print('Best parameters: {}'.format(grid_search.best_params_))
         print("best_estimator:", grid_search.best_estimator_)
         print('Best score: {}'.format(grid_search.best_score_))
-        print("cv_results_:", grid_search.cv_results_)
+        #print("cv_results_:", grid_search.cv_results_)
 
         results = grid_search.cv_results_
 
@@ -661,27 +646,47 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
         print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# run_lr_model()
+#
+# ---------------------------------------------------------------------------------------------------------------------
+
 def run_lr_model(X_train, X_test, y_train, y_test, args):
 
     # Default Logistic Regression Model
     print("Training default Logistic Regression model...")
-    default_pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer()),
-        ('lr', LogisticRegression(max_iter=1000))
-    ])
+    
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
+    
+    if (not args.optimc):
+        
+        print("Optimization not requested, training default Logistic Regression model...")
+        """
+        default_pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('lr', LogisticRegression(max_iter=1000))
+        ])
+        
+        default_pipeline.fit(X_train, y_train)
+        y_pred_default = default_pipeline.predict(X_test)
+        """
 
-    default_pipeline.fit(X_train, y_train)
-    y_pred_default = default_pipeline.predict(X_test)
+        lr = LogisticRegression(max_iter=1000)
+        lr.fit(X_train, y_train)
+        y_pred_default = lr.predict(X_test)
+        
+        print("\nDefault Logistic Regression Model Performance:")
+        print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
 
-    print("\nDefault Logistic Regression Model Performance:")
-    print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-    print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
-
-    if (args.optimc):
+    elif (args.optimc):
+        
         # Optimize Logistic Regression with GridSearchCV
         print("Optimizing Logistic Regression model with GridSearchCV...")
 
         # Define the pipeline
+        """
         pipeline = Pipeline([
             ('tfidf', TfidfVectorizer()),
             ('lr', LogisticRegression(max_iter=1000))
@@ -696,7 +701,14 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
             'lr__penalty': ['l2'],                              # Regularization method (L2 Ridge)
             'lr__solver': ['liblinear', 'lbfgs']                # Solver types
         }
+        """
 
+        param_grid = {
+            'C': [0.01, 0.1, 1, 10, 100],                                           # Inverse of regularization strength
+            'penalty': ['l1', 'l2'],                                                # Regularization method (L2 Ridge)
+            'solver': ['liblinear', 'lbfgs', 'newton-cg', 'sag', 'saga']            # Solver types
+        }
+        
         print("param_grid:", param_grid)
 
         # Define scorers
@@ -709,12 +721,13 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
 
         # Initialize GridSearchCV
         grid_search = GridSearchCV(
-            estimator=pipeline,
+            n_jobs=-1,
+            #estimator=pipeline,
+            estimator =  LogisticRegression(max_iter=1000),
             param_grid=param_grid,
             scoring=scorers,
             refit='f1_score',  # Optimize on F1 Score
             cv=StratifiedKFold(n_splits=5),
-            n_jobs=-1,
             return_train_score=True
         )
 
@@ -743,30 +756,45 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
         )
 
 
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_nb_model()
+#
+# ---------------------------------------------------------------------------------------------------------------------
+
 def run_nb_model(X_train, X_test, y_train, y_test, args):
 
     print("Building default Naive Bayes Classifier...")
 
-    nb = Pipeline([
-        ('tfidf', TfidfVectorizer()),
-        ('clf', MultinomialNB())
-        ])
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
     
-    nb.fit(X_train,y_train)
+    if (not args.optimc):
+            
+        print("Optimization not requested, training default Naive Bayes model...")
+        """
+        nb = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('clf', MultinomialNB())
+            ])
+        """
+        
+        nb = MultinomialNB()
+        nb.fit(X_train,y_train)
+        test_predict = nb.predict(X_test)
 
-    test_predict = nb.predict(X_test)
+        train_accuracy = round(nb.score(X_train,y_train)*100)
+        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
 
-    train_accuracy = round(nb.score(X_train,y_train)*100)
-    test_accuracy =round(accuracy_score(test_predict, y_test)*100)
+        print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
+        print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
+        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
 
-    print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
-    print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
-    print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-    if (args.optimc):
+    elif (args.optimc):
 
         print("Optimizing the model using GridSearchCV...")
 
+        """
         # Define a pipeline
         pipeline = Pipeline([
             ('tfidf', TfidfVectorizer()),
@@ -780,7 +808,13 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
             'tfidf__sublinear_tf': [True, False],                   # Sublinear term frequency
             'nb__alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
         }
-
+        """
+        
+        # Define the parameter grid
+        param_grid = {
+            'alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
+        }
+        
         print("param_grid:", param_grid)
 
         # Define scorers
@@ -795,12 +829,13 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
 
         # Initialize GridSearchCV
         grid_search = GridSearchCV(
-            estimator=pipeline,
+            n_jobs=-1,
+            #estimator=pipeline
+            estimator=MultinomialNB(),
             param_grid=param_grid,
             scoring=scorers,
             refit='f1_score',                           # Optimize on F1 Score
             cv=StratifiedKFold(n_splits=5),
-            n_jobs=-1,
             return_train_score=True
         )
 
@@ -832,10 +867,194 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
             )
 
 
-def run_model(X_train, X_test, y_train, y_test, args):
+# ------------------------------------------------------------------------------------------------------------------------
+#
+# BERT Embeddings functions
+#
+# ------------------------------------------------------------------------------------------------------------------------
 
+from transformers import BertTokenizer, BertModel
+import torch
+from torch.utils.data import DataLoader, Dataset
+
+class TextDataset(Dataset):
+    def __init__(self, texts, tokenizer, max_len):
+        self.texts = texts
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        text = self.texts[item]
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=True,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'token_type_ids': encoding['token_type_ids'].flatten()
+        }
+
+def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=256):
+    dataset = TextDataset(texts, tokenizer, max_len)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    embeddings = []
+    model.eval()
+
+    with torch.cuda.amp.autocast(), torch.no_grad():
+        for batch in dataloader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            token_type_ids = batch['token_type_ids'].to(device)
+            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+            embeddings.append(cls_embeddings.cpu().numpy())
+
+    embeddings = np.vstack(embeddings)
+    return embeddings
+
+
+
+def cache_embeddings(train_embeddings, test_embeddings, cache_path):
+    print("caching embeddings to:", cache_path)
+    
+    np.savez(cache_path, train=train_embeddings, test=test_embeddings)
+
+def load_cached_embeddings(cache_path, debug=False):
+    if (debug):
+        print("looking for cached embeddings at ", cache_path)
+    
+    if os.path.exists(cache_path):
+        
+        if (debug):
+            print("found cached embeddings, loading...")
+        data = np.load(cache_path)
+        return data['train'], data['test']
+    
+    if (debug):
+        print("did not find cached embeddings, returning None...")
+    return None, None
+
+
+# -------------------------------------------------------------------------------------------------------------------
+#
+# gen_embeddings()
+#
+# -------------------------------------------------------------------------------------------------------------------
+def gen_embeddings(X_train, X_test, dataset='20newsgroups', embeddings=None, mode='solo', ngram_size=1):
+    
+    print("generating embeddings...")
+    
+    print("dataset:", dataset)
+    print("embeddings:", embeddings)
+    
+    print('X_train:', type(X_train), X_train.shape)
+    print('X_test:', type(X_test), X_test.shape)
+    
+    print("generating TF-IDF vectors...")
+    # Generate TF-IDF vectors
+    tfidf = TfidfVectorizer(ngram_range=(1, ngram_size))
+    X_train_tfidf = tfidf.fit_transform(X_train)
+    X_test_tfidf = tfidf.transform(X_test)
+        
+    print('X_train_tfidf:', type(X_train_tfidf), X_train_tfidf.shape)
+    print('X_test_tfidf:', type(X_test_tfidf), X_test_tfidf.shape)
+    
+    if (embeddings is None):
+        return X_train_tfidf, X_test_tfidf
+    
+    if embeddings == 'bert':
+
+        print("Using BERT pretrained embeddings...")
+
+        BERT_MODEL = 'bert-base-uncased'
+        cache_path = f'../.vector_cache/{BERT_MODEL}_{dataset}.npz'
+    
+        train_embeddings, test_embeddings = load_cached_embeddings(cache_path, debug=True)
+
+        if train_embeddings is None or test_embeddings is None:                     # If not cached, compute embeddings
+            
+            print("generating BERT embeddings")
+            
+            # Load pre-trained BERT model and tokenizer
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)
+            bert_model = BertModel.from_pretrained(BERT_MODEL).to(device)
+    
+            # Generate BERT embeddings
+            X_train_bert = get_bert_embeddings(X_train.tolist(), bert_model, tokenizer, device)
+            X_test_bert = get_bert_embeddings(X_test.tolist(), bert_model, tokenizer, device)
+            
+            # Cache them for future use
+            cache_embeddings(X_train_bert, X_test_bert, cache_path)
+        else:
+            X_train_bert = train_embeddings
+            X_test_bert = test_embeddings
+                        
+        print('X_train_bert:', type(X_train_bert), X_train_bert.shape)
+        print('X_test_bert:', type(X_test_bert), X_test_bert.shape)
+        
+        if (args.mode == 'solo'):
+            
+            print("using just the BERT embeddings alone (solo)...")
+            X_train = X_train_bert
+            X_test = X_test_bert
+
+        elif (args.mode == 'cat'):
+            
+            print("concatenating BERT embeddings with TF-IDF vectors...")
+
+            # Concatenate BERT embeddings with TF-IDF vectors
+            X_train_combined = np.hstack([X_train_tfidf.toarray(), X_train_bert])
+            X_test_combined = np.hstack([X_test_tfidf.toarray(), X_test_bert])
+
+            X_train = X_train_combined
+            X_test = X_test_combined
+            
+        elif (args.mode == 'dot'):
+
+            print("dot product (matrix multiplication) of BERT embeddings with TF-IDF vectors...")
+
+            # matrix multiply BERT embeddings with TF-IDF vectors
+
+            X_train = X_train_tfidf.dot(X_train_bert)
+            X_test = X_test_tfidf.dot(X_test_bert)
+            
+        return X_train, X_test
+    
+# -------------------------------------------------------------------------------------------------------------------
+#
+# run_model()
+#
+# -------------------------------------------------------------------------------------------------------------------
+         
+def run_model(X_train, X_test, y_train, y_test, args):
+    
     print("Running model...")
 
+    print('X_train:', type(X_train), X_train.shape)
+    print('X_test:', type(X_test), X_test.shape)
+             
+    # Generate embeddings
+    X_train, X_test = gen_embeddings(
+        X_train=X_train, 
+        X_test=X_test, 
+        dataset=args.dataset, 
+        embeddings=args.pretrained, 
+        mode=args.mode, 
+        ngram_size=args.ngram_size
+        )
+        
     # Support Vector Machine Classifier
     if (args.learner == 'svm'):
         run_svm_model(X_train, X_test, y_train, y_test, args)
@@ -891,7 +1110,69 @@ def run_model(X_train, X_test, y_train, y_test, args):
 
 
     
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
+def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
+
+    print("Creating confusion matrix...")
+
+    # Assuming y_test and y_pred_best are already defined
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Plotting the confusion matrix as a table with numbers
+    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
+
+    # Hide axes
+    ax.xaxis.set_visible(False) 
+    ax.yaxis.set_visible(False)
+    ax.set_frame_on(False)
+
+    # Create the table with smaller font sizes and adjusted scale
+    table = ax.table(
+        cellText=conf_matrix,
+        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
+        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
+        cellLoc='center',
+        loc='center'
+    )
+
+    # Adjust the font size and layout
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)  # Reduced font size for better fitting
+    table.scale(1.2, 1.2)
+
+    # Add a title with centered text
+    plt.title(title, fontsize=16, pad=20)
+
+    # Adjust layout to add more padding around the plot
+    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
+
+    # Save the plot to a file
+    confusion_matrix_filename = file_name
+    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
+    plt.show()
+
+    print(f"Confusion matrix saved as {confusion_matrix_filename}")
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # Plain text explanation of the confusion matrix
+    if debug:
+        print("\nHow to read this confusion matrix:")
+        print("------------------------------------------------------")
+        print("The confusion matrix shows the performance of the classification model.")
+        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
+        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
+        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
+        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
+        
+        print("\nConfusion Matrix Values:")
+        for i in range(len(conf_matrix)):
+            print(f"Actual class {i}:")
+            for j in range(len(conf_matrix[i])):
+                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -910,7 +1191,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--learner', type=str, default='svm', metavar='N', help=f'learner (svm, lr, or nb)')
     
-    parser.add_argument('--mode', type=str, default='tfidf', metavar='N', help=f'mode, in [tfidf, count]')
+    parser.add_argument('--mode', type=str, default='solo', metavar='N', help=f'way to combine tfidf and pretrained embeddings, in [solo, cat, dot]')
 
     parser.add_argument('--cm', action='store_true', default=False, help=f'create confusion matrix')
 
@@ -918,8 +1199,36 @@ if __name__ == '__main__':
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the model using relevant models params')
     
+    parser.add_argument('--ngram-size', type=int, default=2, metavar='int',
+                        help='ngram parameter into vectorization routines (TFIDFVectorizer)')
+    
     parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|llama',
                         help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", or "llama" (default None)')
+    
+    parser.add_argument('--embedding-dir', type=str, default='../.vector_cache', metavar='str',
+                        help=f'path where to load and save BERT document embeddings')
+    
+    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/GoogleNews-vectors-negative300.bin',
+                        metavar='PATH',
+                        help=f'path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only '
+                             f'with --pretrained word2vec')
+    
+    parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove')
+    
+    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/crawl-300d-2M.vec',
+                        metavar='PATH',
+                        help=f'path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only '
+                            f'with --pretrained fasttext')
+    
+    parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to BERT pretrained vectors, used only with --pretrained bert')
+    
+    parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to LLaMA pretrained vectors, used only with --pretrained llama')
     
 
     args = parser.parse_args()
