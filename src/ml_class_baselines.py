@@ -2,16 +2,14 @@ import warnings
 import argparse
 from time import time
 
-from sklearn.exceptions import ConvergenceWarning
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
-from sklearn.svm import LinearSVC # type: ignore
-from sklearn.preprocessing import MinMaxScaler, MaxAbsScaler # type: ignore
+from sklearn.svm import LinearSVC 
+from sklearn.preprocessing import MinMaxScaler
 
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
-from util.csv_log import CSVLog
 from util.common import *
 from data.dataset import *
 from embedding.supervised import get_supervised_embeddings
@@ -342,7 +340,7 @@ def set_method_name(opt):
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def get_sysyem_resources():
+def get_system_resources():
 
     print("get system info...")
 

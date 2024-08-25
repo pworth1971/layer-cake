@@ -1,61 +1,39 @@
-
 import pandas as pd
-import re
 import string
-
-import nltk
-from nltk.stem.wordnet import WordNetLemmatizer
-
-
-from timeit import default_timer as timer
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import LinearSVC
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn import model_selection, svm, metrics
-from sklearn.metrics import accuracy_score, f1_score, fbeta_score, recall_score, precision_score, hamming_loss, jaccard_score
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import learning_curve
-from sklearn.metrics import make_scorer
-from sklearn.metrics import recall_score
-from sklearn.model_selection import train_test_split
-from sklearn.datasets import fetch_20newsgroups
-
-from pprint import pprint
+import numpy as np
+import os
+import pickle
 import argparse
 
-import re
-import string
+from scipy.sparse import issparse, csr_matrix
 
-import cufflinks as cf
+from matplotlib import pyplot as plt
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
-import numpy as np
-from matplotlib import pyplot as plt
-import seaborn as sns
-import os
-import pickle
+import nltk
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.corpus import stopwords, wordnet
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
 
-
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn import metrics
+from sklearn.metrics import accuracy_score, f1_score, precision_score, classification_report
+from sklearn.metrics import confusion_matrix, make_scorer, recall_score, hamming_loss, jaccard_score
+from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
+from sklearn.datasets import fetch_20newsgroups
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report
-from sklearn.metrics import accuracy_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
 
-
-import nltk
-from nltk.corpus import stopwords, wordnet
-from nltk.stem import PorterStemmer, WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+import torch
+from torch.utils.data import DataLoader, Dataset
+from transformers import BertTokenizer, BertModel, LlamaTokenizer
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -67,6 +45,7 @@ PICKLE_DIR = '../pickles/'
 OUT_DIR = '../out/'
 DATASET_DIR = '../datasets/'
 VECTOR_CACHE = '../.vector_cache'
+MAX_VOCAB_SIZE = 25000
 
 NUM_JOBS = -1          # important to manage CUDA memory allocation
 #NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
@@ -76,10 +55,11 @@ NUM_JOBS = -1          # important to manage CUDA memory allocation
 dataset_available = {'20newsgroups', 'bbc-news'}
 
 
+# Ensure stopwords are downloaded
+nltk.download('stopwords')
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Utility functions for preprocessing data
-#
 # ------------------------------------------------------------------------------------------------------------------------
 def missing_values(df):
     """
@@ -179,158 +159,227 @@ def preprocessDataset(train_text):
 # ------------------------------------------------------------------------------------------------------------------------
 # load_20newsgroups()
 #
+# Define the load_20newsgroups function
 # ------------------------------------------------------------------------------------------------------------------------
+def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained=None):
+    """
+    Load and preprocess the 20 Newsgroups dataset, returning X and y sparse matrices.
 
-def load_20newsgroups():
-    
-    print("loading 20 newsgroups dataset...")
+    Parameters:
+    - vectorizer_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
+    - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (LLaMA, BERT).
+
+    Returns:
+    - X: Sparse matrix of features (tokenized text aligned with the chosen vectorizer and embedding type).
+    - y: Sparse array of target labels.
+    """
+
+    print("Loading 20 newsgroups dataset...")
 
     # Fetch the 20 newsgroups dataset
-    newsgroups = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'))
+    X_raw, y = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'), return_X_y=True)
 
-    # Create a DataFrame from the Bunch object
-    df = pd.DataFrame({
-        'text': newsgroups.data,
-        'category': newsgroups.target
-    })
+    # Initialize the vectorizer based on the type
+    if embedding_type == 'word':
+        print("Using word-level vectorization...")
+        if vectorizer_type == 'tfidf':
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words='english')  # Adjust max_features as needed
+        elif vectorizer_type == 'count':
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words='english')  # Adjust max_features as needed
+        else:
+            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+        
+        # Fit and transform the text data to obtain tokenized features
+        X_vectorized = vectorizer.fit_transform(X_raw)
 
-    # Add category names
-    df['category_name'] = [newsgroups.target_names[i] for i in df['category']]
+    elif embedding_type == 'token':
+        print("Using token-level vectorization...")
+        if pretrained == 'bert':
+            print("Using token-level vectorization with BERT embeddings...")
+            tokenizer = LlamaTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')             # Replace with correct LLaMA model
+        elif pretrained == 'llama': 
+            print("Using token-level vectorization with BERT or LLaMa embeddings...")
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')                          # BERT tokenizer
+        else:
+            raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
 
-    print(f"Number of documents: {len(df)}")
-    print(f"Number of categories: {len(df['category'].unique())}")
-    print(f"Number of category names: {len(df['category_name'].unique())}")
-    #pprint(list(df.target_names))
-    #pprint(list(df.category_name))
-
-    #df = df['category'].unique()    
-
-    missing_values_df = missing_values(df)
-    print(f"missing values:", missing_values_df)
-
-    ### Start of Text Pre-processing
-    print("preproccessing...")
-
-    nltk.download('punkt')
-    nltk.download('averaged_perceptron_tagger')
-    nltk.download('wordnet')
-    nltk.download('omw-1.4')
-
-    string.punctuation
-
-    ### 2. To LowerCase
-
-    df['CleanedText'] = (df.text.apply(lambda x: x.lower()))
-
-    ### 3. Removing Numbers and Special Characters including XXXXXX
-
-    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('\W+', ' ', x)))
-    regex = re.compile('[' + re.escape(string.punctuation) + '0-9\\r\\t\\n]')
-
-    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub(regex, '', x)))
-    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xxxx', '', x)))
-    df['CleanedText'] =  (df.CleanedText.apply(lambda x: re.sub('xx', '', x)))
-
-    print("removing punctuation...")
-
-    df['CleanedText'] =  (df.CleanedText.apply(lambda x: remove_punctuation(x)))
-
-    ### 5. Tokenization
-    #data['TokenizedText'] =  (data.CleanedText.apply(lambda x: re.split('W+',x)))
-
-    print("removing stopwords...")
-    from nltk.corpus import stopwords
-    nltk.download('stopwords')
-    stopwords = set(stopwords.words("english"))
-    df['CleanedText'] = df.CleanedText.apply(lambda x: " ".join(x for x in x.split() if x not in stopwords))
-    print("Stopwords removed")
-    #print(df['CleanedText'][0])
-
-    ## TFIDF already tokenizes the text so no need to tokenize it here
-    # from nltk.tokenize import sent_tokenize, word_tokenize
-    # data2['TokenizedText'] = data2.CleanedText.apply(word_tokenize)
-
-
-    ### 7. Text Normalization  [Lemmatization] -->better than Stemming since it returns actual words
-    ## lemmatization is an intelligent operation that uses dictionaries
-
-    print("Lemmatizing...")
-
-    df['LemmatizedText'] = lemmatization(df['CleanedText'])
-
-    print("Lemmatized")
-    #print(df['CleanedText'][0])
-    #print(df['LemmatizedText'][0])
-
-    print("Tokenizing...")
+        def tokenize(text):
+            tokens = tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,
+                max_length=512,
+                padding='max_length',
+                truncation=True,
+                return_tensors='np'
+            )
+            return tokens['input_ids']
+        
+        X_vectorized = [tokenize(text) for text in X_raw]
+        X_vectorized = csr_matrix(np.vstack(X_vectorized))  # Convert list of arrays to a sparse matrix
     
-    # Tokenize the text data
-    df['tokenized'] = df['text'].str.lower().apply(nltk.word_tokenize)
+    else:
+        raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMA embeddings.")
+    
+    print("Text vectorization completed.")
+    
+    # Ensure X_vectorized is a sparse matrix
+    if not isinstance(X_vectorized, csr_matrix):
+        X_vectorized = csr_matrix(X_vectorized)
+    
+    # Encode the labels
+    label_encoder = LabelEncoder()
+    y_sparse = csr_matrix(label_encoder.fit_transform(y)).T  # Transpose to match the expected shape
 
-    #return df, df['category'].unique()
-    return df
+    print("Labels encoded and converted to sparse format.")
+
+    # Return X (features) and y (target labels) as sparse arrays
+    return X_vectorized, y_sparse
+
 
 
 # ------------------------------------------------------------------------------------------------------------------------
 # load_bbc_news()
-#
 # ------------------------------------------------------------------------------------------------------------------------
-
-def load_bbc_news():
+def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=None):
+    """
+    Load and preprocess the BBC News dataset and return X, Y sparse arrays.
+    
+    Parameters:
+    - vectorizer_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
+    - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (BERT, LLaMa).
+    
+    Returns:
+    - X: Sparse array of features (tokenized text aligned with the chosen vectorizer and embedding type).
+    - Y: Sparse array of target labels.
+    """
     
     print("Loading BBC News dataset...")
 
-    for dirname, _, filenames in os.walk(DATASET_DIR+'bbc-news'):
+    for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
         for filename in filenames:
             print(os.path.join(dirname, filename))
 
-    train_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Train.csv')
-    test_set = pd.read_csv(DATASET_DIR+'bbc-news/BBC News Test.csv')
+    # Load datasets
+    train_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Train.csv')
+    test_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Test.csv')
 
     print("train_set:", train_set.shape)
-    #print(train_set.head())
     print("test_set:", test_set.shape)
-    #print(test_set.head())
 
-    target_category = train_set['Category'].unique()
+    # Combine train and test sets
+    #df = pd.concat([train_set, test_set], ignore_index=True)
+    df = train_set
+
+    target_category = df['Category'].unique()
     print("target categories:", target_category)
 
-    train_set['categoryId'] = train_set['Category'].factorize()[0]
+    df['categoryId'] = df['Category'].factorize()[0]
     
-    category = train_set[["Category","categoryId"]].drop_duplicates().sort_values('categoryId')
+    #category = df[["Category", "categoryId"]].drop_duplicates().sort_values('categoryId')
     #print("after de-duping:", category)
 
-    print(train_set.groupby('Category').categoryId.count())
-
-    text = train_set["Text"] 
-    #print("text:\n", text.head())
-
-    category = train_set["Category"]
-    #print("categories:\n", category.head())
+    #print(df.groupby('Category').categoryId.count())
 
     print("preprocessing...")
-    train_set['Text'] = train_set['Text'].apply(preprocessDataset)
-    text = train_set['Text']
-    category = train_set['Category']
-    print("text:", type(text), text.shape)
-    #print(text.head())
 
-    #return text, category
-    return train_set
+    # Preprocess the text
+    #df['Text'] = df['Text'].apply(preprocessDataset)
+    
+    # Choose the vectorization and tokenization strategy based on embedding type
+    if embedding_type == 'word':
+        print("Using word-level vectorization...")
+        if vectorizer_type == 'tfidf':
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  # Adjust max_features as needed
+        elif vectorizer_type == 'count':
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  # Adjust max_features as needed
+        else:
+            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+        
+        # Fit and transform the text data to obtain tokenized features
+        X_vectorized = vectorizer.fit_transform(df['Text'])
+    
+    elif embedding_type == 'token':
+
+        if pretrained == 'bert':
+            print("Using token-level vectorization with BERT embeddings...")
+            tokenizer = LlamaTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')             # Replace with correct LLaMA model
+        elif pretrained == 'llama': 
+            print("Using token-level vectorization with BERT or LLaMa embeddings...")
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')                          # BERT tokenizer
+        else:
+            raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
+
+        def tokenize(text):
+            tokens = tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,
+                max_length=512,
+                padding='max_length',
+                truncation=True,
+                return_tensors='np'
+            )
+            return tokens['input_ids']
+        
+        X_vectorized = df['Text'].apply(tokenize).values
+        X_vectorized = csr_matrix(np.vstack(X_vectorized))  # Convert list of arrays to a sparse matrix
+    
+    else:
+        raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
+    
+    # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
+    if not isinstance(X_vectorized, csr_matrix):
+        X_vectorized = csr_matrix(X_vectorized)
+    
+    # Encode the labels
+    label_encoder = LabelEncoder()
+    Y = label_encoder.fit_transform(df['Category'])
+    
+    # Convert Y to a sparse matrix
+    Y_sparse = csr_matrix(Y).T  # Transpose to match the expected shape
+
+    # Return X (features) and Y (target labels) as sparse arrays
+    return X_vectorized, Y_sparse
 
 # ------------------------------------------------------------------------------------------------------------------------
 
-def load_data(dataset='20newsgroups'):
+def load_data(dataset='20newsgroups', pretrained=None):
 
-    print(f"Loading data set {dataset}...")
+    print(f"Loading data set {dataset}, pretrained is {pretrained}...")
 
-    if (dataset == '20newsgroups'):
-        return load_20newsgroups()
+    if (pretrained == 'llama' or pretrained == 'bert'):
+        embedding_type = 'token'
+    else:
+        embedding_type = 'word'
+
+    if (dataset == '20newsgroups'): 
+        X, y = load_20newsgroups(embedding_type=embedding_type)
+        return X, y
     elif (dataset == 'bbc-news'):
-        return load_bbc_news()
+        X, y = load_bbc_news(embedding_type=embedding_type)
+        return X, y
     else:
         print(f"Dataset '{dataset}' not available.")
         return None
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+# Save X and y sparse matrices to pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def save_to_pickle(X, y, pickle_file):
+    print(f"Saving X and y to pickle file: {pickle_file}")
+    with open(pickle_file, 'wb') as f:
+        # Save the sparse matrices as a tuple
+        pickle.dump((X, y), f)
+
+# ------------------------------------------------------------------------------------------------------------------------
+# Load X and y sparse matrices from pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def load_from_pickle(pickle_file):
+    print(f"Loading X and y from pickle file: {pickle_file}")
+    with open(pickle_file, 'rb') as f:
+        X, y = pickle.load(f)
+    return X, y
+
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -346,140 +395,126 @@ def classify(dataset='20newsgrouops', args=None):
         print(f"Dataset '{args.dataset}' not available.")
         return
     
-    pickle_file_name=f'{dataset}_{args.mode}_tokenized.pickle'
+    pickle_file_name=f'{dataset}_{args.pretrained}_tokenized.pickle'
 
     print(f"Classifying {dataset}...")
 
-    print(f"Loading data set {dataset}...")
+    #print(f"Loading data set {dataset}...")
 
-    # Define the path to the pickle file
-    pickle_file = PICKLE_DIR + pickle_file_name
+    pickle_file = PICKLE_DIR + pickle_file_name                         # Define the path to the pickle file
 
-    if os.path.exists(pickle_file):                                         # if the pickle file exists
-        
+    if os.path.exists(pickle_file):  # if the pickle file exists
         print(f"Loading tokenized data from '{pickle_file}'...")
-        
-        if (dataset == '20newsgroups'):
-            # Initialize an empty DataFrame with the desired columns
-            columns = ['tokenized', 'CleanedText', 'LemmatizedText', 'category', 'category_name', 'text']
-            
-            df = pd.DataFrame(columns=columns)
-            
-            # Load the data from the pickle file into the DataFrame
-            with open(pickle_file, 'rb') as f:
-                df = pickle.load(f)
-
-            #categories = df['category'].unique()
-            
-        elif (dataset == 'bbc-news'):
-
-            columns = []
-
-            df = pd.DataFrame(columns=columns)
-            
-            with open(pickle_file, 'rb') as f:
-                df = pickle.load(f)
+        X, y = load_from_pickle(pickle_file)
     else:
-        print(f"'{pickle_file}' not found, retrieving and preprocessing data set {dataset}...")
+        print(f"'{pickle_file}' not found, retrieving and preprocessing dataset {dataset}...")
+        X, y = load_data(dataset=dataset, pretrained=args.pretrained)
 
-        #df, categories = load_data(dataset)
-        df = load_data(dataset)
+        save_to_pickle(X, y, pickle_file)                               # Save the tokenized matrices to a pickle file
 
-        print("df:", df.shape)
-        print(df.head())
+    print("Tokenized data loaded.")
+ 
+    print("X:", type(X), X.shape)
+    print("y:", type(y), y.shape)
 
-        # Save the tokenized DataFrame to a pickle file
-        if (dataset == '20newsgroups'):
-            with open(pickle_file, 'wb') as f:
-                pickle.dump(df[['tokenized', 'CleanedText', 'LemmatizedText', 'category', 'category_name', 'text']], f)
+    print("train_test_sp;it...")
 
-        elif (dataset == 'bbc-news'):
-            with open(pickle_file, 'wb') as f:
-                pickle.dump(df[['ArticleId', 'Text', 'Category']], f)
-                #pickle.dump(df, f)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y, 
+        test_size = 0.25, 
+        random_state = 44,
+        shuffle=True 
+        )
 
-    print("Tokenized data loaded, df:", df.shape)
-    #print(df.head())
-    #print("categories:", categories)
-
-    print("Processing data...")
-
-    if (dataset == '20newsgroups'):
-
-        print("classifying 20 newsgroups...")
-
-        """
-        # POS Tagging and Counting
-        tagged_titles = df['text'].apply(lambda x: nltk.pos_tag(nltk.word_tokenize(x)))
-
-        def count_tags(title_with_tags):
-            tag_count = {}
-            for word, tag in title_with_tags:
-                tag_count[tag] = tag_count.get(tag, 0) + 1
-            return tag_count
-
-        # Create a DataFrame with POS tag counts
-        tagged_titles_df = pd.DataFrame(tagged_titles.apply(lambda x: count_tags(x)).tolist()).fillna(0)
-
-        # Sum the occurrences of each tag across all documents
-        tagged_titles_sum = tagged_titles_df.sum().sort_values(ascending=False)
-
-        # Plot POS Tag Frequency
-        trace = go.Bar(x=tagged_titles_sum.index, y=tagged_titles_sum.values)
-        layout = go.Layout(title='Frequency of POS Tags in IT Support Tickets Dataset', xaxis=dict(title='POS'), yaxis=dict(title='Count'))
-        fig = go.Figure(data=[trace], layout=layout)
-
-        # This will open the plot in the default web browser
-        pyo.plot(fig, filename='../../out/pos_tag_frequency.html')
-        """
-
-        # Feature Extraction and Model Training
-        print("Splitting the dataset...")
-
-        X = df['CleanedText']
-        y = df['category']
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=44)
-
-        print("X_train:", type(X_train), X_train.shape)
-        print("X_test:", type(X_test), X_test.shape)
-        
-        print("Y_train:", type(y_train), y_train.shape)
-        print("Y_test:", type(y_test), y_test.shape)
-
-        #print("Running model...")
-
-        run_model(X_train, X_test, y_train, y_test, args)
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
     
-    elif (dataset == 'bbc-news'):
+    print("y_train:", type(y_train), y_train.shape)
+    print("y_test:", type(y_test), y_test.shape)
 
-        print(f'classifying bbc-news...')
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            df['Text'],
-            df['Category'], 
-            test_size = 0.3, 
-            random_state = 60,
-            shuffle=True, 
-            stratify=df['Category']
-            )
-
-        print("X_train:", type(X_train), X_train.shape)
-        print("X_test:", type(X_test), X_test.shape)
-        
-        print("Y_train:", type(y_train), y_train.shape)
-        print("Y_test:", type(y_test), y_test.shape)
-
-        #print("Running model...")
-
-        run_model(X_train, X_test, y_train, y_test, args)
+    run_model(X_train, X_test, y_train, y_test, args)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+# run_model()
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def run_model(X_train, X_test, y_train, y_test, args):
+    
+    print("Running model...")
+
+    print('X_train:', type(X_train), X_train.shape)
+    print('X_test:', type(X_test), X_test.shape)
+             
+    # Generate embeddings
+    X_train, X_test = gen_embeddings(
+        X_train=X_train, 
+        X_test=X_test, 
+        dataset=args.dataset, 
+        embeddings=args.pretrained, 
+        mode=args.mode, 
+        ngram_size=args.ngram_size
+        )
+        
+    # Support Vector Machine Classifier
+    if (args.learner == 'svm'):
+        run_svm_model(X_train, X_test, y_train, y_test, args)
+
+    # Logistic Regression Classifier
+    elif (args.learner == 'lr'):
+        run_lr_model(X_train, X_test, y_train, y_test, args)
+
+    # Naive Bayes (MultinomialNB) Classifier
+    elif (args.learner == 'nb'):
+        run_nb_model(X_train, X_test, y_train, y_test, args)
+
+    elif (args.learner == 'dt'):
+        print("Decision Tree Classifier")
+        dt = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('dt', DecisionTreeClassifier())
+            ])
+
+        dt.fit(X_train, y_train)
+
+        test_predict = dt.predict(X_test)
+
+        train_accuracy = round(dt.score(X_train, y_train)*100)
+        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
+
+        print("Decision Tree Train Accuracy Score : {}% ".format(train_accuracy ))
+        print("Decision Tree Test Accuracy Score  : {}% ".format(test_accuracy ))
+        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
+
+    elif (args.learner == 'rf'):
+
+        print("Random Forest Classifier")
+        rfc = Pipeline([
+            ('tfidf', TfidfVectorizer()),
+            ('rfc', RandomForestClassifier(n_estimators=100))
+            ])
+
+        rfc.fit(X_train, y_train)
+
+        test_predict = rfc.predict(X_test)
+
+        train_accuracy = round(rfc.score(X_train, y_train)*100)
+        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
+
+        print("K-Nearest Neighbour Train Accuracy Score : {}% ".format(train_accuracy ))
+        print("K-Nearest Neighbour Test Accuracy Score  : {}% ".format(test_accuracy ))
+        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
+
+    else:
+        print(f"Invalid learner '{args.learner}'")
+        return
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
-#
 # ---------------------------------------------------------------------------------------------------------------------
 def run_svm_model(X_train, X_test, y_train, y_test, args):
 
@@ -562,7 +597,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
             )
 
         # Fit the model
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(X_train, y_train.toarray())
 
         print('Best parameters: {}'.format(grid_search.best_params_))
         print("best_estimator:", grid_search.best_estimator_)
@@ -648,9 +683,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
 
 # ---------------------------------------------------------------------------------------------------------------------
 # run_lr_model()
-#
 # ---------------------------------------------------------------------------------------------------------------------
-
 def run_lr_model(X_train, X_test, y_train, y_test, args):
 
     # Default Logistic Regression Model
@@ -759,9 +792,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
 
 # ---------------------------------------------------------------------------------------------------------------------
 # run_nb_model()
-#
 # ---------------------------------------------------------------------------------------------------------------------
-
 def run_nb_model(X_train, X_test, y_train, y_test, args):
 
     print("Building default Naive Bayes Classifier...")
@@ -868,15 +899,8 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
 
 
 # ------------------------------------------------------------------------------------------------------------------------
-#
 # BERT Embeddings functions
-#
 # ------------------------------------------------------------------------------------------------------------------------
-
-from transformers import BertTokenizer, BertModel
-import torch
-from torch.utils.data import DataLoader, Dataset
-
 class TextDataset(Dataset):
     def __init__(self, texts, tokenizer, max_len):
         self.texts = texts
@@ -923,8 +947,7 @@ def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=
     embeddings = np.vstack(embeddings)
     return embeddings
 
-
-
+# -------------------------------------------------------------------------------------------------------------------
 def cache_embeddings(train_embeddings, test_embeddings, cache_path):
     print("caching embeddings to:", cache_path)
     
@@ -944,169 +967,89 @@ def load_cached_embeddings(cache_path, debug=False):
     if (debug):
         print("did not find cached embeddings, returning None...")
     return None, None
-
+# -------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------
-#
+def todense(y):
+    """Convert sparse matrix to dense format as needed."""
+    return y.toarray() if issparse(y) else y
+
+
+def tosparse(y):
+    """Ensure matrix is in CSR format for efficient arithmetic operations."""
+    return y if issparse(y) else csr_matrix(y)
+# -------------------------------------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
 #
+# Embedding generation function with BERT tokenization
 # -------------------------------------------------------------------------------------------------------------------
 def gen_embeddings(X_train, X_test, dataset='20newsgroups', embeddings=None, mode='solo', ngram_size=1):
-    
     print("generating embeddings...")
-    
     print("dataset:", dataset)
     print("embeddings:", embeddings)
-    
     print('X_train:', type(X_train), X_train.shape)
     print('X_test:', type(X_test), X_test.shape)
     
-    print("generating TF-IDF vectors...")
-    # Generate TF-IDF vectors
-    tfidf = TfidfVectorizer(ngram_range=(1, ngram_size))
-    X_train_tfidf = tfidf.fit_transform(X_train)
-    X_test_tfidf = tfidf.transform(X_test)
-        
-    print('X_train_tfidf:', type(X_train_tfidf), X_train_tfidf.shape)
-    print('X_test_tfidf:', type(X_test_tfidf), X_test_tfidf.shape)
-    
-    if (embeddings is None):
-        return X_train_tfidf, X_test_tfidf
-    
     if embeddings == 'bert':
-
         print("Using BERT pretrained embeddings...")
 
         BERT_MODEL = 'bert-base-uncased'
+        tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)
         cache_path = f'../.vector_cache/{BERT_MODEL}_{dataset}.npz'
-    
         train_embeddings, test_embeddings = load_cached_embeddings(cache_path, debug=True)
 
-        if train_embeddings is None or test_embeddings is None:                     # If not cached, compute embeddings
+        # Tokenize text using BERT tokenizer and vectorize accordingly
+        def tokenize_and_vectorize(texts, tokenizer):
+            tokenized_texts = texts.apply(lambda x: tokenizer.tokenize(x))
+            token_indices = tokenized_texts.apply(lambda tokens: tokenizer.convert_tokens_to_ids(tokens))
             
+            # Initialize a zero matrix to store token counts (csr_matrix for efficiency)
+            num_texts = len(texts)
+            vocab_size = tokenizer.vocab_size
+            token_matrix = csr_matrix((num_texts, vocab_size), dtype=np.float32)
+            
+            for i, tokens in enumerate(token_indices):
+                for token in tokens:
+                    token_matrix[i, token] += 1  # Increment the count for each token
+            
+            return token_matrix
+
+        X_train_token_matrix = tokenize_and_vectorize(X_train, tokenizer)
+        X_test_token_matrix = tokenize_and_vectorize(X_test, tokenizer)
+
+        if train_embeddings is None or test_embeddings is None: 
             print("generating BERT embeddings")
-            
-            # Load pre-trained BERT model and tokenizer
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)
             bert_model = BertModel.from_pretrained(BERT_MODEL).to(device)
-    
-            # Generate BERT embeddings
             X_train_bert = get_bert_embeddings(X_train.tolist(), bert_model, tokenizer, device)
             X_test_bert = get_bert_embeddings(X_test.tolist(), bert_model, tokenizer, device)
-            
-            # Cache them for future use
             cache_embeddings(X_train_bert, X_test_bert, cache_path)
         else:
             X_train_bert = train_embeddings
             X_test_bert = test_embeddings
-                        
+
         print('X_train_bert:', type(X_train_bert), X_train_bert.shape)
         print('X_test_bert:', type(X_test_bert), X_test_bert.shape)
-        
-        if (args.mode == 'solo'):
-            
+
+        if mode == 'solo':
             print("using just the BERT embeddings alone (solo)...")
             X_train = X_train_bert
             X_test = X_test_bert
-
-        elif (args.mode == 'cat'):
-            
-            print("concatenating BERT embeddings with TF-IDF vectors...")
-
-            # Concatenate BERT embeddings with TF-IDF vectors
-            X_train_combined = np.hstack([X_train_tfidf.toarray(), X_train_bert])
-            X_test_combined = np.hstack([X_test_tfidf.toarray(), X_test_bert])
-
+        elif mode == 'cat':
+            print("concatenating BERT embeddings with token matrix...")
+            X_train_combined = np.hstack([X_train_token_matrix.toarray(), X_train_bert])
+            X_test_combined = np.hstack([X_test_token_matrix.toarray(), X_test_bert])
             X_train = X_train_combined
             X_test = X_test_combined
-            
-        elif (args.mode == 'dot'):
+        elif mode == 'dot':
+            print("dot product (matrix multiplication) of BERT embeddings with token matrix...")
+            X_train = X_train_token_matrix.dot(X_train_bert)
+            X_test = X_test_token_matrix.dot(X_test_bert)
 
-            print("dot product (matrix multiplication) of BERT embeddings with TF-IDF vectors...")
+    return X_train, X_test
 
-            # matrix multiply BERT embeddings with TF-IDF vectors
-
-            X_train = X_train_tfidf.dot(X_train_bert)
-            X_test = X_test_tfidf.dot(X_test_bert)
-            
-        return X_train, X_test
-    
-# -------------------------------------------------------------------------------------------------------------------
-#
-# run_model()
-#
-# -------------------------------------------------------------------------------------------------------------------
-         
-def run_model(X_train, X_test, y_train, y_test, args):
-    
-    print("Running model...")
-
-    print('X_train:', type(X_train), X_train.shape)
-    print('X_test:', type(X_test), X_test.shape)
-             
-    # Generate embeddings
-    X_train, X_test = gen_embeddings(
-        X_train=X_train, 
-        X_test=X_test, 
-        dataset=args.dataset, 
-        embeddings=args.pretrained, 
-        mode=args.mode, 
-        ngram_size=args.ngram_size
-        )
-        
-    # Support Vector Machine Classifier
-    if (args.learner == 'svm'):
-        run_svm_model(X_train, X_test, y_train, y_test, args)
-
-    # Logistic Regression Classifier
-    elif (args.learner == 'lr'):
-        run_lr_model(X_train, X_test, y_train, y_test, args)
-
-    # Naive Bayes (MultinomialNB) Classifier
-    elif (args.learner == 'nb'):
-        run_nb_model(X_train, X_test, y_train, y_test, args)
-
-    elif (args.learner == 'dt'):
-        print("Decision Tree Classifier")
-        dt = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('dt', DecisionTreeClassifier())
-            ])
-
-        dt.fit(X_train, y_train)
-
-        test_predict = dt.predict(X_test)
-
-        train_accuracy = round(dt.score(X_train, y_train)*100)
-        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-        print("Decision Tree Train Accuracy Score : {}% ".format(train_accuracy ))
-        print("Decision Tree Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-    elif (args.learner == 'rf'):
-
-        print("Random Forest Classifier")
-        rfc = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('rfc', RandomForestClassifier(n_estimators=100))
-            ])
-
-        rfc.fit(X_train, y_train)
-
-        test_predict = rfc.predict(X_test)
-
-        train_accuracy = round(rfc.score(X_train, y_train)*100)
-        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-        print("K-Nearest Neighbour Train Accuracy Score : {}% ".format(train_accuracy ))
-        print("K-Nearest Neighbour Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-    else:
-        print(f"Invalid learner '{args.learner}'")
-        return
 
 
     

@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_class_baselines.py"
-LOG="--log-file ../log/ml_ohsumed.test"
+LOG="--log-file ../log/ml_classification.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 
@@ -22,14 +22,15 @@ OPTIMC="--optimc"
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 #declare -a datasets=("reuters21578" "20newsgroups" "ohsumed" "rcv1")
-declare -a datasets=("ohsumed")
+declare -a datasets=("20newsgroups")
 #declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a pickle_paths=("../pickles")
 #declare -a models=("svm" "lr" "nb")
-declare -a models=("nb")
+declare -a models=("lr")
 #declare -a modes=("tfidf" "count")
 declare -a modes=("tfidf")
 #declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "llama")
+declare -a embeddings=("glove" "word2vec" "fasttext")
 
 
 # Embedding config params
