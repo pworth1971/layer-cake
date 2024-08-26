@@ -546,9 +546,9 @@ def create_embedding(texts, model, embedding_dim):
         words = text.split()
         word_embeddings = [model[word] for word in words if word in model]
         if word_embeddings:
-            embeddings[i] = np.mean(word_embeddings, axis=0)  # Average the word embeddings
+            embeddings[i] = np.mean(word_embeddings, axis=0)            # Average the word embeddings
         else:
-            embeddings[i] = np.zeros(embedding_dim)  # Use a zero vector if no words are in the model
+            embeddings[i] = np.zeros(embedding_dim)                     # Use a zero vector if no words are in the model
     return embeddings
 # -------------------------------------------------------------------------------------------------------------------
 
@@ -571,6 +571,7 @@ def tokenize_and_vectorize(texts, tokenizer):
     return token_matrix
 # -------------------------------------------------------------------------------------------------------------------
 
+from gensim.models import KeyedVectors
 
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
@@ -579,7 +580,7 @@ def tokenize_and_vectorize(texts, tokenizer):
 # -------------------------------------------------------------------------------------------------------------------
 def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, embedding_path=None, vocab=None, mode='solo'):
     
-    print("generating embeddings...")
+    print("\tgenerating embeddings...")
     
     print("dataset:", dataset)
     print("embeddings:", embeddings)
@@ -599,66 +600,61 @@ def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, emb
     pretrained_embeddings.append(P)
     print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
 
+    embedding_dim = len(vocabulary)
+    print("embedding_dim:", embedding_dim)
 
-
-    """
-    if (embeddings == 'word2vec' or embeddings == 'glove' or embeddings == 'fasttext'):
-    
-        print("Using word based pretrained embeddings...")
+    if embedding_type in ['word2vec', 'glove', 'fasttext']:
+        print("Using word-based pretrained embeddings...")
 
         # Load the pre-trained embeddings based on the specified model
-        if embeddings == 'word2vec':
+        if embedding_type == 'word2vec':
             print("Using Word2Vec pretrained embeddings...")
-            from gensim.models import KeyedVectors
             model = KeyedVectors.load_word2vec_format(embedding_path, binary=True)
-            print("model:", type(model), model)
-
-        elif embeddings == 'glove':
+        elif embedding_type == 'glove':
             print("Using GloVe pretrained embeddings...")
             from gensim.scripts.glove2word2vec import glove2word2vec
             glove_input_file = embedding_path
             word2vec_output_file = glove_input_file + '.word2vec'
             glove2word2vec(glove_input_file, word2vec_output_file)
-            from gensim.models import KeyedVectors
             model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
-            print("model:", type(model), model)
-
-        elif embeddings == 'fasttext':
+        elif embedding_type == 'fasttext':
             print("Using fastText pretrained embeddings...")
-            from gensim.models import FastText
-            model = FastText.load_fasttext_format(embedding_path)
-            print("model:", type(model), model)
-
+            model = KeyedVectors.load_word2vec_format(embedding_path)
+        
         embedding_dim = model.vector_size
         print("embedding_dim:", embedding_dim)
 
-        # Generate embeddings for train and test sets
-        X_train_embeddings = create_embedding(X_train, model, embedding_dim)
-        X_test_embeddings = create_embedding(X_test, model, embedding_dim)
+        # Create the embedding matrix that aligns with the TF-IDF vocabulary
+        vocab_size = X_train.shape[1]
+        embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        
+        # Extract the pretrained embeddings for words in the TF-IDF vocabulary
+        for word, idx in vocab.items():
+            if word in model:
+                embedding_matrix[idx] = model[word]
+            else:
+                # If the word is not found in the pretrained model, use a random vector or zeros
+                embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
 
-        print('X_train_embeddings:', type(X_train_embeddings), X_train_embeddings.shape)
-        print('X_test_embeddings:', type(X_test_embeddings), X_test_embeddings.shape)
+        print("embedding_matrix shape:", embedding_matrix.shape)
 
         if mode == 'solo':
             print("Using just the word embeddings alone (solo)...")
-            X_train = X_train_embeddings
-            X_test = X_test_embeddings
+            # Use the embedding matrix directly as your feature set
+            X_train = X_train.dot(embedding_matrix)
+            X_test = X_test.dot(embedding_matrix)
         elif mode == 'cat':
-            print("Concatenating word embeddings with token matrix...")
-            # Example of how you might concatenate with a token matrix (requires tokenization step):
-            # X_train_combined = np.hstack([X_train_token_matrix.toarray(), X_train_embeddings])
-            # X_test_combined = np.hstack([X_test_token_matrix.toarray(), X_test_embeddings])
-            # X_train = X_train_combined
-            # X_test = X_test_combined
-            pass  # Handle the concatenation logic if needed
+            print("Concatenating word embeddings with TF-IDF vectors...")
+            X_train = np.hstack([X_train.toarray(), X_train.dot(embedding_matrix)])
+            X_test = np.hstack([X_test.toarray(), X_test.dot(embedding_matrix)])
         elif mode == 'dot':
-            print("Dot product (matrix multiplication) of word embeddings with token matrix...")
-            # Example of how you might perform a dot product (requires tokenization step):
-            # X_train = X_train_token_matrix.dot(X_train_embeddings)
-            # X_test = X_test_token_matrix.dot(X_test_embeddings)
-            pass  # Handle the dot product logic if needed
-    """
+            print("Dot product (matrix multiplication) of word embeddings with TF-IDF vectors...")
+            X_train = X_train.dot(embedding_matrix)
+            X_test = X_test.dot(embedding_matrix)
 
+    print("after embedding generation...")
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
 
     if embedding_type == 'bert':
         print("Using BERT pretrained embeddings...")

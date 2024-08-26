@@ -10,7 +10,8 @@ from sklearn.preprocessing import MinMaxScaler
 from util.multilabel_classifier import MLClassifier
 from util.metrics import evaluation
 from util.common import *
-from data.dataset import *
+from data.lc_dataset import LCDataset
+
 from embedding.supervised import get_supervised_embeddings
 
 
@@ -276,18 +277,17 @@ def classify(args, learner, pretrained, pretrained_vectors, supervised, logfile,
             supervised=supervised, 
             )
 
-        print("before matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+        print("before matrix multiplication; Xtr, Xte:\n", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
         
         Xtr = Xtr.dot(F)
         Xte = Xte.dot(F)
 
-        print("after matrix multiplication; Xtr, Xte:", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
+        print("after matrix multiplication; Xtr, Xte:\n", type(Xtr), Xtr.shape, type(Xte), Xte.shape)
 
         sup_tend = time() - tinit
     
-
-    print('final matrix types (Xtr, ytr, Xte, yte):', type(Xtr), type(ytr), type(Xte), type(yte)) 
-    print('final matrix shapes (Xtr, ytr, Xte, yte):', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
+    print('final matrix types (Xtr, ytr, Xte, yte):\n', type(Xtr), type(ytr), type(Xte), type(yte)) 
+    print('final matrix shapes (Xtr, ytr, Xte, yte):\n', Xtr.shape, ytr.shape, Xte.shape, yte.shape)
 
     # run the model
     print("running model...")
@@ -331,13 +331,13 @@ def classify(args, learner, pretrained, pretrained_vectors, supervised, logfile,
 
 if __name__ == '__main__':
 
-    available_datasets = Dataset.dataset_available
+    available_datasets = LCDataset.dataset_available
 
     # Training settings
     parser = argparse.ArgumentParser(description='Text Classification with Embeddings')
     
     parser.add_argument('--dataset', type=str, default='20newsgroups', metavar='N',
-                        help=f'dataset, one in {Dataset.dataset_available}')
+                        help=f'dataset, one in {LCDataset.dataset_available}')
     
     parser.add_argument('--pickle-dir', type=str, default='../pickles', metavar='str',
                         help=f'path where to load the pickled dataset from')
@@ -439,10 +439,10 @@ if __name__ == '__main__':
         cpus, mem, gpus = get_system_resources()
 
         print("new model, loading embeddings...")
-        pretrained, pretrained_vectors = load_pretrained_embeddings(embeddings, args)           
+        pretrained, pretrained_vectors, pretrained_vocab = load_pretrained_embeddings(embeddings, args)           
 
-        print("loading dataset", {args.dataset}, "...")
-        dataset = Dataset.load(
+        print("loading LCDataset", {args.dataset}, "...")
+        dataset = LCDataset.load(
             dataset_name=args.dataset, 
             vectorization_type=vtype,                   # TFIDF or Count
             base_pickle_path=args.pickle_dir
@@ -544,7 +544,7 @@ if __name__ == '__main__':
             if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
                 print(f"initializing dataset: {current_config.dataset}")
 
-                dataset = Dataset.load(dataset_name=current_config.dataset, vectorization_type=vtype, base_pickle_path=current_config.pickle_dir).show()
+                dataset = LCDataset.load(dataset_name=current_config.dataset, vectorization_type=vtype, base_pickle_path=current_config.pickle_dir).show()
                 word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
 
             # run layer_cake
