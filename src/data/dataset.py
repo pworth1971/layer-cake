@@ -52,7 +52,7 @@ class Dataset:
     Supports multiple datasets including Reuters, 20 Newsgroups, Ohsumed, RCV1, and WIPO.
     """
 
-    dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1'}
+    available_datasets = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1'}
 
     """
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed', 'jrcall',

@@ -1,4 +1,3 @@
-import warnings
 import argparse
 from time import time
 
@@ -326,134 +325,6 @@ def classify(args, learner, pretrained, pretrained_vectors, supervised, logfile,
     logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend)
     """
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def set_method_name(opt):
-
-    method_name = f'{opt.learner}-{opt.mode}-{"opC" if args.optimc else "default"}'
-
-    if opt.pretrained:
-        method_name += f'-{opt.pretrained}'
-    if opt.supervised:
-        method_name += f'-supervised-{opt.supervised_method}'
-
-    return method_name
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-def get_system_resources():
-
-    print("get system info...")
-
-    # get system info to be used for logging below
-    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
-
-    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
-    mem = total_memory
-
-    gpus = 'None'
-    if (num_cuda_devices >0):
-        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
-        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
-
-    return cpus, mem, gpus
-
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize(opt):
-
-    print("initializing...")
-    
-    # set up model type
-    if args.learner == 'svm':
-        learner = LinearSVC
-        learner_name = 'SVM' 
-    elif args.learner == 'lr':
-        learner = LogisticRegression
-        learner_name = 'LR'
-    elif args.learner == 'nb':
-        #learner = MultinomialNB
-        learner = GaussianNB
-        learner_name = 'NB'
-    else:
-        print("** Unknown learner, possible values are svm, lr or nb **")
-        return
-
-    print("learner:", learner)
-    print("learner_name: ", {learner_name})
-    
-    # disable warnings
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", category=FutureWarning)
-
-    mode = args.mode
-    
-    if args.mode == 'count':
-        vtype = 'count'
-    else:
-        vtype = 'tfidf'             # default to tfidf
-
-    #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
-    method_name = set_method_name(args)
-    print("method_name: ", {method_name})
-
-    pretrained = False
-    embeddings ='none'
-    emb_path = VECTOR_CACHE
-
-    if args.pretrained == 'bert':
-        pretrained = True
-        embeddings = 'bert'
-        emb_path = args.bert_path
-    elif args.pretrained == 'glove':
-        pretrained = True
-        embeddings = 'glove'
-        emb_path = args.glove_path
-    elif args.pretrained == 'word2vec':
-        pretrained = True
-        embeddings = 'word2vec'
-        emb_path = args.word2vec_path
-    elif args.pretrained == 'fasttext':
-        pretrained = True
-        embeddings = 'fasttext'
-        emb_path = args.fasttext_path
-    elif args.pretrained == 'llama':
-        pretrained = True
-        embeddings = 'llama'
-        emb_path = args.llama_path
-
-    print("emb_path: ", {emb_path})
-
-    supervised = False
-    if args.supervised:
-        supervised = True
-
-    print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
-
-    #print("initializing logfile embeddings value to:", {embeddings})
-    logfile = init_layered_baseline_logfile(                             
-        logfile=args.log_file,
-        method_name=method_name, 
-        dataset=args.dataset, 
-        model=learner_name,
-        pretrained=pretrained, 
-        embeddings=embeddings,
-        supervised=supervised
-        )
-
-    # check to see if the model has been run before
-    already_modelled = logfile.already_calculated(
-        dataset=args.dataset,
-        embeddings=embeddings,
-        model=learner_name, 
-        params=method_name,
-        pretrained=pretrained, 
-        wc_supervised=supervised
-        )
-
-    print("already_modelled:", already_modelled)
-
-    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile
-# -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -565,7 +436,7 @@ if __name__ == '__main__':
             print("Run with --force option to override, returning...")
             exit(0)
             
-        cpus, mem, gpus = get_sysyem_resources()
+        cpus, mem, gpus = get_system_resources()
 
         print("new model, loading embeddings...")
         pretrained, pretrained_vectors = load_pretrained_embeddings(embeddings, args)           
@@ -620,7 +491,7 @@ if __name__ == '__main__':
         pretrained_vector = None
         dataset = None
 
-        cpus, mem, gpus = get_sysyem_resources()
+        cpus, mem, gpus = get_system_resources()
         
         for current_config in configurations:
 

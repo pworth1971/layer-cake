@@ -4,7 +4,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import numpy as np
 from tqdm import tqdm
 import torch
-from scipy.sparse import vstack, issparse
+from scipy.sparse import issparse, csr_matrix
 from joblib import Parallel, delayed
 import multiprocessing
 import itertools
@@ -12,7 +12,19 @@ import itertools
 from util.csv_log import CSVLog
 import matplotlib.pyplot as plt
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.naive_bayes import MultinomialNB
+
 from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
+
+# metrics reporting
+import psutil
+import platform
+
+import argparse
+
+
 
 # pretrained model types
 DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
@@ -20,16 +32,7 @@ DEFAULT_LLAMA_PRETRAINED_MODEL = 'meta-llama/Llama-2-7b-hf'
 
 # embedding cache directory
 VECTOR_CACHE = '../.vector_cache'                                   # assumes everything is run from /bin directory
-
-
-# metrics reporting
-import psutil
-import torch
-
-import argparse
-
-from scipy.sparse import issparse, csr_matrix
-
+OUT_DIR = '../out/'
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # load_pretrained_embeddings()
@@ -45,18 +48,22 @@ def load_pretrained_embeddings(model, args):
     if model=='glove':
         print("path:", {args.glove_path})
         print("Loading GloVe pretrained embeddings...")
-        return True, GloVe(path=args.glove_path)
+        glv = GloVe(path=args.glove_path)
+        return True, glv, glv.vocabulary
     
     elif model=='word2vec':
         print("path:", {args.word2vec_path})
         print("Loading Word2Vec pretrained embeddings...")
-        return True, Word2Vec(path=args.word2vec_path, limit=1000000)
+        word2vec = Word2Vec(path=args.word2vec_path, limit=1000000)
+        return True, word2vec, word2vec.vocabulary 
     
     elif model=='fasttext':
         print("path:", {args.fasttext_path})
         print("Loading fastText pretrained embeddings...")
-        return True, FastText(path=args.fasttext_path, limit=1000000)
+        fasttext = FastText(path=args.fasttext_path, limit=1000000)
+        return True, fasttext, fasttext.vocabulary
     
+    """
     elif model=='bert':
         print("path:", {args.bert_path})
         print("Loading BERT pretrained embeddings...")
@@ -66,6 +73,7 @@ def load_pretrained_embeddings(model, args):
         print("path:", {args.llama_path})
         print("Loading LLaMA pretrained embeddings...")
         return True, LLaMA(model_name=DEFAULT_LLAMA_PRETRAINED_MODEL, emb_path=args.llama_path)
+    """
 
     return False, None
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -517,3 +525,204 @@ def tosparse(y):
     return y if issparse(y) else csr_matrix(y)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def initialize(args):
+
+    print("initializing...")
+    
+    # set up model type
+    if args.learner == 'svm':
+        learner = LinearSVC
+        learner_name = 'SVM' 
+    elif args.learner == 'lr':
+        learner = LogisticRegression
+        learner_name = 'LR'
+    elif args.learner == 'nb':
+        learner = MultinomialNB
+        #learner = GaussianNB
+        learner_name = 'NB'
+    else:
+        print("** Unknown learner, possible values are svm, lr or nb **")
+        return
+
+    print("learner:", learner)
+    print("learner_name: ", {learner_name})
+    
+    # disable warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    
+    if args.mode == 'count':
+        vtype = 'count'
+    else:
+        vtype = 'tfidf'             # default to tfidf
+
+    #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
+    method_name = set_method_name(args)
+    print("method_name: ", {method_name})
+
+    pretrained = False
+    embeddings ='none'
+    emb_path = VECTOR_CACHE
+
+    if args.pretrained == 'bert':
+        pretrained = True
+        embeddings = 'bert'
+        emb_path = args.bert_path
+    elif args.pretrained == 'glove':
+        pretrained = True
+        embeddings = 'glove'
+        emb_path = args.glove_path
+    elif args.pretrained == 'word2vec':
+        pretrained = True
+        embeddings = 'word2vec'
+        emb_path = args.word2vec_path
+    elif args.pretrained == 'fasttext':
+        pretrained = True
+        embeddings = 'fasttext'
+        emb_path = args.fasttext_path
+    elif args.pretrained == 'llama':
+        pretrained = True
+        embeddings = 'llama'
+        emb_path = args.llama_path
+
+    print("emb_path: ", {emb_path})
+
+    supervised = False
+    if args.supervised:
+        supervised = True
+
+    print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
+
+    #print("initializing logfile embeddings value to:", {embeddings})
+    logfile = init_layered_baseline_logfile(                             
+        logfile=args.log_file,
+        method_name=method_name, 
+        dataset=args.dataset, 
+        model=learner_name,
+        pretrained=pretrained, 
+        embeddings=embeddings,
+        supervised=supervised
+        )
+
+    # check to see if the model has been run before
+    already_modelled = logfile.already_calculated(
+        dataset=args.dataset,
+        embeddings=embeddings,
+        model=learner_name, 
+        params=method_name,
+        pretrained=pretrained, 
+        wc_supervised=supervised
+        )
+
+    print("already_modelled:", already_modelled)
+
+    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def set_method_name(opt):
+
+    method_name = f'{opt.learner}-{opt.mode}-{"opC" if opt.optimc else "default"}'
+
+    if opt.pretrained:
+        method_name += f'-{opt.pretrained}'
+    if opt.supervised:
+        method_name += f'-supervised-{opt.supervised_method}'
+
+    return method_name
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def get_system_resources():
+
+    print("get system info...")
+
+    operating_system = platform.platform()
+
+    # get system info to be used for logging below
+    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
+
+    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
+    mem = total_memory
+
+    gpus = 'None'
+    if (num_cuda_devices >0):
+        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
+
+    return cpus, mem, gpus
+
+
+
+
+
+    
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
+
+    print("Creating confusion matrix...")
+
+    # Assuming y_test and y_pred_best are already defined
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Plotting the confusion matrix as a table with numbers
+    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
+
+    # Hide axes
+    ax.xaxis.set_visible(False) 
+    ax.yaxis.set_visible(False)
+    ax.set_frame_on(False)
+
+    # Create the table with smaller font sizes and adjusted scale
+    table = ax.table(
+        cellText=conf_matrix,
+        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
+        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
+        cellLoc='center',
+        loc='center'
+    )
+
+    # Adjust the font size and layout
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)  # Reduced font size for better fitting
+    table.scale(1.2, 1.2)
+
+    # Add a title with centered text
+    plt.title(title, fontsize=16, pad=20)
+
+    # Adjust layout to add more padding around the plot
+    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
+
+    # Save the plot to a file
+    confusion_matrix_filename = file_name
+    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
+    plt.show()
+
+    print(f"Confusion matrix saved as {confusion_matrix_filename}")
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # Plain text explanation of the confusion matrix
+    if debug:
+        print("\nHow to read this confusion matrix:")
+        print("------------------------------------------------------")
+        print("The confusion matrix shows the performance of the classification model.")
+        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
+        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
+        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
+        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
+        
+        print("\nConfusion Matrix Values:")
+        for i in range(len(conf_matrix)):
+            print(f"Actual class {i}:")
+            for j in range(len(conf_matrix[i])):
+                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
+
+# --------------------------------------------------------------------------------------------------------------------------------------------

@@ -7,14 +7,12 @@ import requests
 import zipfile
 from tqdm import tqdm
 
-import torch, torchtext
+import torch
 from torchtext.vocab import GloVe as TorchTextGloVe
 
 from transformers import BertModel, BertTokenizer
 from transformers import LlamaModel, LlamaTokenizer
 from transformers import  logging as transformers_logging
-
-import joblib
 
 
 
@@ -218,7 +216,7 @@ class Word2Vec(PretrainedEmbeddings):
         #self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
         self.word2index = {w: i for i,w in enumerate(self.embed.index_to_key)}      # gensim 4.0
         
-        #print('Done')
+        print('Done')
 
     def vocabulary(self):
         return set(self.word2index.keys())
