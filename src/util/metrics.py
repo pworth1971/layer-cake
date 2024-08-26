@@ -1,17 +1,10 @@
-import numpy as np
 
 from scipy.sparse import lil_matrix, issparse
 from scipy.sparse import csr_matrix, find, issparse
 
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard_score
-from sklearn.metrics import confusion_matrix
 
-import os
-import pandas as pd
-
-import warnings
-from sklearn.exceptions import ConvergenceWarning
 
 
 def evaluation(y_true, y_pred, classification_type, debug=False):
@@ -45,71 +38,17 @@ def evaluation(y_true, y_pred, classification_type, debug=False):
     print("y_pred:", type(y_pred), y_pred.shape)
     """
 
-    if classification_type == 'multilabel':
-        eval_function = multilabel_eval
-    elif classification_type == 'singlelabel':
-        eval_function = singlelabel_eval
+    print("evaluating...")
+    print("classification_type:", classification_type)
 
-    # get metrics
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = eval_function(y_true, y_pred, debug=debug)    
-    
+    if classification_type in ['multilabel', 'multi-label']:
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = multilabel_eval(y_true, y_pred, debug=debug)    
+    elif classification_type in ['singlelabel', 'single-label']:
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = singlelabel_eval(y_true, y_pred, debug=debug)         
+    else:
+        print(f'Warning: unknown classification type {classification_type}')
+
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
-
-#
-# original code, for testing & validation purposes
-#
-def multilabel_eval_orig(y, y_):
-
-    tp = y.multiply(y_)
-
-    fn = lil_matrix(y.shape)
-    true_ones = y==1
-    fn[true_ones]=1-tp[true_ones]
-
-    fp = lil_matrix(y.shape)
-    pred_ones = y_==1
-    if pred_ones.nnz>0:
-        fp[pred_ones]=1-tp[pred_ones]
-
-    #macro-f1
-    tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
-    fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()
-    fp_macro = np.asarray(fp.sum(axis=0), dtype=int).flatten()
-
-    pos_pred = tp_macro+fp_macro
-    pos_true = tp_macro+fn_macro
-    prec=np.zeros(shape=tp_macro.shape,dtype=float)
-    rec=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(tp_macro, pos_pred, out=prec, where=pos_pred>0)
-    np.divide(tp_macro, pos_true, out=rec, where=pos_true>0)
-    den=prec+rec
-
-    macrof1=np.zeros(shape=tp_macro.shape,dtype=float)
-    np.divide(np.multiply(prec,rec),den,out=macrof1,where=den>0)
-    macrof1 *=2
-
-    macrof1[(pos_pred==0)*(pos_true==0)]=1
-    macrof1 = np.mean(macrof1)
-
-    #micro-f1
-    tp_micro = tp_macro.sum()
-    fn_micro = fn_macro.sum()
-    fp_micro = fp_macro.sum()
-    pos_pred = tp_micro + fp_micro
-    pos_true = tp_micro + fn_micro
-    prec = (tp_micro / pos_pred) if pos_pred>0 else 0
-    rec  = (tp_micro / pos_true) if pos_true>0 else 0
-    den = prec+rec
-    microf1 = 2*prec*rec/den if den>0 else 0
-    if pos_pred==pos_true==0:
-        microf1=1
-
-    #accuracy
-    ndecisions = np.multiply(*y.shape)
-    tn = ndecisions - (tp_micro+fn_micro+fp_micro)
-    acc = (tp_micro+tn)/ndecisions
-
-    return macrof1,microf1,acc
 
 
 def multilabel_eval(y, y_, debug=False):
@@ -215,6 +154,7 @@ def multilabel_eval(y, y_, debug=False):
     tn = ndecisions - (tp_micro+fn_micro+fp_micro)
     acc = (tp_micro+tn)/ndecisions
 
+    """
     # ----------------------------------------------------------------------------------------------------------------------------------
     # double check nunbers
     #
@@ -272,6 +212,7 @@ def multilabel_eval(y, y_, debug=False):
         accuracy = correct_predictions / total_elements
         print("accuracy:", accuracy)
     # ----------------------------------------------------------------------------------------------------------------------------------
+    """
 
     # Hamming Loss
     h_loss = hamming_loss(y.toarray(), y_.toarray())

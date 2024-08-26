@@ -1,6 +1,3 @@
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -18,9 +15,12 @@ from sklearn.naive_bayes import MultinomialNB
 
 from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
-# metrics reporting
-import psutil
+# system and metrics reporting
 import platform
+import os
+import platform
+import psutil
+import GPUtil
 
 import argparse
 
@@ -248,9 +248,9 @@ def print_arguments(options):
         print(f"{arg}: {value}")
 
 
-def get_sysinfo():
+def get_sysinfo(debug=False):
 
-    print("--SYSTEM INFO--")
+    print("get_sysinfo()...")
     
     # Get CPU information
     num_physical_cores = psutil.cpu_count(logical=False)
@@ -289,12 +289,10 @@ def get_sysinfo():
         num_cuda_devices = 0
         print("CUDA is not available")
 
-    """
     gpus = GPUtil.getGPUs()
     for gpu in gpus:
         print(f"GPU: {gpu.name}, Memory Free: {gpu.memoryFree}MB, Memory Used: {gpu.memoryUsed}MB, Memory Total: {gpu.memoryTotal}MB")
-    """
-
+    
     return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
 
 
@@ -325,29 +323,6 @@ def index_dataset(dataset, pretrained=None):
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
-# ---------------------------------------------------------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------------------------------------------------------------------
-# init_logile()
-# 
-# Simple, legacy log file that included run info in 'method'
-#
-def init_simple_logfile(method_name, opt):
-
-    logfile = CSVLog(
-        file=opt.log_file, 
-        columns=['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'], 
-        verbose=True, 
-        overwrite=False)
-
-    logfile.set_default('dataset', opt.dataset)
-    logfile.set_default('run', opt.seed)
-    logfile.set_default('method', method_name)
-    
-    assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
-    
-    return logfile
 
 
 
@@ -374,6 +349,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
             'value', 
             'run', 
             'timelapse',
+            'system_type',
             'cpus',
             'mem',
             'gpus'], 
@@ -390,6 +366,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
     logfile.set_default('tunable', opt.tunable)
 
     # add system info
+    logfile.set_default('system_type', os)
     logfile.set_default('cpus', cpus)
     logfile.set_default('mem', mem)
     logfile.set_default('gpus', gpus)
@@ -421,6 +398,7 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
             'run',
             'value',
             'timelapse',
+            'system_type',
             'cpus',
             'mem',
             'gpus'], 
@@ -530,7 +508,7 @@ def tosparse(y):
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def initialize(args):
 
-    print("initializing...")
+    print("\tinitializing...")
     
     # set up model type
     if args.learner == 'svm':
@@ -550,17 +528,19 @@ def initialize(args):
     print("learner:", learner)
     print("learner_name: ", {learner_name})
     
+    """
     # disable warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
-    
+    """
+
     if args.mode == 'count':
         vtype = 'count'
     else:
         vtype = 'tfidf'             # default to tfidf
 
     #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
-    method_name = set_method_name(args)
+    method_name = set_method_name2(args)
     print("method_name: ", {method_name})
 
     pretrained = False
@@ -639,11 +619,80 @@ def set_method_name(opt):
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def set_method_name2(opt):
+
+    method_name = f'{opt.learner}-{opt.mode}-{"opC" if opt.optimc else "default"}'
+
+    if opt.pretrained:
+        method_name += f'-pretrained-{opt.pretrained}'
+        method_name += f'-mode:{opt.mode}'
+    if opt.supervised:
+        method_name += f'-supervised-{opt.supervised_method}'
+
+    return method_name
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+class SystemResources:
+    def __init__(self):
+        self.os = self.get_os()
+        self.cpus = self.get_cpus()
+        self.mem = self.get_mem()
+        self.gpus = self.get_gpus()
+
+        self.num_physical_cores, self.num_logical_cores, self.total_memory, self.avail_mem, self.num_cuda_devices, self.cuda_devices = get_sysinfo()
+
+    def get_os(self):
+        return platform.platform()
+
+    def get_cpus(self):
+        return os.cpu_count()
+
+    def get_cpu_details(self):
+        return f'physical:{self.num_physical_cores},logical:{self.num_logical_cores}'
+
+    def get_mem(self):
+        mem = psutil.virtual_memory()
+        return {'total': mem.total, 'available': mem.available, 'percent': mem.percent}
+        
+    def get_total_mem(self):
+        return self.total_memory
+
+    def get_gpus(self):
+        gpus = GPUtil.getGPUs()
+        gpu_info = []
+        for gpu in gpus:
+            gpu_info.append({
+                'name': gpu.name,
+                'total_memory': gpu.memoryTotal,
+                'available_memory': gpu.memoryFree,
+                'utilization': gpu.load
+            })
+        return gpu_info
+
+    def get_gpu_summary(self):
+        if (self.num_cuda_devices >0):
+            #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+            return f'{self.num_cuda_devices}:{self.cuda_devices[0]}'
+        else:
+            return None
+
+    def __str__(self):
+        return f"OS: {self.os}, CPUs: {self.cpus}, Memory: {self.mem}, GPUs: {self.gpus}"
+
+
+
+
 def get_system_resources():
 
-    print("get system info...")
+    print("get_system_resources()...")
 
     operating_system = platform.platform()
+    print("Operating System:", operating_system)
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
@@ -656,7 +705,7 @@ def get_system_resources():
         #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
         gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
 
-    return cpus, mem, gpus
+    return operating_system, cpus, mem, gpus
 
 
 

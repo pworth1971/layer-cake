@@ -2,11 +2,11 @@
 import numpy as np
 import os
 import argparse
+from time import time
 
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn import metrics
@@ -14,15 +14,13 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, classific
 from sklearn.metrics import make_scorer, recall_score, hamming_loss, jaccard_score
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import Pipeline
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
 
-from util.common import initialize, get_system_resources, load_pretrained_embeddings
+from util.common import initialize, get_system_resources, SystemResources, load_pretrained_embeddings
 from data.lc_dataset import LCDataset, load_data, save_to_pickle, load_from_pickle
-
+from util.metrics import evaluation
 
 import warnings
+from ipykernel.pickleutil import class_type
 warnings.filterwarnings('ignore')
 
 #
@@ -44,7 +42,7 @@ NUM_JOBS = -1          # important to manage CUDA memory allocation
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def run_model(X_train, X_test, y_train, y_test, args):
     
-    print("Running model...")
+    print("\tRunning model...")
 
     print('X_train:', type(X_train), X_train.shape)
     print('X_test:', type(X_test), X_test.shape)
@@ -55,64 +53,36 @@ def run_model(X_train, X_test, y_train, y_test, args):
     #print("y_train:", y_train)
     #print("y_test:", y_test)
         
-    # Support Vector Machine Classifier
-    if (args.learner == 'svm'):                                     # Support Vector Machine Classifier
-        run_svm_model(X_train, X_test, y_train, y_test, args)
+    tinit = time()
 
+    # Support Vector Machine Classifier
+    if (args.learner == 'svm'):                                     
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args)
+    
     # Logistic Regression Classifier
-    elif (args.learner == 'lr'):                                    # Logistic Regression Classifier
-        run_lr_model(X_train, X_test, y_train, y_test, args)
+    elif (args.learner == 'lr'):                                  
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args)
 
     # Naive Bayes (MultinomialNB) Classifier
-    elif (args.learner == 'nb'):                                    # Naive Bayes Classifier
-        run_nb_model(X_train, X_test, y_train, y_test, args)
-
-    elif (args.learner == 'dt'):                                    # Decision Tree Classifier
-        print("Decision Tree Classifier")
-        dt = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('dt', DecisionTreeClassifier())
-            ])
-
-        dt.fit(X_train, y_train)
-
-        test_predict = dt.predict(X_test)
-
-        train_accuracy = round(dt.score(X_train, y_train)*100)
-        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-        print("Decision Tree Train Accuracy Score : {}% ".format(train_accuracy ))
-        print("Decision Tree Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
-    elif (args.learner == 'rf'):
-
-        print("Random Forest Classifier")
-        rfc = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('rfc', RandomForestClassifier(n_estimators=100))
-            ])
-
-        rfc.fit(X_train, y_train)
-
-        test_predict = rfc.predict(X_test)
-
-        train_accuracy = round(rfc.score(X_train, y_train)*100)
-        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
-
-        print("K-Nearest Neighbour Train Accuracy Score : {}% ".format(train_accuracy ))
-        print("K-Nearest Neighbour Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
-
+    elif (args.learner == 'nb'):                                  
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args)
+    
     else:
         print(f"Invalid learner '{args.learner}'")
-        return
+        return None
+
+    formatted_string = f'Macro F1: {Mf1:.4f} Micro F1: {mf1:.4f} Acc: {accuracy:.4f} Hamming Loss: {h_loss:.4f} Precision: {precision:.4f} Recall: {recall:.4f} Jaccard Index: {j_index:.4f}'
+    print(formatted_string)
+
+    tend = time() - tinit
+
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index, tend
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_svm_model(X_train, X_test, y_train, y_test, args):
+def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
 
     if (not args.optimc):
         
@@ -122,9 +92,11 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
         svc.fit(X_train, y_train)
         y_pred_default = svc.predict(X_test)
         
-        print("\nDefault Support Vector Mechine Model Performance:")
+        #print("\nDefault Support Vector Mechine Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+
+        y_preds = y_pred_default
 
     elif (args.optimc):                             # Optimize Support Vector Machine with GridSearchCV
 
@@ -170,6 +142,17 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
         #print("cv_results_:", grid_search.cv_results_)
 
         results = grid_search.cv_results_
+
+        # Extract the best estimator from the GridSearchCV
+        best_model = grid_search.best_estimator_
+
+        # Predict on the test set using the best model
+        y_pred_best = best_model.predict(X_test)
+
+        print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
+
+        y_preds = y_pred_best
 
         if (args.plot):
 
@@ -236,20 +219,14 @@ def run_svm_model(X_train, X_test, y_train, y_test, args):
 
                 print(f"Saved plot for {metric} as {filename}")
 
-        # Extract the best estimator from the GridSearchCV
-        best_model = grid_search.best_estimator_
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
 
-        # Predict on the test set using the best model
-        y_pred_best = best_model.predict(X_test)
-
-        print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
-        print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
-
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
 # ---------------------------------------------------------------------------------------------------------------------
 # run_lr_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_lr_model(X_train, X_test, y_train, y_test, args):
+def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
 
     # Default Logistic Regression Model
     print("Training default Logistic Regression model...")
@@ -260,46 +237,21 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
     if (not args.optimc):
         
         print("Optimization not requested, training default Logistic Regression model...")
-        """
-        default_pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('lr', LogisticRegression(max_iter=1000))
-        ])
-        
-        default_pipeline.fit(X_train, y_train)
-        y_pred_default = default_pipeline.predict(X_test)
-        """
-
+    
         lr = LogisticRegression(max_iter=1000)
         lr.fit(X_train, y_train)
         y_pred_default = lr.predict(X_test)
         
-        print("\nDefault Logistic Regression Model Performance:")
+        #print("\nDefault Logistic Regression Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+
+        y_preds = y_pred_default
 
     elif (args.optimc):
         
         # Optimize Logistic Regression with GridSearchCV
         print("Optimizing Logistic Regression model with GridSearchCV...")
-
-        # Define the pipeline
-        """
-        pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('lr', LogisticRegression(max_iter=1000))
-        ])
-
-        # Define the parameter grid
-        param_grid = {
-            'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],     # Unigrams, bigrams, or trigrams
-            'tfidf__use_idf': [True, False],                    # Whether to use IDF
-            'tfidf__sublinear_tf': [True, False],               # Sublinear term frequency
-            'lr__C': [0.01, 0.1, 1, 10, 100],                   # Inverse of regularization strength
-            'lr__penalty': ['l2'],                              # Regularization method (L2 Ridge)
-            'lr__solver': ['liblinear', 'lbfgs']                # Solver types
-        }
-        """
 
         param_grid = {
             'C': [0.01, 0.1, 1, 10, 100],                                           # Inverse of regularization strength
@@ -320,7 +272,6 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
         # Initialize GridSearchCV
         grid_search = GridSearchCV(
             n_jobs=-1,
-            #estimator=pipeline,
             estimator =  LogisticRegression(max_iter=1000),
             param_grid=param_grid,
             scoring=scorers,
@@ -329,8 +280,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
             return_train_score=True
         )
 
-        # Fit the model
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(X_train, y_train)           # Fit the model
 
         # Display the best parameters
         print('Best parameters found by GridSearchCV:')
@@ -339,9 +289,11 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
         # Evaluate on the test set
         y_pred_optimized = grid_search.best_estimator_.predict(X_test)
 
-        print("\nOptimized Logistic Regression Model Performance:")
+        #print("\nOptimized Logistic Regression Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_optimized):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_optimized, digits=4))
+
+        y_preds = y_pred_optimized
 
     if (args.cm):
         # Optionally, plot confusion matrix for the optimized model
@@ -353,6 +305,9 @@ def run_lr_model(X_train, X_test, y_train, y_test, args):
             debug=False
         )
 
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
+
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -368,12 +323,6 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
     if (not args.optimc):
             
         print("Optimization not requested, training default Naive Bayes model...")
-        """
-        nb = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('clf', MultinomialNB())
-            ])
-        """
         
         nb = MultinomialNB()
         nb.fit(X_train,y_train)
@@ -384,27 +333,13 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
 
         print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
         print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=test_predict, y_pred=y_test, digits=4))
+        print(classification_report(y_true=y_test, y_pred=test_predict, digits=4))
+
+        y_preds = test_predict
 
     elif (args.optimc):
 
         print("Optimizing the model using GridSearchCV...")
-
-        """
-        # Define a pipeline
-        pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer()),
-            ('nb', MultinomialNB())
-        ])
-
-        # Define the parameter grid
-        param_grid = {
-            'tfidf__ngram_range': [(1, 1), (1, 2), (1, 3)],         # Unigrams, bigrams, or trigrams
-            'tfidf__use_idf': [True, False],                        # Whether to use IDF
-            'tfidf__sublinear_tf': [True, False],                   # Sublinear term frequency
-            'nb__alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
-        }
-        """
         
         # Define the parameter grid
         param_grid = {
@@ -426,7 +361,6 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
         # Initialize GridSearchCV
         grid_search = GridSearchCV(
             n_jobs=-1,
-            #estimator=pipeline
             estimator=MultinomialNB(),
             param_grid=param_grid,
             scoring=scorers,
@@ -445,12 +379,14 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
         # Evaluate on the test set
         y_pred = grid_search.best_estimator_.predict(X_test)
 
-        print("\nBest Estimator's Test Set Performance:")
+        #print("\nBest Estimator's Test Set Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
         print(f"F1 Score: {f1_score(y_test, y_pred, average='micro'):.4f}")
         print(f"Recall: {recall_score(y_test, y_pred, average='micro'):.4f}")
         print(f"Precision: {precision_score(y_test, y_pred, average='micro'):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred, digits=4))
+
+        y_preds = y_pred
 
         if (args.cm):
             # Optionally, plot confusion matrix
@@ -461,6 +397,14 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
                 file_name=OUT_DIR+'bbc_news_naive_bayes_confusion_matrix.png',
                 debug=False
             )
+    
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
+
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -695,6 +639,10 @@ def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, emb
             print("dot product (matrix multiplication) of BERT embeddings with token matrix...")
             X_train = X_train_token_matrix.dot(X_train_bert)
             X_test = X_test_token_matrix.dot(X_test_bert)
+        elif moode == 'tfidf':
+            print("using just the TF-IDF vectors...")
+            X_train = X_train
+            X_test = X_test
 
     
     return X_train, X_test
@@ -703,9 +651,9 @@ def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, emb
 # --------------------------------------------------------------------------------------------------------------
 # Core processing function
 # --------------------------------------------------------------------------------------------------------------
-def classify(dataset='20newsgrouops', pretrained_embeddings=None, args=None):
+def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, args=None, logfile=None, system=None):
     
-    print("\t\tclassify()...")
+    print("\tclassify_data()...")
     
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
@@ -773,18 +721,37 @@ def classify(dataset='20newsgrouops', pretrained_embeddings=None, args=None):
     print("embeddings:", pretrained_embeddings)
     print("emb_path:", emb_path)
 
-    # Generate embeddings
-    X_train, X_test = gen_embeddings(
-        X_train=X_train, 
-        X_test=X_test, 
-        dataset=dataset, 
-        embedding_type=pretrained_embeddings, 
-        embedding_path=emb_path,
-        vocab=vocab,
-        mode=args.mode
-        )
+    if (args.pretrained is None) and (args.supervised == False):        # no embeddings in this case
+        sup_tend = 0
+    else:                                                               # embeddings are present
+        tinit = time()
 
-    run_model(X_train, X_test, y_train, y_test, args)
+        print("building the embeddings...")
+
+        # Generate embeddings
+        X_train, X_test = gen_embeddings(
+            X_train=X_train, 
+            X_test=X_test, 
+            dataset=dataset, 
+            embedding_type=pretrained_embeddings, 
+            embedding_path=emb_path,
+            vocab=vocab,
+            mode=args.mode
+            )
+        
+        sup_tend = time() - tinit
+
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args)
+
+    tend += sup_tend
+
+    logfile.add_layered_row(tunable=False, measure='final-te-macro-F1', value=Mf1, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='final-te-micro-F1', value=mf1, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='te-accuracy', value=acc, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='te-hamming-loss', value=h_loss, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='te-precision', value=precision, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
+    logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -805,7 +772,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--learner', type=str, default='svm', metavar='N', help=f'learner (svm, lr, or nb)')
     
-    parser.add_argument('--mode', type=str, default='solo', metavar='N', help=f'way to combine tfidf and pretrained embeddings, in [solo, cat, dot]')
+    parser.add_argument('--mode', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [tfidf, solo, cat, dot]')
 
     parser.add_argument('--supervised', action='store_true', default=False, help='use supervised embeddings')
 
@@ -851,7 +818,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    print("\n ---------------------------- Layer Cake: ML baseline classification code: main() ----------------------------")
+    print("\n\t-------------------------------------------------------- Layer Cake: ML baseline classification code: main() --------------------------------------------------------")
 
     print("args:", type(args), args)
 
@@ -869,9 +836,16 @@ if __name__ == '__main__':
         print(f'Assertion warning: model {method_name} with embeddings {embeddings}, pretrained == {pretrained} and wc_supervised == {args.supervised} for {args.dataset} already calculated.')
         print("Run with --force option to override, returning...")
         exit(0)
-        
-    cpus, mem, gpus = get_system_resources()
 
-    classify(dataset=args.dataset, pretrained_embeddings=args.pretrained, args=args)
+    sys = SystemResources()
+    print("system resources:", sys)
+
+    classify_data(
+        dataset=args.dataset, 
+        pretrained_embeddings=args.pretrained, 
+        args=args, 
+        logfile=logfile, 
+        system=SystemResources()
+        )
     
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
