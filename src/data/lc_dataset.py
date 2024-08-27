@@ -37,13 +37,21 @@ from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
 
-
 DATASET_DIR = '../datasets/'
-MAX_VOCAB_SIZE = 25000
+MAX_VOCAB_SIZE = 25000                          # max feature size for the models basically
 
 BERT_MODEL = 'bert-base-uncased'
-#LLAMA_MODEL = 'meta-llama/Llama-2-7b-chat-hf'
-LLAMA_MODEL = 'llama-2-13b'
+LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
+
+#
+# tokens for LLAMA model access, must be requested from huggingface
+#
+from huggingface_hub import login
+
+HF_TOKEN = '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'
+HF_TOKEN2 = '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'
+
+
 
 
 
@@ -347,7 +355,9 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
     
     # ----------------------------------------------------------------------
-    # II: Build vector representation of data set 
+    # II: Build vector representation of data set using TF-IDF 
+    # or CountVectorizer and constructing the embeddings such that they 
+    # align with pretrained embeddings tokenization method
     # ----------------------------------------------------------------------
 
     # initualize local variables
@@ -386,6 +396,21 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         else:
             raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
 
+        # Define a custom tokenizer function for TF-IDF
+        def custom_tokenizer(text):
+            tokens = tokenizer.tokenize(text)
+            return tokens
+
+        if vectorizer_type == 'tfidf':
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=custom_tokenizer) 
+        elif vectorizer_type == 'count':
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=custom_tokenizer)  
+        else:
+            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+
+        # Fit and transform the text data to obtain tokenized features
+        X_vectorized = vectorizer.fit_transform(train_set['Text'])
+
         # Get vocabulary from the tokenizer
         vocab = tokenizer.get_vocab()                                           
 
@@ -393,6 +418,12 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
 
     print("pretrained embeddings vocab:", type(vocab), len(vocab))
+
+    # ----------------------------------------------------------------------
+    # III: build the vector representation of the dataset vocabularly, 
+    # ie the representation of the features that we can use to add information
+    # to the embeddings that we feed into the model (depending upon embedding mode)
+    # ----------------------------------------------------------------------
 
     print("building pretrained embeddings for dataset vocabulary...")    
 
@@ -457,26 +488,17 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             )
             return tokens['input_ids']
 
-        # Create the embedding matrix for BERT/LLaMa embeddings
-        model.eval()
-        embedding_matrix = []
+        model.eval()  # Set model to evaluation mode
+
+        embedding_dim = model.config.hidden_size  # Get the embedding dimension size
+        vocab_size = len(vocab)
+        embedding_matrix = np.zeros((vocab_size, embedding_dim))
 
         with torch.no_grad():
-            for text in train_set['Text']:
-                tokens = tokenizer.encode_plus(
-                    text,
-                    add_special_tokens=True,
-                    max_length=512,
-                    padding='max_length',
-                    truncation=True,
-                    return_tensors='pt'
-                )
-
-                output = model(**tokens)
-                cls_embedding = output.last_hidden_state[:, 0, :]  # Take the [CLS] token embedding
-                embedding_matrix.append(cls_embedding.squeeze().cpu().numpy())
-
-        embedding_matrix = np.vstack(embedding_matrix)
+            for word, idx in vocab.items():
+                input_ids = tokenizer.encode(word, return_tensors='pt')
+                outputs = model(input_ids)
+                embedding_matrix[idx] = outputs.last_hidden_state.mean(dim=1).squeeze().cpu().numpy()
 
     else:
         raise ValueError("Invalid pretrained type.")
