@@ -4,13 +4,14 @@ import pickle
 import numpy as np
 from tqdm import tqdm
 import re
-
 import pandas as pd
 import string
 
 from sklearn.datasets import get_data_home, fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.preprocessing import LabelEncoder
 
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -22,9 +23,6 @@ import tarfile
 import gzip
 import shutil
 
-from sklearn.datasets import fetch_20newsgroups
-from sklearn.preprocessing import LabelEncoder
-
 from scipy.sparse import csr_matrix
 
 import nltk
@@ -33,15 +31,19 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
-import pickle
+import torch
+from transformers import BertTokenizer, LlamaTokenizer
+from transformers import BertModel, LlamaModel
+from gensim.models import KeyedVectors
+
+
 
 DATASET_DIR = '../datasets/'
 MAX_VOCAB_SIZE = 25000
 
-import nltk
-
-# Ensure stopwords are downloaded
-nltk.download('stopwords')
+BERT_MODEL = 'bert-base-uncased'
+#LLAMA_MODEL = 'meta-llama/Llama-2-7b-chat-hf'
+LLAMA_MODEL = 'llama-2-13b'
 
 
 
@@ -166,7 +168,7 @@ def preprocessDataset(train_text):
 #
 # Define the load_20newsgroups function
 # ------------------------------------------------------------------------------------------------------------------------
-def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained=None):
+def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained=None, pretrained_path=None):
     """
     Load and preprocess the 20 Newsgroups dataset, returning X and y sparse matrices.
 
@@ -186,7 +188,13 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
     # Fetch the 20 newsgroups dataset
     X_raw, y = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'), return_X_y=True)
 
-    vocab = None  # Initialize vocabulary
+    print("preprocessing text...")
+
+    # initualize local variables
+    model = None
+    embedding_dim = 0
+    embedding_matrix = None
+    vocab = None
 
     # Initialize the vectorizer based on the type
     if embedding_type == 'word':
@@ -207,12 +215,16 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
         print("Using token-level vectorization...")
         if pretrained == 'bert':
             print("Using token-level vectorization with BERT embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')             # Replace with correct LLaMA model
+            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                               # BERT tokenizer
         elif pretrained == 'llama': 
             print("Using token-level vectorization with BERT or LLaMa embeddings...")
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')                          # BERT tokenizer
+            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                             # LLaMa tokenizer
         else:
             raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
+
+        # Ensure padding token is available
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
         def tokenize(text):
             tokens = tokenizer.encode_plus(
@@ -233,7 +245,48 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMA embeddings.")
     
-    print("Text vectorization completed.")
+    print("building pretrained embeddings for dataset vocabulary...")
+
+    print("pretrained:", pretrained)
+    print("pretrained_path:", pretrained_path)
+    print("vocab:", type(vocab), len(vocab))
+
+    # Load the pre-trained embeddings based on the specified model
+    if pretrained in ['word2vec', 'fastetxt', 'glove']:
+
+        if (pretrained == 'word2vec'):
+            print("Using Word2Vec pretrained embeddings...")
+            model = KeyedVectors.load_word2vec_format(pretrained_path, binary=True)
+        elif pretrained == 'glove':
+            print("Using GloVe pretrained embeddings...")
+            from gensim.scripts.glove2word2vec import glove2word2vec
+            glove_input_file = pretrained_path
+            word2vec_output_file = glove_input_file + '.word2vec'
+            glove2word2vec(glove_input_file, word2vec_output_file)
+            model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+        elif pretrained == 'fasttext':
+            print("Using fastText pretrained embeddings...")
+            model = KeyedVectors.load_word2vec_format(pretrained_path)
+        
+        embedding_dim = model.vector_size
+        print("embedding_dim:", embedding_dim)
+
+        print("building embedding matrix for dataset...")
+        # Create the embedding matrix that aligns with the TF-IDF vocabulary
+        vocab_size = X_vectorized.shape[1]
+        embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        
+        # Extract the pretrained embeddings for words in the TF-IDF vocabulary
+        for word, idx in vocab.items():
+            if word in model:
+                embedding_matrix[idx] = model[word]
+            else:
+                # If the word is not found in the pretrained model, use a random vector or zeros
+                embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
+
+        print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+
+
     
     # Ensure X_vectorized is a sparse matrix
     if not isinstance(X_vectorized, csr_matrix):
@@ -244,7 +297,7 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
 
     print("Labels encoded and converted to sparse format.")
 
-    return X_vectorized, y_sparse, vocab                                              # Return X (features) and Y (target labels) as sparse arrays                               
+    return X_vectorized, y_sparse, embedding_matrix, vocab                                              # Return X (features) and Y (target labels) as sparse arrays                               
 
 
 
@@ -252,21 +305,32 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
 # ------------------------------------------------------------------------------------------------------------------------
 # load_bbc_news()
 # ------------------------------------------------------------------------------------------------------------------------
-def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=None):
+def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=None, pretrained_path=None):
     """
     Load and preprocess the BBC News dataset and return X, Y sparse arrays along with the vocabulary.
     
     Parameters:
     - vectorizer_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
     - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (BERT, LLaMa).
-    
+    - pretrained: 'word2vec', 'glove', 'fasttext', 'bert', or 'llama' for the pretrained embeddings to use.
+    - pretrained_path: Path to the pretrained embeddings file.
+
     Returns:
     - X: Sparse array of features (tokenized text aligned with the chosen vectorizer and embedding type).
     - Y: Sparse array of target labels.
+    - embedding_matrix: Pretrained embeddings aligned with the dataset vocabulary.
     - vocab: Vocabulary generated by the vectorizer or tokenizer.
     """
     
-    print("Loading BBC News dataset...")
+    print("embedding_type:", embedding_type)
+    print("pretrained:", pretrained)
+    print("pretrained_path:", pretrained_path)
+
+    # ----------------------------------------------------------------------
+    # I: Load the dataset
+    # ----------------------------------------------------------------------
+
+    print(f'Loading BBC News dataset from {DATASET_DIR}...')
 
     for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
         for filename in filenames:
@@ -277,10 +341,21 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     test_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Test.csv')
 
     print("train_set:", train_set.shape)
-    print("test_set:", test_set.shape)
+    print("test_set:", test_set.shape)    
 
     print("preprocessing text...")
+
     
+    # ----------------------------------------------------------------------
+    # II: Build vector representation of data set 
+    # ----------------------------------------------------------------------
+
+    # initualize local variables
+    model = None
+    embedding_dim = 0
+    embedding_matrix = None
+    vocab = None
+
     # Choose the vectorization and tokenization strategy based on embedding type
     if embedding_type == 'word':
 
@@ -296,18 +371,80 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
 
-        vocab = vectorizer.vocabulary_                                                              # set vocabulary    
+        # set vocabulary return variable, for TFIDFVectorizer 
+        # this is a mapping of terms to feature indices.
+        vocab = vectorizer.vocabulary_              
     
     elif embedding_type == 'token':
 
-        if pretrained == 'bert':
+        if pretrained == 'llama':
+            print("Using token-level vectorization with LLaMa embeddings...")
+            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                                 # LLaMa tokenizer
+        elif pretrained == 'bert': 
             print("Using token-level vectorization with BERT embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')             # Replace with correct LLaMA model
-        elif pretrained == 'llama': 
-            print("Using token-level vectorization with BERT or LLaMa embeddings...")
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')                          # BERT tokenizer
+            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                                   # BERT tokenizer
         else:
             raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
+
+        # Get vocabulary from the tokenizer
+        vocab = tokenizer.get_vocab()                                           
+
+    else:
+        raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
+
+    print("pretrained embeddings vocab:", type(vocab), len(vocab))
+
+    print("building pretrained embeddings for dataset vocabulary...")    
+
+    # Load the pre-trained embeddings based on the specified model
+    if pretrained in ['word2vec', 'fasttext', 'glove']:
+
+        if (pretrained == 'word2vec'):
+            print("Using Word2Vec pretrained embeddings...")
+            model = KeyedVectors.load_word2vec_format(pretrained_path, binary=True)
+        elif pretrained == 'glove':
+            print("Using GloVe pretrained embeddings...")
+            from gensim.scripts.glove2word2vec import glove2word2vec
+            glove_input_file = pretrained_path
+            word2vec_output_file = glove_input_file + '.word2vec'
+            glove2word2vec(glove_input_file, word2vec_output_file)
+            model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+        elif pretrained == 'fasttext':
+            print("Using fastText pretrained embeddings...")
+            model = KeyedVectors.load_word2vec_format(pretrained_path)
+        
+        embedding_dim = model.vector_size
+        print("embedding_dim:", embedding_dim)
+
+        print("building embedding matrix for dataset...")
+        # Create the embedding matrix that aligns with the TF-IDF vocabulary
+        vocab_size = X_vectorized.shape[1]
+        embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        
+        # Extract the pretrained embeddings for words in the TF-IDF vocabulary
+        for word, idx in vocab.items():
+            if word in model:
+                embedding_matrix[idx] = model[word]
+            else:
+                # If the word is not found in the pretrained model, use a random vector or zeros
+                embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
+    
+    elif pretrained in ['bert', 'llama']:
+
+        if (pretrained == 'bert'):
+            print("Using BERT pretrained embeddings...")
+            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                                   # BERT tokenizer
+            model = BertModel.from_pretrained(BERT_MODEL)                                           # BERT model
+        elif pretrained == 'llama':
+            print("Using LLaMa pretrained embeddings...")
+            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                                 # LLaMa tokenizer
+            model = LlamaModel.from_pretrained(LLAMA_MODEL)                                         # LLaMa mode
+        else:
+            raise ValueError("Invalid pretrained type.")
+
+        # Ensure padding token is available
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
         def tokenize(text):
             tokens = tokenizer.encode_plus(
@@ -316,18 +453,36 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 max_length=512,
                 padding='max_length',
                 truncation=True,
-                return_tensors='np'
+                return_tensors='pt'  # Ensure this returns PyTorch tensors
             )
             return tokens['input_ids']
-        
-        X_vectorized = train_set['Text'].apply(tokenize).values
-        X_vectorized = csr_matrix(np.vstack(X_vectorized))                                          # Convert list of arrays to a sparse matrix
 
-        vocab = tokenizer.get_vocab()                                                               # Get vocabulary from the tokenizer
-    
+        # Create the embedding matrix for BERT/LLaMa embeddings
+        model.eval()
+        embedding_matrix = []
+
+        with torch.no_grad():
+            for text in train_set['Text']:
+                tokens = tokenizer.encode_plus(
+                    text,
+                    add_special_tokens=True,
+                    max_length=512,
+                    padding='max_length',
+                    truncation=True,
+                    return_tensors='pt'
+                )
+
+                output = model(**tokens)
+                cls_embedding = output.last_hidden_state[:, 0, :]  # Take the [CLS] token embedding
+                embedding_matrix.append(cls_embedding.squeeze().cpu().numpy())
+
+        embedding_matrix = np.vstack(embedding_matrix)
+
     else:
-        raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
-    
+        raise ValueError("Invalid pretrained type.")
+        
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+
     # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
     if not isinstance(X_vectorized, csr_matrix):
         X_vectorized = csr_matrix(X_vectorized)
@@ -337,15 +492,15 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     y = label_encoder.fit_transform(train_set['Category'])
     
     # Convert Y to a sparse matrix
-    y_sparse = csr_matrix(y).T                          # Transpose to match the expected shape
+    y_sparse = csr_matrix(y).T         # Transpose to match the expected shape
 
-    return X_vectorized, y_sparse, vocab                # Return X (features) and Y (target labels) as sparse arrays
+    return X_vectorized, y_sparse, embedding_matrix, vocab         # Return X (features) and Y (target labels) as sparse arrays
 
 # ------------------------------------------------------------------------------------------------------------------------
 
-def load_data(dataset='20newsgroups', pretrained=None):
+def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
 
-    print(f"Loading data set {dataset}, pretrained is {pretrained}...")
+    print(f"Loading data set: {dataset}, pretrained: {pretrained}")
 
     if (pretrained == 'llama' or pretrained == 'bert'):
         embedding_type = 'token'
@@ -353,11 +508,11 @@ def load_data(dataset='20newsgroups', pretrained=None):
         embedding_type = 'word'
 
     if (dataset == '20newsgroups'): 
-        X, y, vocab = load_20newsgroups(embedding_type=embedding_type)
-        return X, y, vocab
+        X, y, embedding_matrix, vocab = load_20newsgroups(embedding_type=embedding_type, pretrained=pretrained, pretrained_path=embedding_path)
+        return X, y, embedding_matrix, vocab
     elif (dataset == 'bbc-news'):
-        X, y, vocab = load_bbc_news(embedding_type=embedding_type)
-        return X, y, vocab
+        X, y, embedding_matrix, vocab = load_bbc_news(embedding_type=embedding_type, pretrained=pretrained, pretrained_path=embedding_path)
+        return X, y, embedding_matrix, vocab
     else:
         print(f"Dataset '{dataset}' not available.")
         return None
@@ -366,11 +521,11 @@ def load_data(dataset='20newsgroups', pretrained=None):
 # ------------------------------------------------------------------------------------------------------------------------
 # Save X, y sparse matrices, and vocabulary to pickle
 # ------------------------------------------------------------------------------------------------------------------------
-def save_to_pickle(X, y, vocab, pickle_file):
+def save_to_pickle(X, y, embedding_matrix, vocab, pickle_file):
     print(f"Saving X, y, and vocab to pickle file: {pickle_file}")
     with open(pickle_file, 'wb') as f:
         # Save the sparse matrices and vocabulary as a tuple
-        pickle.dump((X, y, vocab), f)
+        pickle.dump((X, y, embedding_matrix, vocab), f)
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Load X, y sparse matrices, and vocabulary from pickle
@@ -378,8 +533,8 @@ def save_to_pickle(X, y, vocab, pickle_file):
 def load_from_pickle(pickle_file):
     print(f"Loading X, y, and vocab from pickle file: {pickle_file}")
     with open(pickle_file, 'rb') as f:
-        X, y, vocab = pickle.load(f)
-    return X, y, vocab
+        X, y, embedding_matrix, vocab = pickle.load(f)
+    return X, y, embedding_matrix, vocab
 
 
 # ------------------------------------------------------------------------------------------------------------------------

@@ -15,7 +15,7 @@ from sklearn.metrics import make_scorer, recall_score, hamming_loss, jaccard_sco
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
 from sklearn.naive_bayes import MultinomialNB
 
-from util.common import initialize, get_system_resources, SystemResources, load_pretrained_embeddings
+from util.common import initialize, SystemResources
 from data.lc_dataset import LCDataset, load_data, save_to_pickle, load_from_pickle
 from util.metrics import evaluation
 
@@ -515,92 +515,84 @@ def tokenize_and_vectorize(texts, tokenizer):
     return token_matrix
 # -------------------------------------------------------------------------------------------------------------------
 
-from gensim.models import KeyedVectors
+
 
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
 #
 # Embedding generation function with BERT tokenization
 # -------------------------------------------------------------------------------------------------------------------
-def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, embedding_path=None, vocab=None, mode='solo'):
+def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors=None, supervised=False, mode='solo'):
     
     print("\tgenerating embeddings...")
-    
-    print("dataset:", dataset)
-    print("embeddings:", embeddings)
-    
+        
     print('X_train:', type(X_train), X_train.shape)
+    print("y_train:", type(y_train), y_train.shape)
     print('X_test:', type(X_test), X_test.shape)
     
+    print("dataset:", dataset)
     print("vocab:", type(vocab), len(vocab))
+    print("pretrained:", pretrained)
+    print("pretrained_vectors:", type(pretrained_vectors), pretrained_vectors.shape)
+    print("supervised:", supervised)
+    print("mode:", mode)
+
+    # build vocabulary numpy array
     vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
     print("vocabulary:", type(vocabulary), vocabulary.shape)
 
-    pretrained_embeddings = []
-    
-    P = vocabulary
-    print("pretrained_vectors: ", type(P), {P.shape})
+    pretrained_embeddings = []                  # List to store pretrained embeddings
 
-    pretrained_embeddings.append(P)
-    print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
-
-    embedding_dim = len(vocabulary)
-    print("embedding_dim:", embedding_dim)
-
-    if embedding_type in ['word2vec', 'glove', 'fasttext']:
-        print("Using word-based pretrained embeddings...")
-
-        # Load the pre-trained embeddings based on the specified model
-        if embedding_type == 'word2vec':
-            print("Using Word2Vec pretrained embeddings...")
-            model = KeyedVectors.load_word2vec_format(embedding_path, binary=True)
-        elif embedding_type == 'glove':
-            print("Using GloVe pretrained embeddings...")
-            from gensim.scripts.glove2word2vec import glove2word2vec
-            glove_input_file = embedding_path
-            word2vec_output_file = glove_input_file + '.word2vec'
-            glove2word2vec(glove_input_file, word2vec_output_file)
-            model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
-        elif embedding_type == 'fasttext':
-            print("Using fastText pretrained embeddings...")
-            model = KeyedVectors.load_word2vec_format(embedding_path)
+    if pretrained in ['word2vec', 'glove', 'fasttext', 'bert', 'llama']:
         
-        embedding_dim = model.vector_size
-        print("embedding_dim:", embedding_dim)
+        print("setting up pretrained embeddings...")
 
-        # Create the embedding matrix that aligns with the TF-IDF vocabulary
-        vocab_size = X_train.shape[1]
-        embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        #P = pretrained_vectors.extract(vocabulary).numpy()
+        print("pretrained_vectors: ", type(pretrained_vectors), {pretrained_vectors.shape})
+
+        pretrained_embeddings.append(pretrained_vectors)
+        #print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
+
+    if supervised:
         
-        # Extract the pretrained embeddings for words in the TF-IDF vocabulary
-        for word, idx in vocab.items():
-            if word in model:
-                embedding_matrix[idx] = model[word]
-            else:
-                # If the word is not found in the pretrained model, use a random vector or zeros
-                embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
+        print('setting up supervised embeddings...')
 
-        print("embedding_matrix shape:", embedding_matrix.shape)
+        """
+        Xtr, _ = dataset.vectorize()
+        Ytr = dataset.devel_labelmatrix
+        """
+        Xtr = X_train
+        Ytr = y_train
+        
+        S = get_supervised_embeddings(Xtr, Ytr)
+        print("supervised_embeddings:", type(S), {S.shape})
 
-        if mode == 'solo':
-            print("Using just the word embeddings alone (solo)...")
-            # Directly return the embedding matrix for X_train and X_test
-            X_train = embedding_matrix
-            X_test = embedding_matrix                   # This assumes X_test has the same vocab and order as X_train
-        elif mode == 'cat':
-            print("Concatenating word embeddings with TF-IDF vectors...")
-            X_train = np.hstack([X_train.toarray(), embedding_matrix])
-            X_test = np.hstack([X_test.toarray(), embedding_matrix])
-        elif mode == 'dot':
-            print("Dot product (matrix multiplication) of word embeddings with TF-IDF vectors...")
-            X_train = X_train.dot(embedding_matrix)
-            X_test = X_test.dot(embedding_matrix)
+        pretrained_embeddings.append(S)
+        #print(f'pretrained embeddings count after appending supervised: {len(pretrained_embeddings[1])}')
+
+    embedding_matrix = np.hstack(pretrained_embeddings)
+    print("after np.hstack():", type(embedding_matrix), {embedding_matrix.shape})
+
+    if mode == 'solo':
+        print("Using just the word embeddings alone (solo)...")
+        # Directly return the embedding matrix for X_train and X_test
+        X_train = embedding_matrix
+        X_test = embedding_matrix                   # This assumes X_test has the same vocab and order as X_train
+    elif mode == 'cat':
+        print("Concatenating word embeddings with TF-IDF vectors...")
+        X_train = np.hstack([X_train.toarray(), embedding_matrix])
+        X_test = np.hstack([X_test.toarray(), embedding_matrix])
+    elif mode == 'dot':
+        print("Dot product (matrix multiplication) of word embeddings with TF-IDF vectors...")
+        X_train = X_train.dot(embedding_matrix)
+        X_test = X_test.dot(embedding_matrix)
 
     print("after embedding generation...")
     print("X_train:", type(X_train), X_train.shape)
     print("X_test:", type(X_test), X_test.shape)
-
-    if embedding_type == 'bert':
+   
+    """
+    if pretrained == 'bert':
         print("Using BERT pretrained embeddings...")
 
         BERT_MODEL = 'bert-base-uncased'
@@ -643,15 +635,16 @@ def gen_embeddings(X_train, X_test, dataset='bbc-news', embedding_type=None, emb
             print("using just the TF-IDF vectors...")
             X_train = X_train
             X_test = X_test
+    """
 
-    
     return X_train, X_test
+
 
 
 # --------------------------------------------------------------------------------------------------------------
 # Core processing function
 # --------------------------------------------------------------------------------------------------------------
-def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, args=None, logfile=None, system=None):
+def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding_path=None, supervised=False, method=None, args=None, logfile=None, system=None):
     
     print("\tclassify_data()...")
     
@@ -666,19 +659,19 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, args=None
 
     if os.path.exists(pickle_file):                                                 # if the pickle file exists
         print(f"Loading tokenized data from '{pickle_file}'...")
-        X, y, vocab = load_from_pickle(pickle_file)
+        X, y, embedding_matrix, vocab = load_from_pickle(pickle_file)
     else:
         print(f"'{pickle_file}' not found, loading {dataset}...")
-        X, y, vocab = load_data(dataset=dataset, pretrained=args.pretrained)
+        X, y, embedding_matrix, vocab = load_data(dataset=dataset, pretrained=args.pretrained, embedding_path=embedding_path)
 
-        save_to_pickle(X, y, vocab, pickle_file)                              # Save the tokenized matrices to a pickle file
+        save_to_pickle(X, y, embedding_matrix, vocab, pickle_file)                              # Save the tokenized matrices to a pickle file
 
     print("Tokenized data loaded.")
  
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
 
-    print("train_test_sp;it...")
+    print("train_test_split...")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -730,12 +723,14 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, args=None
 
         # Generate embeddings
         X_train, X_test = gen_embeddings(
-            X_train=X_train, 
+            X_train=X_train,
+            y_train=y_train, 
             X_test=X_test, 
-            dataset=dataset, 
-            embedding_type=pretrained_embeddings, 
-            embedding_path=emb_path,
-            vocab=vocab,
+            dataset=dataset,
+            vocab=vocab, 
+            pretrained=pretrained_embeddings,
+            pretrained_vectors=embedding_matrix,
+            supervised=args.supervised,
             mode=args.mode
             )
         
@@ -842,7 +837,10 @@ if __name__ == '__main__':
 
     classify_data(
         dataset=args.dataset, 
-        pretrained_embeddings=args.pretrained, 
+        pretrained_embeddings=embeddings,
+        embedding_path=emb_path,
+        supervised=supervised,
+        method=method_name,
         args=args, 
         logfile=logfile, 
         system=SystemResources()

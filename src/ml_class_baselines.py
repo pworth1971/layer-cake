@@ -168,7 +168,6 @@ def embedding_matrix(dataset, pretrained=False, pretrained_vectors=None, supervi
     Constructs and returns embedding matrices using either pre-trained or supervised embeddings. Support for GloVe, Word2Vec
     FastText and BERT pre-trained embeddings supported (tested).
 
-    
     Parameters:
     - dataset: The dataset object that contains vocabulary and other dataset-specific parameters.
     - pretrained: Boolean indicating whether to use pretrained embeddings.
