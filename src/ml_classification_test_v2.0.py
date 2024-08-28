@@ -519,10 +519,9 @@ def tokenize_and_vectorize(texts, tokenizer):
 
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
-#
-# Embedding generation function with BERT tokenization
 # -------------------------------------------------------------------------------------------------------------------
-def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors=None, supervised=False, mode='solo'):
+def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors=None, weighted_embeddings_train=wNone, 
+                   weighted_embeddings_test=None, supervised=False, mode='solo'):
     
     print("\n\tgenerating embeddings...")
         
@@ -532,8 +531,13 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     
     print("dataset:", dataset)
     print("vocab:", type(vocab), len(vocab))
+    
     print("pretrained:", pretrained)
     print("pretrained_vectors:", type(pretrained_vectors), pretrained_vectors.shape)
+    
+    print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
+    print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
+    
     print("supervised:", supervised)
     print("mode:", mode)
 
@@ -561,6 +565,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
         Xtr, _ = dataset.vectorize()
         Ytr = dataset.devel_labelmatrix
         """
+        
         Xtr = X_train
         Ytr = y_train
         
@@ -574,20 +579,40 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     print("after np.hstack():", type(embedding_matrix), {embedding_matrix.shape})
 
     if mode == 'solo':
+        
         print("Using just the word embeddings alone (solo)...")
-        # Directly return the embedding matrix for X_train and X_test
-        X_train = embedding_matrix
-        X_test = embedding_matrix                   # This assumes X_test has the same vocab and order as X_train
+        
+        #
+        # Here we directly return the (tfidf weighted average) embedding 
+        # matrix for X_train and X_test
+        #
+        X_train = weighted_embeddings_train
+        X_test = weighted_embeddings_test                   
+        
     elif mode == 'cat':
+        
         print("Concatenating word embeddings with TF-IDF vectors...")
-        X_train = np.hstack([X_train.toarray(), embedding_matrix])
-        X_test = np.hstack([X_test.toarray(), embedding_matrix])
+        
+        # 
+        # Here we concatenate the tfidf vectors and the (tfidf weighted 
+        # average) pretrained embedding matrix together
+        # 
+        X_train = np.hstack([X_train.toarray(), weighted_embeddings_train])
+        X_test = np.hstack([X_test.toarray(), weighted_embeddings_test])
+    
     elif mode == 'dot':
+        
         print("Dot product (matrix multiplication) of word embeddings with TF-IDF vectors...")
+        
+        #
+        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product 
+        #
         X_train = X_train.dot(embedding_matrix)
         X_test = X_test.dot(embedding_matrix)
 
     print("after embedding generation...")
+    
     print("X_train:", type(X_train), X_train.shape)
     print("X_test:", type(X_test), X_test.shape)
    
@@ -697,14 +722,16 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
 
     print("train_test_split...")
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    # Perform the train-test split, including the weighted_embeddings
+    X_train, X_test, y_train, y_test, weighted_embeddings_train, weighted_embeddings_test = train_test_split(
         X,
-        y, 
-        test_size = 0.25, 
-        random_state = 44,
+        y,
+        weighted_embeddings,
+        test_size=0.25,
+        random_state=44,
         shuffle=True 
-        )
-
+    )
+    
     print("X_train:", type(X_train), X_train.shape)
     print("X_test:", type(X_test), X_test.shape)
     
@@ -720,6 +747,9 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     print('y_train:', type(y_train), y_train.shape)
     print('y_test:', type(y_test), y_test.shape)
 
+    print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
+    print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
+    
     emb_path = None
 
     if (pretrained_embeddings is not None):
@@ -754,6 +784,8 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             vocab=vocab, 
             pretrained=pretrained_embeddings,
             pretrained_vectors=embedding_matrix,
+            weighted_embeddings_train=weighted_embeddings_train,
+            weighted_embeddings_test=weighted_embeddings_test,
             supervised=args.supervised,
             mode=args.mode
             )
