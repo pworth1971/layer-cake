@@ -32,15 +32,17 @@ from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
 import torch
-from transformers import BertTokenizer, LlamaTokenizer
+from transformers import BertTokenizer, BertTokenizerFast, LlamaTokenizer, LlamaTokenizerFast
 from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
 
+VECTOR_CACHE = '../.vector_cache'
 DATASET_DIR = '../datasets/'
 MAX_VOCAB_SIZE = 25000                          # max feature size for the models basically
 
 BERT_MODEL = 'bert-base-uncased'
+#LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'
 LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
 
 #
@@ -253,7 +255,7 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMA embeddings.")
     
-    print("building pretrained embeddings for dataset vocabulary...")
+    print("\n\tbuilding pretrained embeddings for dataset vocabulary...")
 
     print("pretrained:", pretrained)
     print("pretrained_path:", pretrained_path)
@@ -310,6 +312,8 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
 
 
 
+
+
 # ------------------------------------------------------------------------------------------------------------------------
 # load_bbc_news()
 # ------------------------------------------------------------------------------------------------------------------------
@@ -338,7 +342,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # I: Load the dataset
     # ----------------------------------------------------------------------
 
-    print(f'Loading BBC News dataset from {DATASET_DIR}...')
+    print(f'\n\tloading BBC News dataset from {DATASET_DIR}...')
 
     for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
         for filename in filenames:
@@ -350,9 +354,15 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
     print("train_set:", train_set.shape)
     print("test_set:", test_set.shape)    
-
-    print("preprocessing text...")
-
+    
+    print("train_set columns:", train_set.columns)
+    #print("train_set:\n", train_set.head())
+    
+    #train_set['Category'].value_counts().plot(kind='bar', title='Category distribution in training set')
+    #train_set['Category'].value_counts()
+    print("Unique Categories:\n", train_set['Category'].unique())
+    numCats = len(train_set['Category'].unique())
+    print("# of categories:", numCats)
     
     # ----------------------------------------------------------------------
     # II: Build vector representation of data set using TF-IDF 
@@ -360,7 +370,9 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # align with pretrained embeddings tokenization method
     # ----------------------------------------------------------------------
 
-    # initualize local variables
+    print("building vector representation of dataset...")
+
+    # initialize local variables
     model = None
     embedding_dim = 0
     embedding_matrix = None
@@ -372,27 +384,25 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         print("Using word-level vectorization...")
         
         if vectorizer_type == 'tfidf':
-            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  # Adjust max_features as needed
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  
         elif vectorizer_type == 'count':
-            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  # Adjust max_features as needed
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
         
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
 
-        # set vocabulary return variable, for TFIDFVectorizer 
-        # this is a mapping of terms to feature indices.
-        vocab = vectorizer.vocabulary_              
-    
     elif embedding_type == 'token':
-
-        if pretrained == 'llama':
-            print("Using token-level vectorization with LLaMa embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                                 # LLaMa tokenizer
-        elif pretrained == 'bert': 
+        
+        if pretrained == 'bert': 
             print("Using token-level vectorization with BERT embeddings...")
-            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                                   # BERT tokenizer
+            tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')                           # BERT tokenizer
+            model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')                                       # BERT model
+        elif pretrained == 'llama':
+            print("Using token-level vectorization with LLaMa embeddings...")
+            tokenizer = LlamaTokenizerFast.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')                        # LLaMa tokenizer
+            model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')                                    # LLaMa model
         else:
             raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
 
@@ -411,21 +421,29 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
 
-        # Get vocabulary from the tokenizer
-        vocab = tokenizer.get_vocab()                                           
-
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
 
-    print("pretrained embeddings vocab:", type(vocab), len(vocab))
+    vocab = vectorizer.vocabulary_                                                  # set vocabulary of dataset from vectorizer
 
+    print("vectorizer vocabulary:", type(vocab), len(vocab))
+    
+    # Print the first 100 entries in the vocabulary
+    """
+    print("First 100 entries in the vectorizer vocabulary:")
+    for i, (word, index) in enumerate(vocab.items()):
+        if i >= 100:
+            break
+        print(f"{i+1:3}: {word} -> {index}")
+    """
+    
     # ----------------------------------------------------------------------
-    # III: build the vector representation of the dataset vocabularly, 
+    # III: build the vector representation of the dataset vocabulary, 
     # ie the representation of the features that we can use to add information
     # to the embeddings that we feed into the model (depending upon embedding mode)
     # ----------------------------------------------------------------------
 
-    print("building pretrained embeddings for dataset vocabulary...")    
+    print("\n\tconstructing (pretrained) embeddings dataset vocabulary matrix...")    
 
     # Load the pre-trained embeddings based on the specified model
     if pretrained in ['word2vec', 'fasttext', 'glove']:
@@ -445,12 +463,17 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             model = KeyedVectors.load_word2vec_format(pretrained_path)
         
         embedding_dim = model.vector_size
-        print("embedding_dim:", embedding_dim)
+        #print("embedding_dim:", embedding_dim)
 
-        print("building embedding matrix for dataset...")
+        print("creating (pretrained) embedding matrix which aligns with dataset vocabulary...")
+        
         # Create the embedding matrix that aligns with the TF-IDF vocabulary
         vocab_size = X_vectorized.shape[1]
         embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        
+        print("embedding_dim:", embedding_dim)
+        print("vocab_size:", vocab_size)
+        print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
         
         # Extract the pretrained embeddings for words in the TF-IDF vocabulary
         for word, idx in vocab.items():
@@ -461,45 +484,107 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
     
     elif pretrained in ['bert', 'llama']:
-
+        
+        # tokenizer and model should be initialized in the embedding_type == 'token' block
+        """
         if (pretrained == 'bert'):
             print("Using BERT pretrained embeddings...")
-            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                                   # BERT tokenizer
-            model = BertModel.from_pretrained(BERT_MODEL)                                           # BERT model
+            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE)                   # BERT tokenizer
+            model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE)                           # BERT model
         elif pretrained == 'llama':
             print("Using LLaMa pretrained embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                                 # LLaMa tokenizer
-            model = LlamaModel.from_pretrained(LLAMA_MODEL)                                         # LLaMa mode
+            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE)                 # LLaMa tokenizer
+            model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE)                         # LLaMa model
         else:
             raise ValueError("Invalid pretrained type.")
+        """
+        
+        #print("pretrained is token based, building pretrained embeddings for dataset vocabulary...")
+        
+        print("creating (pretrained) embedding matrix which aligns with dataset vocabulary...")
+        
+        print("Tokenizer vocab size:", tokenizer.vocab_size)
+        print("Model vocab size:", model.config.vocab_size)
 
         # Ensure padding token is available
         if tokenizer.pad_token is None:
-            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-
-        def tokenize(text):
-            tokens = tokenizer.encode_plus(
-                text,
-                add_special_tokens=True,
-                max_length=512,
-                padding='max_length',
-                truncation=True,
-                return_tensors='pt'  # Ensure this returns PyTorch tensors
-            )
-            return tokens['input_ids']
-
+            #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokenizer.pad_token_id = tokenizer.eos_token_id  # Reuse the end-of-sequence token for padding
+        
         model.eval()  # Set model to evaluation mode
 
         embedding_dim = model.config.hidden_size  # Get the embedding dimension size
         vocab_size = len(vocab)
         embedding_matrix = np.zeros((vocab_size, embedding_dim))
+        
+        print("embedding_dim:", embedding_dim)
+        print("vocab_size:", vocab_size)
+        print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)        
+        
+        
+        def process_batch(batch_words):
+            inputs = tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=512)
+            
+            # Check for out-of-bound indices in input_ids
+            input_ids = inputs['input_ids']
+            max_vocab_size = model.config.vocab_size
+            
+            # Identify out-of-range tokens
+            out_of_range_ids = input_ids[input_ids >= max_vocab_size]
+            if len(out_of_range_ids) > 0:
+                print("Warning: The following input IDs are out of range for the model's vocabulary:")
+                for out_id in out_of_range_ids.unique():
+                    token = tokenizer.decode(out_id.item())
+                    print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
+            
+            with torch.no_grad():
+                outputs = model(**inputs)
+            
+            return outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Taking the CLS token embedding
+                
+                
+        # Processing the vocabulary in batches with progress tracking
+        def build_embedding_matrix(vocab, batch_size=32):
+            embedding_matrix = np.zeros((len(vocab), model.config.hidden_size))
+            
+            batch_words = []
+            word_indices = []
+            
+            # Use tqdm to show progress
+            with tqdm(total=len(vocab), desc="Processing Batches") as pbar:
+                for word, idx in vocab.items():
+                    batch_words.append(word)
+                    word_indices.append(idx)
+                    
+                    if len(batch_words) == batch_size:
+                        embeddings = process_batch(batch_words)
+                        for i, embedding in zip(word_indices, embeddings):
+                            if i < len(embedding_matrix):
+                                embedding_matrix[i] = embedding
+                            else:
+                                print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding matrix.")
+                        
+                        # Clear the batch and update the progress bar
+                        batch_words = []
+                        word_indices = []
+                        pbar.update(batch_size)
+                
+                # Don't forget to process the last batch
+                if batch_words:
+                    embeddings = process_batch(batch_words)
+                    for i, embedding in zip(word_indices, embeddings):
+                        if i < len(embedding_matrix):
+                            embedding_matrix[i] = embedding
+                        else:
+                            print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding matrix.")
+                    
+                    # Update the progress bar for the last batch
+                    pbar.update(len(batch_words))
+            
+            return embedding_matrix
 
-        with torch.no_grad():
-            for word, idx in vocab.items():
-                input_ids = tokenizer.encode(word, return_tensors='pt')
-                outputs = model(input_ids)
-                embedding_matrix[idx] = outputs.last_hidden_state.mean(dim=1).squeeze().cpu().numpy()
-
+        embedding_matrix = build_embedding_matrix(vocab, batch_size=512)
+        
     else:
         raise ValueError("Invalid pretrained type.")
         
@@ -519,6 +604,10 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     return X_vectorized, y_sparse, embedding_matrix, vocab         # Return X (features) and Y (target labels) as sparse arrays
 
 # ------------------------------------------------------------------------------------------------------------------------
+
+
+
+
 
 def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
 

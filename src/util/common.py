@@ -508,7 +508,7 @@ def tosparse(y):
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def initialize(args):
 
-    print("\tinitializing...")
+    print("\n\tinitializing...")
     
     # set up model type
     if args.learner == 'svm':

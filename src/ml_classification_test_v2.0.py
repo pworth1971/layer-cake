@@ -524,7 +524,7 @@ def tokenize_and_vectorize(texts, tokenizer):
 # -------------------------------------------------------------------------------------------------------------------
 def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors=None, supervised=False, mode='solo'):
     
-    print("\tgenerating embeddings...")
+    print("\n\tgenerating embeddings...")
         
     print('X_train:', type(X_train), X_train.shape)
     print("y_train:", type(y_train), y_train.shape)
@@ -646,7 +646,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
 # --------------------------------------------------------------------------------------------------------------
 def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding_path=None, supervised=False, method=None, args=None, logfile=None, system=None):
     
-    print("\tclassify_data()...")
+    print("\n\tclassify_data()...")
     
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
