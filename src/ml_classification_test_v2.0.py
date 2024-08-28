@@ -653,23 +653,47 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     #
     pickle_file_name=f'{dataset}_{args.pretrained}_tokenized.pickle'
 
-    #print(f"Loading data set {dataset}...")
+    print(f"Loading data set {dataset}...")
 
     pickle_file = PICKLE_DIR + pickle_file_name                                     # Define the path to the pickle file
 
+    #
+    # we pick up the vectorized dataset along with the associated pretrained 
+    # embedding matrices when e load the data - either from data files directly
+    # if the first time parsing the dataset or from the pickled file if it exists
+    # and the data has been cached for faster loading
+    #
     if os.path.exists(pickle_file):                                                 # if the pickle file exists
+        
         print(f"Loading tokenized data from '{pickle_file}'...")
-        X, y, embedding_matrix, vocab = load_from_pickle(pickle_file)
+        
+        X, y, embedding_matrix, weighted_embeddings, vocab = load_from_pickle(pickle_file)
     else:
         print(f"'{pickle_file}' not found, loading {dataset}...")
-        X, y, embedding_matrix, vocab = load_data(dataset=dataset, pretrained=args.pretrained, embedding_path=embedding_path)
+        
+        X, y, embedding_matrix, weighted_embeddings, vocab = load_data(
+            dataset=dataset,                            # dataset
+            pretrained=args.pretrained,                 # pretrained embeddings
+            embedding_path=embedding_path               # path to embeddings
+            )
 
-        save_to_pickle(X, y, embedding_matrix, vocab, pickle_file)                              # Save the tokenized matrices to a pickle file
-
+        # Save the tokenized matrices to a pickle file
+        save_to_pickle(
+            X,                          # vectorized data
+            y,                          # labels
+            embedding_matrix,           # vector representation of the dataset vocabulary
+            weighted_embeddings,        # weighted avg embedding representation of dataset
+            vocab,                      # tokenized dataset vocabulary
+            pickle_file)         
+    
     print("Tokenized data loaded.")
  
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
+    
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
+    print("vocab:", type(vocab), len(vocab))
 
     print("train_test_split...")
 

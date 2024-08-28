@@ -590,6 +590,62 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
 
+    # ----------------------------------------------------------------------
+    # IV: Generate Weighted Average Embedding Representations
+    # ----------------------------------------------------------------------
+    
+    print("generating weighted average embeddings...")
+    
+    # ---------------------------------------------------------------------------------------
+    # generate_weighted_embeddings()
+    #
+    # calculate the weighted average of the pretrained embeddings for each document. 
+    # For each document, it tokenizes the text, retrieves the corresponding embeddings from 
+    # embedding_matrix, and weights them by their TF-IDF scores.
+    # This method returns a NumPy array where each row is a document's embedding.
+    # ---------------------------------------------------------------------------------------
+    def generate_weighted_embeddings(text_data, vectorizer, embedding_matrix, tokenizer=None):
+        document_embeddings = []
+        for doc in text_data:
+            # Tokenize and get token IDs
+            if tokenizer:                                               # token based tokenization
+                tokens = tokenizer.tokenize(doc)
+                token_ids = tokenizer.convert_tokens_to_ids(tokens)
+            else:                                                       # word based tokenization
+                tokens = doc.split()
+                token_ids = [vocab.get(token, None) for token in tokens]
+
+            # Calculate TF-IDF weights for the tokens
+            tfidf_vector = vectorizer.transform([doc]).toarray()[0]
+            
+            # Aggregate the embeddings weighted by TF-IDF
+            weighted_sum = np.zeros(embedding_matrix.shape[1])
+            total_weight = 0.0
+            
+            for token, token_id in zip(tokens, token_ids):
+                if token_id is not None and 0 <= token_id < embedding_matrix.shape[0]:
+                    weight = tfidf_vector[vocab.get(token, 0)]
+                    weighted_sum += embedding_matrix[token_id] * weight
+                    total_weight += weight
+            
+            if total_weight > 0:
+                doc_embedding = weighted_sum / total_weight
+            else:
+                doc_embedding = np.zeros(embedding_matrix.shape[1])
+
+            document_embeddings.append(doc_embedding)
+        
+        return np.array(document_embeddings)
+    
+    weighted_embeddings = generate_weighted_embeddings(
+        train_set['Text'], 
+        vectorizer, 
+        embedding_matrix, 
+        tokenizer if embedding_type == 'token' else None
+        )
+    
+    print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
+    
     # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
     if not isinstance(X_vectorized, csr_matrix):
         X_vectorized = csr_matrix(X_vectorized)
@@ -601,14 +657,17 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # Convert Y to a sparse matrix
     y_sparse = csr_matrix(y).T         # Transpose to match the expected shape
 
-    return X_vectorized, y_sparse, embedding_matrix, vocab         # Return X (features) and Y (target labels) as sparse arrays
+    # NB we return X (features) and y (target labels) as sparse arrays
+    return X_vectorized, y_sparse, embedding_matrix, weighted_embeddings, vocab         
 
 # ------------------------------------------------------------------------------------------------------------------------
 
 
 
 
-
+# ------------------------------------------------------------------------------------------------------------------------
+# load_data()
+# ------------------------------------------------------------------------------------------------------------------------
 def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
 
     print(f"Loading data set: {dataset}, pretrained: {pretrained}")
@@ -618,34 +677,67 @@ def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
     else:
         embedding_type = 'word'
 
+
     if (dataset == '20newsgroups'): 
-        X, y, embedding_matrix, vocab = load_20newsgroups(embedding_type=embedding_type, pretrained=pretrained, pretrained_path=embedding_path)
-        return X, y, embedding_matrix, vocab
+        
+        X, y, embedding_matrix, weighted_embeddings, vocab = load_20newsgroups(
+            embedding_type=embedding_type, 
+            pretrained=pretrained, 
+            pretrained_path=embedding_path
+            )
+        
+        return X, y, embedding_matrix, weighted_embeddings, vocab
+
     elif (dataset == 'bbc-news'):
-        X, y, embedding_matrix, vocab = load_bbc_news(embedding_type=embedding_type, pretrained=pretrained, pretrained_path=embedding_path)
-        return X, y, embedding_matrix, vocab
+        
+        X, y, embedding_matrix, weighted_embeddings, vocab = load_bbc_news(
+            embedding_type=embedding_type, 
+            pretrained=pretrained, 
+            pretrained_path=embedding_path
+            )
+
+        return X, y, embedding_matrix, weighted_embeddings, vocab
+
     else:
-        print(f"Dataset '{dataset}' not available.")
+        print(f"Dataset '{dataset}' not available, returning None.")
         return None
+# ------------------------------------------------------------------------------------------------------------------------
+
 
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Save X, y sparse matrices, and vocabulary to pickle
 # ------------------------------------------------------------------------------------------------------------------------
-def save_to_pickle(X, y, embedding_matrix, vocab, pickle_file):
-    print(f"Saving X, y, and vocab to pickle file: {pickle_file}")
+def save_to_pickle(X, y, embedding_matrix, weighted_embeddings, vocab, pickle_file):
+    
+    print(f"Saving X, y, embedding_matrix, weighted_embeddings, and vocab to pickle file: {pickle_file}")
+    
     with open(pickle_file, 'wb') as f:
         # Save the sparse matrices and vocabulary as a tuple
-        pickle.dump((X, y, embedding_matrix, vocab), f)
+        pickle.dump((X, y, embedding_matrix, weighted_embeddings, vocab), f)
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Load X, y sparse matrices, and vocabulary from pickle
 # ------------------------------------------------------------------------------------------------------------------------
 def load_from_pickle(pickle_file):
-    print(f"Loading X, y, and vocab from pickle file: {pickle_file}")
+    
+    print(f"Loading X, y, embedding_matrix, weighted_embeddings and vocab from pickle file: {pickle_file}")
+    
     with open(pickle_file, 'rb') as f:
-        X, y, embedding_matrix, vocab = pickle.load(f)
-    return X, y, embedding_matrix, vocab
+        X, y, embedding_matrix, weighted_embeddings, vocab = pickle.load(f)
+    
+    return X, y, embedding_matrix, weighted_embeddings, vocab
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ------------------------------------------------------------------------------------------------------------------------
