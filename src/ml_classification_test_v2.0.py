@@ -520,7 +520,7 @@ def tokenize_and_vectorize(texts, tokenizer):
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
 # -------------------------------------------------------------------------------------------------------------------
-def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors=None, weighted_embeddings_train=wNone, 
+def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors_dictionary=None, weighted_embeddings_train=None, 
                    weighted_embeddings_test=None, supervised=False, mode='solo'):
     
     print("\n\tgenerating embeddings...")
@@ -533,7 +533,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     print("vocab:", type(vocab), len(vocab))
     
     print("pretrained:", pretrained)
-    print("pretrained_vectors:", type(pretrained_vectors), pretrained_vectors.shape)
+    print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
     
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
@@ -551,10 +551,10 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
         
         print("setting up pretrained embeddings...")
 
-        #P = pretrained_vectors.extract(vocabulary).numpy()
-        print("pretrained_vectors: ", type(pretrained_vectors), {pretrained_vectors.shape})
+        #P = pretrained_vectors_dictionary.extract(vocabulary).numpy()
+        print("pretrained_vectors_dictionary: ", type(pretrained_vectors_dictionary), {pretrained_vectors_dictionary.shape})
 
-        pretrained_embeddings.append(pretrained_vectors)
+        pretrained_embeddings.append(pretrained_vectors_dictionary)
         #print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
 
     if supervised:
@@ -615,52 +615,6 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     
     print("X_train:", type(X_train), X_train.shape)
     print("X_test:", type(X_test), X_test.shape)
-   
-    """
-    if pretrained == 'bert':
-        print("Using BERT pretrained embeddings...")
-
-        BERT_MODEL = 'bert-base-uncased'
-        tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)
-        cache_path = f'../.vector_cache/{BERT_MODEL}_{dataset}.npz'
-        train_embeddings, test_embeddings = load_cached_embeddings(cache_path, debug=True)
-
-        X_train_token_matrix = tokenize_and_vectorize(X_train, tokenizer)
-        X_test_token_matrix = tokenize_and_vectorize(X_test, tokenizer)
-
-        if train_embeddings is None or test_embeddings is None: 
-            print("generating BERT embeddings")
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            bert_model = BertModel.from_pretrained(BERT_MODEL).to(device)
-            X_train_bert = get_bert_embeddings(X_train.tolist(), bert_model, tokenizer, device)
-            X_test_bert = get_bert_embeddings(X_test.tolist(), bert_model, tokenizer, device)
-            cache_embeddings(X_train_bert, X_test_bert, cache_path)
-        else:
-            X_train_bert = train_embeddings
-            X_test_bert = test_embeddings
-
-        print('X_train_bert:', type(X_train_bert), X_train_bert.shape)
-        print('X_test_bert:', type(X_test_bert), X_test_bert.shape)
-
-        if mode == 'solo':
-            print("using just the BERT embeddings alone (solo)...")
-            X_train = X_train_bert
-            X_test = X_test_bert
-        elif mode == 'cat':
-            print("concatenating BERT embeddings with token matrix...")
-            X_train_combined = np.hstack([X_train_token_matrix.toarray(), X_train_bert])
-            X_test_combined = np.hstack([X_test_token_matrix.toarray(), X_test_bert])
-            X_train = X_train_combined
-            X_test = X_test_combined
-        elif mode == 'dot':
-            print("dot product (matrix multiplication) of BERT embeddings with token matrix...")
-            X_train = X_train_token_matrix.dot(X_train_bert)
-            X_test = X_test_token_matrix.dot(X_test_bert)
-        elif moode == 'tfidf':
-            print("using just the TF-IDF vectors...")
-            X_train = X_train
-            X_test = X_test
-    """
 
     return X_train, X_test
 
@@ -692,11 +646,11 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         print(f"Loading tokenized data from '{pickle_file}'...")
         
-        X, y, embedding_matrix, weighted_embeddings, vocab = load_from_pickle(pickle_file)
+        X, y, embedding_vocab_matrix, weighted_embeddings, vocab = load_from_pickle(pickle_file)
     else:
         print(f"'{pickle_file}' not found, loading {dataset}...")
         
-        X, y, embedding_matrix, weighted_embeddings, vocab = load_data(
+        X, y, embedding_vocab_matrix, weighted_embeddings, vocab = load_data(
             dataset=dataset,                            # dataset
             pretrained=args.pretrained,                 # pretrained embeddings
             embedding_path=embedding_path               # path to embeddings
@@ -706,7 +660,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         save_to_pickle(
             X,                          # vectorized data
             y,                          # labels
-            embedding_matrix,           # vector representation of the dataset vocabulary
+            embedding_vocab_matrix,     # vector representation of the dataset vocabulary
             weighted_embeddings,        # weighted avg embedding representation of dataset
             vocab,                      # tokenized dataset vocabulary
             pickle_file)         
@@ -716,7 +670,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
     
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
     print("vocab:", type(vocab), len(vocab))
 
@@ -783,7 +737,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             dataset=dataset,
             vocab=vocab, 
             pretrained=pretrained_embeddings,
-            pretrained_vectors=embedding_matrix,
+            pretrained_vectors_dictionary=embedding_vocab_matrix,
             weighted_embeddings_train=weighted_embeddings_train,
             weighted_embeddings_test=weighted_embeddings_test,
             supervised=args.supervised,

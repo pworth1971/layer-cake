@@ -17,7 +17,7 @@ OPTIMC="--optimc"
 #declare -a pretrained_embeddings=("glove" "word2vec" "fasttext" "bert" "llama")
 #declare -a learners=("svm" "lr" "nb")
 
-#bb_dataset="--dataset bbc-news --pickle-dir ../pickles"                    # bbc-news (single label, XXX classes)
+#bb_dataset="--dataset bbc-news --pickle-dir ../pickles"                    # bbc-news (single label, 5 classes)
 #20_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                # 20_newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                    # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
@@ -25,7 +25,7 @@ OPTIMC="--optimc"
 
 declare -a datasets=("bbc-news")
 declare -a pickle_paths=("../pickles")
-declare -a learners=("svm" "lr" "nb")
+declare -a learners=("svm")
 declare -a modes=("tfidf" "cat" "solo" "dot")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
 
