@@ -36,14 +36,17 @@ from transformers import BertTokenizer, BertTokenizerFast, LlamaTokenizer, Llama
 from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
+from torch.utils.data import DataLoader, Dataset
+
 
 VECTOR_CACHE = '../.vector_cache'
 DATASET_DIR = '../datasets/'
-MAX_VOCAB_SIZE = 50000                          # max feature size for the models basically
 
-BERT_MODEL = 'bert-base-uncased'
-#LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'
-LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
+MAX_VOCAB_SIZE = 50000                                      # max feature size for TF-IDF vectorization
+
+BERT_MODEL = 'bert-base-uncased'                            # dimension = 768
+LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
+#LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -52,8 +55,6 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
-
-
 
 
 
@@ -170,6 +171,226 @@ def preprocessDataset(train_text):
     return lem_text
 
 # ------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+# BERT Embeddings functions
+# ------------------------------------------------------------------------------------------------------------------------
+class TextDataset(Dataset):
+    def __init__(self, texts, tokenizer, max_len):
+        self.texts = texts
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        text = self.texts[item]
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=True,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'token_type_ids': encoding['token_type_ids'].flatten()
+        }
+
+def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=256):
+    
+    print("getting BERT embeddings...")
+    
+    dataset = TextDataset(texts, tokenizer, max_len)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    embeddings = []
+    model.eval()
+
+    with torch.cuda.amp.autocast(), torch.no_grad():
+        for batch in tqdm(dataloader, desc="Processing BERT Embeddings"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            token_type_ids = batch['token_type_ids'].to(device)
+            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+            embeddings.append(cls_embeddings.cpu().numpy())
+
+    embeddings = np.vstack(embeddings)
+    return embeddings
+
+def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=32, max_len=512):
+    
+    print("getting weighted bert embeddings...")
+    
+    dataset = TextDataset(texts, tokenizer, max_len)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    embeddings = []
+    model.eval()
+
+    with torch.cuda.amp.autocast(), torch.no_grad():
+        for batch in tqdm(dataloader, desc="Processing Weighted BERT Embeddings"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            token_type_ids = batch['token_type_ids'].to(device)
+
+            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+            token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+            for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                tokens = tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                tfidf_vector = vectorizer.transform([texts[i]]).toarray()[0]
+
+                weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
+                total_weight = 0.0
+
+                for j, token in enumerate(tokens):
+                    if token in vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                        token_weight = tfidf_vector[vectorizer.vocabulary_[token.lower()]]
+                        weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
+                        total_weight += token_weight
+
+                if total_weight > 0:
+                    doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                else:
+                    doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
+
+                embeddings.append(doc_embedding)
+
+    return np.vstack(embeddings)
+
+def get_llama_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=512):
+    
+    print("getting llama embeddings...")
+    
+    dataset = TextDataset(texts, tokenizer, max_len)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    embeddings = []
+    model.eval()
+
+    with torch.cuda.amp.autocast(), torch.no_grad():
+        for batch in tqdm(dataloader, desc="Processing LLaMa Embeddings"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            outputs = model(input_ids, attention_mask=attention_mask)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token or equivalent
+            embeddings.append(cls_embeddings.cpu().numpy())
+
+    embeddings = np.vstack(embeddings)
+    return embeddings
+
+def get_weighted_llama_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=32, max_len=512):
+    
+    print("getting weighted llama embeddings...")
+
+    model = model.to(device)                # move model to device
+    
+    dataset = TextDataset(texts, tokenizer, max_len)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    embeddings = []
+    model.eval()
+
+    with torch.cuda.amp.autocast(), torch.no_grad():
+        for batch in tqdm(dataloader, desc="Processing Weighted LLaMa Embeddings"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+
+            outputs = model(input_ids, attention_mask=attention_mask)
+            token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+            for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                tokens = tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                tfidf_vector = vectorizer.transform([texts[i]]).toarray()[0]
+
+                weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
+                total_weight = 0.0
+
+                for j, token in enumerate(tokens):
+                    if token in vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                        token_weight = tfidf_vector[vectorizer.vocabulary_[token.lower()]]
+                        weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
+                        total_weight += token_weight
+
+                if total_weight > 0:
+                    doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                else:
+                    doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
+
+                embeddings.append(doc_embedding)
+
+    return np.vstack(embeddings)
+
+
+# -------------------------------------------------------------------------------------------------------------------
+def cache_embeddings(train_embeddings, test_embeddings, cache_path):
+    print("caching embeddings to:", cache_path)
+    
+    np.savez(cache_path, train=train_embeddings, test=test_embeddings)
+
+def load_cached_embeddings(cache_path, debug=False):
+    if (debug):
+        print("looking for cached embeddings at ", cache_path)
+    
+    if os.path.exists(cache_path):
+        
+        if (debug):
+            print("found cached embeddings, loading...")
+        data = np.load(cache_path)
+        return data['train'], data['test']
+    
+    if (debug):
+        print("did not find cached embeddings, returning None...")
+    return None, None
+# -------------------------------------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------------------------------------
+# Function to create embeddings for a given text
+# -------------------------------------------------------------------------------------------------------------------
+def create_embedding(texts, model, embedding_dim):
+    embeddings = np.zeros((len(texts), embedding_dim))
+    for i, text in enumerate(texts):
+        words = text.split()
+        word_embeddings = [model[word] for word in words if word in model]
+        if word_embeddings:
+            embeddings[i] = np.mean(word_embeddings, axis=0)            # Average the word embeddings
+        else:
+            embeddings[i] = np.zeros(embedding_dim)                     # Use a zero vector if no words are in the model
+    return embeddings
+# -------------------------------------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------------------------------------
+# Tokenize text using BERT tokenizer and vectorize accordingly
+# -------------------------------------------------------------------------------------------------------------------
+def tokenize_and_vectorize(texts, tokenizer):
+    tokenized_texts = texts.apply(lambda x: tokenizer.tokenize(x))
+    token_indices = tokenized_texts.apply(lambda tokens: tokenizer.convert_tokens_to_ids(tokens))
+    
+    # Initialize a zero matrix to store token counts (csr_matrix for efficiency)
+    num_texts = len(texts)
+    vocab_size = tokenizer.vocab_size
+    token_matrix = csr_matrix((num_texts, vocab_size), dtype=np.float32)
+    
+    for i, tokens in enumerate(token_indices):
+        for token in tokens:
+            token_matrix[i, token] += 1  # Increment the count for each token
+    
+    return token_matrix
+# -------------------------------------------------------------------------------------------------------------------
+
+
+
 
 
 
@@ -422,7 +643,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
         
         # Use the tokenizer's vocabulary directly
-        vocab = tokenizer.get_vocab()
+        #vocab = tokenizer.get_vocab()
+        vocab = vectorizer.vocabulary_                                                  # set vocabulary of dataset from vectorizer
 
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
@@ -517,7 +739,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         embedding_vocab_matrix = np.zeros((vocab_size, embedding_dim))
         
         print("embedding_dim:", embedding_dim)
-        print("vocab_size:", vocab_size)
+        print("dataset vocab size:", vocab_size)
         #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
         
         def process_batch(batch_words):
@@ -539,6 +761,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
 
         def build_embedding_vocab_matrix(vocab, batch_size=32):
+            
             embedding_vocab_matrix = np.zeros((len(vocab), model.config.hidden_size))
             batch_words = []
             word_indices = []
@@ -594,21 +817,14 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # This method returns a NumPy array where each row is a document's embedding.
     # ---------------------------------------------------------------------------------------
     
-    def generate_weighted_embeddings(text_data, vectorizer, embedding_vocab_matrix, tokenizer=None, truncation=False):
-
+    def get_word_based_weighted_embeddings(text_data, vectorizer, embedding_vocab_matrix):
+        
         document_embeddings = []
         
         for doc in text_data:
             # Tokenize the document and get token IDs
-            if tokenizer:  # Token-based tokenization                
-                if (truncation):
-                    tokens = tokenizer(doc, max_length=512, truncation=True)
-                else:
-                    tokens = tokenizer(doc)
-                token_ids = tokenizer.convert_tokens_to_ids(tokens)
-            else:  # Word-based tokenization
-                tokens = doc.split()
-                token_ids = [vocab.get(token, None) for token in tokens]
+            tokens = doc.split()
+            token_ids = [vectorizer.vocabulary_.get(token.lower(), None) for token in tokens]
 
             # Calculate TF-IDF weights for the tokens
             tfidf_vector = vectorizer.transform([doc]).toarray()[0]
@@ -619,8 +835,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
             for token, token_id in zip(tokens, token_ids):
                 if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
-                    # Use token ID directly as the index
-                    weight = tfidf_vector[token_ids.index(token_id)] if token_id < len(tfidf_vector) else 0
+                    weight = tfidf_vector[token_id]
                     weighted_sum += embedding_vocab_matrix[token_id] * weight
                     total_weight += weight
 
@@ -636,16 +851,49 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     #print("vectorizer:", type(vectorizer), vectorizer)
     #print("tokenizer:", type(tokenizer), tokenizer)
     
-    # Determine if truncation is needed (e.g., for BERT)
-    truncation = pretrained == 'bert'
-    
-    weighted_embeddings = generate_weighted_embeddings(
-        train_set['Text'], 
-        vectorizer, 
-        embedding_vocab_matrix, 
-        tokenizer if embedding_type == 'token' else None,
-        truncation=truncation
-        )
+    if (pretrained in ['bert', 'llama']):
+        
+        MPS_BATCH_SIZE = 32
+        
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+
+        # BERT embeddings        
+        if (pretrained == 'bert'): 
+            weighted_embeddings = get_weighted_bert_embeddings(
+                texts=train_set['Text'].tolist(), 
+                model=model, 
+                tokenizer=tokenizer, 
+                vectorizer=vectorizer, 
+                device=device, 
+                batch_size=MPS_BATCH_SIZE, 
+                max_len=512
+            )  
+            
+        # LLaMa embeddings
+        elif (pretrained == 'llama'):
+        
+            weighted_embeddings = get_weighted_llama_embeddings(
+                texts=train_set['Text'].tolist(), 
+                model=model, 
+                tokenizer=tokenizer, 
+                vectorizer=vectorizer, 
+                device=device, 
+                batch_size=MPS_BATCH_SIZE, 
+                max_len=512
+            )        
+    else:
+        
+        # Word-based embeddings
+        weighted_embeddings = get_word_based_weighted_embeddings(
+            train_set['Text'], 
+            vectorizer, 
+            embedding_vocab_matrix
+            )
     
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
     
