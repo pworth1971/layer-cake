@@ -37,6 +37,7 @@ from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
 from torch.utils.data import DataLoader, Dataset
+#from torch.testing._internal.distributed.rpc.examples.parameter_server_test import batch_size
 
 
 VECTOR_CACHE = '../.vector_cache'
@@ -47,6 +48,14 @@ MAX_VOCAB_SIZE = 50000                                      # max feature size f
 BERT_MODEL = 'bert-base-uncased'                            # dimension = 768
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
 #LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
+
+TOKEN_TOKENIZER_MAX_LENGTH = 512
+
+
+# batch sizes for pytorch encoding routines
+DEFAULT_GPU_BATCH_SIZE = 16
+DEFAULT_GPU_BATCH_SIZE = 32
+MPS_BATCH_SIZE = 32
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -206,7 +215,7 @@ class TextDataset(Dataset):
             'token_type_ids': encoding['token_type_ids'].flatten()
         }
 
-def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=256):
+def get_bert_embeddings(texts, model, tokenizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=256):
     
     print("getting BERT embeddings...")
     
@@ -214,6 +223,8 @@ def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
     embeddings = []
+
+    model.to(device)
     model.eval()
 
     with torch.cuda.amp.autocast(), torch.no_grad():
@@ -228,7 +239,7 @@ def get_bert_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=
     embeddings = np.vstack(embeddings)
     return embeddings
 
-def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=32, max_len=512):
+def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
     
     print("getting weighted bert embeddings...")
     
@@ -236,6 +247,8 @@ def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, ba
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
     embeddings = []
+
+    model.to(device)
     model.eval()
 
     with torch.cuda.amp.autocast(), torch.no_grad():
@@ -269,7 +282,7 @@ def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, ba
 
     return np.vstack(embeddings)
 
-def get_llama_embeddings(texts, model, tokenizer, device, batch_size=32, max_len=512):
+def get_llama_embeddings(texts, model, tokenizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
     
     print("getting llama embeddings...")
     
@@ -277,6 +290,8 @@ def get_llama_embeddings(texts, model, tokenizer, device, batch_size=32, max_len
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
     embeddings = []
+
+    model.to(device)
     model.eval()
 
     with torch.cuda.amp.autocast(), torch.no_grad():
@@ -290,16 +305,16 @@ def get_llama_embeddings(texts, model, tokenizer, device, batch_size=32, max_len
     embeddings = np.vstack(embeddings)
     return embeddings
 
-def get_weighted_llama_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=32, max_len=512):
+def get_weighted_llama_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
     
     print("getting weighted llama embeddings...")
-
-    model = model.to(device)                # move model to device
     
     dataset = TextDataset(texts, tokenizer, max_len)
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
     embeddings = []
+
+    model = model.to(device)                # move model to device
     model.eval()
 
     with torch.cuda.amp.autocast(), torch.no_grad():
@@ -461,7 +476,7 @@ def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained
             tokens = tokenizer.encode_plus(
                 text,
                 add_special_tokens=True,
-                max_length=512,
+                max_length=TOKEN_TOKENIZER_MAX_LENGTH,
                 padding='max_length',
                 truncation=True,
                 return_tensors='np'
@@ -613,7 +628,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
         
-        vocab = vectorizer.vocabulary_                                                  # set vocabulary of dataset from vectorizer
+        # Ensure the vocabulary is all lowercased to avoid case mismatches
+        vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
 
     elif embedding_type == 'token':
         print(f"Using token-level vectorization with {pretrained.upper()} embeddings...")
@@ -629,7 +645,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
         def custom_tokenizer(text):
             # Tokenize with truncation
-            tokens = tokenizer.tokenize(text, max_length=512, truncation=True)
+            tokens = tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
             return tokens
 
         if vectorizer_type == 'tfidf':
@@ -641,11 +657,10 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
-        
-        # Use the tokenizer's vocabulary directly
-        #vocab = tokenizer.get_vocab()
-        vocab = vectorizer.vocabulary_                                                  # set vocabulary of dataset from vectorizer
 
+        # Use the tokenizer's vocabulary directly, lowercased for consistency
+        vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
+    
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
 
@@ -709,18 +724,6 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     elif pretrained in ['bert', 'llama']:
         
         # NB: tokenizer and model should be initialized in the embedding_type == 'token' block
-        """
-        if (pretrained == 'bert'):
-            print("Using BERT pretrained embeddings...")
-            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE)                   # BERT tokenizer
-            model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE)                           # BERT model
-        elif pretrained == 'llama':
-            print("Using LLaMa pretrained embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE)                 # LLaMa tokenizer
-            model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE)                         # LLaMa model
-        else:
-            raise ValueError("Invalid pretrained type.")
-        """
         
         print("creating (pretrained) embedding vocab matrix which aligns with dataset vocabulary...")
         
@@ -743,7 +746,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
         
         def process_batch(batch_words):
-            inputs = tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=512)
+            inputs = tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=TOKEN_TOKENIZER_MAX_LENGTH)
             input_ids = inputs['input_ids']
             max_vocab_size = model.config.vocab_size
 
@@ -760,7 +763,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
 
-        def build_embedding_vocab_matrix(vocab, batch_size=32):
+        def build_embedding_vocab_matrix(vocab, batch_size=DEFAULT_GPU_BATCH_SIZE):
             
             embedding_vocab_matrix = np.zeros((len(vocab), model.config.hidden_size))
             batch_words = []
@@ -853,14 +856,15 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     
     if (pretrained in ['bert', 'llama']):
         
-        MPS_BATCH_SIZE = 32
-        
         if torch.cuda.is_available():
             device = torch.device("cuda")
+            batch_size = DEFAULT_GPU_BATCH_SIZE
         elif torch.backends.mps.is_available():
             device = torch.device("mps")
+            batch_size = MPS_BATCH_SIZE
         else:
             device = torch.device("cpu")
+            batch_size = DEFAULT_CPU_BATCH_SIZE
 
         # BERT embeddings        
         if (pretrained == 'bert'): 
@@ -870,8 +874,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 tokenizer=tokenizer, 
                 vectorizer=vectorizer, 
                 device=device, 
-                batch_size=MPS_BATCH_SIZE, 
-                max_len=512
+                batch_size=batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
             )  
             
         # LLaMa embeddings
@@ -883,8 +887,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 tokenizer=tokenizer, 
                 vectorizer=vectorizer, 
                 device=device, 
-                batch_size=MPS_BATCH_SIZE, 
-                max_len=512
+                batch_size=batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
             )        
     else:
         

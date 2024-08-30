@@ -443,7 +443,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
         print("pretrained_vectors_dictionary: ", type(pretrained_vectors_dictionary), {pretrained_vectors_dictionary.shape})
 
         pretrained_embeddings.append(pretrained_vectors_dictionary)
-        #print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
+        print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
 
     if supervised:
         
@@ -490,14 +490,14 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     
     elif mode == 'dot':
         
-        print("Dot product (matrix multiplication) of word embeddings with TF-IDF vectors...")
+        print("Dot product (matrix multiplication) of embeddings matrix with TF-IDF vectors...")
         
         #
         # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
         # using matrix multiplication, i.e. dot product 
         #
-        X_train = X_train.dot(embedding_matrix)
-        X_test = X_test.dot(embedding_matrix)
+        X_train = X_train.toarray().dot(embedding_matrix)
+        X_test = X_test.toarray().dot(embedding_matrix)
 
     print("after embedding generation...")
     
