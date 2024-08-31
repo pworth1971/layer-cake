@@ -37,6 +37,7 @@ from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
 from torch.utils.data import DataLoader, Dataset
+from fontTools.misc.textTools import num2binary
 #from torch.testing._internal.distributed.rpc.examples.parameter_server_test import batch_size
 
 
@@ -642,7 +643,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
         else:
             raise ValueError("Invalid embedding type. Use 'bert' or 'llama' for token embeddings.")
-
+        
         def custom_tokenizer(text):
             # Tokenize with truncation
             tokens = tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
@@ -682,7 +683,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # ----------------------------------------------------------------------
 
     print("\n\tconstructing (pretrained) embeddings dataset vocabulary matrix...")    
-
+    
     # Load the pre-trained embeddings based on the specified model
     if pretrained in ['word2vec', 'fasttext', 'glove']:
 
@@ -762,7 +763,6 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             
             return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
-
         def build_embedding_vocab_matrix(vocab, batch_size=DEFAULT_GPU_BATCH_SIZE):
             
             embedding_vocab_matrix = np.zeros((len(vocab), model.config.hidden_size))
@@ -799,7 +799,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             return embedding_vocab_matrix
 
         embedding_vocab_matrix = build_embedding_vocab_matrix(vocab, batch_size=1024)
-        
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+            
     else:
         raise ValueError("Invalid pretrained type.")
         
@@ -818,7 +819,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     # For each document, it tokenizes the text, retrieves the corresponding embeddings from 
     # embedding_matrix, and weights them by their TF-IDF scores.
     # This method returns a NumPy array where each row is a document's embedding.
-    # ---------------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------------    
     
     def get_word_based_weighted_embeddings(text_data, vectorizer, embedding_vocab_matrix):
         
@@ -890,6 +891,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 batch_size=batch_size, 
                 max_len=TOKEN_TOKENIZER_MAX_LENGTH
             )        
+            
     else:
         
         # Word-based embeddings
@@ -898,7 +900,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             vectorizer, 
             embedding_vocab_matrix
             )
-    
+        
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
     
     # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
