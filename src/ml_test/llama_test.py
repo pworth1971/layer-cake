@@ -81,6 +81,7 @@ elif (dataset == '20newsgroups'):
     target_names = newsgroups_data.target_names
 
 print("X_raw:", type(X_raw), len(X_raw))
+#print("X_raw:", X_raw)
 print("y", type(y), len(y))
 print("target_names:", target_names)
 
@@ -116,6 +117,7 @@ X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_raw).toarray()
 X_test_tfidf = tfidf_vectorizer.transform(X_test_raw).toarray()
 
 print("X_train_tfidf:", type(X_train_tfidf), X_train_tfidf.shape)
+print("X_train_tfidf[0]:", X_train_tfidf[0])
 print("X_test_tfidf:", type(X_test_tfidf), X_test_tfidf.shape)
 
 
@@ -140,10 +142,19 @@ else:
         
 print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_embeddings))
 
+from itertools import islice
 
+print("llama_vocab_embeddings\n:")
+# Print the first 3 elements
+for key, value in islice(llama_vocab_embeddings.items(), 3):
+    print(f'{key}, {value}\n')
+    
+print("X_train_tfidf[0]\n:", X_train_tfidf[0])
+
+print("\n\tprojecting...")
 
 # Project the TF-IDF vectors into the LLaMA embedding space
-def project_tfidf_to_llama(tfidf_vectors, vocab_embeddings, vocab):
+def llama_weighted_average_vectorization(tfidf_vectors, vocab_embeddings, vocab):
     print("projecting tfidf vectorized data to llama embeddings...")
           
     print("tfidf_vectors:", type(tfidf_vectors), tfidf_vectors.shape)
@@ -162,19 +173,80 @@ def project_tfidf_to_llama(tfidf_vectors, vocab_embeddings, vocab):
 
 # Project the training and testing sets
 vocab = tfidf_vectorizer.get_feature_names_out()
-print("vocab:", type(vocab), vocab.shape)
+print("vocab (get_feature_names_out):", type(vocab), vocab.shape)
 
-X_train_projected = project_tfidf_to_llama(X_train_tfidf, llama_vocab_embeddings, vocab)
-X_test_projected = project_tfidf_to_llama(X_test_tfidf, llama_vocab_embeddings, vocab)
-print("X_train_projected:", type(X_train_projected), X_train_projected.shape)
-print("X_test_projected:", type(X_test_projected), X_test_projected.shape)
+vect_vocab = tfidf_vectorizer.vocabulary_
+print("vect_vocab:", type(vect_vocab), len(vect_vocab))
+
+# Use the tokenizer's vocabulary directly, lowercased for consistency
+lower_vect_vocab = {k.lower(): v for k, v in tfidf_vectorizer.vocabulary_.items()}
+print("lower_vect_vocab:", type(vect_vocab), len(vect_vocab))
+        
+
+print("using weighted average vectorization...")
+        
+X_train_projected_wa = llama_weighted_average_vectorization(X_train_tfidf, llama_vocab_embeddings, vocab)
+X_test_projected_wa = llama_weighted_average_vectorization(X_test_tfidf, llama_vocab_embeddings, vocab)
+print("X_train_projected_wa:", type(X_train_projected_wa), X_train_projected_wa.shape)
+print("X_test_projected_wa:", type(X_test_projected_wa), X_test_projected_wa.shape)
+
 
 # Train an SVM classifier on the projected features
 svm_classifier = SVC(kernel='linear')
-svm_classifier.fit(X_train_projected, y_train)
+svm_classifier.fit(X_train_projected_wa, y_train)
 
 # Make predictions on the test set
-y_pred = svm_classifier.predict(X_test_projected)
+y_pred = svm_classifier.predict(X_test_projected_wa)
+
+# Print classification report
+print(classification_report(y_test, y_pred, target_names=target_names))
+
+
+print("\n\tusing matrix multiplication...")
+
+# Function to convert llama_vocab_embeddings (dict) to a numpy matrix
+def convert_dict_to_matrix(vocab_embeddings, vocab):
+    
+    print("converting dict to matrix...")
+    
+    # Assuming all embeddings have the same dimension and it's correctly 4096 as per the LLaMA model dimension
+    embedding_dim = 4096
+    embedding_matrix = np.zeros((len(vocab), embedding_dim))  # Shape (vocab_size, embedding_dim)
+
+    print("embedding_dim:", embedding_dim)
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    
+    for i, token in enumerate(vocab):
+        if token in vocab_embeddings:
+            # Direct assignment of the embedding which is already in the correct shape (4096,)
+            embedding_matrix[i, :] = vocab_embeddings[token]
+        else:
+            # Initialize missing tokens with zeros or a small random value
+            embedding_matrix[i, :] = np.zeros(embedding_dim)
+
+    return embedding_matrix
+
+# Function to project the TF-IDF vectors into the LLaMA embedding space using matrix multiplication
+def project_tfidf_to_llama(tfidf_vectors, embedding_matrix):
+    return np.dot(tfidf_vectors, embedding_matrix)
+
+
+llama_vocab_matrix = convert_dict_to_matrix(llama_vocab_embeddings, vocab)
+print("llama_vocab_matrix:", type(llama_vocab_matrix), llama_vocab_matrix.shape)
+
+# Project the training and testing sets
+X_train_projected_dot = project_tfidf_to_llama(X_train_tfidf, llama_vocab_matrix)
+X_test_projected_dot = project_tfidf_to_llama(X_test_tfidf, llama_vocab_matrix)
+
+print("X_train_projected_dot:", type(X_train_projected_dot), X_train_projected_dot.shape)
+print("X_test_projected_dot:", type(X_test_projected_dot), X_test_projected_dot.shape)
+
+# Train an SVM classifier on the projected features
+svm_classifier = SVC(kernel='linear')
+svm_classifier.fit(X_train_projected_dot, y_train)
+
+# Make predictions on the test set
+y_pred = svm_classifier.predict(X_test_projected_dot)
 
 # Print classification report
 print(classification_report(y_test, y_pred, target_names=target_names))

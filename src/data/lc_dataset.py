@@ -629,9 +629,6 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
         
-        # Ensure the vocabulary is all lowercased to avoid case mismatches
-        vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
-
     elif embedding_type == 'token':
         print(f"Using token-level vectorization with {pretrained.upper()} embeddings...")
 
@@ -659,12 +656,14 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         # Fit and transform the text data to obtain tokenized features
         X_vectorized = vectorizer.fit_transform(train_set['Text'])
 
-        # Use the tokenizer's vocabulary directly, lowercased for consistency
-        vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
-    
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
 
+    # Ensure the vocabulary is all lowercased to avoid case mismatches
+    #vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
+    #vocab = vectorizer.vocabulary_
+    vocab = vectorizer.get_feature_names_out()
+            
     print("vectorizer vocabulary:", type(vocab), len(vocab))
     
     # Print the first 100 entries in the vocabulary
