@@ -408,7 +408,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
 # -------------------------------------------------------------------------------------------------------------------
-def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pretrained=None, pretrained_vectors_dictionary=None, weighted_embeddings_train=None, 
+def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None, pretrained_vectors_dictionary=None, weighted_embeddings_train=None, 
                    weighted_embeddings_test=None, supervised=False, mode='solo'):
     
     print("\n\tgenerating embeddings...")
@@ -418,7 +418,6 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     print('X_test:', type(X_test), X_test.shape)
     
     print("dataset:", dataset)
-    print("vocab:", type(vocab), len(vocab))
     
     print("pretrained:", pretrained)
     print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
@@ -430,8 +429,8 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', vocab=None, pre
     print("mode:", mode)
 
     # build vocabulary numpy array
-    vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
-    print("vocabulary:", type(vocabulary), vocabulary.shape)
+    #vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
+    #print("vocabulary:", type(vocabulary), vocabulary.shape)
 
     pretrained_embeddings = []                  # List to store pretrained embeddings
 
@@ -534,11 +533,11 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         print(f"Loading tokenized data from '{pickle_file}'...")
         
-        X, y, embedding_vocab_matrix, weighted_embeddings, vocab = load_from_pickle(pickle_file)
+        X, y, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
     else:
         print(f"'{pickle_file}' not found, loading {dataset}...")
         
-        X, y, embedding_vocab_matrix, weighted_embeddings, vocab = load_data(
+        X, y, embedding_vocab_matrix, weighted_embeddings = load_data(
             dataset=dataset,                            # dataset
             pretrained=args.pretrained,                 # pretrained embeddings
             embedding_path=embedding_path               # path to embeddings
@@ -550,7 +549,6 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             y,                          # labels
             embedding_vocab_matrix,     # vector representation of the dataset vocabulary
             weighted_embeddings,        # weighted avg embedding representation of dataset
-            vocab,                      # tokenized dataset vocabulary
             pickle_file)         
     
     print("Tokenized data loaded.")
@@ -560,7 +558,6 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     
     print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
-    print("vocab:", type(vocab), len(vocab))
 
     print("train_test_split...")
 
@@ -623,7 +620,6 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             y_train=y_train, 
             X_test=X_test, 
             dataset=dataset,
-            vocab=vocab, 
             pretrained=pretrained_embeddings,
             pretrained_vectors_dictionary=embedding_vocab_matrix,
             weighted_embeddings_train=weighted_embeddings_train,

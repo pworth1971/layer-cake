@@ -11,8 +11,12 @@ from tqdm import tqdm
 import pandas as pd
 import pickle
 
+from nltk.corpus import stopwords
+
+
+
 DATASET_DIR = '../datasets/'
-MAX_VOCAB_SIZE = 5000
+MAX_VOCAB_SIZE = 15000
 llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
 PICKLE_DIR = '../pickles/'
 
@@ -112,7 +116,7 @@ def llama_tokenizer(text):
     return tokens
 
 # Create a TF-IDF vectorizer with the custom tokenizer
-tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=llama_tokenizer)
+tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=llama_tokenizer)
 X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_raw).toarray()
 X_test_tfidf = tfidf_vectorizer.transform(X_test_raw).toarray()
 

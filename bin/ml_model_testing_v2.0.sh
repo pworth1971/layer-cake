@@ -26,7 +26,7 @@ OPTIMC="--optimc"
 declare -a datasets=("bbc-news")
 declare -a pickle_paths=("../pickles")
 declare -a learners=("svm")
-declare -a modes=("tfidf" "cat" "solo" "dot")
+declare -a modes=("dot")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
 
 # Embedding config params
@@ -77,9 +77,9 @@ for i in "${!datasets[@]}"; do
         for mode in "${modes[@]}"; do
 
             # Run the command for each embedding type
-            run_command $dataset $pickle_path $learner $mode "$GLOVE"
-            run_command $dataset $pickle_path $learner $mode "$WORD2VEC"
-            run_command $dataset $pickle_path $learner $mode "$FASTTEXT"
+            #run_command $dataset $pickle_path $learner $mode "$GLOVE"
+            #run_command $dataset $pickle_path $learner $mode "$WORD2VEC"
+            #run_command $dataset $pickle_path $learner $mode "$FASTTEXT"
             run_command $dataset $pickle_path $learner $mode "$BERT"
             run_command $dataset $pickle_path $learner $mode "$LLAMA"
 
