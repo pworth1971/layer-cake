@@ -871,10 +871,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
             return embedding_matrix
 
         embedding_vocab_matrix_orig = build_embedding_vocab_matrix(vocab, batch_size=1024)
-        embedding_vocab_matrix_new = convert_dict_to_matrix(vocab_dict, vocab_ndarr, embedding_dim)
-        
         print("embedding_vocab_matrix_orig:", type(embedding_vocab_matrix_orig), embedding_vocab_matrix_orig.shape)
-        print("embedding_vocab_matrix_new:", type(embedding_vocab_matrix_new), embedding_vocab_matrix_new.shape)
             
         #
         # NB we use different embedding vocab matrices here depending upon the pretrained model
@@ -882,8 +879,6 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         if (pretrained == 'bert'):
             embedding_vocab_matrix = embedding_vocab_matrix_orig
         elif (pretrained == 'llama'):
-            embedding_vocab_matrix = embedding_vocab_matrix_new
-            
             print("creating vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary...")
             
             model = model.to(device)
@@ -897,13 +892,22 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 llama_vocab_embeddings[token] = output.last_hidden_state.mean(dim=1).cpu().numpy()
         
             print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_embeddings))
+        
+            embedding_vocab_matrix_new = convert_dict_to_matrix(llama_vocab_embeddings, vocab_ndarr, embedding_dim)
+            print("embedding_vocab_matrix_new:", type(embedding_vocab_matrix_new), embedding_vocab_matrix_new.shape)
             
-            embedding_vocab_matrix = llama_vocab_embeddings
+            embedding_vocab_matrix = embedding_vocab_matrix_new
     else:
         raise ValueError("Invalid pretrained type.")
         
-    print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
-
+    # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
+    if isinstance(embedding_vocab_matrix, dict):
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Length:", len(embedding_vocab_matrix))
+    elif isinstance(embedding_vocab_matrix, np.ndarray):
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Shape:", embedding_vocab_matrix.shape)
+    else:
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Unsupported type")
+    
     # ----------------------------------------------------------------------
     # IV: Generate Weighted Average Embedding Representations
     # ----------------------------------------------------------------------
@@ -1092,6 +1096,9 @@ def save_to_pickle(X, y, embedding_matrix, weighted_embeddings, pickle_file):
     
     print(f"Saving X, y, embedding_matrix, weighted_embeddings to pickle file: {pickle_file}")
     
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    print("embedding_matrix[0]:\n", embedding_matrix[0])
+    
     with open(pickle_file, 'wb') as f:
         # Save the sparse matrices and vocabulary as a tuple
         pickle.dump((X, y, embedding_matrix, weighted_embeddings), f)
@@ -1105,7 +1112,10 @@ def load_from_pickle(pickle_file):
     
     with open(pickle_file, 'rb') as f:
         X, y, embedding_matrix, weighted_embeddings = pickle.load(f)
-    
+
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    print("embedding_matrix[0]:\n", embedding_matrix[0])
+
     return X, y, embedding_matrix, weighted_embeddings
 
 

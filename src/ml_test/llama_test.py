@@ -237,13 +237,28 @@ def project_tfidf_to_llama(tfidf_vectors, embedding_matrix):
 
 llama_vocab_matrix = convert_dict_to_matrix(llama_vocab_embeddings, vocab)
 print("llama_vocab_matrix:", type(llama_vocab_matrix), llama_vocab_matrix.shape)
+print("llama_vocab_matrix[0]:\n", llama_vocab_matrix[0])
+
+print("before dot product...")
+print("X_train_tfidf:", type(X_train_tfidf), X_train_tfidf.shape)
+print("X_train_tfidf[0]:\n", X_train_tfidf[0])
+
+print("X_test_tfidf:", type(X_test_tfidf), X_test_tfidf.shape)
+print("X_test_tfidf[0]:\n", X_test_tfidf[0])
 
 # Project the training and testing sets
 X_train_projected_dot = project_tfidf_to_llama(X_train_tfidf, llama_vocab_matrix)
 X_test_projected_dot = project_tfidf_to_llama(X_test_tfidf, llama_vocab_matrix)
 
+print("dot product outputs (input to SVM)...")
 print("X_train_projected_dot:", type(X_train_projected_dot), X_train_projected_dot.shape)
+print("X_train_projected_dot[0]:\n", X_train_projected_dot[0])
+
 print("X_test_projected_dot:", type(X_test_projected_dot), X_test_projected_dot.shape)
+print("X_test_projected_dot[0]:\n", X_test_projected_dot[0])
+
+print("y_train:", type(y_train), y_train.shape)
+print("y_train[0]:", y_train[0])
 
 # Train an SVM classifier on the projected features
 svm_classifier = SVC(kernel='linear')

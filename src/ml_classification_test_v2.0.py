@@ -420,7 +420,14 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
     print("dataset:", dataset)
     
     print("pretrained:", pretrained)
-    print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+    
+    # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
+    if isinstance(pretrained_vectors_dictionary, dict):
+        print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Length:", len(pretrained_vectors_dictionary))
+    elif isinstance(pretrained_vectors_dictionary, np.ndarray):
+        print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Shape:", pretrained_vectors_dictionary.shape)
+    else:
+        print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Unsupported type")
     
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
@@ -439,7 +446,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         print("setting up pretrained embeddings...")
 
         #P = pretrained_vectors_dictionary.extract(vocabulary).numpy()
-        print("pretrained_vectors_dictionary: ", type(pretrained_vectors_dictionary), {pretrained_vectors_dictionary.shape})
+        #print("pretrained_vectors_dictionary: ", type(pretrained_vectors_dictionary), {pretrained_vectors_dictionary.shape})
 
         pretrained_embeddings.append(pretrained_vectors_dictionary)
         print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
@@ -495,9 +502,36 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
         # using matrix multiplication, i.e. dot product 
         #
+        """
         X_train = X_train.toarray().dot(embedding_matrix)
         X_test = X_test.toarray().dot(embedding_matrix)
-
+        """
+        
+        print("before dot product...")
+        
+        X_train = X_train.toarray()
+        X_test = X_test.toarray()
+        
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_train[0]:\n", X_train[0])
+        
+        print("X_test:", type(X_test), X_test.shape)
+        print("X_test[0]\n:", X_test[0])
+        
+        print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+        print("pretrained_vectors_dictionary[0]:\n", pretrained_vectors_dictionary[0])
+        
+        X_train = np.dot(X_train, pretrained_vectors_dictionary)
+        X_test = np.dot(X_test, pretrained_vectors_dictionary)
+        
+        print("after dot product...")
+        
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_train[0]:\n", X_train[0])
+        
+        print("X_test:", type(X_test), X_test.shape)
+        print("X_test[0]:\n", X_test[0])
+        
     print("after embedding generation...")
     
     print("X_train:", type(X_train), X_train.shape)
@@ -556,7 +590,14 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
     
-    print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+    # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
+    if isinstance(embedding_vocab_matrix, dict):
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Length:", len(embedding_vocab_matrix))
+    elif isinstance(embedding_vocab_matrix, np.ndarray):
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Shape:", embedding_vocab_matrix.shape)
+    else:
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Unsupported type")
+        
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
 
     print("train_test_split...")
