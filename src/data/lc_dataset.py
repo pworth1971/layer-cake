@@ -897,6 +897,8 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                 llama_vocab_embeddings[token] = output.last_hidden_state.mean(dim=1).cpu().numpy()
         
             print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_embeddings))
+            
+            embedding_vocab_matrix = llama_vocab_embeddings
     else:
         raise ValueError("Invalid pretrained type.")
         
