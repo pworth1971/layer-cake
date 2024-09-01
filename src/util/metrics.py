@@ -7,7 +7,7 @@ from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard
 
 
 
-def evaluation(y_true, y_pred, classification_type, debug=False):
+def evaluation(y_true, y_pred, classification_type='single-label', debug=False):
     """
     Evaluates the classification performance based on the true and predicted labels.
     It distinguishes between multilabel and singlelabel classification tasks and computes

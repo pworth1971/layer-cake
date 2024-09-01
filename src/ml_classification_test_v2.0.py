@@ -1,4 +1,5 @@
 
+from nltk import TopDownChartParser
 import numpy as np
 import os
 import argparse
@@ -40,7 +41,7 @@ NUM_JOBS = -1          # important to manage CUDA memory allocation
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 # run_model()
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(X_train, X_test, y_train, y_test, args):
+def run_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
     
     print("\tRunning model...")
 
@@ -57,15 +58,15 @@ def run_model(X_train, X_test, y_train, y_test, args):
 
     # Support Vector Machine Classifier
     if (args.learner == 'svm'):                                     
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
     
     # Logistic Regression Classifier
     elif (args.learner == 'lr'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
 
     # Naive Bayes (MultinomialNB) Classifier
     elif (args.learner == 'nb'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
     
     else:
         print(f"Invalid learner '{args.learner}'")
@@ -219,7 +220,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-lab
 
                 print(f"Saved plot for {metric} as {filename}")
 
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
 
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
@@ -305,7 +306,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
             debug=False
         )
 
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
 
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
@@ -313,7 +314,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
 # ---------------------------------------------------------------------------------------------------------------------
 # run_nb_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_nb_model(X_train, X_test, y_train, y_test, args):
+def run_nb_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
 
     print("Building default Naive Bayes Classifier...")
 
@@ -398,7 +399,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, args):
                 debug=False
             )
     
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, class_type)
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
 
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
@@ -585,6 +586,9 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             weighted_embeddings,        # weighted avg embedding representation of dataset
             pickle_file)         
     
+    #
+    # TODO: get dataset class_type: single-label or multi-label
+    #
     print("Tokenized data loaded.")
  
     print("X:", type(X), X.shape)
@@ -671,7 +675,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         sup_tend = time() - tinit
 
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args)
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, class_type='single-label')
 
     tend += sup_tend
 
