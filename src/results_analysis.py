@@ -157,11 +157,11 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                             weight='bold'
                         )
                     },
-                    legend_title_text='Embeddings'
+                    legend_title_text='Pretrained Embeddings'
                 )
-
+                
                 fig.update_xaxes(title_text='Model')
-                fig.update_yaxes(title_text='Maximum Measure Value', range=[0, max_df['value'].max() * 1.1])  # Adjust the y-axis range to fit max value
+                fig.update_yaxes(title_text='Maximum Measure Value', range=[0.5, max_df['value'].max() * 1.1])  # Adjust the y-axis range to start at 50%
 
                 # Save each plot in the specified output directory and show it
                 if output_path:

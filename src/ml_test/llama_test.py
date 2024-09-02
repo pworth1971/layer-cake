@@ -16,12 +16,20 @@ from nltk.corpus import stopwords
 
 
 DATASET_DIR = '../datasets/'
-MAX_VOCAB_SIZE = 15000
+
+MAX_VOCAB_SIZE = 20000
+
 llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
+
 PICKLE_DIR = '../pickles/'
+
+TEST_SIZE = 0.2
 
 dataset = 'bbc_news'
 #dataset = '20newsgroups'
+
+
+stop_words = set(stopwords.words('english'))
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -89,8 +97,26 @@ print("X_raw:", type(X_raw), len(X_raw))
 print("y", type(y), len(y))
 print("target_names:", target_names)
 
+
+print("removing stopwords...")
+
+# Function to remove stopwords before tokenization
+def remove_stopwords(texts):
+    filtered_texts = []
+    for text in texts:
+        filtered_words = [word for word in text.split() if word.lower() not in stop_words]
+        filtered_texts.append(" ".join(filtered_words))
+    return filtered_texts
+
+# Remove stopwords from the raw text
+X_raw = remove_stopwords(X_raw)
+print("X_raw:", type(X_raw), len(X_raw))
+
+print("X_raw[0]:\n", X_raw[0])
+print("y[0]:", y[0])
+
 # Split the dataset into training and testing sets
-X_train_raw, X_test_raw, y_train, y_test = train_test_split(X_raw, y, test_size=0.2, random_state=42)
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(X_raw, y, test_size=TEST_SIZE, random_state=42)
 
 print("X_train_raw:", type(X_train_raw), len(X_train_raw))
 print("X_test_raw:", type(X_test_raw), len(X_test_raw))
@@ -110,13 +136,14 @@ model = LlamaModel.from_pretrained(llama_model_name).to(device)
 print("model: ", model)
 
 
-# Custom tokenizer function using LLaMA tokenizer
+# Custom tokenizer function using LLaMA tokenizer (no need for stopwords filtering here)
 def llama_tokenizer(text):
     tokens = tokenizer.tokenize(text)
     return tokens
 
+
 # Create a TF-IDF vectorizer with the custom tokenizer
-tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=llama_tokenizer)
+tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=llama_tokenizer)
 X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_raw).toarray()
 X_test_tfidf = tfidf_vectorizer.transform(X_test_raw).toarray()
 
@@ -203,7 +230,7 @@ svm_classifier.fit(X_train_projected_wa, y_train)
 y_pred = svm_classifier.predict(X_test_projected_wa)
 
 # Print classification report
-print(classification_report(y_test, y_pred, target_names=target_names))
+print(classification_report(y_test, y_pred, target_names=target_names), digits=4)
 
 
 print("\n\tusing matrix multiplication...")
@@ -268,5 +295,5 @@ svm_classifier.fit(X_train_projected_dot, y_train)
 y_pred = svm_classifier.predict(X_test_projected_dot)
 
 # Print classification report
-print(classification_report(y_test, y_pred, target_names=target_names))
+print(classification_report(y_test, y_pred, target_names=target_names), digits=4)
 

@@ -30,6 +30,7 @@ warnings.filterwarnings('ignore')
 PICKLE_DIR = '../pickles/'
 VECTOR_CACHE = '../.vector_cache'
 
+TEST_SIZE = 0.2
 
 NUM_JOBS = -1          # important to manage CUDA memory allocation
 #NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
@@ -41,7 +42,7 @@ NUM_JOBS = -1          # important to manage CUDA memory allocation
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 # run_model()
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
+def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
     
     print("\tRunning model...")
 
@@ -58,15 +59,15 @@ def run_model(X_train, X_test, y_train, y_test, args, class_type='single-label')
 
     # Support Vector Machine Classifier
     if (args.learner == 'svm'):                                     
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
     
     # Logistic Regression Classifier
     elif (args.learner == 'lr'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
 
     # Naive Bayes (MultinomialNB) Classifier
     elif (args.learner == 'nb'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
     
     else:
         print(f"Invalid learner '{args.learner}'")
@@ -83,7 +84,7 @@ def run_model(X_train, X_test, y_train, y_test, args, class_type='single-label')
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
+def run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
 
     if (not args.optimc):
         
@@ -95,7 +96,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-lab
         
         #print("\nDefault Support Vector Mechine Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4))
 
         y_preds = y_pred_default
 
@@ -151,7 +152,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-lab
         y_pred_best = best_model.predict(X_test)
 
         print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
-        print(classification_report(y_true=y_test, y_pred=y_pred_best, digits=4))
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4))
 
         y_preds = y_pred_best
 
@@ -227,7 +228,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args, class_type='single-lab
 # ---------------------------------------------------------------------------------------------------------------------
 # run_lr_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
+def run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
 
     # Default Logistic Regression Model
     print("Training default Logistic Regression model...")
@@ -245,7 +246,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
         
         #print("\nDefault Logistic Regression Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_default, digits=4))
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4))
 
         y_preds = y_pred_default
 
@@ -292,7 +293,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
 
         #print("\nOptimized Logistic Regression Model Performance:")
         print(f"Accuracy: {accuracy_score(y_test, y_pred_optimized):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_optimized, digits=4))
+        print(classification_report(y_true=y_test, y_pred=y_pred_optimized, target_names=target_names, digits=4))
 
         y_preds = y_pred_optimized
 
@@ -314,7 +315,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
 # ---------------------------------------------------------------------------------------------------------------------
 # run_nb_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_nb_model(X_train, X_test, y_train, y_test, args, class_type='single-label'):
+def run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
 
     print("Building default Naive Bayes Classifier...")
 
@@ -334,7 +335,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
 
         print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
         print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=y_test, y_pred=test_predict, digits=4))
+        print(classification_report(y_true=y_test, y_pred=test_predict, target_names=target_names, digits=4))
 
         y_preds = test_predict
 
@@ -385,7 +386,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, args, class_type='single-labe
         print(f"F1 Score: {f1_score(y_test, y_pred, average='micro'):.4f}")
         print(f"Recall: {recall_score(y_test, y_pred, average='micro'):.4f}")
         print(f"Precision: {precision_score(y_test, y_pred, average='micro'):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred, digits=4))
+        print(classification_report(y_true=y_test, y_pred=y_pred, target_names=target_names, digits=4))
 
         y_preds = y_pred
 
@@ -568,11 +569,11 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         print(f"Loading tokenized data from '{pickle_file}'...")
         
-        X, y, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
+        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
     else:
         print(f"'{pickle_file}' not found, loading {dataset}...")
         
-        X, y, embedding_vocab_matrix, weighted_embeddings = load_data(
+        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_data(
             dataset=dataset,                            # dataset
             pretrained=args.pretrained,                 # pretrained embeddings
             embedding_path=embedding_path               # path to embeddings
@@ -582,6 +583,8 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         save_to_pickle(
             X,                          # vectorized data
             y,                          # labels
+            target_names,               # target names
+            class_type,                 # class type (single-label or multi-label):
             embedding_vocab_matrix,     # vector representation of the dataset vocabulary
             weighted_embeddings,        # weighted avg embedding representation of dataset
             pickle_file)         
@@ -611,7 +614,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         X,
         y,
         weighted_embeddings,
-        test_size=0.25,
+        test_size=TEST_SIZE,
         random_state=44,
         shuffle=True 
     )
@@ -675,7 +678,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         sup_tend = time() - tinit
 
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, class_type='single-label')
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label')
 
     tend += sup_tend
 

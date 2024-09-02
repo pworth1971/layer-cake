@@ -31,14 +31,15 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
+stop_words = set(stopwords.words('english'))
+
 import torch
 from transformers import BertTokenizer, BertTokenizerFast, LlamaTokenizer, LlamaTokenizerFast
 from transformers import BertModel, LlamaModel
 from gensim.models import KeyedVectors
 
 from torch.utils.data import DataLoader, Dataset
-from fontTools.misc.textTools import num2binary
-#from torch.testing._internal.distributed.rpc.examples.parameter_server_test import batch_size
+
 
 
 VECTOR_CACHE = '../.vector_cache'
@@ -54,9 +55,9 @@ TOKEN_TOKENIZER_MAX_LENGTH = 512
 
 
 # batch sizes for pytorch encoding routines
-DEFAULT_GPU_BATCH_SIZE = 16
-DEFAULT_GPU_BATCH_SIZE = 32
-MPS_BATCH_SIZE = 32
+DEFAULT_CPU_BATCH_SIZE = 16
+DEFAULT_GPU_BATCH_SIZE = 64
+MPS_BATCH_SIZE = 16
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -609,7 +610,31 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     print("Unique Categories:\n", train_set['Category'].unique())
     numCats = len(train_set['Category'].unique())
     print("# of categories:", numCats)
+
+    X_raw = train_set['Text'].tolist()
+    y = np.array(train_set['Category'])
+
+    target_names = train_set['Category'].unique()       
+    class_type = 'single-label'
     
+    print("removing stopwords...")
+
+    # Function to remove stopwords before tokenization
+    def remove_stopwords(texts):
+        filtered_texts = []
+        for text in texts:
+            filtered_words = [word for word in text.split() if word.lower() not in stop_words]
+            filtered_texts.append(" ".join(filtered_words))
+        return filtered_texts
+
+    # Remove stopwords from the raw text
+    X_raw = remove_stopwords(X_raw)
+    print("X_raw:", type(X_raw), len(X_raw))
+
+    print("X_raw[0]:\n", X_raw[0])
+    print("y[0]:", y[0])
+
+
     # ----------------------------------------------------------------------
     # II: Build vector representation of data set using TF-IDF 
     # or CountVectorizer and constructing the embeddings such that they 
@@ -630,50 +655,58 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         print("Using word-level vectorization...")
         
         if vectorizer_type == 'tfidf':
-            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)  
         elif vectorizer_type == 'count':
-            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"))  
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)  
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
         
         # Fit and transform the text data to obtain tokenized features
-        X_vectorized = vectorizer.fit_transform(train_set['Text'])
+        X_vectorized = vectorizer.fit_transform(X_raw)
         
     elif embedding_type == 'token':
         print(f"Using token-level vectorization with {pretrained.upper()} embeddings...")
 
         if pretrained == 'bert': 
             tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
-            model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
+            model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT').to(device)
         elif pretrained == 'llama':
             tokenizer = LlamaTokenizerFast.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
-            model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
+            model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa').to(device)
         else:
             raise ValueError("Invalid embedding type. Use 'bert' or 'llama' for token embeddings.")
         
-        print("model:", model)
+        print("model:\n", model)
+
+        # Ensure padding token is available
+        if tokenizer.pad_token is None:
+            #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokenizer.pad_token_id = tokenizer.eos_token_id  # Reuse the end-of-sequence token for padding
         
         def custom_tokenizer(text):
             # Tokenize with truncation
             tokens = tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
             return tokens
-
+    
         if vectorizer_type == 'tfidf':
-            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=custom_tokenizer) 
+            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=custom_tokenizer) 
         elif vectorizer_type == 'count':
-            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words=stopwords.words("english"), tokenizer=custom_tokenizer)  
+            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=custom_tokenizer)  
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
         # Fit and transform the text data to obtain tokenized features
-        X_vectorized = vectorizer.fit_transform(train_set['Text'])
+        X_vectorized = vectorizer.fit_transform(X_raw)
 
     else:
         raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
 
+
     print("X_vectorized:", type(X_vectorized), X_vectorized.shape)
      
-    #vocab = vectorizer.vocabulary_
+    vocab_ = vectorizer.vocabulary_
+    print("vocab_:", type(vocab_), len(vocab_))
+    
     vocab_dict = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}              # Ensure the vocabulary is all lowercased to avoid case mismatches
     print("vocab_dict:", type(vocab_dict), len(vocab_dict))
     """
@@ -772,10 +805,12 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         print("Tokenizer vocab size:", tokenizer.vocab_size)
         print("Model vocab size:", model.config.vocab_size)
 
+        """
         # Ensure padding token is available
         if tokenizer.pad_token is None:
             #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
             tokenizer.pad_token_id = tokenizer.eos_token_id  # Reuse the end-of-sequence token for padding
+        """
         
         model.eval()  # Set model to evaluation mode
 
@@ -793,10 +828,15 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
         #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
         
         def process_batch(batch_words):
+            #tokenize and prepare inputs
             inputs = tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=TOKEN_TOKENIZER_MAX_LENGTH)
-            input_ids = inputs['input_ids']
+            
+            # move input tensors to proper device
+            input_ids = inputs['input_ids'].to(device)
+            attention_mask = inputs['attention_mask'].to(device)  # Ensure all inputs are on the same device
             max_vocab_size = model.config.vocab_size
 
+            # check for out of range tokens
             out_of_range_ids = input_ids[input_ids >= max_vocab_size]
             if len(out_of_range_ids) > 0:
                 print("Warning: The following input IDs are out of range for the model's vocabulary:")
@@ -804,12 +844,16 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
                     token = tokenizer.decode(out_id.item())
                     print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
             
+            # Perform inference, ensuring that the model is on the same device as the inputs
+            model.to(device)
             with torch.no_grad():
-                outputs = model(**inputs)
-            
+                #outputs = model(**inputs)
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+
+            # Return the embeddings and ensure they are on the CPU for further processing
             return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
-        def build_embedding_vocab_matrix(vocab, batch_size=DEFAULT_GPU_BATCH_SIZE):
+        def build_embedding_vocab_matrix(vocab, batch_size=MPS_BATCH_SIZE):
             
             print("building embedding vocab matrix...")
             print("vocab:", type(vocab), len(vocab))
@@ -870,7 +914,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 
             return embedding_matrix
 
-        embedding_vocab_matrix_orig = build_embedding_vocab_matrix(vocab, batch_size=1024)
+        embedding_vocab_matrix_orig = build_embedding_vocab_matrix(vocab, batch_size=MPS_BATCH_SIZE)
         print("embedding_vocab_matrix_orig:", type(embedding_vocab_matrix_orig), embedding_vocab_matrix_orig.shape)
             
         #
@@ -1042,7 +1086,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
     y_sparse = csr_matrix(y).T         # Transpose to match the expected shape
 
     # NB we return X (features) and y (target labels) as sparse arrays
-    return X_vectorized, y_sparse, embedding_vocab_matrix, weighted_embeddings  
+    return X_vectorized, y_sparse, target_names, class_type, embedding_vocab_matrix, weighted_embeddings  
 
 # ------------------------------------------------------------------------------------------------------------------------
 
@@ -1064,23 +1108,23 @@ def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
 
     if (dataset == '20newsgroups'): 
         
-        X, y, embedding_vocab_matrix, weighted_embeddings = load_20newsgroups(
+        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_20newsgroups(
             embedding_type=embedding_type, 
             pretrained=pretrained, 
             pretrained_path=embedding_path
             )
         
-        return X, y, embedding_matrix, weighted_embeddings, vocab
+        return X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings
 
     elif (dataset == 'bbc-news'):
         
-        X, y, embedding_vocab_matrix, weighted_embeddings = load_bbc_news(
+        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_bbc_news(
             embedding_type=embedding_type, 
             pretrained=pretrained, 
             pretrained_path=embedding_path
             )
 
-        return X, y, embedding_vocab_matrix, weighted_embeddings
+        return X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings
 
     else:
         print(f"Dataset '{dataset}' not available, returning None.")
@@ -1092,31 +1136,31 @@ def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
 # ------------------------------------------------------------------------------------------------------------------------
 # Save X, y sparse matrices, and vocabulary to pickle
 # ------------------------------------------------------------------------------------------------------------------------
-def save_to_pickle(X, y, embedding_matrix, weighted_embeddings, pickle_file):
+def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, pickle_file):
     
-    print(f"Saving X, y, embedding_matrix, weighted_embeddings to pickle file: {pickle_file}")
+    print(f"Saving X, y, target_names, class_type, embedding_matrix, weighted_embeddings to pickle file: {pickle_file}")
     
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
     print("embedding_matrix[0]:\n", embedding_matrix[0])
     
     with open(pickle_file, 'wb') as f:
         # Save the sparse matrices and vocabulary as a tuple
-        pickle.dump((X, y, embedding_matrix, weighted_embeddings), f)
+        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings), f)
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Load X, y sparse matrices, and vocabulary from pickle
 # ------------------------------------------------------------------------------------------------------------------------
 def load_from_pickle(pickle_file):
     
-    print(f"Loading X, y, embedding_matrix, weighted_embeddings and vocab from pickle file: {pickle_file}")
+    print(f"Loading X, y, target_names, class_type, embedding_matrix, weighted_embeddings and vocab from pickle file: {pickle_file}")
     
     with open(pickle_file, 'rb') as f:
-        X, y, embedding_matrix, weighted_embeddings = pickle.load(f)
+        X, y, target_names, class_type, embedding_matrix, weighted_embeddings = pickle.load(f)
 
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
     print("embedding_matrix[0]:\n", embedding_matrix[0])
 
-    return X, y, embedding_matrix, weighted_embeddings
+    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings
 
 
 

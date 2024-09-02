@@ -540,7 +540,7 @@ def initialize(args):
         vtype = 'tfidf'             # default to tfidf
 
     #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
-    method_name = set_method_name2(args)
+    method_name = set_method_name2(args, vtype)
     print("method_name: ", {method_name})
 
     pretrained = False
@@ -581,7 +581,7 @@ def initialize(args):
         logfile=args.log_file,
         method_name=method_name, 
         dataset=args.dataset, 
-        model=learner_name,
+        model=learner_name + '-' + args.mode,
         pretrained=pretrained, 
         embeddings=embeddings,
         supervised=supervised
@@ -620,16 +620,17 @@ def set_method_name(opt):
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def set_method_name2(opt):
+def set_method_name2(opt, vtype='tfidf'):
 
-    method_name = f'{opt.learner}-{opt.mode}-{"opC" if opt.optimc else "default"}'
+    method_name = f'{opt.learner}-{vtype}-{"opC" if opt.optimc else "default"}'
 
     if opt.pretrained:
         method_name += f'-pretrained-{opt.pretrained}'
-        method_name += f'-mode:{opt.mode}'
     if opt.supervised:
         method_name += f'-supervised-{opt.supervised_method}'
 
+    method_name += f'-mode:{opt.mode}'
+    
     return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
