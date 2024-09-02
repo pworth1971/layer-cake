@@ -157,7 +157,7 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                             weight='bold'
                         )
                     },
-                    legend_title_text='Pretrained Embeddings'
+                    legend_title_text='Embeddings'
                 )
                 
                 fig.update_xaxes(title_text='Model')

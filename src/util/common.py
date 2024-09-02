@@ -379,7 +379,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
 # 
 # Enhanced log info for ML baseline (layer cake) program suport
 #
-def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, supervised):
+def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, wc_supervised):
 
     print("initializing baseline layered log file...")
 
@@ -412,7 +412,7 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
     logfile.set_default('pretrained', pretrained)
     logfile.set_default('model', model)                 # method in the log file
     logfile.set_default('embeddings', embeddings)
-    logfile.set_default('wc_supervised', supervised)
+    logfile.set_default('wc_supervised', wc_supervised)
     logfile.set_default('params', method_name)
 
     # normalize data fields
@@ -584,14 +584,14 @@ def initialize(args):
         model=learner_name + '-' + args.mode,
         pretrained=pretrained, 
         embeddings=embeddings,
-        supervised=supervised
+        wc_supervised=supervised
         )
 
     # check to see if the model has been run before
     already_modelled = logfile.already_calculated(
         dataset=args.dataset,
         embeddings=embeddings,
-        model=learner_name, 
+        model=learner_name+'-'+args.mode, 
         params=method_name,
         pretrained=pretrained, 
         wc_supervised=supervised
