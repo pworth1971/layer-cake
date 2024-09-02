@@ -7,7 +7,7 @@ import argparse
 
 
 
-
+Y_AXIS_THRESHOLD = 0.6               # when to start the Y axis to show differentiation in the plot
 
 # ----------------------------------------------------------------------------------------------------------------------------
 # results_analysis()
@@ -161,7 +161,7 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                 )
                 
                 fig.update_xaxes(title_text='Model')
-                fig.update_yaxes(title_text='Maximum Measure Value', range=[0.5, max_df['value'].max() * 1.1])  # Adjust the y-axis range to start at 50%
+                fig.update_yaxes(title_text='Maximum Measure Value', range=[Y_AXIS_THRESHOLD, max_df['value'].max() * 1.1])  # Adjust the y-axis range to start at 50%
 
                 # Save each plot in the specified output directory and show it
                 if output_path:
