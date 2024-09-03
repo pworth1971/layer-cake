@@ -22,6 +22,7 @@ from util.metrics import evaluation
 
 import warnings
 from ipykernel.pickleutil import class_type
+from tensorflow.python.keras.constraints import nonneg
 warnings.filterwarnings('ignore')
 
 #
@@ -411,7 +412,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_typ
 # gen_embeddings()
 # -------------------------------------------------------------------------------------------------------------------
 def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None, pretrained_vectors_dictionary=None, weighted_embeddings_train=None, 
-                   weighted_embeddings_test=None, supervised=False, mode='solo'):
+                   weighted_embeddings_test=None, supervised=False, mix='solo'):
     
     print("\n\tgenerating embeddings...")
         
@@ -423,6 +424,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
     
     print("pretrained:", pretrained)
     
+    """
     # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
     if isinstance(pretrained_vectors_dictionary, dict):
         print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Length:", len(pretrained_vectors_dictionary))
@@ -430,12 +432,17 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Shape:", pretrained_vectors_dictionary.shape)
     else:
         print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Unsupported type")
+    """
+    
+    # should be a numpy array
+    print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Shape:", pretrained_vectors_dictionary.shape)
+    
     
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
     
     print("supervised:", supervised)
-    print("mode:", mode)
+    print("mix:", mix)
 
     # build vocabulary numpy array
     #vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
@@ -474,7 +481,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
     embedding_matrix = np.hstack(pretrained_embeddings)
     print("after np.hstack():", type(embedding_matrix), {embedding_matrix.shape})
 
-    if mode == 'solo':
+    if mix == 'solo':
         
         print("Using just the word embeddings alone (solo)...")
         
@@ -485,10 +492,9 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         X_train = weighted_embeddings_train
         X_test = weighted_embeddings_test                   
         
-    elif mode == 'cat':
-        
+    elif mix == 'cat':        
         print("Concatenating word embeddings with TF-IDF vectors...")
-        
+                
         # 
         # Here we concatenate the tfidf vectors and the (tfidf weighted 
         # average) pretrained embedding matrix together
@@ -496,7 +502,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         X_train = np.hstack([X_train.toarray(), weighted_embeddings_train])
         X_test = np.hstack([X_test.toarray(), weighted_embeddings_test])
     
-    elif mode == 'dot':
+    elif mix == 'dot':
         
         print("Dot product (matrix multiplication) of embeddings matrix with TF-IDF vectors...")
         
@@ -522,7 +528,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         
         print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
         print("pretrained_vectors_dictionary[0]:\n", pretrained_vectors_dictionary[0])
-        
+               
         X_train = np.dot(X_train, pretrained_vectors_dictionary)
         X_test = np.dot(X_test, pretrained_vectors_dictionary)
         
@@ -533,6 +539,14 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         
         print("X_test:", type(X_test), X_test.shape)
         print("X_test[0]:\n", X_test[0])
+    
+    elif mix == 'vmode':
+        # we simply return X_train and X_test as is here
+        pass
+    
+    else:
+        print(f"Unsupported mix mode '{mix}'")
+        return None    
         
     print("after embedding generation...")
     
@@ -546,14 +560,14 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
 # --------------------------------------------------------------------------------------------------------------
 # Core processing function
 # --------------------------------------------------------------------------------------------------------------
-def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding_path=None, supervised=False, method=None, args=None, logfile=None, system=None):
+def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=None, embedding_path=None, supervised=False, method=None, args=None, logfile=None, system=None):
     
     print("\n\tclassify_data()...")
     
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
     #
-    pickle_file_name=f'{dataset}_{args.pretrained}_tokenized.pickle'
+    pickle_file_name=f'{dataset}_{vtype}_{args.pretrained}_tokenized.pickle'
 
     print(f"Loading data set {dataset}...")
 
@@ -575,6 +589,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         
         X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_data(
             dataset=dataset,                            # dataset
+            vtype=args.vtype,                           # vectorization type
             pretrained=args.pretrained,                 # pretrained embeddings
             embedding_path=embedding_path               # path to embeddings
             )
@@ -597,6 +612,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
     
+    """
     # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
     if isinstance(embedding_vocab_matrix, dict):
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Length:", len(embedding_vocab_matrix))
@@ -604,7 +620,11 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Shape:", embedding_vocab_matrix.shape)
     else:
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Unsupported type")
-        
+    """
+    
+    # embedding_vocab_matrix should be a numpy array
+    print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+     
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
 
     print("train_test_split...")
@@ -662,6 +682,12 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
 
         print("building the embeddings...")
 
+        if (args.learner == 'nb'):
+            print("Naive Bayes model, non-negative embeddings required...")
+            non_negative = True
+        else:
+            non_negative = False
+            
         # Generate embeddings
         X_train, X_test = gen_embeddings(
             X_train=X_train,
@@ -673,7 +699,7 @@ def classify_data(dataset='20newsgrouops', pretrained_embeddings=None, embedding
             weighted_embeddings_train=weighted_embeddings_train,
             weighted_embeddings_test=weighted_embeddings_test,
             supervised=args.supervised,
-            mode=args.mode
+            mix=args.mix
             )
         
         sup_tend = time() - tinit
@@ -709,7 +735,9 @@ if __name__ == '__main__':
     
     parser.add_argument('--learner', type=str, default='svm', metavar='N', help=f'learner (svm, lr, or nb)')
     
-    parser.add_argument('--mode', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [tfidf, solo, cat, dot]')
+    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', help=f'dataset base vectorization strategy, in [tfidf, count]')
+                        
+    parser.add_argument('--mix', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [vmode, solo, cat, dot]. NB presumes --pretrained is set')
 
     parser.add_argument('--supervised', action='store_true', default=False, help='use supervised embeddings')
 
@@ -761,12 +789,18 @@ if __name__ == '__main__':
 
     print("available_datasets:", available_datasets)
 
-    # check dataset
+
+    # check valid dataset
     assert args.dataset in available_datasets, \
         f'unknown dataset {args.dataset}'
 
+    # check valid NB arguments
+    if (args.learner in ['nb', 'NB'] and args.mix != 'vmode'):
+        print(f'Warning: abandoning run. Naive Bayes model (nb) can only be run with no --pretrained parameter and with --mix vmode (due to lack of support for negative embeddings). Exiting...')
+        exit(0)
+                
     # initialize log file and run params
-    already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile = initialize(args)
+    already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, mix, method_name, logfile = initialize(args)
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
@@ -779,6 +813,7 @@ if __name__ == '__main__':
 
     classify_data(
         dataset=args.dataset, 
+        vtype=vtype,
         pretrained_embeddings=embeddings,
         embedding_path=emb_path,
         supervised=supervised,

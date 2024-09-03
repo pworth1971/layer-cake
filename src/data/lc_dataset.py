@@ -1096,7 +1096,7 @@ def load_bbc_news(vectorizer_type='tfidf', embedding_type='word', pretrained=Non
 # ------------------------------------------------------------------------------------------------------------------------
 # load_data()
 # ------------------------------------------------------------------------------------------------------------------------
-def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
+def load_data(dataset='20newsgroups', vtype='tfidf', pretrained=None, embedding_path=None):
 
     print(f"Loading data set: {dataset}, pretrained: {pretrained}")
 
@@ -1109,6 +1109,7 @@ def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
     if (dataset == '20newsgroups'): 
         
         X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_20newsgroups(
+            vectorizer_type=vtype,
             embedding_type=embedding_type, 
             pretrained=pretrained, 
             pretrained_path=embedding_path
@@ -1119,6 +1120,7 @@ def load_data(dataset='20newsgroups', pretrained=None, embedding_path=None):
     elif (dataset == 'bbc-news'):
         
         X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_bbc_news(
+            vectorizer_type=vtype,
             embedding_type=embedding_type, 
             pretrained=pretrained, 
             pretrained_path=embedding_path
@@ -1141,7 +1143,7 @@ def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_em
     print(f"Saving X, y, target_names, class_type, embedding_matrix, weighted_embeddings to pickle file: {pickle_file}")
     
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    print("embedding_matrix[0]:\n", embedding_matrix[0])
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
     
     with open(pickle_file, 'wb') as f:
         # Save the sparse matrices and vocabulary as a tuple
@@ -1158,7 +1160,7 @@ def load_from_pickle(pickle_file):
         X, y, target_names, class_type, embedding_matrix, weighted_embeddings = pickle.load(f)
 
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    print("embedding_matrix[0]:\n", embedding_matrix[0])
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
 
     return X, y, target_names, class_type, embedding_matrix, weighted_embeddings
 

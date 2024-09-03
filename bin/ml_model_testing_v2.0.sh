@@ -25,8 +25,9 @@ OPTIMC="--optimc"
 
 declare -a datasets=("bbc-news")
 declare -a pickle_paths=("../pickles")
-declare -a learners=("svm" "lr" "nb")
-declare -a modes=("tfidf" "cat" "solo" "dot")
+declare -a learners=("nb")
+declare -a vtypes=("tfidf" "count")
+declare -a mixes=("vmode" "cat" "solo" "dot")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
 
 # Embedding config params
@@ -46,19 +47,22 @@ BERT="--pretrained bert --bert-path ../.vector_cache/BERT"
 LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
 #LLAMA_SUP="--pretrained llama --llama-path ../.vector_cache --supervised"
 
+
+
 # Function to run commands
 function run_command() {
     local dataset=$1
     local pickle_path=$2
     local learner=$3
-    local mode=$4
-    local embedding_option=$5
+    local vtype=$4
+    local mix=$5
+    local embedding_option=$6
 
     local dataset_flag="--dataset ${dataset}"
     local pickle_flag="--pickle-dir ${pickle_path}"
     #local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $embedding_option $OPTIMC"
     #local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --mode $mode $embedding_option $OPTIMC"
-    local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --mode $mode $embedding_option"
+    local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option"
 
     # Execute the base command
     echo
@@ -68,21 +72,21 @@ function run_command() {
     eval $cmd
 }
 
+
 # Loop through datasets and run commands
 for i in "${!datasets[@]}"; do
     dataset=${datasets[$i]}
     pickle_path=${pickle_paths[$i]}
 
     for learner in "${learners[@]}"; do
-        for mode in "${modes[@]}"; do
-
-            # Run the command for each embedding type
-            run_command $dataset $pickle_path $learner $mode "$GLOVE"
-            run_command $dataset $pickle_path $learner $mode "$WORD2VEC"
-            run_command $dataset $pickle_path $learner $mode "$FASTTEXT"
-            run_command $dataset $pickle_path $learner $mode "$BERT"
-            run_command $dataset $pickle_path $learner $mode "$LLAMA"
-
+        for vtype in "${vtypes[@]}"; do
+            for mix in "${mixes[@]}"; do
+                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE"
+                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC"
+                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT"
+                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT"
+                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA"
+            done
         done
     done
 done

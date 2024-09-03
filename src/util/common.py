@@ -534,11 +534,14 @@ def initialize(args):
     warnings.filterwarnings("ignore", category=FutureWarning)
     """
 
-    if args.mode == 'count':
+    # default to tfidf vectorization type unless 'count' specified explicitly
+    if args.vtype == 'count':
         vtype = 'count'
     else:
-        vtype = 'tfidf'             # default to tfidf
-
+        vtype = 'tfidf'             
+        
+    print("vtype:", {vtype})
+    
     #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
     method_name = set_method_name2(args, vtype)
     print("method_name: ", {method_name})
@@ -576,12 +579,15 @@ def initialize(args):
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
 
+    model_type = f'{learner_name}-{args.vtype}-{args.mix}'
+    print("model_type:", {model_type})
+    
     #print("initializing logfile embeddings value to:", {embeddings})
     logfile = init_layered_baseline_logfile(                             
         logfile=args.log_file,
         method_name=method_name, 
         dataset=args.dataset, 
-        model=learner_name + '-' + args.mode,
+        model=model_type,
         pretrained=pretrained, 
         embeddings=embeddings,
         wc_supervised=supervised
@@ -591,7 +597,7 @@ def initialize(args):
     already_modelled = logfile.already_calculated(
         dataset=args.dataset,
         embeddings=embeddings,
-        model=learner_name+'-'+args.mode, 
+        model=model_type, 
         params=method_name,
         pretrained=pretrained, 
         wc_supervised=supervised
@@ -599,38 +605,29 @@ def initialize(args):
 
     print("already_modelled:", already_modelled)
 
-    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, method_name, logfile
+    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, args.mix, method_name, logfile
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def set_method_name(opt):
-
-    method_name = f'{opt.learner}-{opt.mode}-{"opC" if opt.optimc else "default"}'
-
-    if opt.pretrained:
-        method_name += f'-{opt.pretrained}'
-    if opt.supervised:
-        method_name += f'-supervised-{opt.supervised_method}'
-
-    return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def set_method_name2(opt, vtype='tfidf'):
 
-    method_name = f'{opt.learner}-{vtype}-{"opC" if opt.optimc else "default"}'
+    method_name = f'{opt.learner}-{vtype}'
 
     if opt.pretrained:
         method_name += f'-pretrained-{opt.pretrained}'
     if opt.supervised:
         method_name += f'-supervised-{opt.supervised_method}'
 
-    method_name += f'-mode:{opt.mode}'
-    
+    if (opt.mix):
+        method_name += f'-mix:{opt.mix}'
+   
+    if (opt.optimc):
+        method_name += f'-opC'
+    else:
+        method_name += f'-default'
+         
     return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
