@@ -25,7 +25,7 @@ OPTIMC="--optimc"
 
 declare -a datasets=("bbc-news")
 declare -a pickle_paths=("../pickles")
-declare -a learners=("nb")
+declare -a learners=("svm" "lr")
 declare -a vtypes=("tfidf" "count")
 declare -a mixes=("vmode" "cat" "solo" "dot")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")

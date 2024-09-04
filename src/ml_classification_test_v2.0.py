@@ -521,10 +521,10 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         X_test = X_test.toarray()
         
         print("X_train:", type(X_train), X_train.shape)
-        print("X_train[0]:\n", X_train[0])
+        #print("X_train[0]:\n", X_train[0])
         
         print("X_test:", type(X_test), X_test.shape)
-        print("X_test[0]\n:", X_test[0])
+        #print("X_test[0]\n:", X_test[0])
         
         print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
         print("pretrained_vectors_dictionary[0]:\n", pretrained_vectors_dictionary[0])
@@ -535,10 +535,10 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         print("after dot product...")
         
         print("X_train:", type(X_train), X_train.shape)
-        print("X_train[0]:\n", X_train[0])
+        #print("X_train[0]:\n", X_train[0])
         
         print("X_test:", type(X_test), X_test.shape)
-        print("X_test[0]:\n", X_test[0])
+        #print("X_test[0]:\n", X_test[0])
     
     elif mix == 'vmode':
         # we simply return X_train and X_test as is here
@@ -573,6 +573,12 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
 
     pickle_file = PICKLE_DIR + pickle_file_name                                     # Define the path to the pickle file
 
+    #------------------------------------------------------------------------------------------
+    #
+    # TODO: change this code to use LCDataset class
+    #
+    #------------------------------------------------------------------------------------------
+    
     #
     # we pick up the vectorized dataset along with the associated pretrained 
     # embedding matrices when e load the data - either from data files directly
