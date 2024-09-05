@@ -1,52 +1,77 @@
 import numpy as np
+
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report
 from transformers import LlamaTokenizer, LlamaModel
-import torch
+
 import os
 from tqdm import tqdm
 import pandas as pd
 import pickle
 
+import nltk
 from nltk.corpus import stopwords
 
+nltk.download('stopwords')
 
 
-DATASET_DIR = '../datasets/'
-
-MAX_VOCAB_SIZE = 20000
-
-llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
-
-PICKLE_DIR = '../pickles/'
-
-TEST_SIZE = 0.2
-
-dataset = 'bbc_news'
-#dataset = '20newsgroups'
-
-
-stop_words = set(stopwords.words('english'))
-
+# ---------------------------------------------------------------------------------------------------
 #
 # tokens for LLAMA model access, must be requested from huggingface
+# 
+# must login to huggingface first 
+# (see https://huggingface.co/docs/huggingface_hub/guides/cli#huggingface-cli-login) 
 #
 from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
+# ---------------------------------------------------------------------------------------------------
 
+import torch
 
-if (torch.backends.mps.is_built()):
+# Check for CUDA availability
+if torch.cuda.is_available():
+    print("CUDA is available")
+    device = torch.device("cuda")
+
+# Check for MPS availability (for Apple Silicon)
+elif torch.backends.mps.is_available():
     print("MPS is available")
     device = torch.device("mps")
+
+    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"          # disable memory upper limit
+
+# Default to CPU if neither CUDA nor MPS is available
 else:
-    print("MPS is not available")
+    print("Neither CUDA nor MPS is available, using CPU")
     device = torch.device("cpu")
-    
+
+print(f"Using device: {device}")
+
+
+
+# ---------------------------------------------------------------------------------------------------
+# constants
+#
+DATASET_DIR = '../datasets/'
+MAX_VOCAB_SIZE = 20000
+
+llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
+
+PICKLE_DIR = '../pickles/'
+TEST_SIZE = 0.2
+
+dataset = 'bbc_news'
+#dataset = '20newsgroups'
+# 
+# ---------------------------------------------------------------------------------------------------
+
+stop_words = set(stopwords.words('english'))
+
 #
 # BBC News 
 #
@@ -61,10 +86,10 @@ if (dataset == 'bbc_news'):
 
     # Load datasets
     train_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Train.csv')
-    test_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Test.csv')
+    #test_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Test.csv')
 
     print("train_set:", train_set.shape)
-    print("test_set:", test_set.shape)    
+    #print("test_set:", test_set.shape)    
 
     print("train_set columns:", train_set.columns)
     #print("train_set:\n", train_set.head())

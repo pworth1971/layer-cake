@@ -210,12 +210,39 @@ Cache for datasets after they have been 'pickled'
 
 Output log file
 
+### /datasets
 
+directory of dataset files
 
 
 ## Supported Data sets
 
 TODO: describe supported data sets here
+
+
+### BBC News
+
+#### Download
+
+https://www.kaggle.com/datasets/hgultekin/bbcnewsarchive?resource=download
+
+https://www.kaggle.com/competitions/learn-ai-bbc/data?select=BBC+News+Train.csv
+
+
+#### Context
+News article datasets, originating from BBC News, provided for use as benchmarks for machine learning research. The original data is processed to form a single csv file for ease of use, the news title and the related text file name is preserved along with the news content and its category. This dataset is made available for non-commercial and research purposes only.
+
+All rights, including copyright, in the content of the original articles are owned by the BBC.
+
+#### Content
+Consists of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
+Class Labels: 5 (business, entertainment, politics, sport, tech)
+
+#### Acknowledgements
+The original source of the data may be accessed through this link and it might be interesting to read the associated research article.
+
+#### Associated Official Research Papers
+D. Greene and P. Cunningham. "Practical Solutions to the Problem of Diagonal Dominance in Kernel Document Clustering", Proc. ICML 2006.
 
 
 

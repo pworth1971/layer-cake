@@ -16,3 +16,4 @@ pandas
 psutil
 GPUtil
 plotly
+nltk
