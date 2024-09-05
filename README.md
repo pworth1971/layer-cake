@@ -179,7 +179,7 @@ apt install zip
 These should be run individually from a command line to make sure they take, and the CUDA library support should be confirmed once complete - if on a CUDA 
 supported Linux environment. This can be done by starting a python environment (type 'python' at the command line) and then running the following code:
 
-iport torch
+import torch
 torch.cuda.is_available()
 
 This should return True if on a CUDA enabled environment, or False otherwise (for example on my Mac which althogh has GPU support does not support CUDA which 
@@ -220,7 +220,7 @@ directory of dataset files
 TODO: describe supported data sets here
 
 
-### BBC News
+### BBC News (Single Label)
 
 #### Download
 
@@ -230,9 +230,9 @@ https://www.kaggle.com/competitions/learn-ai-bbc/data?select=BBC+News+Train.csv
 
 
 #### Context
-News article datasets, originating from BBC News, provided for use as benchmarks for machine learning research. The original data is processed to form a single csv file for ease of use, the news title and the related text file name is preserved along with the news content and its category. This dataset is made available for non-commercial and research purposes only.
-
-All rights, including copyright, in the content of the original articles are owned by the BBC.
+News article datasets, originating from BBC News, provided for use as benchmarks for machine learning research. The original data is processed to form a single csv 
+file for ease of use, the news title and the related text file name is preserved along with the news content and its category. This dataset is made available for 
+non-commercial and research purposes only. All rights, including copyright, in the content of the original articles are owned by the BBC.
 
 #### Content
 Consists of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
@@ -243,6 +243,24 @@ The original source of the data may be accessed through this link and it might b
 
 #### Associated Official Research Papers
 D. Greene and P. Cunningham. "Practical Solutions to the Problem of Diagonal Dominance in Kernel Document Clustering", Proc. ICML 2006.
+
+
+
+### 20newsgroups (Single Label)
+
+The 20 newsgroups dataset comprises around 18000 newsgroups posts on 20 topics split in two subsets: one for training (or development) 
+and the other one for testing (or for performance evaluation). The split between the train and test set is based upon a messages posted before 
+and after a specific date.
+
+We download the dataset from sklearn using sklearn.datasets.fetch_20newsgroups.
+
+Single Label dataset, 20 categories
+
+target_names: 
+
+['alt.atheism', 'comp.graphics', 'comp.os.ms-windows.misc', 'comp.sys.ibm.pc.hardware', 'comp.sys.mac.hardware', 'comp.windows.x', \
+  'misc.forsale', 'rec.autos', 'rec.motorcycles', 'rec.sport.baseball', 'rec.sport.hockey', 'sci.crypt', 'sci.electronics', 'sci.med', \
+  'sci.space', 'soc.religion.christian', 'talk.politics.guns', 'talk.politics.mideast', 'talk.politics.misc', 'talk.religion.misc']
 
 
 

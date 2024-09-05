@@ -65,8 +65,8 @@ llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4
 PICKLE_DIR = '../pickles/'
 TEST_SIZE = 0.2
 
-dataset = 'bbc_news'
-#dataset = '20newsgroups'
+#dataset = 'bbc_news'
+dataset = '20newsgroups'
 # 
 # ---------------------------------------------------------------------------------------------------
 
@@ -187,7 +187,7 @@ if os.path.exists(embeddings_file):
 else:
     # Create a vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary
     llama_vocab_embeddings = {}
-    for token in tqdm(tfidf_vectorizer.get_feature_names_out(), desc="encoding Vocabulary using LlaMa pretrained embeddings..."):
+    for token in tqdm(tfidf_vectorizer.get_feature_names_out(), desc="encoding vocabulary using LlaMa (pretrained) embeddings..."):
         input_ids = tokenizer.encode(token, return_tensors='pt').to(device)
         with torch.no_grad():
             output = model(input_ids)
@@ -200,18 +200,18 @@ print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_e
 
 from itertools import islice
 
-print("llama_vocab_embeddings\n:")
+print("llama_vocab_embeddings (first three elements):\n:")
 # Print the first 3 elements
 for key, value in islice(llama_vocab_embeddings.items(), 3):
     print(f'{key}, {value}\n')
     
 print("X_train_tfidf[0]\n:", X_train_tfidf[0])
 
-print("\n\tprojecting...")
+print("\n\tApproach I: converting dataset into LlaMa embedding space (--solo)...")
 
 # Project the TF-IDF vectors into the LLaMA embedding space
 def llama_weighted_average_vectorization(tfidf_vectors, vocab_embeddings, vocab):
-    print("projecting tfidf vectorized data to llama embeddings...")
+    print("converting tfidf vectorized data into llama embedding space...")
           
     print("tfidf_vectors:", type(tfidf_vectors), tfidf_vectors.shape)
     print("vocab_embeddings:", type(vocab_embeddings), len(vocab_embeddings))
@@ -224,10 +224,10 @@ def llama_weighted_average_vectorization(tfidf_vectors, vocab_embeddings, vocab)
         for j, token in enumerate(vocab):
             if token in vocab_embeddings:
                 embedded_vectors[i] += doc[j] * vocab_embeddings[token].squeeze()
+    
     return embedded_vectors
 
-
-# Project the training and testing sets
+# convert the training and testing datasets
 vocab = tfidf_vectorizer.get_feature_names_out()
 print("vocab (get_feature_names_out):", type(vocab), vocab.shape)
 
@@ -239,26 +239,27 @@ lower_vect_vocab = {k.lower(): v for k, v in tfidf_vectorizer.vocabulary_.items(
 print("lower_vect_vocab:", type(vect_vocab), len(vect_vocab))
         
 
-print("using weighted average vectorization...")
+print("encoding dataset using LlaMa embeddings (weighted average approach)...")
         
-X_train_projected_wa = llama_weighted_average_vectorization(X_train_tfidf, llama_vocab_embeddings, vocab)
-X_test_projected_wa = llama_weighted_average_vectorization(X_test_tfidf, llama_vocab_embeddings, vocab)
-print("X_train_projected_wa:", type(X_train_projected_wa), X_train_projected_wa.shape)
-print("X_test_projected_wa:", type(X_test_projected_wa), X_test_projected_wa.shape)
+X_train_encoded_wa = llama_weighted_average_vectorization(X_train_tfidf, llama_vocab_embeddings, vocab)
+X_test_encoded_wa = llama_weighted_average_vectorization(X_test_tfidf, llama_vocab_embeddings, vocab)
+print("X_train_projected_wa:", type(X_train_encoded_wa), X_train_encoded_wa.shape)
+print("X_test_projected_wa:", type(X_test_encoded_wa), X_test_encoded_wa.shape)
 
+print("training SVM classifier...")
 
 # Train an SVM classifier on the projected features
 svm_classifier = SVC(kernel='linear')
-svm_classifier.fit(X_train_projected_wa, y_train)
+svm_classifier.fit(X_train_encoded_wa, y_train)
 
 # Make predictions on the test set
-y_pred = svm_classifier.predict(X_test_projected_wa)
+y_pred = svm_classifier.predict(X_test_encoded_wa)
 
 # Print classification report
-print(classification_report(y_test, y_pred, target_names=target_names), digits=4)
+print(classification_report(y_test, y_pred, target_names=target_names, digits=4))
 
 
-print("\n\tusing matrix multiplication...")
+print("\n\tApproach II: projecting tfidf vectors into the LlaMa embedding space (vocabulary) using matrix multiplication (i.e. dot product)...")
 
 # Function to convert llama_vocab_embeddings (dict) to a numpy matrix
 def convert_dict_to_matrix(vocab_embeddings, vocab):
@@ -286,12 +287,13 @@ def convert_dict_to_matrix(vocab_embeddings, vocab):
 def project_tfidf_to_llama(tfidf_vectors, embedding_matrix):
     return np.dot(tfidf_vectors, embedding_matrix)
 
+print("building llama vocabulary matrix for dataset vocab...")
 
 llama_vocab_matrix = convert_dict_to_matrix(llama_vocab_embeddings, vocab)
 print("llama_vocab_matrix:", type(llama_vocab_matrix), llama_vocab_matrix.shape)
 print("llama_vocab_matrix[0]:\n", llama_vocab_matrix[0])
 
-print("before dot product...")
+print("-- before numpy.dot operation...")
 print("X_train_tfidf:", type(X_train_tfidf), X_train_tfidf.shape)
 print("X_train_tfidf[0]:\n", X_train_tfidf[0])
 
@@ -302,7 +304,7 @@ print("X_test_tfidf[0]:\n", X_test_tfidf[0])
 X_train_projected_dot = project_tfidf_to_llama(X_train_tfidf, llama_vocab_matrix)
 X_test_projected_dot = project_tfidf_to_llama(X_test_tfidf, llama_vocab_matrix)
 
-print("dot product outputs (input to SVM)...")
+print("-- after numpy.dot product operation (input to SVM)...")
 print("X_train_projected_dot:", type(X_train_projected_dot), X_train_projected_dot.shape)
 print("X_train_projected_dot[0]:\n", X_train_projected_dot[0])
 
@@ -320,5 +322,5 @@ svm_classifier.fit(X_train_projected_dot, y_train)
 y_pred = svm_classifier.predict(X_test_projected_dot)
 
 # Print classification report
-print(classification_report(y_test, y_pred, target_names=target_names), digits=4)
+print(classification_report(y_test, y_pred, target_names=target_names, digits=4))
 
