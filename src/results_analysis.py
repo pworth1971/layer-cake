@@ -95,16 +95,24 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
     print("generating charts to output directory:", output_path)
 
     # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'timelapse']
+    measures = ['final-te-macro-F1', 'final-te-micro-F1']
 
     print("filtering for measures:", measures)
 
-    df = df[df['measure'].isin(measures)]
+    df_measures = df[df['measure'].isin(measures)]
+    df_timelapse = df[['dataset', 'model', 'embeddings', 'wc_supervised', 'timelapse']].drop_duplicates()
 
-    print("df shape after filtering:", df.shape)
-    print("df:", df.head())
+    print("df shape after filtering for measures:", df_measures.shape)
+    print("df shape after filtering for timelapse:", df_timelapse.shape)
 
-    if (df.empty):
+    if df_measures.empty and df_timelapse.empty:
+        print("Error: No data available for the specified measures or timelapse")
+        return  
+
+    print("df_measures shape after filtering:", df_measures.shape)
+    print("df_measures:\n", df_measures.head())
+
+    if (df_measures.empty):
         print("Error: No data available for the specified measures")
         return  
 
@@ -121,21 +129,17 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
             
             print(f"generating plots for {measure} in dataset {dataset}...")
 
-            for supervised in sorted(df['wc_supervised'].unique(), reverse=True):
+            for supervised in sorted(df_measures['wc_supervised'].unique(), reverse=True):
                 # Filter the DataFrame for the current measure, dataset, and wc_supervised status
-                subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['wc_supervised'] == supervised)]
+                subset_df = df_measures[(df_measures['measure'] == measure) & (df_measures['dataset'] == dataset) & (df_measures['wc_supervised'] == supervised)]
 
                 # Check if the subset DataFrame is empty
                 if subset_df.empty:
                     print(f"No data available for {measure} in dataset {dataset} with wc_supervised={supervised}")
                     continue
 
-                # Aggregate to find the maximum value per model and embeddings
-                if measure != 'timelapse':
-                    max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
-                else:
-                    max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'mean'}).reset_index()
-
+                max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
+                
                 # Create title text for the plot
                 title_text = f'Dataset: {dataset.upper()}; Measure: {measure} [by Model and Embeddings Type {"(pretrained+supervised)" if supervised else "(pretrained)"}]'
 
@@ -185,6 +189,75 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
                 if show_charts:
                     fig.show()              # This will display the plot in the notebook or a web browser
 
+
+    print("df_timelapse shape after filtering:", df_timelapse.shape)
+    print("df_timelapse:", df_timelapse.head())
+
+    if (df_timelapse.empty):
+        print("Error: No data available for timelapse analysis.")
+        return  
+
+
+    # Generate charts for timelapse (time taken by each model)
+    for dataset in df_timelapse['dataset'].unique():
+        print(f"generating timelapse plots for dataset {dataset}...")
+
+        for supervised in sorted(df_timelapse['wc_supervised'].unique(), reverse=True):
+            # Filter the DataFrame for the current dataset and wc_supervised status
+            subset_df = df_timelapse[(df_timelapse['dataset'] == dataset) & 
+                                     (df_timelapse['wc_supervised'] == supervised)]
+
+            # Check if the subset DataFrame is empty
+            if subset_df.empty:
+                print(f"No timelapse data available for dataset {dataset} with wc_supervised={supervised}")
+                continue
+
+            # Aggregate to find the average timelapse per model and embeddings
+            avg_timelapse_df = subset_df.groupby(['model', 'embeddings']).agg({'timelapse': 'mean'}).reset_index()
+
+            title_text = f'Dataset: {dataset.upper()}; Timelapse [by Model and Embeddings Type {"(pretrained+supervised)" if supervised else "(pretrained)"}]'
+
+            # Create the plot using Plotly Express
+            fig = px.bar(avg_timelapse_df, x='model', y='timelapse', color='embeddings', barmode='group',
+                         title=title_text,
+                         labels={"timelapse": "Average Time (seconds)", "model": "Model"},
+                         color_discrete_sequence=color_palette,
+                         hover_data=['model', 'embeddings'])
+
+            # Update layout for title
+            fig.update_layout(
+                title={
+                    'text': title_text,
+                    'y': 0.95,
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': dict(
+                        family="Arial",
+                        size=16,
+                        color='black',
+                        weight='bold'
+                    )
+                },
+                legend_title_text='Embeddings'
+            )
+            
+            fig.update_xaxes(title_text='Model')
+            fig.update_yaxes(title_text='Average Time (seconds)', range=[0, avg_timelapse_df['timelapse'].max() * 1.1])
+
+            # Save each plot in the specified output directory and show it
+            if output_path:
+                print(f"Generating interactive plot for timelapse in dataset {dataset} with wc_supervised={supervised}...")
+
+                plot_file_name = f"{dataset}_timelapse_{'pretrained+supervised' if supervised else 'pretrained'}.html"
+                plot_file = os.path.join(output_path, plot_file_name)
+                
+                fig.write_html(plot_file)  # Save as HTML to retain interactivity
+                
+                print(f"Saved interactive plot for timelapse in dataset {dataset} at {plot_file}")
+
+            if show_charts:
+                fig.show()  # This will display the plot in the notebook or a web browser
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
