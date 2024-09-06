@@ -17,7 +17,7 @@ from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_sp
 from sklearn.naive_bayes import MultinomialNB
 
 from util.common import initialize, SystemResources
-from data.lc_dataset import LCDataset, load_data, save_to_pickle, load_from_pickle
+from data.lc_dataset import LCDataset
 from util.metrics import evaluation
 
 import warnings
@@ -564,55 +564,15 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
     
     print("\n\tclassify_data()...")
     
-    #
-    # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
-    #
-    pickle_file_name=f'{dataset}_{vtype}_{args.pretrained}_tokenized.pickle'
-
-    print(f"Loading data set {dataset}...")
-
-    pickle_file = PICKLE_DIR + pickle_file_name                                     # Define the path to the pickle file
-
-    #------------------------------------------------------------------------------------------
-    #
-    # TODO: change this code to use LCDataset class
-    #
-    #------------------------------------------------------------------------------------------
+    lcd = LCDataset()                                    # Create an instance of the LCDataset class
     
-    #
-    # we pick up the vectorized dataset along with the associated pretrained 
-    # embedding matrices when e load the data - either from data files directly
-    # if the first time parsing the dataset or from the pickled file if it exists
-    # and the data has been cached for faster loading
-    #
-    if os.path.exists(pickle_file):                                                 # if the pickle file exists
-        
-        print(f"Loading tokenized data from '{pickle_file}'...")
-        
-        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
-    else:
-        print(f"'{pickle_file}' not found, loading {dataset}...")
-        
-        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_data(
-            dataset=dataset,                            # dataset
-            vtype=args.vtype,                           # vectorization type
-            pretrained=args.pretrained,                 # pretrained embeddings
-            embedding_path=embedding_path               # path to embeddings
-            )
-
-        # Save the tokenized matrices to a pickle file
-        save_to_pickle(
-            X,                          # vectorized data
-            y,                          # labels
-            target_names,               # target names
-            class_type,                 # class type (single-label or multi-label):
-            embedding_vocab_matrix,     # vector representation of the dataset vocabulary
-            weighted_embeddings,        # weighted avg embedding representation of dataset
-            pickle_file)         
+    X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = lcd.loadpt(
+        dataset=dataset,
+        vtype=args.vtype, 
+        pretrained=args.pretrained,
+        embedding_path=embedding_path
+        )                                                 # Load the dataset
     
-    #
-    # TODO: get dataset class_type: single-label or multi-label
-    #
     print("Tokenized data loaded.")
  
     print("X:", type(X), X.shape)
@@ -662,24 +622,6 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
 
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
-    
-    emb_path = None
-
-    if (pretrained_embeddings is not None):
-        print("Using pretrained embeddings...")
-        if (pretrained_embeddings == 'word2vec'):
-            emb_path = args.word2vec_path
-        elif (pretrained_embeddings == 'glove'):
-            emb_path = args.glove_path
-        elif (pretrained_embeddings == 'fasttext'):
-            emb_path = args.fasttext_path
-        elif (pretrained_embeddings == 'bert'):
-            emb_path = args.bert_path
-        elif (pretrained_embeddings == 'llama'):
-            emb_path = args.llama_path
-
-    print("embeddings:", pretrained_embeddings)
-    print("emb_path:", emb_path)
 
     if (args.pretrained is None) and (args.supervised == False):        # no embeddings in this case
         sup_tend = 0
@@ -688,12 +630,6 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
 
         print("building the embeddings...")
 
-        if (args.learner == 'nb'):
-            print("Naive Bayes model, non-negative embeddings required...")
-            non_negative = True
-        else:
-            non_negative = False
-            
         # Generate embeddings
         X_train, X_test = gen_embeddings(
             X_train=X_train,
