@@ -90,12 +90,12 @@ def results_analysis(df, output_path='../out'):
 # Generate plots for models and their performance evalutaion metrics and save to file 
 # ----------------------------------------------------------------------------------------------------------------------------
 
-def generate_charts_plotly(df, output_path='../out', show_charts=False):
+def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_threshold=Y_AXIS_THRESHOLD):
     
     print("generating charts to output directory:", output_path)
 
     # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    measures = ['final-te-macro-F1', 'final-te-micro-F1', 'timelapse']
 
     print("filtering for measures:", measures)
 
@@ -131,14 +131,18 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                     continue
 
                 # Aggregate to find the maximum value per model and embeddings
-                max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
+                if measure != 'timelapse':
+                    max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
+                else:
+                    max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'mean'}).reset_index()
 
+                # Create title text for the plot
                 title_text = f'Dataset: {dataset.upper()}; Measure: {measure} [by Model and Embeddings Type {"(pretrained+supervised)" if supervised else "(pretrained)"}]'
 
                 # Create the plot using Plotly Express
                 fig = px.bar(max_df, x='model', y='value', color='embeddings', barmode='group',
                              title=title_text,
-                             labels={"value": "Max Value", "model": "Model"},
+                             labels={"value": "Max Value" if measure != 'timelapse' else "Average Time (s)", "model": "Model"},
                              color_discrete_sequence=color_palette,
                              hover_data=['model', 'embeddings'])
 
@@ -161,7 +165,10 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                 )
                 
                 fig.update_xaxes(title_text='Model')
-                fig.update_yaxes(title_text='Maximum Measure Value', range=[Y_AXIS_THRESHOLD, max_df['value'].max() * 1.1])  # Adjust the y-axis range to start at 50%
+                if measure != 'timelapse':
+                    fig.update_yaxes(title_text='Maximum Measure Value', range=[y_axis_threshold, max_df['value'].max() * 1.1])  # Adjust the y-axis range
+                else:
+                    fig.update_yaxes(title_text='Average Time (seconds)', range=[0, max_df['value'].max() * 1.1])  # Adjust the y-axis for time
 
                 # Save each plot in the specified output directory and show it
                 if output_path:
@@ -175,8 +182,9 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False):
                     
                     print(f"Saved interactive plot for {measure} in dataset {dataset} at {plot_file}")
 
-                if (show_charts):
+                if show_charts:
                     fig.show()              # This will display the plot in the notebook or a web browser
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -216,13 +224,15 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
-    parser.add_argument('--output_dir', type=str, default='../out', help='Directory to save the output files, default is "../out"')
+    parser.add_argument('-output_dir', type=str, default='../out', help='Directory to save the output files, default is "../out"')
     
     parser.add_argument('-c', '--charts', action='store_true', help='Generate charts')
     parser.add_argument('-s', '--summary', action='store_true', help='Generate summary')
     parser.add_argument('-d', action='store_true', default=False, help='debug mode')
     
-    parser.add_argument('--show', action='store_true', help='Display charts interactively (requires -c)')
+    parser.add_argument('-ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
+
+    parser.add_argument('-show', action='store_true', help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
 
@@ -244,7 +254,7 @@ def main():
             results_analysis(df, args.output_dir)
 
         if args.charts:
-            generate_charts_plotly(df, args.output_dir, show_charts=args.show)
+            generate_charts_plotly(df, args.output_dir, show_charts=args.show, y_axis_threshold=args.ystart)
     else:
         print("Error: Data file not found or empty")
 

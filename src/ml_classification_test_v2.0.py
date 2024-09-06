@@ -43,9 +43,9 @@ NUM_JOBS = -1          # important to manage CUDA memory allocation
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 # run_model()
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
+def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
     
-    print("\tRunning model...")
+    print("\n\tRunning model...")
 
     print('X_train:', type(X_train), X_train.shape)
     print('X_test:', type(X_test), X_test.shape)
@@ -56,19 +56,46 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
     #print("y_train:", y_train)
     #print("y_test:", y_test)
         
+    print("target_names:", target_names)
+    print("class_type:", class_type)
+
     tinit = time()
 
     # Support Vector Machine Classifier
     if (args.learner == 'svm'):                                     
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
     
     # Logistic Regression Classifier
     elif (args.learner == 'lr'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
 
     # Naive Bayes (MultinomialNB) Classifier
     elif (args.learner == 'nb'):                                  
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
     
     else:
         print(f"Invalid learner '{args.learner}'")
@@ -85,7 +112,7 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
+def run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
 
     if (not args.optimc):
         
@@ -229,7 +256,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_ty
 # ---------------------------------------------------------------------------------------------------------------------
 # run_lr_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
+def run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
 
     # Default Logistic Regression Model
     print("Training default Logistic Regression model...")
@@ -316,7 +343,7 @@ def run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_typ
 # ---------------------------------------------------------------------------------------------------------------------
 # run_nb_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label'):
+def run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
 
     print("Building default Naive Bayes Classifier...")
 
@@ -564,13 +591,22 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
     
     print("\n\tclassify_data()...")
     
+    if (pretrained_embeddings in ['bert', 'llama']):
+        embedding_type = 'token'
+    else:
+        embedding_type = 'word'
+    
+    print("pretrained_embeddings:", pretrained_embeddings)    
+    print("embedding_type:", embedding_type)
+    
     lcd = LCDataset()                                    # Create an instance of the LCDataset class
     
     X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = lcd.loadpt(
         dataset=dataset,
         vtype=args.vtype, 
         pretrained=args.pretrained,
-        embedding_path=embedding_path
+        embedding_path=embedding_path,
+        emb_type=embedding_type
         )                                                 # Load the dataset
     
     print("Tokenized data loaded.")

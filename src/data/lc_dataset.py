@@ -193,6 +193,7 @@ def preprocessDataset(train_text):
 # BERT Embeddings functions
 # ------------------------------------------------------------------------------------------------------------------------
 class TextDataset(Dataset):
+
     def __init__(self, texts, tokenizer, max_len):
         self.texts = texts
         self.tokenizer = tokenizer
@@ -218,419 +219,6 @@ class TextDataset(Dataset):
             'attention_mask': encoding['attention_mask'].flatten(),
             'token_type_ids': encoding['token_type_ids'].flatten()
         }
-
-def get_bert_embeddings(texts, model, tokenizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=256):
-    
-    print("getting BERT embeddings...")
-    
-    dataset = TextDataset(texts, tokenizer, max_len)
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-
-    embeddings = []
-
-    model.to(device)
-    model.eval()
-
-    with torch.cuda.amp.autocast(), torch.no_grad():
-        for batch in tqdm(dataloader, desc="Processing BERT Embeddings"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            token_type_ids = batch['token_type_ids'].to(device)
-            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
-            embeddings.append(cls_embeddings.cpu().numpy())
-
-    embeddings = np.vstack(embeddings)
-    return embeddings
-
-def get_weighted_bert_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-    
-    print("getting weighted bert embeddings...")
-    
-    dataset = TextDataset(texts, tokenizer, max_len)
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-
-    embeddings = []
-
-    model.to(device)
-    model.eval()
-
-    with torch.cuda.amp.autocast(), torch.no_grad():
-        for batch in tqdm(dataloader, desc="Processing Weighted BERT Embeddings"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            token_type_ids = batch['token_type_ids'].to(device)
-
-            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-            token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-            for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
-                tokens = tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
-                tfidf_vector = vectorizer.transform([texts[i]]).toarray()[0]
-
-                weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
-                total_weight = 0.0
-
-                for j, token in enumerate(tokens):
-                    if token in vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
-                        token_weight = tfidf_vector[vectorizer.vocabulary_[token.lower()]]
-                        weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
-                        total_weight += token_weight
-
-                if total_weight > 0:
-                    doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
-                else:
-                    doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
-
-                embeddings.append(doc_embedding)
-
-    return np.vstack(embeddings)
-
-def get_llama_embeddings(texts, model, tokenizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-    
-    print("getting llama embeddings...")
-    
-    dataset = TextDataset(texts, tokenizer, max_len)
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-
-    embeddings = []
-
-    model.to(device)
-    model.eval()
-
-    with torch.cuda.amp.autocast(), torch.no_grad():
-        for batch in tqdm(dataloader, desc="Processing LLaMa Embeddings"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            outputs = model(input_ids, attention_mask=attention_mask)
-            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token or equivalent
-            embeddings.append(cls_embeddings.cpu().numpy())
-
-    embeddings = np.vstack(embeddings)
-    return embeddings
-
-def get_weighted_llama_embeddings(texts, model, tokenizer, vectorizer, device, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-    
-    print("getting weighted llama embeddings...")
-    
-    dataset = TextDataset(texts, tokenizer, max_len)
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-
-    embeddings = []
-
-    model = model.to(device)                # move model to device
-    model.eval()
-
-    with torch.cuda.amp.autocast(), torch.no_grad():
-        for batch in tqdm(dataloader, desc="Processing Weighted LLaMa Embeddings"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-
-            outputs = model(input_ids, attention_mask=attention_mask)
-            token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-            for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
-                tokens = tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
-                tfidf_vector = vectorizer.transform([texts[i]]).toarray()[0]
-
-                weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
-                total_weight = 0.0
-
-                for j, token in enumerate(tokens):
-                    if token in vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
-                        token_weight = tfidf_vector[vectorizer.vocabulary_[token.lower()]]
-                        weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
-                        total_weight += token_weight
-
-                if total_weight > 0:
-                    doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
-                else:
-                    doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
-
-                embeddings.append(doc_embedding)
-
-    return np.vstack(embeddings)
-
-
-# -------------------------------------------------------------------------------------------------------------------
-def cache_embeddings(train_embeddings, test_embeddings, cache_path):
-    print("caching embeddings to:", cache_path)
-    
-    np.savez(cache_path, train=train_embeddings, test=test_embeddings)
-
-def load_cached_embeddings(cache_path, debug=False):
-    if (debug):
-        print("looking for cached embeddings at ", cache_path)
-    
-    if os.path.exists(cache_path):
-        
-        if (debug):
-            print("found cached embeddings, loading...")
-        data = np.load(cache_path)
-        return data['train'], data['test']
-    
-    if (debug):
-        print("did not find cached embeddings, returning None...")
-    return None, None
-# -------------------------------------------------------------------------------------------------------------------
-
-# -------------------------------------------------------------------------------------------------------------------
-# Function to create embeddings for a given text
-# -------------------------------------------------------------------------------------------------------------------
-def create_embedding(texts, model, embedding_dim):
-    embeddings = np.zeros((len(texts), embedding_dim))
-    for i, text in enumerate(texts):
-        words = text.split()
-        word_embeddings = [model[word] for word in words if word in model]
-        if word_embeddings:
-            embeddings[i] = np.mean(word_embeddings, axis=0)            # Average the word embeddings
-        else:
-            embeddings[i] = np.zeros(embedding_dim)                     # Use a zero vector if no words are in the model
-    return embeddings
-# -------------------------------------------------------------------------------------------------------------------
-
-# -------------------------------------------------------------------------------------------------------------------
-# Tokenize text using BERT tokenizer and vectorize accordingly
-# -------------------------------------------------------------------------------------------------------------------
-def tokenize_and_vectorize(texts, tokenizer):
-    tokenized_texts = texts.apply(lambda x: tokenizer.tokenize(x))
-    token_indices = tokenized_texts.apply(lambda tokens: tokenizer.convert_tokens_to_ids(tokens))
-    
-    # Initialize a zero matrix to store token counts (csr_matrix for efficiency)
-    num_texts = len(texts)
-    vocab_size = tokenizer.vocab_size
-    token_matrix = csr_matrix((num_texts, vocab_size), dtype=np.float32)
-    
-    for i, tokens in enumerate(token_indices):
-        for token in tokens:
-            token_matrix[i, token] += 1  # Increment the count for each token
-    
-    return token_matrix
-# -------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------
-# load_20newsgroups()
-#
-# Define the load_20newsgroups function
-# ------------------------------------------------------------------------------------------------------------------------
-def load_20newsgroups(vectorizer_type='tfidf', embedding_type='word', pretrained=None, pretrained_path=None):
-    """
-    Load and preprocess the 20 Newsgroups dataset, returning X and y sparse matrices.
-
-    Parameters:
-    - vectorizer_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
-    - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (LLaMA, BERT).
-
-    Returns:
-    - X: Sparse matrix of features (tokenized text aligned with the chosen vectorizer and embedding type).
-    - y: Sparse array of target labels.
-    - dataset_vocab: Vocabulary generated by the vectorizer (for word-level embeddings).
-    - embeddings_vocab: Vocabulary generated by the tokenizer (for token-level embeddings).
-    """
-
-    print("Loading 20 newsgroups dataset...")
-
-    # Fetch the 20 newsgroups dataset
-    X_raw, y = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'), return_X_y=True)
-
-    print("preprocessing text...")
-
-    # initualize local variables
-    model = None
-    embedding_dim = 0
-    embedding_matrix = None
-    vocab = None
-
-    # Initialize the vectorizer based on the type
-    if embedding_type == 'word':
-        print("Using word-level vectorization...")
-        if vectorizer_type == 'tfidf':
-            vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, stop_words='english')  # Adjust max_features as needed
-        elif vectorizer_type == 'count':
-            vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, stop_words='english')  # Adjust max_features as needed
-        else:
-            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
-        
-        # Fit and transform the text data to obtain tokenized features
-        X_vectorized = vectorizer.fit_transform(X_raw)
-
-        vocab = vectorizer.vocabulary_                                  # Set vocabulary for the dataset
-
-    elif embedding_type == 'token':
-        print("Using token-level vectorization...")
-        if pretrained == 'bert':
-            print("Using token-level vectorization with BERT embeddings...")
-            tokenizer = BertTokenizer.from_pretrained(BERT_MODEL)                               # BERT tokenizer
-        elif pretrained == 'llama': 
-            print("Using token-level vectorization with BERT or LLaMa embeddings...")
-            tokenizer = LlamaTokenizer.from_pretrained(LLAMA_MODEL)                             # LLaMa tokenizer
-        else:
-            raise ValueError("Invalid embedding type. Use pretrained = 'bert' or pretrained = 'llama' for token embeddings.")
-
-        # Ensure padding token is available
-        if tokenizer.pad_token is None:
-            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-
-        def tokenize(text):
-            tokens = tokenizer.encode_plus(
-                text,
-                add_special_tokens=True,
-                max_length=TOKEN_TOKENIZER_MAX_LENGTH,
-                padding='max_length',
-                truncation=True,
-                return_tensors='np'
-            )
-            return tokens['input_ids']
-        
-        X_vectorized = [tokenize(text) for text in X_raw]
-        X_vectorized = csr_matrix(np.vstack(X_vectorized))              # Convert list of arrays to a sparse matrix
-
-        vocab = tokenizer.get_vocab()                                                             # Get vocabulary from the tokenizer
-
-    else:
-        raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMA embeddings.")
-    
-    print("\n\tbuilding pretrained embeddings for dataset vocabulary...")
-
-    print("pretrained:", pretrained)
-    print("pretrained_path:", pretrained_path)
-    print("vocab:", type(vocab), len(vocab))
-
-    # Load the pre-trained embeddings based on the specified model
-    if pretrained in ['word2vec', 'fastetxt', 'glove']:
-
-        if (pretrained == 'word2vec'):
-            print("Using Word2Vec pretrained embeddings...")
-            model = KeyedVectors.load_word2vec_format(pretrained_path, binary=True)
-        elif pretrained == 'glove':
-            print("Using GloVe pretrained embeddings...")
-            from gensim.scripts.glove2word2vec import glove2word2vec
-            glove_input_file = pretrained_path
-            word2vec_output_file = glove_input_file + '.word2vec'
-            glove2word2vec(glove_input_file, word2vec_output_file)
-            model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
-        elif pretrained == 'fasttext':
-            print("Using fastText pretrained embeddings...")
-            model = KeyedVectors.load_word2vec_format(pretrained_path)
-        
-        embedding_dim = model.vector_size
-        print("embedding_dim:", embedding_dim)
-
-        print("building embedding matrix for dataset...")
-        # Create the embedding matrix that aligns with the TF-IDF vocabulary
-        vocab_size = X_vectorized.shape[1]
-        embedding_matrix = np.zeros((vocab_size, embedding_dim))
-        
-        # Extract the pretrained embeddings for words in the TF-IDF vocabulary
-        for word, idx in vocab.items():
-            if word in model:
-                embedding_matrix[idx] = model[word]
-            else:
-                # If the word is not found in the pretrained model, use a random vector or zeros
-                embedding_matrix[idx] = np.random.normal(size=(embedding_dim,))
-
-        print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-
-    # Ensure X_vectorized is a sparse matrix
-    if not isinstance(X_vectorized, csr_matrix):
-        X_vectorized = csr_matrix(X_vectorized)
-    
-    label_encoder = LabelEncoder()                                                                  # Encode the labels
-    y_sparse = csr_matrix(label_encoder.fit_transform(y)).T                                         # Transpose to match the expected shape
-
-    print("Labels encoded and converted to sparse format.")
-
-    return X_vectorized, y_sparse, embedding_matrix                                            # Return X (features) and Y (target labels) as sparse arrays                               
-
-
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------
-# load_data()
-# ------------------------------------------------------------------------------------------------------------------------
-def load_data(dataset='20newsgroups', vtype='tfidf', pretrained=None, embedding_path=None):
-
-    print(f"Loading data set: {dataset}, pretrained: {pretrained}")
-
-    if (pretrained == 'llama' or pretrained == 'bert'):
-        embedding_type = 'token'
-    else:
-        embedding_type = 'word'
-
-
-    if (dataset == '20newsgroups'): 
-        
-        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_20newsgroups(
-            vectorizer_type=vtype,
-            embedding_type=embedding_type, 
-            pretrained=pretrained, 
-            pretrained_path=embedding_path
-            )
-        
-        return X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings
-
-    elif (dataset == 'bbc-news'):
-        
-        X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_bbc_news(
-            vectorizer_type=vtype,
-            embedding_type=embedding_type, 
-            pretrained=pretrained, 
-            pretrained_path=embedding_path
-            )
-
-        return X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings
-
-    else:
-        print(f"Dataset '{dataset}' not available, returning None.")
-        return None
-# ------------------------------------------------------------------------------------------------------------------------
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------
-# Save X, y sparse matrices, and vocabulary to pickle
-# ------------------------------------------------------------------------------------------------------------------------
-def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, pickle_file):
-    
-    print(f"Saving X, y, target_names, class_type, embedding_matrix, weighted_embeddings to pickle file: {pickle_file}")
-    
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    #print("embedding_matrix[0]:\n", embedding_matrix[0])
-    
-    with open(pickle_file, 'wb') as f:
-        # Save the sparse matrices and vocabulary as a tuple
-        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings), f)
-
-# ------------------------------------------------------------------------------------------------------------------------
-# Load X, y sparse matrices, and vocabulary from pickle
-# ------------------------------------------------------------------------------------------------------------------------
-def load_from_pickle(pickle_file):
-    
-    print(f"Loading X, y, target_names, class_type, embedding_matrix, weighted_embeddings and vocab from pickle file: {pickle_file}")
-    
-    with open(pickle_file, 'rb') as f:
-        X, y, target_names, class_type, embedding_matrix, weighted_embeddings = pickle.load(f)
-
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    #print("embedding_matrix[0]:\n", embedding_matrix[0])
-
-    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -712,10 +300,10 @@ class LCDataset:
             self._vectorizer = init_tfidf_vectorizer()
 
         print("fitting training data... devel_raw type and length:", type(self.devel_raw), len(self.devel_raw))
-        self._vectorizer.fit(self.devel_raw)
+        #self._vectorizer.fit(self.devel_raw)
 
         print("setting vocabulary...")
-        self.vocabulary = self._vectorizer.vocabulary_
+        #self.vocabulary = self._vectorizer.vocabulary_
 
         # vectorize dataset and build vectorizer vocabulary structures        
         self.vectorize(self)                                    
@@ -730,13 +318,6 @@ class LCDataset:
         # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
         if not isinstance(self.X_vectorized, csr_matrix):
             self.X_vectorized = csr_matrix(self.X_vectorized)
-        
-        # Encode the labels
-        label_encoder = LabelEncoder()
-        self.y = label_encoder.fit_transform(train_set['Category'])
-        
-        # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(y).T         # Transpose to match the expected shape
         
         self.loaded = True
         self.name = name
@@ -762,13 +343,11 @@ class LCDataset:
             filtered_texts.append(" ".join(filtered_words))
         return filtered_texts
 
-
+   
     def custom_tokenizer(self, text):
         # Tokenize with truncation
-        tokens = self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
-        return tokens
-
-
+        return self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
+        
     # -----------------------------------------------------------------------------------------------------
     # vectorize()
     # 
@@ -789,18 +368,20 @@ class LCDataset:
         if self.embedding_type == 'word':
             print("Using word-level vectorization...")
             
-            if self.vectorizer_type == 'tfidf':
+            if self.vectorization_type == 'tfidf':
                 self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)  
-            elif self.vectorizer_type == 'count':
+            elif self.vectorization_type == 'count':
                 self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)  
             else:
                 raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
             
             self.X_vectorized = self.vectorizer.fit_transform(self.X_raw)                   # Fit and transform the text data to obtain tokenized features
-
             
         elif self.embedding_type == 'token':
+            
             print(f"Using token-level vectorization with {self.pretrained.upper()} embeddings...")
+
+            from functools import partial
 
             if self.pretrained == 'bert': 
                 self.tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
@@ -817,15 +398,30 @@ class LCDataset:
             if self.tokenizer.pad_token is None:
                 #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
                 self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-            
-            if self.vectorizer_type == 'tfidf':
-                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer) 
-            elif self.vectorizer_type == 'count':
-                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer)  
-            else:
-                raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+    
+            # NB: Our custom_tokenizer() method needs access to the object instance (self), so 
+            # we need to use functools.partial to bind the self argument. With functools.partial, the 
+            # self argument is automatically passed when calling the custom_tokenizer method, making it 
+            # compatible with TfidfVectorizer.
 
-            # Fit and transform the text data to obtain tokenized features
+            if self.vectorization_type == 'tfidf':
+                self.vectorizer = TfidfVectorizer(
+                    max_features=MAX_VOCAB_SIZE, 
+                    tokenizer=partial(self.custom_tokenizer, self)
+                )
+            elif self.vectorization_type == 'count':
+                self.vectorizer = CountVectorizer(
+                    max_features=MAX_VOCAB_SIZE, 
+                    tokenizer=partial(self.custom_tokenizer, self)
+                )
+            else:
+                raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+            print("fitting training data... devel_raw type and length:", type(self.devel_raw), len(self.devel_raw))
+
+            # Fit and transform the text data to obtain tokenized features, 
+            # note the requirement for the partial() method to bind the self 
+            # argument when we call fit_transform() here 
             self.X_vectorized = self.vectorizer.fit_transform(self.X_raw)
 
         else:
@@ -879,7 +475,192 @@ class LCDataset:
         self.vocab = self.vocab_dict
         print("vocab:", type(self.vocab), len(self.vocab))
         
+        """    
+        if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
+
+            print("self does not have Xtr or Xte attributes, transforming and sorting...")
+
+            self.Xtr = self._vectorizer.transform(self.devel_raw)
+            self.Xte = self._vectorizer.transform(self.test_raw)
+            self.Xtr.sort_indices()
+            self.Xte.sort_indices()
         
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        
+        return self.Xtr, self.Xte
+        """
+
+        return self.X_vectorized
+
+
+
+    # -------------------------------------------------------------------------------------------------------------
+    # vocab embedding matrix construction helper functions
+    #
+    def process_batch(self, batch_words):
+
+        #tokenize and prepare inputs
+        inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=TOKEN_TOKENIZER_MAX_LENGTH)
+        
+        # move input tensors to proper device
+        input_ids = inputs['input_ids'].to(self.device)
+        attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
+        max_vocab_size = self.model.config.vocab_size
+
+        # check for out of range tokens
+        out_of_range_ids = input_ids[input_ids >= max_vocab_size]
+        if len(out_of_range_ids) > 0:
+            print("Warning: The following input IDs are out of range for the model's vocabulary:")
+            for out_id in out_of_range_ids.unique():
+                token = self.tokenizer.decode(out_id.item())
+                print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
+        
+        # Perform inference, ensuring that the model is on the same device as the inputs
+        self.model.to(self.device)
+        with torch.no_grad():
+            #outputs = model(**inputs)
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+        # Return the embeddings and ensure they are on the CPU for further processing
+        return outputs.last_hidden_state[:, 0,:].cpu().numpy()
+        
+
+    def build_embedding_vocab_matrix_core(self, vocab, batch_size=MPS_BATCH_SIZE):
+        
+        print("core embedding dataset vocab matrix construction...")
+        
+        print("vocab:", type(vocab), len(vocab))
+        print("batch_size:", batch_size)
+        
+        embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
+        batch_words = []
+        word_indices = []
+
+        with tqdm(total=len(vocab), desc="Processing embedding vocab matrix construction batches") as pbar:
+            for word, idx in vocab.items():
+                batch_words.append(word)
+                word_indices.append(idx)
+
+                if len(batch_words) == batch_size:
+                    embeddings = self.process_batch(self, batch_words)
+                    for i, embedding in zip(word_indices, embeddings):
+                        if i < len(embedding_vocab_matrix):
+                            embedding_vocab_matrix[i] = embedding
+                        else:
+                            print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
+                    
+                    batch_words = []
+                    word_indices = []
+                    pbar.update(batch_size)
+
+            if batch_words:
+                embeddings = self.process_batch(self, batch_words)
+                for i, embedding in zip(word_indices, embeddings):
+                    if i < len(embedding_vocab_matrix):
+                        embedding_vocab_matrix[i] = embedding
+                    else:
+                        print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
+                
+                pbar.update(len(batch_words))
+
+        return embedding_vocab_matrix
+
+
+    def get_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=256):
+        
+        print("getting BERT embeddings...")
+        
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)
+        self.model.eval()
+
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            for batch in tqdm(dataloader, desc="building BERT embeddings for dataset..."):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                token_type_ids = batch['token_type_ids'].to(self.device)
+                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+                embeddings.append(cls_embeddings.cpu().numpy())
+
+        embeddings = np.vstack(embeddings)
+
+        return embeddings
+
+    def get_weighted_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+    
+        print("getting weighted bert embeddings...")
+        
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)
+        self.model.eval()
+
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            for batch in tqdm(dataloader, desc="building weighted BERT embeddings for dataset..."):
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                token_type_ids = batch['token_type_ids'].to(self.device)
+
+                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                    tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                    tfidf_vector = self.vectorizer.transform([texts[i]]).toarray()[0]
+
+                    weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
+                    total_weight = 0.0
+
+                    for j, token in enumerate(tokens):
+                        if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token.lower()]]
+                            weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
+                            total_weight += token_weight
+
+                    if total_weight > 0:
+                        doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                    else:
+                        doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
+
+                    embeddings.append(doc_embedding)
+
+        return np.vstack(embeddings)
+
+
+    def get_llama_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        
+        print("getting llama embeddings...")
+        
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)
+        self.model.eval()
+
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            for batch in tqdm(dataloader, desc="building LLaMa embeddings for dataset..."):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token or equivalent
+                embeddings.append(cls_embeddings.cpu().numpy())
+
+        embeddings = np.vstack(embeddings)
+
+        return embeddings
+
+
     
     # -------------------------------------------------------------------------------------------------------------
     # build_embedding_vocab_matrix()
@@ -907,7 +688,7 @@ class LCDataset:
                 self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
             elif self.pretrained == 'fasttext':
                 print("Using fastText pretrained embeddings...")
-                self.model = KeyedVectors.load_word2vec_format(pretrained_path)
+                self.model = KeyedVectors.load_word2vec_format(self.pretrained_path)
             
             self.embedding_dim = self.model.vector_size
             #print("embedding_dim:", embedding_dim)
@@ -915,7 +696,7 @@ class LCDataset:
             print("creating (pretrained) embedding matrix which aligns with dataset vocabulary...")
             
             # Create the embedding matrix that aligns with the TF-IDF vocabulary
-            self.vocab_size = X_vectorized.shape[1]
+            self.vocab_size = self.X_vectorized.shape[1]
             self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
             
             print("embedding_dim:", self.embedding_dim)
@@ -955,19 +736,14 @@ class LCDataset:
             elif self.pretrained == 'llama':
                 self.vocab_size = len(self.vocab_ndarr)
                 
-                
-                
             self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
             
             print("embedding_dim:", self.embedding_dim)
             print("dataset vocab size:", self.vocab_size)
             #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
-            
 
-            self.embedding_vocab_matrix_orig = self.build_embedding_vocab_matrix(self.vocab, batch_size=MPS_BATCH_SIZE)
+            self.embedding_vocab_matrix_orig = self.build_embedding_vocab_matrix_core(self, self.vocab, batch_size=MPS_BATCH_SIZE)
             print("embedding_vocab_matrix_orig:", type(self.embedding_vocab_matrix_orig), self.embedding_vocab_matrix_orig.shape)
-                
-                
                 
             #
             # NB we use different embedding vocab matrices here depending upon the pretrained model
@@ -977,7 +753,7 @@ class LCDataset:
             elif (self.pretrained == 'llama'):
                 print("creating vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary...")
                 
-                self.model = model.to(self.device)
+                self.model = self.model.to(self.device)
                 print(f"Using device: {self.device}")  # To confirm which device is being used
 
                 self.llama_vocab_embeddings = {}
@@ -989,12 +765,35 @@ class LCDataset:
             
                 print("llama_vocab_embeddings:", type(self.llama_vocab_embeddings), len(self.llama_vocab_embeddings))
             
-                self.embedding_vocab_matrix_new = self.convert_dict_to_matrix(self.llama_vocab_embeddings, self.vocab_ndarr, self.embedding_dim)
+                # Function to convert llama_vocab_embeddings (dict) to a numpy matrix
+                def convert_dict_to_matrix(vocab_embeddings, vocab, embedding_dim):
+                    
+                    print("converting dict to matrix...")
+                    
+                    # Assuming all embeddings have the same dimension and it's correctly 4096 as per the LLaMA model dimension
+                    embedding_dim = embedding_dim
+                    embedding_matrix = np.zeros((len(vocab), embedding_dim))  # Shape (vocab_size, embedding_dim)
+
+                    print("embedding_dim:", embedding_dim)
+                    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+                    
+                    for i, token in enumerate(vocab):
+                        if token in vocab_embeddings:
+                            # Direct assignment of the embedding which is already in the correct shape (4096,)
+                            embedding_matrix[i, :] = vocab_embeddings[token]
+                        else:
+                            # Initialize missing tokens with zeros or a small random value
+                            embedding_matrix[i, :] = np.zeros(embedding_dim)
+
+                    return embedding_matrix
+
+                self.embedding_vocab_matrix_new = convert_dict_to_matrix(self.llama_vocab_embeddings, self.vocab_ndarr, self.embedding_dim)
                 print("embedding_vocab_matrix_new:", type(self.embedding_vocab_matrix_new), self.embedding_vocab_matrix_new.shape)
                 
                 self.embedding_vocab_matrix = self.embedding_vocab_matrix_new
         else:
             raise ValueError("Invalid pretrained type.")
+        
             
         """
         # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
@@ -1010,17 +809,7 @@ class LCDataset:
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
             
             
-    
-    
-    
-    
-    
-            
-            
-            
-            
-            
-            
+
     # ------------------------------------------------------------------------------------------------------------------------
     # load_bbc_news()
     #
@@ -1101,7 +890,8 @@ class LCDataset:
         # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
         if not isinstance(self.X_vectorized, csr_matrix):
             self.X_vectorized = csr_matrix(self.X_vectorized)
-        
+        """
+
         # Encode the labels
         label_encoder = LabelEncoder()
         self.y = label_encoder.fit_transform(train_set['Category'])
@@ -1109,72 +899,12 @@ class LCDataset:
         # Convert Y to a sparse matrix
         self.y_sparse = csr_matrix(y).T         # Transpose to match the expected shape
 
+        """
         # NB we return X (features) and y (target labels) as sparse arrays
         #return X_vectorized, y_sparse, self.target_names, self.class_type, self.embedding_vocab_matrix, self.weighted_embeddings  
         """
 
-    # ---------------------------------------------------------------------------------------
-    # generate_weighted_embeddings()
-    #
-    # calculate the weighted average of the pretrained embeddings for each document. 
-    # For each document, it tokenizes the text, retrieves the corresponding embeddings from (pretrained) 
-    # embedding_matrix, and weights them by their TF-IDF scores.
-    # 
-    # This method returns a NumPy array where each row is a document's embedding.  
-    # ---------------------------------------------------------------------------------------    
-    def get_word_based_weighted_embeddings(self, text_data, vectorizer, embedding_vocab_matrix):
-        
-        print("get_word_based_weighted_embeddings...")
-        
-        document_embeddings = []
-        
-        for doc in text_data:
-            # Tokenize the document and get token IDs
-            tokens = doc.split()
-            token_ids = [vectorizer.vocabulary_.get(token.lower(), None) for token in tokens]
-
-            # Calculate TF-IDF weights for the tokens
-            tfidf_vector = vectorizer.transform([doc]).toarray()[0]
-
-            # Aggregate the embeddings weighted by TF-IDF
-            weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
-            total_weight = 0.0
-
-            for token, token_id in zip(tokens, token_ids):
-                if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
-                    weight = tfidf_vector[token_id]
-                    weighted_sum += embedding_vocab_matrix[token_id] * weight
-                    total_weight += weight
-
-            if total_weight > 0:
-                doc_embedding = weighted_sum / total_weight
-            else:
-                doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])
-
-            document_embeddings.append(doc_embedding)
-
-        return np.array(document_embeddings)
-    
-    # Project the TF-IDF vectors into the LLaMA embedding space
-    def llama_weighted_average_vectorization(self, tfidf_vectors, vocab_embeddings, vocab):
-        
-        print("projecting tfidf vectorized data to llama embeddings...")
-            
-        print("tfidf_vectors:", type(tfidf_vectors), tfidf_vectors.shape)
-        print("vocab_embeddings:", type(vocab_embeddings), len(vocab_embeddings))
-        print("vocab:", type(vocab), vocab.shape)
-        
-        embedded_vectors = np.zeros((tfidf_vectors.shape[0], list(vocab_embeddings.values())[0].shape[1]))
-        print("embedded_vectors:", type(embedded_vectors), embedded_vectors.shape)
-        
-        for i, doc in enumerate(tfidf_vectors):
-            for j, token in enumerate(vocab):
-                if token in vocab_embeddings:
-                    embedded_vectors[i] += doc[j] * vocab_embeddings[token].squeeze()
-        
-        return embedded_vectors
-
-
+        return self.target_names
 
 
     # --------------------------------------------------------------------------------------------------------------------
@@ -1200,48 +930,100 @@ class LCDataset:
 
             # BERT embeddings        
             if (self.pretrained == 'bert'): 
+
                 self.weighted_embeddings = self.get_weighted_bert_embeddings(
-                    texts=self.X_raw.tolist(), 
-                    model=self.model, 
-                    tokenizer=self.tokenizer, 
-                    vectorizer=self.vectorizer, 
-                    device=self.device, 
+                    self,
+                    texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )  
+                    )  
                 
             # LLaMa embeddings
             elif (self.pretrained == 'llama'):
                 
-                """
-                weighted_embeddings_old = get_weighted_llama_embeddings(
-                    texts=train_set['Text'].tolist(), 
-                    model=model, 
-                    tokenizer=tokenizer, 
-                    vectorizer=vectorizer, 
-                    device=device, 
-                    batch_size=batch_size, 
-                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )        
-                print("weighted_embeddings_old:", type(weighted_embeddings_old), weighted_embeddings_old.shape)
-                """
-                
-                self.weighted_embeddings_new = self.llama_weighted_average_vectorization(self.X_vectorized.toarray(), self.llama_vocab_embeddings, self.vocab_ndarr)
+
+                # Project the TF-IDF vectors into the LLaMA embedding space
+                def llama_weighted_average_vectorization(tfidf_vectors, vocab_embeddings, vocab):
+                    
+                    print("projecting tfidf vectorized data to llama embeddings...")
+                        
+                    print("tfidf_vectors:", type(tfidf_vectors), tfidf_vectors.shape)
+                    print("vocab_embeddings:", type(vocab_embeddings), len(vocab_embeddings))
+                    print("vocab:", type(vocab), vocab.shape)
+                    
+                    embedded_vectors = np.zeros((tfidf_vectors.shape[0], list(vocab_embeddings.values())[0].shape[1]))
+                    print("embedded_vectors:", type(embedded_vectors), embedded_vectors.shape)
+                    
+                    # Add tqdm progress bar for iterating over documents
+                    for i, doc in tqdm(enumerate(tfidf_vectors), total=tfidf_vectors.shape[0], desc="converting vectorized text into LlaMa embedding (vocabulary) space..."):
+                        for j, token in enumerate(vocab):
+                            if token in vocab_embeddings:
+                                embedded_vectors[i] += doc[j] * vocab_embeddings[token].squeeze()
+                    
+                    return embedded_vectors
+
+                # Generate the weighted average embeddings for the dataset
+                self.weighted_embeddings_new = llama_weighted_average_vectorization(
+                    self.X_vectorized.toarray(),
+                    self.llama_vocab_embeddings,
+                    self.vocab_ndarr
+                    )
+
                 print("weighted_embeddings_new:", type(self.weighted_embeddings_new), self.weighted_embeddings_new.shape)
                 
                 self.weighted_embeddings = self.weighted_embeddings_new
         else:
+
+            # ---------------------------------------------------------------------------------------
+            # get_word_based_weighted_embeddings()
+            #
+            # calculate the weighted average of the pretrained embeddings for each document. 
+            # For each document, it tokenizes the text, retrieves the corresponding embeddings from (pretrained) 
+            # embedding_matrix, and weights them by their TF-IDF scores.
+            # 
+            # This method returns a NumPy array where each row is a document's embedding.  
+            # ---------------------------------------------------------------------------------------    
+            def get_word_based_weighted_embeddings(text_data, vectorizer, embedding_vocab_matrix):
+                
+                print("get_word_based_weighted_embeddings...")
+                
+                document_embeddings = []
+                
+                for doc in text_data:
+                    # Tokenize the document and get token IDs
+                    tokens = doc.split()
+                    token_ids = [vectorizer.vocabulary_.get(token.lower(), None) for token in tokens]
+
+                    # Calculate TF-IDF weights for the tokens
+                    tfidf_vector = vectorizer.transform([doc]).toarray()[0]
+
+                    # Aggregate the embeddings weighted by TF-IDF
+                    weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
+                    total_weight = 0.0
+
+                    for token, token_id in zip(tokens, token_ids):
+                        if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
+                            weight = tfidf_vector[token_id]
+                            weighted_sum += embedding_vocab_matrix[token_id] * weight
+                            total_weight += weight
+
+                    if total_weight > 0:
+                        doc_embedding = weighted_sum / total_weight
+                    else:
+                        doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])
+
+                    document_embeddings.append(doc_embedding)
+
+                return np.array(document_embeddings)
             
             # Word-based embeddings
-            self.weighted_embeddings = self.get_word_based_weighted_embeddings(
+            self.weighted_embeddings = get_word_based_weighted_embeddings(
                 self.X_raw, 
                 self.vectorizer, 
                 self.embedding_vocab_matrix
                 )
             
         print("weighted_embeddings:", type(self.weighted_embeddings), self.weighted_embeddings.shape)
-        
-        
         
         
 
@@ -1309,27 +1091,27 @@ class LCDataset:
         
         metadata = ('headers', 'footers', 'quotes')
         
-        devel = fetch_20newsgroups(subset='train', remove=metadata)
-        test = fetch_20newsgroups(subset='test', remove=metadata)
+        self.devel = fetch_20newsgroups(subset='train', remove=metadata)
+        self.test = fetch_20newsgroups(subset='test', remove=metadata)
 
         self.classification_type = 'singlelabel'
         
         self.class_type = 'singlelabel'
         
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_target, self.test_target = devel.target, test.target
+        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+        self.devel_target, self.test_target = self.devel.target, self.test.target
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
 
-        self.label_names = devel.target_names           # set self.labels to the class label names
+        self.label_names = self.devel.target_names           # set self.labels to the class label names
 
-        self.X_raw = devel.data
+        self.X_raw = self.devel.data
         
         print("removing stopwords...")
 
         # Remove stopwords from the raw text
-        texts = self.X_raw
+        #texts = self.X_raw
         self.X_raw = self.remove_stopwords(self, self.X_raw)
-        print("X_raw:", type(self.X_raw), len(self.X_raw))
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
         
         self.target_names = self.label_names
         
@@ -1341,6 +1123,13 @@ class LCDataset:
         if (num_labels != num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
+
+        # Encode the labels
+        label_encoder = LabelEncoder()
+        self.y = label_encoder.fit_transform(self.devel_target)
+        
+        # Convert Y to a sparse matrix
+        self.y_sparse = csr_matrix(self.y).T                   # Transpose to match the expected shape
 
         return self.label_names
 
@@ -1439,27 +1228,6 @@ class LCDataset:
             return self.loaded
         else:
             return False
-        
-
-    def vectorize(self):
-
-        print("vectorizing dataset...")
-        
-        if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
-
-            print("self does not have Xtr or Xte attributes, transforming and sorting...")
-
-            self.Xtr = self._vectorizer.transform(self.devel_raw)
-            self.Xte = self._vectorizer.transform(self.test_raw)
-            self.Xtr.sort_indices()
-            self.Xte.sort_indices()
-        
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        
-        return self.Xtr, self.Xte
-
-
 
     def analyzer(self):
         return self._vectorizer.build_analyzer()
@@ -1509,7 +1277,7 @@ class LCDataset:
 
 
     @classmethod
-    def loadpt(cls, dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE):
+    def loadpt(cls, dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word'):
 
         print("LCDataset::loadpt():", dataset, PICKLE_DIR)
 
@@ -1521,11 +1289,7 @@ class LCDataset:
         print(f"Loading data set {dataset}...")
 
         pickle_file = PICKLE_DIR + pickle_file_name                                     
-    
-        if ([pretrained in ['bert', 'llama']]):
-            emb_type = 'token'
-        else:    
-            emb_type = 'word'    
+
             
         #
         # we pick up the vectorized dataset along with the associated pretrained 
@@ -1537,7 +1301,9 @@ class LCDataset:
             
             print(f"Loading tokenized data from '{pickle_file}'...")
             
-            X, y, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
+            X_vectorized, y_sparse, target_names, class_type, embedding_vocab_matrix, weighted_embeddings = load_from_pickle(pickle_file)
+
+            return X_vectorized, y_sparse, target_names, class_type, embedding_vocab_matrix, weighted_embeddings
         else:
             print(f"'{pickle_file}' not found, loading {dataset}...")
             
@@ -1552,15 +1318,15 @@ class LCDataset:
 
             # Save the tokenized matrices to a pickle file
             save_to_pickle(
-                cls.X_raw,                          # vectorized data
-                cls.y_sparse,                          # labels
+                cls.X_vectorized,               # vectorized data
+                cls.y_sparse,                   # labels
                 cls.target_names,               # target names
                 cls.class_type,                 # class type (single-label or multi-label):
                 cls.embedding_vocab_matrix,     # vector representation of the dataset vocabulary
                 cls.weighted_embeddings,        # weighted avg embedding representation of dataset
                 pickle_file)         
     
-        return cls.X, cls.y, cls.target_names, cls.class_type, cls.embedding_vocab_matrix, cls.weighted_embeddings
+            return cls.X_vectorized, cls.y_sparse, cls.target_names, cls.class_type, cls.embedding_vocab_matrix, cls.weighted_embeddings
     
             
             
@@ -1609,6 +1375,36 @@ class LCDataset:
             dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type)
 
         return dataset
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+# Save X, y sparse matrices, and vocabulary to pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, pickle_file):
+    
+    print(f"Saving pickle file: {pickle_file}...")
+    
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+    
+    with open(pickle_file, 'wb') as f:
+        # Save the sparse matrices and vocabulary as a tuple
+        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings), f)
+
+# ------------------------------------------------------------------------------------------------------------------------
+# Load X, y sparse matrices, and vocabulary from pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def load_from_pickle(pickle_file):
+    
+    print(f"Loading pickle file: {pickle_file}...")
+    
+    with open(pickle_file, 'rb') as f:
+        X, y, target_names, class_type, embedding_matrix, weighted_embeddings = pickle.load(f)
+
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+
+    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings
 
 
 def _label_matrix(tr_target, te_target):
