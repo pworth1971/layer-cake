@@ -621,12 +621,12 @@ def set_method_name2(opt, vtype='tfidf'):
         method_name += f'-supervised-{opt.supervised_method}'
 
     if (opt.mix):
-        method_name += f'-mix:{opt.mix}'
+        method_name += f'-{opt.mix}'
    
     if (opt.optimc):
-        method_name += f'-opC'
+        method_name += f'-optC'
     else:
-        method_name += f'-default'
+        method_name += f'-defC'
          
     return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -705,71 +705,3 @@ def get_system_resources():
 
     return operating_system, cpus, mem, gpus
 
-
-
-
-
-    
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
-def create_confusion_matrix(y_test, y_pred, title, file_name=OUT_DIR+'svm_20newsgroups_confusion_matrix_best_model_table.png', debug=False):
-
-    print("Creating confusion matrix...")
-
-    # Assuming y_test and y_pred_best are already defined
-    conf_matrix = confusion_matrix(y_test, y_pred)
-
-    # Plotting the confusion matrix as a table with numbers
-    fig, ax = plt.subplots(figsize=(12, 8))  # Increase the width and height of the figure
-
-    # Hide axes
-    ax.xaxis.set_visible(False) 
-    ax.yaxis.set_visible(False)
-    ax.set_frame_on(False)
-
-    # Create the table with smaller font sizes and adjusted scale
-    table = ax.table(
-        cellText=conf_matrix,
-        rowLabels=[f'Actual {i}' for i in range(conf_matrix.shape[0])],
-        colLabels=[f'Predicted {i}' for i in range(conf_matrix.shape[1])],
-        cellLoc='center',
-        loc='center'
-    )
-
-    # Adjust the font size and layout
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)  # Reduced font size for better fitting
-    table.scale(1.2, 1.2)
-
-    # Add a title with centered text
-    plt.title(title, fontsize=16, pad=20)
-
-    # Adjust layout to add more padding around the plot
-    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)  # Increase padding on the left
-
-    # Save the plot to a file
-    confusion_matrix_filename = file_name
-    plt.savefig(confusion_matrix_filename, bbox_inches='tight')  # Ensure everything is saved in the output file
-    plt.show()
-
-    print(f"Confusion matrix saved as {confusion_matrix_filename}")
-
-    accuracy = accuracy_score(y_test, y_pred)
-
-    # Plain text explanation of the confusion matrix
-    if debug:
-        print("\nHow to read this confusion matrix:")
-        print("------------------------------------------------------")
-        print("The confusion matrix shows the performance of the classification model.")
-        print("Each row of the matrix represents the actual classes, while each column represents the predicted classes.")
-        print("Values on the diagonal (from top-left to bottom-right) represent correct predictions (true positives and true negatives).")
-        print("Values outside the diagonal represent incorrect predictions (false positives and false negatives).")
-        print("\nAccuracy Score: {:.2f}%".format(accuracy * 100))
-        
-        print("\nConfusion Matrix Values:")
-        for i in range(len(conf_matrix)):
-            print(f"Actual class {i}:")
-            for j in range(len(conf_matrix[i])):
-                print(f"  Predicted as class {j}: {conf_matrix[i][j]}")
-
-# --------------------------------------------------------------------------------------------------------------------------------------------

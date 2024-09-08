@@ -1,9 +1,9 @@
-
-from nltk import TopDownChartParser
 import numpy as np
-import os
+
 import argparse
 from time import time
+
+from scipy.sparse import csr_matrix, csc_matrix
 
 import plotly.offline as pyo
 import plotly.graph_objs as go
@@ -11,18 +11,22 @@ import plotly.graph_objs as go
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn import metrics
-from sklearn.metrics import accuracy_score, f1_score, precision_score, classification_report
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, precision_score
 from sklearn.metrics import make_scorer, recall_score, hamming_loss, jaccard_score
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import MultinomialNB, ComplementNB
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.utils.multiclass import type_of_target
+from sklearn.preprocessing import LabelEncoder
 
-from util.common import initialize, SystemResources
 from data.lc_dataset import LCDataset
+from util.common import OUT_DIR, initialize, SystemResources
 from util.metrics import evaluation
+from util.multilabel_classifier import MLClassifier
+
 
 import warnings
-from ipykernel.pickleutil import class_type
-from tensorflow.python.keras.constraints import nonneg
 warnings.filterwarnings('ignore')
 
 #
@@ -30,14 +34,12 @@ warnings.filterwarnings('ignore')
 #
 PICKLE_DIR = '../pickles/'
 VECTOR_CACHE = '../.vector_cache'
+OUT_DIR = '../out/'
 
 TEST_SIZE = 0.2
 
 NUM_JOBS = -1          # important to manage CUDA memory allocation
 #NUM_JOBS = 40          # for rcv1 dataset which has 101 classes, too many to support in parallel
-
-
-
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -64,6 +66,7 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
     # Support Vector Machine Classifier
     if (args.learner == 'svm'):                                     
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(
+            args.dataset,
             X_train,
             X_test,
             y_train,
@@ -76,6 +79,7 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
     # Logistic Regression Classifier
     elif (args.learner == 'lr'):                                  
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(
+            args.dataset,
             X_train,
             X_test,
             y_train,
@@ -88,6 +92,7 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
     # Naive Bayes (MultinomialNB) Classifier
     elif (args.learner == 'nb'):                                  
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(
+            args.dataset,
             X_train,
             X_test,
             y_train,
@@ -112,325 +117,346 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_svm_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+    
+    print("\n\trunning SVM model...")
 
-    if (not args.optimc):
-        
-        print("Training default Support Vector Machine model...")
+    print("Training Support Vector Machine model using OneVsRestClassifier...")
 
-        svc = LinearSVC(max_iter=1000)
-        svc.fit(X_train, y_train)
-        y_pred_default = svc.predict(X_test)
-        
-        #print("\nDefault Support Vector Mechine Model Performance:")
-        print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4))
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        classifier = OneVsRestClassifier(LinearSVC(class_weight='balanced', dual='auto', max_iter=1000))
+    else:
+        print("Single-label classification detected. Using regular SVM...")
+        classifier = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
+
+    if not args.optimc:
+        svc = LinearSVC(dual='auto', max_iter=1000)
+        ovr_svc = OneVsRestClassifier(svc)
+        ovr_svc.fit(X_train, y_train)
+        y_pred_default = ovr_svc.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_default
 
-    elif (args.optimc):                             # Optimize Support Vector Machine with GridSearchCV
-
+    # Case with optimization using GridSearchCV
+    else:
         print("Optimizing Support Vector Machine model with GridSearchCV...")
-
-        param_grid = {
-            'penalty': ['l1', 'l2'],                        # Regularization method
-            'loss': ['hinge', 'squared_hinge'],             # Loss function
-            'multi_class': ['ovr', 'crammer_singer'],       # Multi-class strategy
-            'class_weight': [None, 'balanced'],             # Class weights
-            'dual': [True, False],                          # Dual or primal formulation
-            'C': np.logspace(-3, 3, 7)                      # Regularization parameter   
-        }
         
-        print("param_grid:", param_grid)
+        param_grid = {
+            'estimator__penalty': ['l1', 'l2'],
+            'estimator__loss': ['hinge', 'squared_hinge'],
+            'estimator__C': np.logspace(-3, 3, 7)
+        } if class_type == 'multilabel' else {
+            'penalty': ['l1', 'l2'],
+            'loss': ['hinge', 'squared_hinge'],
+            'C': np.logspace(-3, 3, 7)
+        }
 
-        cross_validation = StratifiedKFold()
-
+        # Add zero_division=0 to precision and recall to suppress the warnings
         scorers = {
             'accuracy_score': make_scorer(accuracy_score),
             'f1_score': make_scorer(f1_score, average='micro'),
-            'recall_score': make_scorer(recall_score, average='micro'),
-            'precision_score': make_scorer(precision_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
             'hamming_loss': make_scorer(hamming_loss),
-            'jaccard_score': make_scorer(jaccard_score, average='micro')
-            }
+        }
 
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
         grid_search = GridSearchCV(
-            n_jobs=-1, 
-            estimator=LinearSVC(max_iter=1000),
+            estimator=classifier,
+            param_grid=param_grid,
+            scoring=scorers,
             refit='f1_score',
-            param_grid=param_grid,
-            cv=cross_validation,
-            scoring=scorers,
-            return_train_score=True                         # ensure train scores are calculated
-            )
-
-        grid_search.fit(X_train, y_train)                   # Fit the model
-
-        print('Best parameters: {}'.format(grid_search.best_params_))
-        print("best_estimator:", grid_search.best_estimator_)
-        print('Best score: {}'.format(grid_search.best_score_))
-        #print("cv_results_:", grid_search.cv_results_)
-
-        results = grid_search.cv_results_
-
-        # Extract the best estimator from the GridSearchCV
-        best_model = grid_search.best_estimator_
-
-        # Predict on the test set using the best model
-        y_pred_best = best_model.predict(X_test)
-
-        print("Accuracy best score:", metrics.accuracy_score(y_test, y_pred_best))
-        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4))
-
-        y_preds = y_pred_best
-
-        if (args.plot):
-
-            print("Plotting the results...")
-
-            # Define the metrics we want to plot
-            metrics_to_plot = ['accuracy_score', 'f1_score', 'recall_score', 'precision_score', 'hamming_loss']
-
-            # Iterate over each metric to create a separate plot
-            for metric in metrics_to_plot:
-                traces = []
-
-                print(f"Plotting {metric}...")
-
-                for sample in ["train", "test"]:
-
-                    key_mean = f"mean_{sample}_{metric}"
-                    key_std = f"std_{sample}_{metric}"
-
-                    print(f"Plotting {key_mean}...")
-                    print(f"Plotting {key_std}...")
-
-                    # Directly use the keys without conditional check
-                    sample_score_mean = np.nan_to_num(np.array(results[key_mean]) * 100)  # Convert to percentage and handle NaN
-                    sample_score_std = np.nan_to_num(np.array(results[key_std]) * 100)  # Convert to percentage and handle NaN
-
-                    x_axis = np.linspace(0, 100, len(sample_score_mean))
-
-                    # Create the trace for Plotly
-                    traces.append(
-                        go.Scatter(
-                            x=x_axis,
-                            y=sample_score_mean,
-                            mode='lines+markers',
-                            name=f"{metric} ({sample})",
-                            line=dict(dash='dash' if sample == 'train' else 'solid'),
-                            error_y=dict(
-                                type='data',
-                                array=sample_score_std,
-                                visible=True
-                            ),
-                            hoverinfo='x+y+name'
-                        )
-                    )
-
-                # Define the layout of the plot
-                layout = go.Layout(
-                    title={'text': f"Training and Test Scores for {metric.capitalize()}",
-                        'y':0.9,
-                        'x':0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top'},
-                    xaxis=dict(title="Training Sample Percentage (%)"),
-                    yaxis=dict(title="Score (%)", range=[0, 100]),
-                    hovermode='closest'
-                )
-
-                # Create the figure
-                fig = go.Figure(data=traces, layout=layout)
-
-                # Write the plot to an HTML file
-                filename = f'{OUT_DIR}training_test_scores_{metric}.html'
-                pyo.plot(fig, filename=filename)
-
-                print(f"Saved plot for {metric} as {filename}")
-
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
-
-    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
-
-# ---------------------------------------------------------------------------------------------------------------------
-# run_lr_model()
-# ---------------------------------------------------------------------------------------------------------------------
-def run_lr_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
-
-    # Default Logistic Regression Model
-    print("Training default Logistic Regression model...")
-    
-    print("X_train:", type(X_train), X_train.shape)
-    print("X_test:", type(X_test), X_test.shape)
-    
-    if (not args.optimc):
-        
-        print("Optimization not requested, training default Logistic Regression model...")
-    
-        lr = LogisticRegression(max_iter=1000)
-        lr.fit(X_train, y_train)
-        y_pred_default = lr.predict(X_test)
-        
-        #print("\nDefault Logistic Regression Model Performance:")
-        print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4))
-
-        y_preds = y_pred_default
-
-    elif (args.optimc):
-        
-        # Optimize Logistic Regression with GridSearchCV
-        print("Optimizing Logistic Regression model with GridSearchCV...")
-
-        param_grid = {
-            'C': [0.01, 0.1, 1, 10, 100],                                           # Inverse of regularization strength
-            'penalty': ['l1', 'l2'],                                                # Regularization method (L2 Ridge)
-            'solver': ['liblinear', 'lbfgs', 'newton-cg', 'sag', 'saga']            # Solver types
-        }
-        
-        print("param_grid:", param_grid)
-
-        # Define scorers
-        scorers = {
-            'accuracy_score': make_scorer(accuracy_score),
-            'f1_score': make_scorer(f1_score, average='micro'),
-            'recall_score': make_scorer(recall_score, average='micro'),
-            'precision_score': make_scorer(precision_score, average='micro')
-        }
-
-        # Initialize GridSearchCV
-        grid_search = GridSearchCV(
             n_jobs=-1,
-            estimator =  LogisticRegression(max_iter=1000),
-            param_grid=param_grid,
-            scoring=scorers,
-            refit='f1_score',  # Optimize on F1 Score
-            cv=StratifiedKFold(n_splits=5),
+            #cv=StratifiedKFold(n_splits=5),
+            cv=5,
             return_train_score=True
         )
 
-        grid_search.fit(X_train, y_train)           # Fit the model
+        grid_search.fit(X_train, y_train)
+        
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
 
-        # Display the best parameters
-        print('Best parameters found by GridSearchCV:')
-        print(grid_search.best_params_)
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
 
-        # Evaluate on the test set
-        y_pred_optimized = grid_search.best_estimator_.predict(X_test)
+        y_preds = y_pred_best
 
-        #print("\nOptimized Logistic Regression Model Performance:")
-        print(f"Accuracy: {accuracy_score(y_test, y_pred_optimized):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred_optimized, target_names=target_names, digits=4))
+        # confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with SVM Model',
+                file_name=f'{OUT_DIR}{dataset}_svm_confusion.png',
+                debug=True
+            )
 
-        y_preds = y_pred_optimized
+        y_preds = y_pred_best
 
-    if (args.cm):
-        # Optionally, plot confusion matrix for the optimized model
-        create_confusion_matrix(
-            y_test, 
-            y_pred_optimized, 
-            title='Confusion Matrix for Optimized Logistic Regression Model',
-            file_name=OUT_DIR+'bbc_news_logistic_regression_confusion_matrix.png',
-            debug=False
-        )
-
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
-
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+    
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # run_nb_model()
 # ---------------------------------------------------------------------------------------------------------------------
-def run_nb_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
-
-    print("Building default Naive Bayes Classifier...")
-
-    print("X_train:", type(X_train), X_train.shape)
-    print("X_test:", type(X_test), X_test.shape)
+def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
     
-    if (not args.optimc):
-            
-        print("Optimization not requested, training default Naive Bayes model...")
-        
+    print("\n\trunning Naive Bayes model...")
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        classifier = OneVsRestClassifier(MultinomialNB())
+    else:
+        print("Single-label classification detected. Using regular Naive Bayes...")
+        classifier = MultinomialNB()
+
+    if not args.optimc:
         nb = MultinomialNB()
-        nb.fit(X_train,y_train)
-        test_predict = nb.predict(X_test)
+        ovr_nb = OneVsRestClassifier(nb) if class_type in ['multilabel', 'multi-label'] else nb
+        ovr_nb.fit(X_train, y_train)
+        y_pred_default = ovr_nb.predict(X_test)
 
-        train_accuracy = round(nb.score(X_train,y_train)*100)
-        test_accuracy =round(accuracy_score(test_predict, y_test)*100)
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
 
-        print("Naive Bayes Train Accuracy Score : {}% ".format(train_accuracy ))
-        print("Naive Bayes Test Accuracy Score  : {}% ".format(test_accuracy ))
-        print(classification_report(y_true=y_test, y_pred=test_predict, target_names=target_names, digits=4))
+        y_preds = y_pred_default
 
-        y_preds = test_predict
+    # Case with optimization using GridSearchCV
+    else:
+        print("Optimizing Naive Bayes model with GridSearchCV...")
 
-    elif (args.optimc):
-
-        print("Optimizing the model using GridSearchCV...")
-        
-        # Define the parameter grid
         param_grid = {
-            'alpha': [0.1, 0.5, 1.0, 1.5, 2.0],                 # Smoothing parameter for Naive Bayes
+            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        } if class_type == 'multilabel' else {
+            'alpha': [0.1, 0.5, 1.0, 2.0]
         }
-        
-        print("param_grid:", param_grid)
 
-        # Define scorers
+        # Add zero_division=0 to precision and recall to suppress the warnings
         scorers = {
             'accuracy_score': make_scorer(accuracy_score),
             'f1_score': make_scorer(f1_score, average='micro'),
-            'recall_score': make_scorer(recall_score, average='micro'),
-            'precision_score': make_scorer(precision_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
             'hamming_loss': make_scorer(hamming_loss),
-            'jaccard_score': make_scorer(jaccard_score, average='micro')
         }
 
-        # Initialize GridSearchCV
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
         grid_search = GridSearchCV(
-            n_jobs=-1,
-            estimator=MultinomialNB(),
+            estimator=classifier,
             param_grid=param_grid,
             scoring=scorers,
-            refit='f1_score',                           # Optimize on F1 Score
-            cv=StratifiedKFold(n_splits=5),
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
             return_train_score=True
         )
 
-        # Fit the model
         grid_search.fit(X_train, y_train)
+        
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
 
-        # Display the best parameters
-        print('Best parameters found by GridSearchCV:')
-        print(grid_search.best_params_)
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best)::.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
 
-        # Evaluate on the test set
-        y_pred = grid_search.best_estimator_.predict(X_test)
+        y_preds = y_pred_best
 
-        #print("\nBest Estimator's Test Set Performance:")
-        print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-        print(f"F1 Score: {f1_score(y_test, y_pred, average='micro'):.4f}")
-        print(f"Recall: {recall_score(y_test, y_pred, average='micro'):.4f}")
-        print(f"Precision: {precision_score(y_test, y_pred, average='micro'):.4f}")
-        print(classification_report(y_true=y_test, y_pred=y_pred, target_names=target_names, digits=4))
-
-        y_preds = y_pred
-
-        if (args.cm):
-            # Optionally, plot confusion matrix
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
             create_confusion_matrix(
-                y_test, 
-                y_pred, 
-                title='Confusion Matrix for Optimized Naive Bayes Model',
-                file_name=OUT_DIR+'bbc_news_naive_bayes_confusion_matrix.png',
-                debug=False
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Naive Bayes Model',
+                file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
+                debug=True
             )
-    
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation(y_test, y_preds, classification_type=class_type)
 
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+    
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_lr_model()
+# ---------------------------------------------------------------------------------------------------------------------
+def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+
+    print("\n\tRunning Logistic Regression model...")
+
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
+    print("y_train:", type(y_train), y_train.shape)
+    print("y_test:", type(y_test), y_test.shape)
+    print("Target Names:", target_names)
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        classifier = OneVsRestClassifier(LogisticRegression(max_iter=1000, class_weight='balanced'))
+    else:
+        print("Single-label classification detected. Using regular Logistic Regression...")
+        classifier = LogisticRegression(max_iter=1000, class_weight='balanced')
+
+    if not args.optimc:
+        lr = LogisticRegression(max_iter=1000, class_weight='balanced')
+        ovr_lr = OneVsRestClassifier(lr)
+        ovr_lr.fit(X_train, y_train)
+        y_pred_default = ovr_lr.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_default
+
+    # Case with optimization using GridSearchCV
+    else:
+        print("Optimizing Logistic Regression model with GridSearchCV...")
+
+        param_grid = {
+            'estimator__C': np.logspace(-3, 3, 7),                      # Regularization strength
+            'estimator__penalty': ['l1', 'l2'],                         # Regularization method
+            'estimator__solver': ['liblinear', 'saga']                  # Solvers compatible with L1 and L2 regularization
+        } if class_type == 'multilabel' else {
+            'C': np.logspace(-3, 3, 7),
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear', 'saga']
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
+        grid_search = GridSearchCV(
+            estimator=classifier,
+            param_grid=param_grid,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True
+        )
+
+        grid_search.fit(X_train, y_train)
+        
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Logistic Regression Model',
+                file_name=f'{OUT_DIR}{dataset}_logistic_regression_confusion.png',
+                debug=True
+            )
+
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+    
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+
+
+
+
+
+
+def create_confusion_matrix(y_test, y_pred, category_names, title, file_name=OUT_DIR+'confusion_matrix.png', debug=True):
+    """
+    Create and display a confusion matrix with actual category names.
+    
+    Args:
+    y_test (array-like): Ground truth (actual labels).
+    y_pred (array-like): Predicted labels by the model.
+    category_names (list): List of actual category names.
+    title (str): Title of the plot.
+    file_name (str): File name to save the confusion matrix.
+    debug (bool): If True, will print additional information for debugging purposes.
+    """
+
+    print("Creating confusion matrix...")
+
+    # Generate confusion matrix
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Plot the confusion matrix with category names on the axes
+    fig, ax = plt.subplots(figsize=(12, 8))  # Set figure size
+
+    # Display confusion matrix as a heatmap
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=category_names, yticklabels=category_names, ax=ax)
+
+    # Set axis labels and title
+    ax.set_xlabel('Predicted Categories', fontsize=14)
+    ax.set_ylabel('Actual Categories', fontsize=14)
+    plt.title(title, fontsize=16, pad=20)
+
+    # Adjust layout and save the plot to a file
+    plt.tight_layout()
+    plt.savefig(file_name, bbox_inches='tight')  # Save to file
+    plt.show()  # Display plot
+
+    print(f"Confusion matrix saved as {file_name}")
+
+    # Calculate and print accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Accuracy Score: {accuracy * 100:.2f}%")
+
+    # Optionally print more detailed information
+    if debug:
+        print("\nConfusion Matrix Debug Information:")
+        print("------------------------------------------------------")
+        print("Confusion matrix shows actual classes as rows and predicted classes as columns.")
+        print("\nConfusion Matrix Values:")
+        for i in range(len(conf_matrix)):
+            print(f"Actual category '{category_names[i]}':")
+            for j in range(len(conf_matrix[i])):
+                print(f"  Predicted as '{category_names[j]}': {conf_matrix[i][j]}")
 
 
 
@@ -584,12 +610,37 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
 
 
 
-# --------------------------------------------------------------------------------------------------------------
-# Core processing function
-# --------------------------------------------------------------------------------------------------------------
-def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=None, embedding_path=None, supervised=False, method=None, args=None, logfile=None, system=None):
-    
-    print("\n\tclassify_data()...")
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# classify_data(): Core processing function
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=None, embedding_path=None, \
+    supervised=False, method=None, args=None, logfile=None, system=None):
+    """
+    Core function for classifying text data using various configurations like embeddings, methods, and models.
+
+    Parameters:
+    - dataset (str): The name of the dataset to use (e.g., '20newsgroups', 'ohsumed').
+    - vtype (str): The vectorization type (e.g., 'tfidf', 'count').
+    - pretrained_embeddings (str or None): Specifies the type of pretrained embeddings to use (e.g., 'bert', 'llama'). If None, no embeddings are used.
+    - embedding_path (str): Path to the pretrained embeddings file or directory.
+    - supervised (bool): Specifies whether supervised embeddings are used.
+    - method (str or None): Specifies the classification method (optional).
+    - args: Argument parser object, containing various flags for optimization and configuration (e.g., --optimc).
+    - logfile: Logfile object to store results and performance metrics.
+    - system: System object containing hardware information like CPU and GPU details.
+
+    Returns:
+    None: The function does not return anything, but it prints results and logs them into the specified logfile.
+
+    Workflow:
+    - Loads the dataset and the corresponding embeddings.
+    - Prepares the input data and target labels for training and testing.
+    - Splits the data into train and test sets.
+    - Generates embeddings if pretrained embeddings are specified.
+    - Calls the classification model (run_model) and logs the evaluation metrics.
+    """
+
+    print("\n\tclassifying...")
     
     if (pretrained_embeddings in ['bert', 'llama']):
         embedding_type = 'token'
@@ -614,20 +665,17 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
     print("X:", type(X), X.shape)
     print("y:", type(y), y.shape)
     
-    """
-    # Check if embedding_vocab_matrix is a dictionary or an ndarray and print accordingly
-    if isinstance(embedding_vocab_matrix, dict):
-        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Length:", len(embedding_vocab_matrix))
-    elif isinstance(embedding_vocab_matrix, np.ndarray):
-        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Shape:", embedding_vocab_matrix.shape)
-    else:
-        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), "Unsupported type")
-    """
-    
     # embedding_vocab_matrix should be a numpy array
     print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
-     
     print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
+
+    print("transforming labels...")
+    if isinstance(y, (csr_matrix, csc_matrix)):
+        y = y.toarray()  # Convert sparse matrix to dense array for multi-label tasks
+    # Ensure y is in the correct format for classification type
+    if class_type in ['singlelabel', 'single-label']:
+        y = y.ravel()                       # Flatten y for single-label classification
+    print("y after transformation:", type(y), y.shape)
 
     print("train_test_split...")
 
@@ -649,12 +697,6 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
 
     #print("y_train:", y_train)
     #print("y_test:", y_test)
-
-    y_train = y_train.toarray().ravel()             # Ensure y_train is a 1D array
-    y_test = y_test.toarray().ravel()               # Ensure y_test is a 1D array
-
-    print('y_train:', type(y_train), y_train.shape)
-    print('y_test:', type(y_test), y_test.shape)
 
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
@@ -682,7 +724,7 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
         
         sup_tend = time() - tinit
 
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='single-label')
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
 
     tend += sup_tend
 
@@ -694,9 +736,10 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', pretrained_embeddings=
     logfile.add_layered_row(tunable=False, measure='te-recall', value=recall, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
     logfile.add_layered_row(tunable=False, measure='te-jacard-index', value=j_index, timelapse=tend, system_type=system.get_os(), cpus=system.get_cpu_details(), mem=system.get_total_mem(), gpus=system.get_gpu_summary())
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
 
@@ -719,9 +762,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--supervised', action='store_true', default=False, help='use supervised embeddings')
 
-    parser.add_argument('--cm', action='store_true', default=False, help=f'create confusion matrix')
-
-    parser.add_argument('--plot', action='store_true', default=False, help=f'create plots of GridSearchCV metrics (if --optimc is True)')
+    parser.add_argument('--cm', action='store_true', default=False, help=f'create confusion matrix for underlying model')
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the model using relevant models params')
 

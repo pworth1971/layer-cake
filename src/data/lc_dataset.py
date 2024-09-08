@@ -47,7 +47,7 @@ VECTOR_CACHE = '../.vector_cache'
 DATASET_DIR = '../datasets/'
 PICKLE_DIR = '../pickles/'
 
-MAX_VOCAB_SIZE = 50000                                      # max feature size for TF-IDF vectorization
+MAX_VOCAB_SIZE = 25000                                      # max feature size for TF-IDF vectorization
 
 BERT_MODEL = 'bert-base-uncased'                            # dimension = 768
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
@@ -616,6 +616,8 @@ class LCDataset:
 
         return embeddings
 
+
+
     def get_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
         """
         Compute document embeddings using a pretrained BERT model by averaging token embeddings.
@@ -666,7 +668,6 @@ class LCDataset:
 
         # Return a 2D numpy array where each row is a document's final averaged embedding.
         return np.vstack(embeddings)
-
 
 
     def get_weighted_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
@@ -1314,7 +1315,8 @@ class LCDataset:
         print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
         
         # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(self.y).T  # Transpose to match the expected shape
+        #self.y_sparse = csr_matrix(self.y).T       # Transpose to match the expected shape
+        self.y_sparse = csr_matrix(self.y)          # without Transpose to match the expected shape
         print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
 
         return self.label_names
@@ -1395,7 +1397,7 @@ class LCDataset:
         #
         # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
         #
-        pickle_file_name=f'{dataset}_{vtype}_{pretrained}_tokenized.pickle'
+        pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{MAX_VOCAB_SIZE}_tokenized.pickle'
 
         print(f"Loading data set {dataset}...")
 

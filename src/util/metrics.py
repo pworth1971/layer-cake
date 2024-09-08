@@ -5,6 +5,8 @@ from scipy.sparse import csr_matrix, find, issparse
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard_score
 
+import numpy as np
+
 
 
 def evaluation(y_true, y_pred, classification_type='single-label', debug=False):
