@@ -23,7 +23,7 @@ import tarfile
 import gzip
 import shutil
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, csc_matrix
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -1108,36 +1108,71 @@ class LCDataset:
         
         
 
-
     def _load_reuters(self):
 
         print("\n\tloading reuters21578 dataset...")
 
-        data_path = os.path.join(get_data_home(), 'reuters21578')
+        data_path = os.path.join(DATASET_DIR, 'reuters21578')
         
-        devel = fetch_reuters21578(subset='train', data_path=data_path)
-        test = fetch_reuters21578(subset='test', data_path=data_path)
+        print("data_path:", data_path)  
+
+        self.devel = fetch_reuters21578(subset='train', data_path=data_path)
+        self.test = fetch_reuters21578(subset='test', data_path=data_path)
 
         #print("dev target names:", type(devel), devel.target_names)
         #print("test target names:", type(test), test.target_names)
 
         self.classification_type = 'multilabel'
-
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
-
-        self.label_names = devel.target_names           # set self.labels to the class label names
+        self.class_type = 'multilabel'
+        
+        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+        
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels:\n", self.labels)
 
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+        print("devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("test_target:", type(self.test_target), self.test_target.shape)
 
+        # Convert sparse targets to dense arrays
+        print("Converting devel_target from sparse matrix to dense array...")
+        self.devel_target = self.devel_target.toarray()                           # Convert to dense
+        self.test_target = self.test_target.toarray()                             # Convert to dense
+        print("devel_target (after processing):", type(self.devel_target), self.devel_target.shape)
+        print("test_target (after processing):", type(self.test_target), self.test_target.shape)
+
+        self.label_names = self.devel.target_names              # Set labels to class label names
+        print("self.label_names:\n", self.label_names)
+        
+        self.X_raw = self.devel.data
+        self.X_raw = self.remove_stopwords(self, self.X_raw)                        # Remove stopwords from the raw text
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
+        
+        self.target_names = self.label_names
+        
         self.num_labels = len(self.labels)
         self.num_label_names = len(self.label_names)
-
         print("# labels, # label_names:", self.num_labels, self.num_label_names)
-        
         if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
+
+        """
+        # Encode the labels using MultiLabelBinarizer
+        mlb = MultiLabelBinarizer()
+        self.y = mlb.fit_transform(self.devel_target)  # Transform multi-label targets into a binary matrix
+        """
+
+        # Now self.devel_target is already a dense NumPy array with shape (9603, 115), so no need for MultiLabelBinarizer.
+        self.y = self.devel_target
+        print("y:", type(self.y), self.y.shape)
+
+        # Convert Y to a sparse matrix
+        self.y_sparse = csr_matrix(self.y)  # No need for transpose
+        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
+
 
         return self.label_names
 
@@ -1311,7 +1346,7 @@ class LCDataset:
 
         # Encode the labels using MultiLabelBinarizer
         mlb = MultiLabelBinarizer()
-        self.y = mlb.fit_transform(self.devel_target)  # Transform multi-label targets into a binary matrix
+        self.y = mlb.fit_transform(self.devel_target)   # Transform multi-label targets into a binary matrix
         print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
         
         # Convert Y to a sparse matrix

@@ -24,9 +24,9 @@ CONF_MATRIX="--cm"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("ohsumed")
+declare -a datasets=("reuters21578")
 declare -a pickle_paths=("../pickles")
-declare -a learners=("nb" "lr")
+declare -a learners=("lr")
 declare -a vtypes=("tfidf")
 declare -a mixes=("vmode" "solo")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
