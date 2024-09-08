@@ -1,33 +1,49 @@
 import numpy as np
-
-from sklearn.datasets import fetch_20newsgroups
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.metrics import classification_report
-from src.ml_test.bert_test import EPOCHS
-from src.util.common import OUT_DIR
-from transformers import LlamaTokenizer, LlamaModel
-
-import torch
-from transformers import LlamaForSequenceClassification, LlamaTokenizer, Trainer, TrainingArguments
-from sklearn.datasets import fetch_20newsgroups
-from sklearn.model_selection import train_test_split
-from datasets import Dataset
-from sklearn.metrics import precision_recall_fscore_support
-
 import argparse
 import os
 from tqdm import tqdm
 import pandas as pd
 import pickle
 
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.metrics import precision_recall_fscore_support
+
+from datasets import Dataset
+
+import torch
+from transformers import LlamaTokenizer, LlamaTokenizerFast, LlamaModel
+from transformers import LlamaForSequenceClassification, Trainer, TrainingArguments
+# from transformers.models import llama
+
 import nltk
 from nltk.corpus import stopwords
-from transformers.models import llama
-from gensim.scripts.make_wiki import tfidf
+
 
 nltk.download('stopwords')
+
+
+# ---------------------------------------------------------------------------------------------------
+# constants
+#
+DATASET_DIR = '../datasets/'
+OUT_DIR = '../out'
+LOG_DIR = '../log'
+PICKLE_DIR = '../pickles'
+VECTOR_CACHE = '../.vector_cache'
+
+EPOCHS = 3
+MAX_VOCAB_SIZE = 1000
+TEST_SIZE = 0.2
+BATCH_SIZE = 8
+
+LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
+LLAMA_EMBEDDING_DIM = 4096
+TOKEN_TOKENIZER_MAX_LENGTH = 512
+# ---------------------------------------------------------------------------------------------------
+
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -43,55 +59,13 @@ HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 # ---------------------------------------------------------------------------------------------------
 
-import torch
-
-# Check for CUDA availability
-if torch.cuda.is_available():
-    print("CUDA is available")
-    device = torch.device("cuda")
-
-# Check for MPS availability (for Apple Silicon)
-elif torch.backends.mps.is_available():
-    print("MPS is available")
-    device = torch.device("mps")
-
-    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"          # disable memory upper limit
-
-# Default to CPU if neither CUDA nor MPS is available
-else:
-    print("Neither CUDA nor MPS is available, using CPU")
-    device = torch.device("cpu")
-
-print(f"Using device: {device}")
-
-
-
-# ---------------------------------------------------------------------------------------------------
-# constants
-#
-DATASET_DIR = '../datasets/'
-OUT_DIR = '../out/'
-LOG_DIR = '../log/'
-EPOCHS = 3
-MAX_VOCAB_SIZE = 30000
-
-llama_model_name = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
-
-PICKLE_DIR = '../pickles/'
-TEST_SIZE = 0.2
-
-LLAMA_EMBEDDING_DIM = 4096
-
-#dataset = 'bbc_news'
-dataset = '20newsgroups'
-# 
-# ---------------------------------------------------------------------------------------------------
-
-stop_words = set(stopwords.words('english'))
-
 
 def load_dataset(dataset = 'bbc_news'):
         
+    print("loading dataset...")
+
+    stop_words = set(stopwords.words('english'))
+
     #
     # BBC News 
     #
@@ -172,14 +146,9 @@ def load_dataset(dataset = 'bbc_news'):
 
 
 
-
-
-
-
-
 # ---------------------------------------------------------------------------------------------------------------------
 
-def get_llama_vocab_embeddings(embeddings_file=f'{PICKLE_DIR}/{dataset}_llama_vocab_embeddings_{MAX_VOCAB_SIZE}.pkl'):
+def get_llama_vocab_embeddings(embeddings_file, tfidf_vectorizer, tokenizer, device):
 
     print("get_llama_vocab_embeddings...")
 
@@ -201,10 +170,12 @@ def get_llama_vocab_embeddings(embeddings_file=f'{PICKLE_DIR}/{dataset}_llama_vo
         with open(embeddings_file, "wb") as f:
             pickle.dump(llama_vocab_embeddings, f)
 
+    return llama_vocab_embeddings
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 
-def run_solo(tfidf_vectorizer, X_train_tfidf, X_test_tfidf, y_train, y_test, target_names, llama_vocab_embeddings, vocab):
+def run_solo(X_train_tfidf, X_test_tfidf, y_train, y_test, target_names, vectorizer, llama_vocab_embeddings, vocab):
 
     print("running solo...")
 
@@ -227,14 +198,14 @@ def run_solo(tfidf_vectorizer, X_train_tfidf, X_test_tfidf, y_train, y_test, tar
         return embedded_vectors
 
     # convert the training and testing datasets
-    vocab = tfidf_vectorizer.get_feature_names_out()
+    vocab = vectorizer.get_feature_names_out()
     print("vocab (get_feature_names_out):", type(vocab), vocab.shape)
 
-    vect_vocab = tfidf_vectorizer.vocabulary_
+    vect_vocab = vectorizer.vocabulary_
     print("vect_vocab:", type(vect_vocab), len(vect_vocab))
 
     # Use the tokenizer's vocabulary directly, lowercased for consistency
-    lower_vect_vocab = {k.lower(): v for k, v in tfidf_vectorizer.vocabulary_.items()}
+    lower_vect_vocab = {k.lower(): v for k, v in vectorizer.vocabulary_.items()}
     print("lower_vect_vocab:", type(lower_vect_vocab), len(lower_vect_vocab))
             
     print("encoding dataset using LlaMa embeddings (weighted average approach)...")
@@ -246,19 +217,15 @@ def run_solo(tfidf_vectorizer, X_train_tfidf, X_test_tfidf, y_train, y_test, tar
 
     print("training SVM classifier...")
 
-    run_svm_model(X_train_encoded_wa, X_test_encoded_wa, y_train, y_test, target_names)
+    run_svm_model(
+        X_train_encoded_wa,
+        X_test_encoded_wa,
+        y_train,
+        y_test,
+        target_names,
+        vectorizer
+        )
 
-    """
-    # Train an SVM classifier on the projected features
-    svm_classifier = SVC(kernel='linear')
-    svm_classifier.fit(X_train_encoded_wa, y_train)
-
-    # Make predictions on the test set
-    y_pred = svm_classifier.predict(X_test_encoded_wa)
-
-    # Print classification report
-    print(classification_report(y_test, y_pred, target_names=target_names, digits=4))
-    """
 
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -266,7 +233,7 @@ def run_solo(tfidf_vectorizer, X_train_tfidf, X_test_tfidf, y_train, y_test, tar
 
 # ---------------------------------------------------------------------------------------------------------------------
 
-def run_dot(X_train_tfidf, X_test_tfidf, y_train, y_test, target_names, llama_vocab_embeddings, vocab):
+def run_dot(X_train_tfidf, X_test_tfidf, y_train, y_test, target_names, vectorizer, llama_vocab_embeddings, vocab):
 
     print("running dot...")
 
@@ -336,18 +303,24 @@ def run_dot(X_train_tfidf, X_test_tfidf, y_train, y_test, target_names, llama_vo
     # Print classification report
     print(classification_report(y_test, y_pred, target_names=target_names, digits=4))
     """
-    run_svm_model(X_train_projected_dot, X_test_projected_dot, y_train, y_test, category_names=target_names)
+
+    run_svm_model(
+        X_train_projected_dot,
+        X_test_projected_dot,
+        y_train,
+        y_test,
+        category_names=target_names,
+        vectorizer=vectorizer
+        )
 
 
 
-
-
-def run_svm_model(X_train, X_test, y_train, y_test, category_names, optimized=False, plot=False):
+def run_svm_model(X_train, X_test, y_train, y_test, category_names, vectorizer, optimized=False, plot=False):
 
     print("Training default Support Vector Machine model...")
     
     default_pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer()),
+        ('tfidf', vectorizer),
         ('lr', LinearSVC(max_iter=1000))
     ])
 
@@ -365,7 +338,7 @@ def run_svm_model(X_train, X_test, y_train, y_test, category_names, optimized=Fa
 
         # Define the pipeline
         pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer()),
+            ('tfidf', vectorizer),
             ('svm', LinearSVC(max_iter=1000))
         ])
 
@@ -495,8 +468,11 @@ def run_svm_model(X_train, X_test, y_train, y_test, category_names, optimized=Fa
 
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# fine_tune()
+# ---------------------------------------------------------------------------------------------------------------------
 
-def fine_tune(train_texts, test_texts, train_labels, test_labels, batch_size=8, epochs=3):
+def fine_tune(train_texts, test_texts, train_labels, test_labels, num_labels, device):
 
     print("fine tuning....")
 
@@ -504,37 +480,74 @@ def fine_tune(train_texts, test_texts, train_labels, test_labels, batch_size=8, 
     train_dataset = Dataset.from_dict({'text': train_texts, 'labels': train_labels})
     test_dataset = Dataset.from_dict({'text': test_texts, 'labels': test_labels})
 
-    # Step 2: Load the pretrained LLaMa model and tokenizer
-    model_name = llama_model_name 
-    tokenizer = LlamaTokenizer.from_pretrained(model_name)
-    model = LlamaForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+    print("\n\tbuilding the model...")
 
-    # Step 3: Tokenize the dataset
-    def tokenize_function(examples):
-        return tokenizer(examples['text'], padding="max_length", truncation=True)
+    model = LlamaForSequenceClassification.from_pretrained(
+        LLAMA_MODEL,
+        num_labels=num_labels,
+        cache_dir=VECTOR_CACHE + '/LLaMa'
+    ).to(device)
 
-    train_dataset = train_dataset.map(tokenize_function, batched=True)
-    test_dataset = test_dataset.map(tokenize_function, batched=True)
+    # Load the pre-trained LLaMA Fast tokenizer
+    tokenizer = LlamaTokenizerFast.from_pretrained(
+        LLAMA_MODEL,
+        cache_dir=VECTOR_CACHE + '/LLaMa'
+    )
 
-    train_dataset = train_dataset.remove_columns(["text"])
-    test_dataset = test_dataset.remove_columns(["text"])
+    # Ensure the tokenizer has a padding token
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+#        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+ #       model.resize_token_embeddings(len(tokenizer))  # Resize model's embeddings to accommodate the new token
+
+    # set the pad token of the model's configuration
+    model.config.pad_token_id = model.config.eos_token_id
+
+    print("model:\n ", model)
+    print("tokenizer:\n", tokenizer)
+
+    # Custom tokenizer function using LLaMA tokenizer
+    def llama_tokenize_function(text):
+
+        #print("text:", type(text), text)
+
+        # Tokenize the text with padding and truncation
+        tokens = tokenizer(text=text['text'], text_target=text['labels'], padding="max_length", truncation=True, max_length=TOKEN_TOKENIZER_MAX_LENGTH)
+        tokens["labels"] = text["labels"]  # Ensure labels are passed
+        return tokens
+
+    # Apply tokenization
+    train_dataset = train_dataset.map(llama_tokenize_function, batched=True)
+    test_dataset = test_dataset.map(llama_tokenize_function, batched=True)
+
+    # Remove unnecessary columns and set the dataset format to PyTorch
+    #train_dataset = train_dataset.remove_columns(["text"])
+    #test_dataset = test_dataset.remove_columns(["text"])
 
     train_dataset.set_format("torch")
     test_dataset.set_format("torch")
 
-    # Step 6: Define training arguments
+    """
+    # Use DataLoader for smaller batches
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    """
+
+    # Step 4: Define training arguments (with gradient accumulation and mixed precision)
     training_args = TrainingArguments(
         output_dir=OUT_DIR,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        num_train_epochs=epochs,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=EPOCHS,
         weight_decay=0.01,
         logging_dir=LOG_DIR,
+        #fp16=True,                                  # Enable mixed precision for memory efficiency, only supported on GPU
+        gradient_accumulation_steps=4,              # Accumulate gradients over 4 steps to simulate larger batch size
     )
 
-    # Step 7: Define metrics for evaluation
+    # Step 5: Define metrics for evaluation
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
         predictions = torch.argmax(logits, dim=-1)
@@ -547,7 +560,7 @@ def fine_tune(train_texts, test_texts, train_labels, test_labels, batch_size=8, 
             'recall': recall
         }
 
-    # Step 8: Initialize Trainer and start fine-tuning
+    # Step 6: Initialize Trainer and start fine-tuning
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -556,14 +569,26 @@ def fine_tune(train_texts, test_texts, train_labels, test_labels, batch_size=8, 
         compute_metrics=compute_metrics,
     )
 
+    print("\n\ttraining the mnodel (ie fine tuning)...")
+
     # Fine-tune the model
     trainer.train()
 
-    # Step 9: Evaluate the model on the test dataset
+    print("\n\tevaluating the model...")
+
+    # Step 7: Evaluate the model on the test dataset
     eval_results = trainer.evaluate()
+
+    print("eval_results:\n", type(eval_results), eval_results)
+
     print(f"Test Accuracy: {eval_results['eval_accuracy']:.4f}")
 
-# ---------------------------------------------------------------------------------------------------------------------
+    return eval_results
+
+
+
+
+    
 
 if __name__ == '__main__':
     
@@ -571,14 +596,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Text Classification with LLAMA (testing).")
     
     parser.add_argument('--dataset', type=str, default='20newsgroups', help='Dataset to use: 20newsgroups or bbc-news.')
-    parser.add_argument('--learner', type=str, default='svm', help='Choose the learner: nn, svm, or fine.')
+
+    parser.add_argument('--learner', type=str, default='svm', help='Choose the learner, in [nn, svm, fine].')
+    
+    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', help=f'dataset base vectorization strategy, in [tfidf, count]')                    
+    
+    parser.add_argument('--mix', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [vmode, solo, cat, dot]. NB presumes --pretrained is set')
+
     parser.add_argument('--optimc', action='store_true', help='Optimize classifier with GridSearchCV, only valid when using SVM learner.')
+    
     parser.add_argument('--cm', action='store_true', help='Generate confusion matrix.')
     
     args = parser.parse_args()
 
     print("args:", args)
-    
         
     # Check for CUDA availability
     if torch.cuda.is_available():
@@ -615,118 +646,137 @@ if __name__ == '__main__':
 
     print(f"Using device: {device}")
 
-    X_train_raw, X_test_raw, y_train, y_test, target_names = load_dataset(dataset=args.dataset)
+    dataset = args.dataset
+
+    if (dataset not in ['20newsgroups', 'bbc_news', 'ohsumed']):
+        print(f"Invalid dataset option. Please choose from '20newsgroups', 'bbc_news', or 'ohsumed'.")
+        exit()
+
+    print(f'loading dataset {dataset}...')
     
-    """
-    # Detect hardware, return appropriate distribution strategy (you can see that it is pretty easy to set up).
-    try:
-        # TPU detection. No parameters necessary if TPU_NAME environment variable is set (always set in Kaggle)
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
-        tf.config.experimental_connect_to_cluster(tpu)
-        tf.tpu.experimental.initialize_tpu_system(tpu)
-        strategy = tf.distribute.experimental.TPUStrategy(tpu)
-        print('Running on TPU ', tpu.master())
-    except ValueError:
-        # Default distribution strategy in Tensorflow. Works on CPU and single GPU.
-        strategy = tf.distribute.get_strategy()
+    X_train_raw, X_test_raw, y_train, y_test, target_names = load_dataset(dataset=dataset)
 
-    print('Number of replicas:', strategy.num_replicas_in_sync)
-    """
-
-
-
-
-    """
-    MODEL_NAME = 'bert-base-uncased'
-    MAX_LEN = 256
-    ARTIFACTS_PATH = '../artifacts/'
-
-    BATCH_SIZE = 8 * strategy.num_replicas_in_sync
-    EPOCHS = 3
-
-    if not os.path.exists(ARTIFACTS_PATH):
-        os.makedirs(ARTIFACTS_PATH)
-    """
-
-
-    # Load the pre-trained LLaMA model and tokenizer
-    tokenizer = LlamaTokenizer.from_pretrained(llama_model_name)
-
-    # Ensure padding token is available
-    if tokenizer.pad_token is None:
-        #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        tokenizer.pad_token_id = tokenizer.eos_token_id  # Reuse the end-of-sequence token for padding
-        
-    model = LlamaModel.from_pretrained(llama_model_name).to(device)
-    print("model: ", model)
-
-
-    # Custom tokenizer function using LLaMA tokenizer (no need for stopwords filtering here)
-    def llama_tokenizer(text):
-        tokens = tokenizer.tokenize(text)
-        return tokens
-
-
-    # Create a TF-IDF vectorizer with the custom tokenizer
-    tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=llama_tokenizer)
-    X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_raw).toarray()
-    X_test_tfidf = tfidf_vectorizer.transform(X_test_raw).toarray()
-
-    print("X_train_tfidf:", type(X_train_tfidf), X_train_tfidf.shape)
-    print("X_train_tfidf[0]:", X_train_tfidf[0])
-    print("X_test_tfidf:", type(X_test_tfidf), X_test_tfidf.shape)
-
-    llama_vocab_embeddings = get_llama_vocab_embeddings()
-            
-    print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_embeddings))
-
-    from itertools import islice
-
-    print("llama_vocab_embeddings (first three elements):\n:")
-    # Print the first 3 elements
-    for key, value in islice(llama_vocab_embeddings.items(), 3):
-        print(f'{key}, {value}\n')
-        
-    print("X_train_tfidf[0]\n:", X_train_tfidf[0])
-
-
-    # Set the batch size 
-    batch_size = 8 * num_replicas
-
+    print("X_train_raw:", type(X_train_raw), len(X_train_raw))
+    print("X_test_raw:", type(X_test_raw), len(X_test_raw))
+    print("y_train:", type(y_train), len(y_train))
+    print("y_test:", type(y_test), len(y_test))
+    print("target_names:", target_names)
+    
     if (args.learner == 'svm'):
 
-        print("\n\tApproach I: converting dataset into LlaMa embedding space (--solo)...")
-
-        run_solo(
-            tfidf_vectorizer=tfidf_vectorizer,
-            X_train_tfidf=X_train_tfidf,
-            X_test_tfidf=X_test_tfidf,
-            y_train=y_train,
-            y_test=y_test,
-            target_names=target_names,
-            llama_vocab_embeddings=llama_vocab_embeddings,
-            vocab=vocab
+        # Load the pre-trained LLaMA model and tokenizer
+        tokenizer = LlamaTokenizer.from_pretrained(
+            pretrained=LLAMA_MODEL,
+            max_length=TOKEN_TOKENIZER_MAX_LENGTH,
+            cache_dir=VECTOR_CACHE + '/LLaMa',
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt"
             )
-
-
-        print("\n\tApproach II: projecting tfidf vectors into the LlaMa embedding space (vocabulary) using matrix multiplication (i.e. dot product)...")
-
-        run_dot(
-            X_train_tfidf=X_train_tfidf,
-            X_test_tfidf=X_test_tfidf,
-            y_train=y_train,
-            y_test=y_test,
-            target_names=target_names,
-            llama_vocab_embeddings=llama_vocab_embeddings,
-            vocab=vocab
-            )
-
-    if (args.learner == 'nn'):
         
-        run_neural_model(args, device, batch_size=batch_size, epochs=EPOCHS)
+        """
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            LLAMA_MODEL, 
+            max_length=TOKEN_TOKENIZER_MAX_LENGTH,
+            cache_dir=VECTOR_CACHE + '/LLaMa'
+            )
+        """
 
+        model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa').to(device)
+
+        # Ensure the tokenizer has a padding token
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            model.resize_token_embeddings(len(tokenizer))  # Resize model's embeddings to accommodate the new token
+
+        print("model:\n ", model)
+        print("tokenizer:\n", tokenizer)
+
+        # Custom tokenizer function using LLaMA tokenizer (no need for stopwords filtering here)
+        def llama_tokenizer(text):
+            tokens = tokenizer.tokenize(text)
+            return tokens
+
+        # Create a TF-IDF vectorizer with the custom tokenizer
+        tfidf_vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=llama_tokenizer)
+        X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_raw).toarray()
+        X_test_tfidf = tfidf_vectorizer.transform(X_test_raw).toarray()
+
+        print("X_train_tfidf:", type(X_train_tfidf), X_train_tfidf.shape)
+        print("X_train_tfidf[0]:", X_train_tfidf[0])
+        print("X_test_tfidf:", type(X_test_tfidf), X_test_tfidf.shape)
+
+        #print("X_train_tfidf[0]\n:", X_train_tfidf[0])
+
+        llama_vocab_embeddings = get_llama_vocab_embeddings(
+            embeddings_file=f'{PICKLE_DIR}/{dataset}_llama_vocab_embeddings_{MAX_VOCAB_SIZE}.pkl',
+            tfidf_vectorizer=tfidf_vectorizer,
+            tokenizer=tokenizer,
+            device=device
+            )
+                
+        print("llama_vocab_embeddings:", type(llama_vocab_embeddings), len(llama_vocab_embeddings))
+
+        from itertools import islice
+
+        print("llama_vocab_embeddings (first three elements):\n:")
+        # Print the first 3 elements
+        for key, value in islice(llama_vocab_embeddings.items(), 3):
+            print(f'{key}, {value}\n')
+           
+        if (args.mix == 'solo'):
+
+            print("\n\tApproach I: converting dataset into LlaMa embedding space (--solo)...")
+
+            run_solo(
+                X_train_tfidf=X_train_tfidf,
+                X_test_tfidf=X_test_tfidf,
+                y_train=y_train,
+                y_test=y_test,
+                target_names=target_names,
+                vectorizer=tfidf_vectorizer,
+                llama_vocab_embeddings=llama_vocab_embeddings,
+                vocab=vocab
+                )
+        
+        elif (args.mix == 'dot'):
+        
+            print("\n\tApproach II: projecting tfidf vectors into the LlaMa embedding space (vocabulary) using matrix multiplication (i.e. dot product)...")
+
+            run_dot(
+                X_train_tfidf=X_train_tfidf,
+                X_test_tfidf=X_test_tfidf,
+                y_train=y_train,
+                y_test=y_test,
+                target_names=target_names,
+                vectorizer=tfidf_vectorizer,
+                llama_vocab_embeddings=llama_vocab_embeddings,
+                vocab=vocab
+                )
+        else:
+            print(f'unsupported mix (--mix) {args,mix}, exiting...')
+            exit(0)
+
+    elif (args.learner == 'nn'):
+
+        run_neural_model(
+            args,
+            device
+            )
+    
     elif (args.learner == 'fine'):
         
-        fine_tune(X_train_raw, X_test_raw, y_train, y_test, batch_size=batch_size, epochs=EPOCHS)
+        fine_tune(
+            X_train_raw,
+            X_test_raw,
+            y_train, y_test,
+            num_labels=len(target_names),
+    #        tokenizer=tokenizer,
+            device=device
+            )
     
+    else:
+        print(f'unsupported learner (--learner) {args.learner}, exiting...')
+        exit(0)
+        
 

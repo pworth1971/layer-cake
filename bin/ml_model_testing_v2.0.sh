@@ -23,8 +23,8 @@ OPTIMC="--optimc"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("bbc-news" "20newsgroups")
-declare -a pickle_paths=("../pickles" "../pickles")
+declare -a datasets=("ohsumed" "bbc-news" "20newsgroups")
+declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
 declare -a learners=("nb" "svm" "lr")
 declare -a vtypes=("tfidf" "count")
 declare -a mixes=("vmode" "cat" "solo" "dot")

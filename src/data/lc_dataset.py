@@ -275,19 +275,22 @@ class LCDataset:
         print("device:", self.device)
         
 
-        if name=='reuters21578':
-            self._load_reuters(self)
-        elif name == '20newsgroups':
-            self._load_20news(self)
-        elif name == 'rcv1':
-            self._load_rcv1(self)
-        elif name == 'ohsumed':
-            self._load_ohsumed(self)
-        elif name == 'bbc-news':
+        if name=='bbc-news':
             self._load_bbc_news(self)
 
-        #self.nC = self.devel_labelmatrix.shape[1]
-        self.nC = self.target_names.shape[0]
+        elif name == '20newsgroups':
+            self._load_20news(self)
+
+        elif name == 'ohsumed':
+            self._load_ohsumed(self)
+
+        elif name == 'rcv1':
+            self._load_rcv1(self)
+
+        elif name == 'reuters21578':
+            self._load_reuters(self)
+            
+        self.nC = self.num_labels
         print("nC:", self.nC)
 
         if (vectorization_type=='tfidf'):
@@ -568,8 +571,22 @@ class LCDataset:
         return embedding_vocab_matrix
 
 
-    def get_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=256):
+    def get_bert_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=256):
+        """
+        Gets the aasociated BERT embeddings for a given input text(s) using just the CLS 
+        Token Embeddings as a summmary of the related doc (text), which is the first token 
+        in the BERT input sequence. NB: the BERT model is trained so that the [CLS] token 
+        contains a summary of the entire sequence, making it suitable for tasks like classification.
         
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's averaged embedding.
+        """
+         
         print("getting BERT embeddings...")
         
         dataset = TextDataset(texts, self.tokenizer, max_len)
@@ -585,16 +602,85 @@ class LCDataset:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(self.device)
                 token_type_ids = batch['token_type_ids'].to(self.device)
+                
                 outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+
+                
+                # take only the embedding for the first token ([CLS]), 
+                # which is expected to encode the entire document's context.
                 cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+
                 embeddings.append(cls_embeddings.cpu().numpy())
 
         embeddings = np.vstack(embeddings)
 
         return embeddings
 
+    def get_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute document embeddings using a pretrained BERT model by averaging token embeddings.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's averaged embedding.
+        """
+
+        print("getting bert embeddings (without TF-IDF weights)...")
+
+        # Create a dataset from the input texts and prepare it for batch processing.
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        # Initialize a list to store the embeddings for each document.
+        embeddings = []
+
+        # Move the model to the appropriate device (CPU, GPU, etc.) and set it to evaluation mode.
+        self.model.to(self.device)
+        self.model.eval()
+
+        # Disable gradient computation and enable mixed precision for inference (if available on GPU).
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            # Iterate over the dataset in batches.
+            for batch in tqdm(dataloader, desc="building BERT embeddings for dataset..."):
+                # Move the batch data to the device (input IDs, attention mask, and token type IDs).
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                token_type_ids = batch['token_type_ids'].to(self.device)
+
+                # Pass the batch through the BERT model to get the token embeddings.
+                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                # Iterate over each document in the batch.
+                for i in range(token_embeddings.size(0)):
+                    # Average the token embeddings across the sequence length dimension.
+                    # This produces a single vector per document by averaging all token embeddings.
+                    doc_embedding = token_embeddings[i].mean(dim=0).cpu().numpy()
+
+                    # Append the document's embedding to the list of embeddings.
+                    embeddings.append(doc_embedding)
+
+        # Return a 2D numpy array where each row is a document's final averaged embedding.
+        return np.vstack(embeddings)
+
+
+
     def get_weighted_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-    
+        """
+        Compute weighted document embeddings using a pretrained BERT model and TF-IDF weights.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's weighted embedding.
+        """
         print("getting weighted bert embeddings...")
         
         dataset = TextDataset(texts, self.tokenizer, max_len)
@@ -879,6 +965,17 @@ class LCDataset:
 
         self.label_names = self.target_names           # set self.labels to the class label names
 
+        self.labels = self.label_names
+
+        self.num_label_names = len(self.label_names)
+        self.num_labels = self.num_label_names
+        
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
         # Encode the labels
         label_encoder = LabelEncoder()
         self.y = label_encoder.fit_transform(self.devel_target)
@@ -1013,7 +1110,8 @@ class LCDataset:
 
     def _load_reuters(self):
 
-        print("-- LCDataset::_load_reuters() --")
+        print("\n\tloading reuters21578 dataset...")
+
         data_path = os.path.join(get_data_home(), 'reuters21578')
         
         devel = fetch_reuters21578(subset='train', data_path=data_path)
@@ -1031,46 +1129,23 @@ class LCDataset:
 
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
-        num_labels = len(self.labels)
-        num_label_names = len(self.label_names)
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
 
-        print("# labels, # label_names:", num_labels, num_label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
         
-        if (num_labels != num_label_names):
+        if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
 
         return self.label_names
 
-    def _load_20news_old(self):
-        metadata = ('headers', 'footers', 'quotes')
-        
-        devel = fetch_20newsgroups(subset='train', remove=metadata)
-        test = fetch_20newsgroups(subset='test', remove=metadata)
-
-        self.classification_type = 'singlelabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_target, self.test_target = devel.target, test.target
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
-
-        self.label_names = devel.target_names           # set self.labels to the class label names
-
-        num_labels = len(self.labels)
-        num_label_names = len(self.label_names)
-
-        print("# labels, # label_names:", num_labels, num_label_names)
-        
-        if (num_labels != num_label_names):
-            print("Warning, number of labels does not match number of label names.")
-            return None
-
-        return self.label_names
 
 
 
     def _load_20news(self):
         
-        print("loafing 20newsgroups dataset...")
+        print("\n\tloading 20newsgroups dataset...")
         
         metadata = ('headers', 'footers', 'quotes')
         
@@ -1083,7 +1158,16 @@ class LCDataset:
         
         self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
         self.devel_target, self.test_target = self.devel.target, self.test.target
+        
+        print("devel_target:", type(self.devel_target), len(self.devel_target))
+        print("test_target:", type(self.test_target), len(self.test_target))
+
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+
+        print("self.labels:", type(self.labels), len(self.labels))
 
         self.label_names = self.devel.target_names           # set self.labels to the class label names
 
@@ -1098,12 +1182,14 @@ class LCDataset:
         
         self.target_names = self.label_names
         
-        num_labels = len(self.labels)
-        num_label_names = len(self.label_names)
+        print("target_names:", type(self.target_names), len(self.target_names))
 
-        print("# labels, # label_names:", num_labels, num_label_names)
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
         
-        if (num_labels != num_label_names):
+        if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
 
@@ -1121,7 +1207,7 @@ class LCDataset:
 
         data_path = '../datasets/RCV1-v2/rcv1/'               
 
-        print("loading rcv1 LCDataset (_load_rcv1) from path:", data_path)
+        print("\n\tloading rcv1 LCDataset (_load_rcv1) from path:", data_path)
 
         """
         print('Downloading rcv1v2-ids.dat.gz...')
@@ -1167,29 +1253,71 @@ class LCDataset:
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
-    def _load_ohsumed(self):
+    def _load_ohsumed_orig(self):
         data_path = os.path.join(get_data_home(), 'ohsumed50k')
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
         test = fetch_ohsumed50k(subset='test', data_path=data_path)
 
         self.classification_type = 'multilabel'
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
-    def _load_fasttext_data(self,name):
-        data_path='../datasets/fastText'
-        self.classification_type = 'singlelabel'
-        name=name.replace('-','_')
-        train_file = join(data_path,f'{name}.train')
-        assert os.path.exists(train_file), f'file {name} not found, please place the fasttext data in {data_path}' #' or specify the path' #todo
-        self.devel_raw, self.devel_target = load_fasttext_format(train_file)
-        self.test_raw, self.test_target = load_fasttext_format(join(data_path, f'{name}.test'))
-        self.devel_raw = mask_numbers(self.devel_raw)
-        self.test_raw = mask_numbers(self.test_raw)
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))
 
+    def _load_ohsumed(self):
+
+        print("\n\tloading ohsumed dataset...")
+
+        #data_path = os.path.join(get_data_home(), 'ohsumed50k')
+        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
+
+        print("data_path:", data_path)  
+
+        self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        self.classification_type = 'multilabel'
+        self.class_type = 'multilabel'
+        
+        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+
+
+        self.devel_target, self.test_target = self.devel.target, self.test.target
+        print("devel_target:", type(self.devel_target), len(self.devel_target))
+        print("test_target:", type(self.test_target), len(self.test_target))
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels:\n", self.labels)
+
+        self.label_names = self.devel.target_names                                  # set self.labels to the class label names
+        print("self.label_names:\n", self.label_names)
+
+        self.X_raw = self.devel.data
+        self.X_raw = self.remove_stopwords(self, self.X_raw)                        # Remove stopwords from the raw text
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
+        
+        self.target_names = self.label_names
+        
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        # Encode the labels using MultiLabelBinarizer
+        mlb = MultiLabelBinarizer()
+        self.y = mlb.fit_transform(self.devel_target)  # Transform multi-label targets into a binary matrix
+        print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
+        
+        # Convert Y to a sparse matrix
+        self.y_sparse = csr_matrix(self.y).T  # Transpose to match the expected shape
+        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
+
+        return self.label_names
 
 
     def get_label_names(self):

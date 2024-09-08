@@ -41,6 +41,7 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 
 
+from src.ml_test.llama_test import BATCH_SIZE, TEST_SIZE
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
@@ -729,7 +730,7 @@ def run_nb_model(X_train, X_test, y_train, y_test, category_names, args):
             
             
 
-def run_model(X_train, X_test, y_train, y_test, category_names, args):
+def run_model(X_train, X_test, y_train, y_test, category_names, confusion_matrix=False):
 
     print("\n\tRunning model...")
 
@@ -792,7 +793,7 @@ def run_model(X_train, X_test, y_train, y_test, category_names, args):
         return
     
     
-    if (args.cm):
+    if (confusion_matrix):
         # Optionally, plot confusion matrix
         create_confusion_matrix(
             y_test, 
@@ -979,13 +980,11 @@ class BERTClassifier(nn.Module):
 
 
 
-def run_neural_model(args, device, batch_size=16, epochs=3):
+def run_neural_model(dataset, device):
     
     print("\n\trunning neural model...")
     
     # Load data
-    dataset = args.dataset
-    
     print("dataset:", dataset)
     
     data = load_data(dataset)
@@ -1036,42 +1035,33 @@ def run_neural_model(args, device, batch_size=16, epochs=3):
         print(f"# categories: {n_categories}")
 
     # Split into train and test datasets
-    X_train, X_test, y_train, y_test = train_test_split(X_data, y_data, test_size=0.25, random_state=777) # random_state to reproduce results
-
+    X_train, X_test, y_train, y_test = train_test_split(X_data, y_data, test_size=TEST_SIZE, random_state=777) # random_state to reproduce results
 
     print("X_train:", type(X_train), X_train.shape)
     print("X_test:", type(X_test), X_test.shape)
     print("y_train:", type(y_train), y_train.shape)
     print("y_test:", type(y_test), y_test.shape)
 
+    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)               # Import tokenizer from HuggingFace
 
-    # Import tokenizer from HuggingFace
-    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
-
+    # encode the train and test data with BERT embeddings
     X_train = bert_encode(X_train, tokenizer)
     X_test = bert_encode(X_test, tokenizer)
+
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
 
     y_train = np.asarray(y_train, dtype='int32')
     y_test = np.asarray(y_test, dtype='int32')
 
-
-    print("X_train:", type(X_train), X_train.keys())
     print("y_train:", type(y_train), y_train.shape)
+    print("y_test:", type(y_test), y_test.shape)
 
     """
     with strategy.scope():
         model = build_model(n_categories)
         model.summary()
     """
-
-    # Example of model creation
-    model = BERTClassifier(n_categories=n_categories)
-
-    model.to(device)
-
-    # Example of model summary
-    print(model)
-
 
     # Example assuming the data is in a specific key
     # Adjust 'input_ids' to the appropriate key based on your data
@@ -1098,16 +1088,17 @@ def run_neural_model(args, device, batch_size=16, epochs=3):
     X_test_tensor = torch.tensor(X_test_word_ids, dtype=torch.long).to(device)
     y_test_tensor = torch.tensor(y_test, dtype=torch.long).to(device)
 
-
     # Create DataLoader for training and validation
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Initialize model, loss function, and optimizer
     model = BERTClassifier(n_categories=n_categories).to(device)
+    print(model)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-5)
 

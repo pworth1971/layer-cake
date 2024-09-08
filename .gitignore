@@ -8,9 +8,8 @@ src/util/__pycache__
 /log
 /pickles
 /checkpoint
-datasets/
-datasets/
+/datasets
 .DS_Store
-fasttext/
+/fasttext
 src/supervised_term_weighting/__pycache__/
-out/
+/out
