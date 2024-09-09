@@ -14,7 +14,9 @@ from sklearn import metrics
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import accuracy_score, f1_score, precision_score
 from sklearn.metrics import make_scorer, recall_score, hamming_loss, jaccard_score
-from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
+from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV, train_test_split
+
 from sklearn.naive_bayes import MultinomialNB, ComplementNB
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.utils.multiclass import type_of_target
@@ -144,6 +146,68 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
 
     # Case with optimization using GridSearchCV
     else:
+
+        print("Optimizing Support Vector Machine model with RandomizedSearchCV...")
+        
+        param_distributions = {
+            'estimator__penalty': ['l1', 'l2'],
+            'estimator__loss': ['hinge', 'squared_hinge'],
+            'estimator__C': np.logspace(-3, 3, 7)
+        } if class_type == 'multilabel' else {
+            'penalty': ['l1', 'l2'],
+            'loss': ['hinge', 'squared_hinge'],
+            'C': np.logspace(-3, 3, 7)
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True,
+            n_iter=10  # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        # confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with SVM Model',
+                file_name=f'{OUT_DIR}{dataset}_svm_confusion.png',
+                debug=True
+            )
+
+        y_preds = y_pred_best
+
+
+        """
         print("Optimizing Support Vector Machine model with GridSearchCV...")
         
         param_grid = {
@@ -203,6 +267,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
             )
 
         y_preds = y_pred_best
+        """
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
@@ -240,6 +305,60 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
 
     # Case with optimization using GridSearchCV
     else:
+        print("Optimizing Naive Bayes model with RandomizedSearchCV...")
+
+        param_distributions = {
+            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        } if class_type == 'multilabel' else {
+            'alpha': [0.1, 0.5, 1.0, 2.0]
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True,
+            n_iter=10  # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Naive Bayes Model',
+                file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
+                debug=True
+            )
+
+            
+        """
         print("Optimizing Naive Bayes model with GridSearchCV...")
 
         param_grid = {
@@ -292,6 +411,7 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
                 file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
                 debug=True
             )
+        """
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
@@ -336,6 +456,61 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
 
     # Case with optimization using GridSearchCV
     else:
+        print("Optimizing Logistic Regression model with RandomizedSearchCV...")
+
+        param_distributions = {
+            'estimator__C': np.logspace(-3, 3, 7),                      # Regularization strength
+            'estimator__penalty': ['l1', 'l2'],                         # Regularization method
+            'estimator__solver': ['liblinear', 'saga']                  # Solvers compatible with L1 and L2 regularization
+        } if class_type == 'multilabel' else {
+            'C': np.logspace(-3, 3, 7),
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear', 'saga']
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True,
+            n_iter=10  # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+        y_preds = y_pred_best
+
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Logistic Regression Model',
+                file_name=f'{OUT_DIR}{dataset}_logistic_regression_confusion.png',
+                debug=True
+            )
+        """
         print("Optimizing Logistic Regression model with GridSearchCV...")
 
         param_grid = {
@@ -392,6 +567,7 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
                 file_name=f'{OUT_DIR}{dataset}_logistic_regression_confusion.png',
                 debug=True
             )
+        """
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \

@@ -47,7 +47,7 @@ VECTOR_CACHE = '../.vector_cache'
 DATASET_DIR = '../datasets/'
 PICKLE_DIR = '../pickles/'
 
-MAX_VOCAB_SIZE = 25000                                      # max feature size for TF-IDF vectorization
+MAX_VOCAB_SIZE = 10000                                      # max feature size for TF-IDF vectorization
 
 BERT_MODEL = 'bert-base-uncased'                            # dimension = 768
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
@@ -1317,7 +1317,6 @@ class LCDataset:
         self.class_type = 'multilabel'
         
         self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
-
 
         self.devel_target, self.test_target = self.devel.target, self.test.target
         print("devel_target:", type(self.devel_target), len(self.devel_target))
