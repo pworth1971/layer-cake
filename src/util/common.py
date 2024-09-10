@@ -1,12 +1,19 @@
 import numpy as np
+
 from tqdm import tqdm
+
 import torch
+
 from scipy.sparse import issparse, csr_matrix
+
 from joblib import Parallel, delayed
+
 import multiprocessing
 import itertools
+import pickle
 
 from util.csv_log import CSVLog
+
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
@@ -506,9 +513,9 @@ def tosparse(y):
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize(args):
+def initialize_logging(args):
 
-    print("\n\tinitializing...")
+    print("\n\tinitializing logging...")
     
     # set up model type
     if args.learner == 'svm':
@@ -579,7 +586,7 @@ def initialize(args):
 
     print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
 
-    model_type = f'{learner_name}-{args.vtype}-{args.mix}'
+    model_type = f'{learner_name}-{args.vtype}-{args.mix}-{args.dataset_emb_comp}'
     print("model_type:", {model_type})
     
     #print("initializing logfile embeddings value to:", {embeddings})
@@ -616,7 +623,7 @@ def set_method_name2(opt, vtype='tfidf'):
     method_name = f'{opt.learner}-{vtype}'
 
     if opt.pretrained:
-        method_name += f'-pretrained-{opt.pretrained}'
+        method_name += f'-pretrained-{opt.pretrained}-{opt.dataset_emb_comp}'
     if opt.supervised:
         method_name += f'-supervised-{opt.supervised_method}'
 
@@ -705,3 +712,30 @@ def get_system_resources():
 
     return operating_system, cpus, mem, gpus
 
+
+
+
+    
+def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings, pickle_file):
+    
+    print(f"Saving pickle file: {pickle_file}...")
+    
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+    
+    with open(pickle_file, 'wb') as f:
+        # Save the sparse matrices and vocabulary as a tuple
+        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings), f)
+
+
+def load_from_pickle(pickle_file):
+    
+    print(f"Loading pickle file: {pickle_file}...")
+    
+    with open(pickle_file, 'rb') as f:
+        X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings = pickle.load(f)
+
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+
+    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings

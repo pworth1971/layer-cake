@@ -1,16 +1,17 @@
 import os
+from os.path import join
+import pickle
 import numpy as np
 from tqdm import tqdm
 import re
 import pandas as pd
 import string
 
-from sklearn.datasets import fetch_20newsgroups
+from sklearn.datasets import get_data_home, fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
 
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -22,7 +23,7 @@ import tarfile
 import gzip
 import shutil
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, csc_matrix
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -31,12 +32,11 @@ from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
 
-
+stop_words = set(stopwords.words('english'))
 
 import torch
-from transformers import BertTokenizerFast, LlamaTokenizerFast
+from transformers import BertTokenizer, BertTokenizerFast, LlamaTokenizer, LlamaTokenizerFast
 from transformers import BertModel, LlamaModel
-
 from gensim.models import KeyedVectors
 
 from torch.utils.data import DataLoader, Dataset
@@ -55,7 +55,6 @@ LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
 
 TOKEN_TOKENIZER_MAX_LENGTH = 512
 
-TEST_SIZE = 0.2
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
@@ -72,7 +71,121 @@ HF_TOKEN2 = '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'
 
 
 
-stop_words = set(stopwords.words('english'))
+# ------------------------------------------------------------------------------------------------------------------------
+# Utility functions for preprocessing data
+# ------------------------------------------------------------------------------------------------------------------------
+
+def init_tfidf_vectorizer():
+    """
+    Initializes and returns a sklearn TFIDFVectorizer with specific configuration.
+    """
+    print("init_tfidf_vectorizer()")
+    return TfidfVectorizer(stop_words='english', min_df=3, sublinear_tf=True)
+
+
+
+def init_count_vectorizer():
+    """
+    Initializes and returns a sklearn CountVectorizer with specific configuration.
+    """
+    print("init_count_vectorizer()")
+    return CountVectorizer(stop_words='english', min_df=3)
+
+
+def missing_values(df):
+    """
+    Calculate the percentage of missing values for each column in a DataFrame.
+    
+    Args:
+    df (pd.DataFrame): The input DataFrame to analyze.
+    
+    Returns:
+    pd.DataFrame: A DataFrame containing the total count and percentage of missing values for each column.
+    """
+    # Calculate total missing values and their percentage
+    total = df.isnull().sum()
+    percent = (total / len(df) * 100)
+    
+    # Create a DataFrame with the results
+    missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
+    
+    # Sort the DataFrame by percentage of missing values (descending)
+    missing_data = missing_data.sort_values('Percent', ascending=False)
+    
+    # Filter out columns with no missing values
+    missing_data = missing_data[missing_data['Total'] > 0]
+    
+    print("Columns with missing values:")
+    print(missing_data)
+    
+    return missing_data
+
+
+def remove_punctuation(x):
+    punctuationfree="".join([i for i in x if i not in string.punctuation])
+    return punctuationfree
+
+
+# Function to lemmatize text with memory optimization
+def lemmatization(texts, chunk_size=1000):
+    lmtzr = WordNetLemmatizer()
+    
+    num_chunks = len(texts) // chunk_size + 1
+    #print(f"Number of chunks: {num_chunks}")
+    for i in range(num_chunks):
+        chunk = texts[i*chunk_size:(i+1)*chunk_size]
+        texts[i*chunk_size:(i+1)*chunk_size] = [' '.join([lmtzr.lemmatize(word) for word in text.split()]) for text in chunk]
+    
+    return texts
+
+
+# ------------------------------------------------------------------------------------------------------------------------
+
+def preprocessDataset(train_text):
+    
+    #print("preprocessing...")
+    
+    # Ensure input is string
+    train_text = str(train_text)
+    
+    # Word tokenization using NLTK's word_tokenize
+    tokenized_train_set = word_tokenize(train_text.lower())
+    
+    # Stop word removal
+    stop_words = set(stopwords.words('english'))
+    stopwordremove = [i for i in tokenized_train_set if i not in stop_words]
+    
+    # Join words into sentence
+    stopwordremove_text = ' '.join(stopwordremove)
+    
+    # Remove numbers
+    numberremove_text = ''.join(c for c in stopwordremove_text if not c.isdigit())
+    
+    # Stemming using NLTK's PorterStemmer
+    stemmer = PorterStemmer()
+    stem_input = word_tokenize(numberremove_text)
+    stem_text = ' '.join([stemmer.stem(word) for word in stem_input])
+    
+    # Lemmatization using NLTK's WordNetLemmatizer
+    lemmatizer = WordNetLemmatizer()
+    
+    def get_wordnet_pos(word):
+        """Map POS tag to first character lemmatize() accepts"""
+        tag = nltk.pos_tag([word])[0][1][0].upper()
+        tag_dict = {"J": wordnet.ADJ,
+                    "N": wordnet.NOUN,
+                    "V": wordnet.VERB,
+                    "R": wordnet.ADV}
+        return tag_dict.get(tag, wordnet.NOUN)
+    
+    lem_input = word_tokenize(stem_text)
+    lem_text = ' '.join([lemmatizer.lemmatize(w, get_wordnet_pos(w)) for w in lem_input])
+    
+    return lem_text
+
+# ------------------------------------------------------------------------------------------------------------------------
+
+
 
 
 
@@ -109,6 +222,9 @@ class TextDataset(Dataset):
 
 
 
+# ------------------------------------------------------------------------------------------------------------------------
+# LCDataset class
+# ------------------------------------------------------------------------------------------------------------------------
 class LCDataset:
     """
     A class to handle loading and preparing datasets for text classification.
@@ -117,58 +233,9 @@ class LCDataset:
 
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
     
-
-    def __init__(self, name):
-        
-        print("initializing LCDataset...")
-
-        assert name in LCDataset.dataset_available, f'dataset {name} is not available'
-
-        self.name = name
-        print("self.name:", self.name) 
-        self.loaded = False
-        self.initialized = False
-
-        # Setup device prioritizing CUDA, then MPS, then CPU
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-            self.batch_size = DEFAULT_GPU_BATCH_SIZE
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-            self.batch_size = MPS_BATCH_SIZE
-        else:
-            self.device = torch.device("cpu")
-            self.batch_size = DEFAULT_CPU_BATCH_SIZE
-
-        print("device:", self.device)
-        print("batch_size:", self.batch_size)
-
-        if name=='reuters21578':
-            self._load_reuters()
-        elif name == '20newsgroups':
-            self._load_20news()
-        elif name == 'rcv1':
-            self._load_rcv1()
-        elif name == 'ohsumed':
-            self._load_ohsumed()
-        elif name == 'bbc-news':
-            self._load_bbc_news()
-
-        self.nC = self.num_labels
-        print("nC:", self.nC)
-
-        self.loaded = True
-
+    def _initialize(self, name=None, vectorization_type='tfidf', embedding_type='word', pretrained=None, pretrained_path=None):
         """
-        self._vectorizer = init_vectorizer()
-        self._vectorizer.fit(self.devel_raw)
-        self.vocabulary = self._vectorizer.vocabulary_
-        """
-
-
-    def initialize(self, vectorization_type='tfidf', embedding_type='word', pretrained=None, pretrained_path=None):
-        """
-        Initializes the EmbeddingDataset object by loading the appropriate dataset.
+        Initializes the LCDataset object by loading the appropriate dataset.
         
         Parameters:
         - name: dataset name, must be one of supprted datasets 
@@ -177,36 +244,87 @@ class LCDataset:
         - pretrained: 'word2vec', 'glove', 'fasttext', 'bert', or 'llama' for the pretrained embeddings to use.
         - pretrained_path: Path to the pretrained embeddings file.
         """
+
+        print("initializing dataset with name and vectorization_type:", name, vectorization_type)
         
+        assert name in LCDataset.dataset_available, f'dataset {name} is not available'
+
+        self.name = name
+        self.loaded = False
         self.vectorization_type = vectorization_type
         self.emebdding_type = embedding_type
         self.pretrained = pretrained
         self.pretrained_path = pretrained_path
         self.embedding_type = embedding_type
-
+        
+        print("name:", self.name)
         print("vectorization_type:", self.vectorization_type)
         print("embedding_type:", self.embedding_type)
         print("pretrained:", self.pretrained)
         print("pretrained_path:", self.pretrained_path)
-        print("embedding_type:", self.embedding_type)
+
+
+        # Setup device prioritizing CUDA, then MPS, then CPU
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
+
+        print("device:", self.device)
+        
+
+        if name=='bbc-news':
+            self._load_bbc_news(self)
+
+        elif name == '20newsgroups':
+            self._load_20news(self)
+
+        elif name == 'ohsumed':
+            self._load_ohsumed(self)
+
+        elif name == 'rcv1':
+            self._load_rcv1(self)
+
+        elif name == 'reuters21578':
+            self._load_reuters(self)
+            
+        self.nC = self.num_labels
+        print("nC:", self.nC)
+
+        if (vectorization_type=='tfidf'):
+            print("initializing tfidf vectors...")
+            self._vectorizer = init_tfidf_vectorizer()
+        elif (vectorization_type=='count'):
+            print("initializing count vectors...")
+            self._vectorizer = init_count_vectorizer()
+        else:
+            print("WARNING: unknown vectorization_type, initializing tf-idf vectorizer...")
+            self._vectorizer = init_tfidf_vectorizer()
+
+        print("fitting training data... devel_raw type and length:", type(self.devel_raw), len(self.devel_raw))
+        #self._vectorizer.fit(self.devel_raw)
+
+        print("setting vocabulary...")
+        #self.vocabulary = self._vectorizer.vocabulary_
 
         # vectorize dataset and build vectorizer vocabulary structures        
-        self.vectorize()                                    
+        self.vectorize(self)                                    
            
         # build the embedding vocabulary matrix to align 
         # with the dataset vocabulary and embedding type
-        self.build_embedding_vocab_matrix()         
+        self.build_embedding_vocab_matrix(self)         
         
         # generate pretrained embedding representation of dataset 
-        self.generate_dataset_embeddings()
+        self.generate_dataset_embeddings(self)
         
         # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
         if not isinstance(self.X_vectorized, csr_matrix):
             self.X_vectorized = csr_matrix(self.X_vectorized)
         
-        self.initialized = True
-        
-        
+        self.loaded = True
+        self.name = name
 
 
     def show(self):
@@ -234,14 +352,14 @@ class LCDataset:
         # Tokenize with truncation
         return self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
         
-    
+    # -----------------------------------------------------------------------------------------------------
+    # vectorize()
+    # 
+    # Build vector representation of data set using TF-IDF or CountVectorizer and constructing 
+    # the embeddings such that they align with pretrained embeddings tokenization method
+    # -----------------------------------------------------------------------------------------------------
     def vectorize(self):
     
-        """
-        Build vector representation of data set using TF-IDF or CountVectorizer and constructing 
-        the embeddings such that they align with pretrained embeddings tokenization method
-        """
-
         print("building vector representation of dataset...")
 
         # initialize local variables
@@ -380,14 +498,34 @@ class LCDataset:
         return self.X_vectorized
 
 
+    #
+    # -------------------------------------------------------------------------------------------------------------
+    # dataset embedding representation construction
+    # -------------------------------------------------------------------------------------------------------------
+    #
+
+
+
+    # --------------------------------------------------------------------------------------------------------------------
+    # generate_dataset_embeddings()
+    #
+    # generate embedding representation of dataset docs
+    # --------------------------------------------------------------------------------------------------------------------
     def generate_dataset_embeddings(self):
-        """
-        generate embedding representation of dataset docs
-        """
         
         print("generating dataset embedding representation forms...")
         
         if (self.pretrained in ['bert', 'llama']):
+            
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+                self.batch_size = DEFAULT_GPU_BATCH_SIZE
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+                self.batch_size = MPS_BATCH_SIZE
+            else:
+                self.device = torch.device("cpu")
+                self.batch_size = DEFAULT_CPU_BATCH_SIZE
 
             # BERT embeddings        
             if (self.pretrained == 'bert'): 
@@ -395,6 +533,7 @@ class LCDataset:
                 print("generating BERT embeddings...")
 
                 self.weighted_embeddings = self.get_weighted_bert_embeddings(
+                    self,
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
@@ -403,6 +542,7 @@ class LCDataset:
                 print("weighted_embeddings:", type(self.weighted_embeddings), self.weighted_embeddings.shape)
 
                 self.summary_embeddings = self.get_bert_embedding_cls(
+                    self,
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
@@ -411,6 +551,7 @@ class LCDataset:
                 print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
                 
                 self.avg_embeddings = self.get_avg_bert_embeddings(
+                    self,
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
@@ -426,6 +567,7 @@ class LCDataset:
 
                 # Generate the weighted average embeddings for the dataset
                 self.weighted_embeddings_new = self.get_weighted_llama_embeddings(
+                    self,
                     self.X_vectorized.toarray(),
                     self.llama_vocab_embeddings,
                     self.vocab_ndarr
@@ -438,6 +580,7 @@ class LCDataset:
                 print("weighted_embeddings_new:", type(self.weighted_embeddings_new), self.weighted_embeddings_new.shape)
 
                 self.summary_embeddings = self.get_llama_embeddings_cls(
+                    self,
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
@@ -446,6 +589,7 @@ class LCDataset:
                 print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
                 
                 self.avg_embeddings = self.get_avg_llama_embeddings(
+                    self,
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
@@ -457,6 +601,7 @@ class LCDataset:
         else:
             
             self.weighted_embeddings = self.get_weighted_word_embeddings(
+                self,
                 self.X_raw, 
                 self.vectorizer, 
                 self.embedding_vocab_matrix
@@ -466,6 +611,7 @@ class LCDataset:
 
             # Word-based embeddings
             self.avg_embeddings = self.get_avg_word_embeddings(
+                self, 
                 self.X_raw, 
                 self.vectorizer, 
                 self.embedding_vocab_matrix
@@ -1124,8 +1270,6 @@ class LCDataset:
         for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
             for filename in filenames:
                 print(os.path.join(dirname, filename))
-        self.classification_type = 'singlelabel'
-        self.class_type = 'singlelabel'
 
         # Load datasets
         train_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Train.csv')
@@ -1146,18 +1290,24 @@ class LCDataset:
         numCats = len(train_set['Category'].unique())
         print("# of categories:", numCats)
 
-        #self.X_raw = train_set['Text'].tolist()
-        self.X_raw = train_set['Text']        
-        print("X_raw:", type(self.X_raw), len(self.X_raw))
-        print("X_raw[0]:\n", self.X_raw[0])
-        
-        # preprocess the text (stopword removal, lemmatization, etc)
-        self.X = self._preprocess(self.X_raw)
-        print("X:", type(self.X), self.X.shape)
-        print("X[0]:\n", self.X[0])
+        self.X_raw = train_set['Text'].tolist()
+        self.y = np.array(train_set['Category'])
 
         self.target_names = train_set['Category'].unique()       
         self.class_type = 'singlelabel'
+        
+        print("removing stopwords...")
+
+        # Remove stopwords from the raw text
+        self.X_raw = self.remove_stopwords(self, self.X_raw)
+        print("X_raw:", type(self.X_raw), len(self.X_raw))
+
+        """
+        print("X_raw[0]:\n", self.X_raw[0])
+        print("y[0]:", self.y[0])
+        """
+        
+        self.classification_type = 'singlelabel'
         
         self.devel_raw = self.X_raw
         self.test_raw = test_set['Text'].tolist()
@@ -1169,11 +1319,14 @@ class LCDataset:
         #self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
 
         self.label_names = self.target_names           # set self.labels to the class label names
+
         self.labels = self.label_names
+
         self.num_label_names = len(self.label_names)
         self.num_labels = self.num_label_names
         
         print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        
         if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
@@ -1186,75 +1339,8 @@ class LCDataset:
         self.y_sparse = csr_matrix(self.y).T         # Transpose to match the expected shape
 
         return self.target_names
-
-
-    def split(self):
         
-        return train_test_split(
-            self.X,
-            self.y, 
-            test_size = TEST_SIZE, 
-            random_state = 60,
-            shuffle=True, 
-            stratify=self.y
-            )
-
-
-    def _load_20news(self):
         
-        print("\n\tloading 20newsgroups dataset...")
-        
-        metadata = ('headers', 'footers', 'quotes')
-        
-        self.devel = fetch_20newsgroups(subset='train', remove=metadata)
-        self.test = fetch_20newsgroups(subset='test', remove=metadata)
-
-        self.classification_type = 'singlelabel'
-        self.class_type = 'singlelabel'
-        
-        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
-        self.devel_target, self.test_target = self.devel.target, self.test.target
-        
-        print("devel_target:", type(self.devel_target), len(self.devel_target))
-        print("test_target:", type(self.test_target), len(self.test_target))
-
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
-
-        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
-        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
-
-        print("self.labels:", type(self.labels), len(self.labels))
-
-        self.label_names = self.devel.target_names           # set self.labels to the class label names
-
-        self.X_raw = pd.Series(self.devel.data)              # convert to Series object (from list)
-        print("X_raw:", type(self.X_raw), len(self.X_raw))
-        print("X_raw[0]:\n", self.X_raw[0])
-
-        self.X = self._preprocess(self.X_raw)
-        print("self.X:", type(self.X), self.X.shape)
-        print("self.X[0]:\n", self.X[0])
-
-        self.target_names = self.label_names
-        print("target_names:", type(self.target_names), len(self.target_names))
-
-        self.num_labels = len(self.labels)
-        self.num_label_names = len(self.label_names)
-        print("# labels, # label_names:", self.num_labels, self.num_label_names)
-        if (self.num_labels != self.num_label_names):
-            print("Warning, number of labels does not match number of label names.")
-            return None
-
-        # Encode the labels
-        label_encoder = LabelEncoder()
-        self.y = label_encoder.fit_transform(self.devel_target)
-        
-        # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(self.y).T                   # Transpose to match the expected shape
-
-        return self.label_names
-
-
 
     def _load_reuters(self):
 
@@ -1327,12 +1413,71 @@ class LCDataset:
 
 
 
+    def _load_20news(self):
+        
+        print("\n\tloading 20newsgroups dataset...")
+        
+        metadata = ('headers', 'footers', 'quotes')
+        
+        self.devel = fetch_20newsgroups(subset='train', remove=metadata)
+        self.test = fetch_20newsgroups(subset='test', remove=metadata)
+
+        self.classification_type = 'singlelabel'
+        
+        self.class_type = 'singlelabel'
+        
+        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+        self.devel_target, self.test_target = self.devel.target, self.test.target
+        
+        print("devel_target:", type(self.devel_target), len(self.devel_target))
+        print("test_target:", type(self.test_target), len(self.test_target))
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+
+        print("self.labels:", type(self.labels), len(self.labels))
+
+        self.label_names = self.devel.target_names           # set self.labels to the class label names
+
+        self.X_raw = self.devel.data
+        
+        print("removing stopwords...")
+
+        # Remove stopwords from the raw text
+        #texts = self.X_raw
+        self.X_raw = self.remove_stopwords(self, self.X_raw)
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
+        
+        self.target_names = self.label_names
+        
+        print("target_names:", type(self.target_names), len(self.target_names))
+
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        # Encode the labels
+        label_encoder = LabelEncoder()
+        self.y = label_encoder.fit_transform(self.devel_target)
+        
+        # Convert Y to a sparse matrix
+        self.y_sparse = csr_matrix(self.y).T                   # Transpose to match the expected shape
+
+        return self.label_names
+
 
     def _load_rcv1(self):
 
         data_path = '../datasets/RCV1-v2/rcv1/'               
 
-        print("\n\tloading rcv1 EmbeddingDataset (_load_rcv1) from path:", data_path)
+        print("\n\tloading rcv1 LCDataset (_load_rcv1) from path:", data_path)
 
         """
         print('Downloading rcv1v2-ids.dat.gz...')
@@ -1375,6 +1520,17 @@ class LCDataset:
         print("masking numbers...")
         self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
+        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+
+
+    def _load_ohsumed_orig(self):
+        data_path = os.path.join(get_data_home(), 'ohsumed50k')
+        devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        self.classification_type = 'multilabel'
+        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
 
@@ -1432,110 +1588,6 @@ class LCDataset:
         print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
 
         return self.label_names
-
-
-    def _missing_values(self, df):
-        """
-        Calculate the percentage of missing values for each column in a DataFrame.
-        
-        Args:
-        df (pd.DataFrame): The input DataFrame to analyze.
-        
-        Returns:
-        pd.DataFrame: A DataFrame containing the total count and percentage of missing values for each column.
-        """
-        # Calculate total missing values and their percentage
-        total = df.isnull().sum()
-        percent = (total / len(df) * 100)
-        
-        # Create a DataFrame with the results
-        missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
-        
-        # Sort the DataFrame by percentage of missing values (descending)
-        missing_data = missing_data.sort_values('Percent', ascending=False)
-        
-        # Filter out columns with no missing values
-        missing_data = missing_data[missing_data['Total'] > 0]
-        
-        print("Columns with missing values:")
-        print(missing_data)
-        
-        return missing_data
-
-
-    def _remove_punctuation(self, x):
-        punctuationfree="".join([i for i in x if i not in string.punctuation])
-        return punctuationfree
-
-
-    # Function to lemmatize text with memory optimization
-    def _lemmatization(self, texts, chunk_size=1000):
-        lmtzr = WordNetLemmatizer()
-        
-        num_chunks = len(texts) // chunk_size + 1
-        #print(f"Number of chunks: {num_chunks}")
-        for i in range(num_chunks):
-            chunk = texts[i*chunk_size:(i+1)*chunk_size]
-            texts[i*chunk_size:(i+1)*chunk_size] = [' '.join([lmtzr.lemmatize(word) for word in text.split()]) for text in chunk]
-        
-        return texts
-
-    def _preprocess(self, text_series):
-        """
-        Preprocess a pandas Series of texts, tokenizing, removing punctuation, stopwords, 
-        and applying stemming and lemmatization.
-
-        Parameters:
-        - text_series: A pandas Series containing text data (strings).
-
-        Returns:
-        - processed_texts: A NumPy array containing processed text strings with the shape property.
-        """
-        print("preprocessing text...")
-        print("text_series:", type(text_series), text_series.shape)
-
-        processed_texts = []
-
-        for train_text in text_series:
-            # Remove punctuation
-            train_text = self._remove_punctuation(train_text)
-
-            # Word tokenization
-            tokenized_train_set = word_tokenize(train_text.lower())
-
-            # Stop word removal
-            stop_words = set(stopwords.words('english'))
-            stopwordremove = [i for i in tokenized_train_set if i not in stop_words]
-
-            # Join words into sentence
-            stopwordremove_text = ' '.join(stopwordremove)
-
-            # Remove numbers
-            numberremove_text = ''.join(c for c in stopwordremove_text if not c.isdigit())
-
-            # Stemming
-            stemmer = PorterStemmer()
-            stem_input = word_tokenize(numberremove_text)
-            stem_text = ' '.join([stemmer.stem(word) for word in stem_input])
-
-            # Lemmatization
-            lemmatizer = WordNetLemmatizer()
-
-            def get_wordnet_pos(word):
-                """Map POS tag to first character lemmatize() accepts"""
-                tag = nltk.pos_tag([word])[0][1][0].upper()
-                tag_dict = {"J": wordnet.ADJ, "N": wordnet.NOUN, "V": wordnet.VERB, "R": wordnet.ADV}
-                return tag_dict.get(tag, wordnet.NOUN)
-
-            lem_input = word_tokenize(stem_text)
-            lem_text = ' '.join([lemmatizer.lemmatize(w, get_wordnet_pos(w)) for w in lem_input])
-
-            processed_texts.append(lem_text)
-
-        return np.array(processed_texts)  # Convert processed texts to NumPy array to support .shape
-
-
-
 
 
     def get_label_names(self):
@@ -1604,9 +1656,9 @@ class LCDataset:
                 with open(str(path.parent/file_output_name), 'wb') as f_out:
                     shutil.copyfileobj(f_in, f_out)
 
-    """
+
     @classmethod
-    def loadpt_data(cls, dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word'):
+    def loadpt(cls, dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word'):
 
         print("LCDataset::loadpt():", dataset, PICKLE_DIR)
 
@@ -1618,6 +1670,7 @@ class LCDataset:
         print(f"Loading data set {dataset}...")
 
         pickle_file = PICKLE_DIR + pickle_file_name                                     
+
             
         #
         # we pick up the vectorized dataset along with the associated pretrained 
@@ -1630,7 +1683,7 @@ class LCDataset:
             print(f"Loading tokenized data from '{pickle_file}'...")
             
             X_vectorized, y_sparse, target_names, class_type, embedding_vocab_matrix, weighted_embeddings, \
-                avg_embeddings, summary_embeddings = cls.load_from_pickle(cls, pickle_file)
+                avg_embeddings, summary_embeddings = load_from_pickle(pickle_file)
 
             return X_vectorized, y_sparse, target_names, class_type, embedding_vocab_matrix, weighted_embeddings, avg_embeddings, summary_embeddings
 
@@ -1638,7 +1691,8 @@ class LCDataset:
             print(f"'{pickle_file}' not found, loading {dataset}...")
             
             cls._initialize(
-                cls,                                        # class
+                cls,                                        # LCDataset object
+                name=dataset,                               # dataset
                 vectorization_type=vtype,                   # vectorization type
                 embedding_type=emb_type,                    # embedding type
                 pretrained=pretrained,                      # pretrained embeddings
@@ -1646,8 +1700,7 @@ class LCDataset:
                 )
 
             # Save the tokenized matrices to a pickle file
-            cls.save_to_pickle(
-                cls,                            # class
+            save_to_pickle(
                 cls.X_vectorized,               # vectorized data
                 cls.y_sparse,                   # labels
                 cls.target_names,               # target names
@@ -1659,7 +1712,7 @@ class LCDataset:
                 pickle_file)         
     
             return cls.X_vectorized, cls.y_sparse, cls.target_names, cls.class_type, cls.embedding_vocab_matrix, cls.weighted_embeddings, cls.avg_embeddings, cls.summary_embeddings
-    """
+    
             
             
     @classmethod
@@ -1688,7 +1741,7 @@ class LCDataset:
                 dataset = pickle.load(open(full_pickle_path, 'rb'))
             else:                                                                       # pickle file does not exist, create it, load it, and dump it
                 print(f'fetching dataset and dumping it into {full_pickle_path}')
-                dataset = EmbeddingDataset(name=dataset_name, vectorization_type=vectorization_type)
+                dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type)
                 print('vectorizing for faster processing')
                 dataset.vectorize()
                 
@@ -1704,12 +1757,39 @@ class LCDataset:
 
         else:
             print(f'loading dataset {dataset_name}')
-            dataset = EmbeddingDataset(name=dataset_name, vectorization_type=vectorization_type)
+            dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type)
 
         return dataset
 
 
+# ------------------------------------------------------------------------------------------------------------------------
+# Save X, y sparse matrices, and vocabulary to pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings, pickle_file):
+    
+    print(f"Saving pickle file: {pickle_file}...")
+    
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+    
+    with open(pickle_file, 'wb') as f:
+        # Save the sparse matrices and vocabulary as a tuple
+        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings), f)
 
+# ------------------------------------------------------------------------------------------------------------------------
+# Load X, y sparse matrices, and vocabulary from pickle
+# ------------------------------------------------------------------------------------------------------------------------
+def load_from_pickle(pickle_file):
+    
+    print(f"Loading pickle file: {pickle_file}...")
+    
+    with open(pickle_file, 'rb') as f:
+        X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings = pickle.load(f)
+
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    #print("embedding_matrix[0]:\n", embedding_matrix[0])
+
+    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings
 
 
 def _label_matrix(tr_target, te_target):

@@ -7,7 +7,7 @@ import argparse
 
 
 
-Y_AXIS_THRESHOLD = 0.6               # when to start the Y axis to show differentiation in the plot
+Y_AXIS_THRESHOLD = 0.1               # when to start the Y axis to show differentiation in the plot
 
 # ----------------------------------------------------------------------------------------------------------------------------
 # results_analysis()
@@ -91,7 +91,7 @@ def results_analysis(df, output_path='../out'):
 # ----------------------------------------------------------------------------------------------------------------------------
 
 def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_threshold=Y_AXIS_THRESHOLD):
-    
+
     print("generating charts to output directory:", output_path)
 
     # Filter to only include specific measures
@@ -107,14 +107,14 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
 
     if df_measures.empty and df_timelapse.empty:
         print("Error: No data available for the specified measures or timelapse")
-        return  
+        return
 
     print("df_measures shape after filtering:", df_measures.shape)
     print("df_measures:\n", df_measures.head())
 
-    if (df_measures.empty):
+    if df_measures.empty:
         print("Error: No data available for the specified measures")
-        return  
+        return
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -123,34 +123,31 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
     # Using a color-blind-friendly palette
     color_palette = px.colors.qualitative.Safe
 
-    for measure in measures:                                                        # Loop through each measure
-
-        for dataset in df['dataset'].unique():                                          # Loop through each dataset
-            
+    for measure in measures:
+        for dataset in df['dataset'].unique():
             print(f"generating plots for {measure} in dataset {dataset}...")
 
             for supervised in sorted(df_measures['wc_supervised'].unique(), reverse=True):
-                # Filter the DataFrame for the current measure, dataset, and wc_supervised status
                 subset_df = df_measures[(df_measures['measure'] == measure) & (df_measures['dataset'] == dataset) & (df_measures['wc_supervised'] == supervised)]
 
-                # Check if the subset DataFrame is empty
                 if subset_df.empty:
                     print(f"No data available for {measure} in dataset {dataset} with wc_supervised={supervised}")
                     continue
 
+                # Print to see if any data is missing
+                print(f"Subset for {dataset}, wc_supervised={supervised}:\n", subset_df)
+
                 max_df = subset_df.groupby(['model', 'embeddings']).agg({'value': 'max'}).reset_index()
-                
-                # Create title text for the plot
+                max_df['value'] = pd.to_numeric(max_df['value'], errors='coerce').fillna(0)  # Convert to numeric
+
                 title_text = f'Dataset: {dataset.upper()}; Measure: {measure} [by Model and Embeddings Type {"(pretrained+supervised)" if supervised else "(pretrained)"}]'
 
-                # Create the plot using Plotly Express
                 fig = px.bar(max_df, x='model', y='value', color='embeddings', barmode='group',
                              title=title_text,
                              labels={"value": "Max Value" if measure != 'timelapse' else "Average Time (s)", "model": "Model"},
                              color_discrete_sequence=color_palette,
                              hover_data=['model', 'embeddings'])
 
-                # Update layout for title
                 fig.update_layout(
                     title={
                         'text': title_text,
@@ -167,27 +164,25 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
                     },
                     legend_title_text='Embeddings'
                 )
-                
+
                 fig.update_xaxes(title_text='Model')
                 if measure != 'timelapse':
-                    fig.update_yaxes(title_text='Maximum Measure Value', range=[y_axis_threshold, max_df['value'].max() * 1.1])  # Adjust the y-axis range
+                    fig.update_yaxes(title_text='Maximum Measure Value', range=[min(y_axis_threshold, max_df['value'].min()), max_df['value'].max() * 1.1])
                 else:
-                    fig.update_yaxes(title_text='Average Time (seconds)', range=[0, max_df['value'].max() * 1.1])  # Adjust the y-axis for time
+                    fig.update_yaxes(title_text='Average Time (seconds)', range=[0, max_df['value'].max() * 1.1])
 
-                # Save each plot in the specified output directory and show it
+                # Save each plot in the specified output directory
                 if output_path:
-
                     print(f"Generating interactive plot for {measure} in dataset {dataset} with wc_supervised={supervised}...")
 
                     plot_file_name = f"{dataset}_{measure}_{'pretrained+supervised' if supervised else 'pretrained'}.html"
                     plot_file = os.path.join(output_path, plot_file_name)
-                    
-                    fig.write_html(plot_file)                                                               # Save as HTML to retain interactivity
-                    
+                    fig.write_html(plot_file)
+
                     print(f"Saved interactive plot for {measure} in dataset {dataset} at {plot_file}")
 
                 if show_charts:
-                    fig.show()              # This will display the plot in the notebook or a web browser
+                    fig.show()
 
 
     print("df_timelapse shape after filtering:", df_timelapse.shape)
@@ -315,6 +310,8 @@ def main():
 
     debug = args.d
     print("debug mode:", debug)
+
+    print("y_start:", args.ystart)
 
     df = read_data_file(args.file_path, debug=debug)
 

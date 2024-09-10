@@ -8,6 +8,7 @@ LOG="--log-file ../log/ml_classification_2.0.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
+DATASET_EMB_COMP="--dataset-emb-comp"
 
 #
 # Full Arrays of datasets and corresponding pickle paths
@@ -24,12 +25,13 @@ CONF_MATRIX="--cm"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("ohsumed")
+declare -a datasets=("bbc-news")
 declare -a pickle_paths=("../pickles")
-declare -a learners=("lr" "svm" "nb")
+declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-declare -a mixes=("vmode")
+declare -a mixes=("solo")
 declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
+declare -a emb_comp_options=("weighted" "avg" "summary")
 
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe/glove.42B.300d.txt" 
@@ -55,13 +57,17 @@ function run_command() {
     local vtype=$4
     local mix=$5
     local embedding_option=$6
+    local emb_comp=$7
 
     local dataset_flag="--dataset ${dataset}"
     local pickle_flag="--pickle-dir ${pickle_path}"
+    local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp"
+
+
     #local cmd="$PY $LOG $dataset_flag $pickle_flag $EMB --learner $learner --mode $mode $embedding_option $OPTIMC"
     #local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --mode $mode $embedding_option $OPTIMC $CONF_MATRIX"
-    local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option"
-    local cmd_opt="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $OPTIMC"
+    local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp"
+    local cmd_opt="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $OPTIMC"
 
     # Execute the base command
     echo
@@ -76,11 +82,11 @@ function run_command() {
     echo
     echo
     echo
-    echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
-    echo "#########################################################################################################################################################################################################################################################################"
-    echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running optimized command: $cmd_opt"
-    eval $cmd_opt
+    #echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
+    #echo "#########################################################################################################################################################################################################################################################################"
+    #echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+    #echo "Running optimized command: $cmd_opt"
+    #eval $cmd_opt
 }
 
 # Loop through datasets and run commands
@@ -91,11 +97,13 @@ for i in "${!datasets[@]}"; do
     for learner in "${learners[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
-                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE"
-                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC"
-                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT"
-                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT"
-                run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA"
+                for emb_comp in "${emb_comp_options[@]}"; do
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
+                done
             done
         done
     done
