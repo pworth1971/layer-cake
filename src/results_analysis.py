@@ -7,7 +7,7 @@ import argparse
 
 
 
-Y_AXIS_THRESHOLD = 0.1               # when to start the Y axis to show differentiation in the plot
+Y_AXIS_THRESHOLD = 0.5               # when to start the Y axis to show differentiation in the plot
 
 # ----------------------------------------------------------------------------------------------------------------------------
 # results_analysis()

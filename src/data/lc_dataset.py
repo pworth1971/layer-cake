@@ -171,40 +171,38 @@ class LCDataset:
         Initializes the EmbeddingDataset object by loading the appropriate dataset.
         
         Parameters:
-        - name: dataset name, must be one of supprted datasets 
-        - vectorizer_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
+        - vectorization_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
         - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (BERT, LLaMa).
         - pretrained: 'word2vec', 'glove', 'fasttext', 'bert', or 'llama' for the pretrained embeddings to use.
         - pretrained_path: Path to the pretrained embeddings file.
         """
         
         self.vectorization_type = vectorization_type
-        self.emebdding_type = embedding_type
+        self.embedding_type = embedding_type
         self.pretrained = pretrained
         self.pretrained_path = pretrained_path
-        self.embedding_type = embedding_type
 
         print("vectorization_type:", self.vectorization_type)
         print("embedding_type:", self.embedding_type)
         print("pretrained:", self.pretrained)
         print("pretrained_path:", self.pretrained_path)
-        print("embedding_type:", self.embedding_type)
 
-        # vectorize dataset and build vectorizer vocabulary structures        
-        self.vectorize()                                    
-           
-        # build the embedding vocabulary matrix to align 
-        # with the dataset vocabulary and embedding type
-        self.build_embedding_vocab_matrix()         
-        
-        # generate pretrained embedding representation of dataset 
+        # vectorize dataset and build vectorizer vocabulary structures
+        self.vectorize()
+
+        # build the embedding vocabulary matrix to align with the dataset vocabulary and embedding type
+        self.build_embedding_vocab_matrix()
+
+        # generate pretrained embedding representation of dataset
         self.generate_dataset_embeddings()
-        
+
         # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
         if not isinstance(self.X_vectorized, csr_matrix):
             self.X_vectorized = csr_matrix(self.X_vectorized)
-        
+
         self.initialized = True
+
+
         
         
 
@@ -229,11 +227,11 @@ class LCDataset:
             filtered_texts.append(" ".join(filtered_words))
         return filtered_texts
 
-   
     def custom_tokenizer(self, text):
-        # Tokenize with truncation
+        # Tokenize the text using the tokenizer with truncation
         return self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
-        
+
+    
     
     def vectorize(self):
     
@@ -255,9 +253,15 @@ class LCDataset:
             print("Using word-level vectorization...")
             
             if self.vectorization_type == 'tfidf':
-                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)  
+                self.vectorizer = TfidfVectorizer(
+                    max_features=MAX_VOCAB_SIZE, 
+                    tokenizer=self.custom_tokenizer  # Removed the self from partial
+                )
             elif self.vectorization_type == 'count':
-                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)  
+                self.vectorizer = CountVectorizer(
+                    max_features=MAX_VOCAB_SIZE, 
+                    tokenizer=self.custom_tokenizer  # Removed the self from partial
+                )
             else:
                 raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
             
@@ -293,17 +297,17 @@ class LCDataset:
             if self.vectorization_type == 'tfidf':
                 self.vectorizer = TfidfVectorizer(
                     max_features=MAX_VOCAB_SIZE, 
-                    tokenizer=partial(self.custom_tokenizer, self)
+                    tokenizer=(self.custom_tokenizer)
                 )
             elif self.vectorization_type == 'count':
                 self.vectorizer = CountVectorizer(
                     max_features=MAX_VOCAB_SIZE, 
-                    tokenizer=partial(self.custom_tokenizer, self)
+                    tokenizer=self.custom_tokenizer
                 )
             else:
                 raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
-            print("fitting training data... devel_raw type and length:", type(self.devel_raw), len(self.devel_raw))
+            print("fitting training data... X_raw type and length:", type(self.X_raw), len(self.X_raw))
 
             # Fit and transform the text data to obtain tokenized features, 
             # note the requirement for the partial() method to bind the self 
@@ -401,14 +405,6 @@ class LCDataset:
                     )  
 
                 print("weighted_embeddings:", type(self.weighted_embeddings), self.weighted_embeddings.shape)
-
-                self.summary_embeddings = self.get_bert_embedding_cls(
-                    texts=self.X_raw, 
-                    batch_size=self.batch_size, 
-                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                    )  
-
-                print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
                 
                 self.avg_embeddings = self.get_avg_bert_embeddings(
                     texts=self.X_raw, 
@@ -418,6 +414,13 @@ class LCDataset:
                 
                 print("avg_embeddings (cls):", type(self.avg_embeddings), self.avg_embeddings.shape)
                 
+                self.summary_embeddings = self.get_bert_embedding_cls(
+                    texts=self.X_raw, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )  
+
+                print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
 
             # LLaMa embeddings
             elif (self.pretrained == 'llama'):
@@ -436,14 +439,6 @@ class LCDataset:
                 self.weighted_embeddings = self.weighted_embeddings_new
 
                 print("weighted_embeddings_new:", type(self.weighted_embeddings_new), self.weighted_embeddings_new.shape)
-
-                self.summary_embeddings = self.get_llama_embeddings_cls(
-                    texts=self.X_raw, 
-                    batch_size=self.batch_size, 
-                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                    )  
-
-                print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
                 
                 self.avg_embeddings = self.get_avg_llama_embeddings(
                     texts=self.X_raw, 
@@ -452,6 +447,10 @@ class LCDataset:
                     )  
                 
                 print("avg_embeddings:", type(self.avg_embeddings), self.avg_embeddings.shape)
+
+                self.summary_embeddings = self.avg_embeddings
+
+                print("summary_embeddings set to avg_embeddings:", type(self.summary_embeddings), self.summary_embeddings.shape)
 
         # word based embeddins
         else:
@@ -475,9 +474,9 @@ class LCDataset:
 
             # CLS token summary embeddings not supported in pretrained 
             # word embedding models like word2vec, glove or fasttext
-            self.summary_embeddings = None  
+            self.summary_embeddings = self.avg_embeddings
 
-            print("summary_embeddings: None")
+            print("summary_embeddings set to avg_embeddings:", type(self.summary_embeddings), self.summary_embeddings.shape)
 
         return self.weighted_embeddings, self.summary_embeddings, self.avg_embeddings
         
@@ -815,60 +814,6 @@ class LCDataset:
         return embedded_vectors
 
 
-    def get_llama_embeddings_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-        """
-        Generates LLaMa embeddings for a batch of input texts, supporting CUDA, MPS, and CPU devices.
-
-        Parameters:
-        - texts: A list of input texts to generate embeddings for.
-        - batch_size: The size of each batch processed by the model.
-        - max_len: Maximum token length for each text.
-
-        Returns:
-        - embeddings: A numpy array containing the embeddings for all input texts.
-        """
-        print("getting llama CLS embeddings...")
-
-        # Step 1: Set the device based on availability
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-            print("Using CUDA...")
-        elif torch.backends.mps.is_available():
-            device = torch.device("mps")
-            print("Using MPS...")
-        else:
-            device = torch.device("cpu")
-            print("Using CPU...")
-
-        # Step 2: Convert the input texts into a tokenized dataset.
-        dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True if device != torch.device("cpu") else False)
-
-        embeddings = []
-
-        # Step 3: Prepare the model for evaluation mode and move it to the specified device.
-        self.model.to(device)
-        self.model.eval()
-
-        # Step 4: Loop through the batches and generate embeddings.
-        with torch.no_grad():
-            for batch in tqdm(dataloader, desc="building LLaMa embeddings for dataset using CLS tokens..."):
-                # Step 5: Move input data to the target device
-                input_ids = batch['input_ids'].to(device, non_blocking=True)
-                attention_mask = batch['attention_mask'].to(device, non_blocking=True)
-
-                # Step 6: Pass the inputs through the model and extract the embeddings (CLS token output).
-                outputs = self.model(input_ids, attention_mask=attention_mask)
-                cls_embeddings = outputs.last_hidden_state[:, 0, :].detach().cpu().numpy()
-
-                # Step 7: Append the embeddings to the list.
-                embeddings.append(cls_embeddings)
-
-        # Step 8: Stack the embeddings from each batch into a single numpy array.
-        embeddings = np.vstack(embeddings)
-
-        return embeddings
-
 
     #
     # -------------------------------------------------------------------------------------------------------------
@@ -926,7 +871,7 @@ class LCDataset:
                 word_indices.append(idx)
 
                 if len(batch_words) == batch_size:
-                    embeddings = self.process_batch(self, batch_words)
+                    embeddings = self.process_batch(batch_words)
                     for i, embedding in zip(word_indices, embeddings):
                         if i < len(embedding_vocab_matrix):
                             embedding_vocab_matrix[i] = embedding
@@ -938,7 +883,7 @@ class LCDataset:
                     pbar.update(batch_size)
 
             if batch_words:
-                embeddings = self.process_batch(self, batch_words)
+                embeddings = self.process_batch(batch_words)
                 for i, embedding in zip(word_indices, embeddings):
                     if i < len(embedding_vocab_matrix):
                         embedding_vocab_matrix[i] = embedding
@@ -1031,7 +976,7 @@ class LCDataset:
             print("dataset vocab size:", self.vocab_size)
             #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
 
-            self.embedding_vocab_matrix_orig = self.build_embedding_vocab_matrix_core(self, self.vocab, batch_size=MPS_BATCH_SIZE)
+            self.embedding_vocab_matrix_orig = self.build_embedding_vocab_matrix_core(self.vocab, batch_size=MPS_BATCH_SIZE)
             print("embedding_vocab_matrix_orig:", type(self.embedding_vocab_matrix_orig), self.embedding_vocab_matrix_orig.shape)
                 
             #
@@ -1273,7 +1218,7 @@ class LCDataset:
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
         
-        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
         
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
@@ -1295,23 +1240,25 @@ class LCDataset:
         print("self.label_names:\n", self.label_names)
         
         self.X_raw = self.devel.data
-        self.X_raw = self.remove_stopwords(self, self.X_raw)                        # Remove stopwords from the raw text
         print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-        
+
+        self.X_raw = pd.Series(self.X_raw)                      # convert to Series object (from tuple)
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
+        print("self.X_raw[0]:\n", self.X_raw[0])
+
+        self.X = self._preprocess(self.X_raw)
+        print("self.X:", type(self.X), self.X.shape)
+        print("self.X[0]:\n", self.X[0])
+
         self.target_names = self.label_names
-        
+        print("target_names:", type(self.target_names), len(self.target_names))
+
         self.num_labels = len(self.labels)
         self.num_label_names = len(self.label_names)
         print("# labels, # label_names:", self.num_labels, self.num_label_names)
         if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
-
-        """
-        # Encode the labels using MultiLabelBinarizer
-        mlb = MultiLabelBinarizer()
-        self.y = mlb.fit_transform(self.devel_target)  # Transform multi-label targets into a binary matrix
-        """
 
         # Now self.devel_target is already a dense NumPy array with shape (9603, 115), so no need for MultiLabelBinarizer.
         self.y = self.devel_target
@@ -1324,6 +1271,67 @@ class LCDataset:
 
         return self.label_names
 
+
+
+
+    def _load_ohsumed(self):
+
+        print("\n\tloading ohsumed dataset...")
+
+        #data_path = os.path.join(get_data_home(), 'ohsumed50k')
+        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
+
+        print("data_path:", data_path)  
+
+        self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        self.classification_type = 'multilabel'
+        self.class_type = 'multilabel'
+        
+        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+
+        self.devel_target, self.test_target = self.devel.target, self.test.target
+        print("devel_target:", type(self.devel_target), len(self.devel_target))
+        print("test_target:", type(self.test_target), len(self.test_target))
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels:\n", self.labels)
+
+        self.label_names = self.devel.target_names                                  # set self.labels to the class label names
+        print("self.label_names:\n", self.label_names)
+
+        self.X_raw = self.devel.data
+        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
+        print("self.X[0]:\n", self.X[0])
+
+        self.X = self._preprocess(self.X_raw)
+        print("self.X:", type(self.X), self.X.shape)
+        print("self.X[0]:\n", self.X[0])
+
+        self.target_names = self.label_names
+        print("target_names:", type(self.target_names), len(self.target_names))
+        
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        # Encode the labels using MultiLabelBinarizer
+        mlb = MultiLabelBinarizer()
+        self.y = mlb.fit_transform(self.devel_target)   # Transform multi-label targets into a binary matrix
+        print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
+        
+        # Convert Y to a sparse matrix
+        #self.y_sparse = csr_matrix(self.y).T       # Transpose to match the expected shape
+        self.y_sparse = csr_matrix(self.y)          # without Transpose to match the expected shape
+        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
+
+        return self.label_names
 
 
 
@@ -1377,61 +1385,6 @@ class LCDataset:
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
-
-
-    def _load_ohsumed(self):
-
-        print("\n\tloading ohsumed dataset...")
-
-        #data_path = os.path.join(get_data_home(), 'ohsumed50k')
-        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
-
-        print("data_path:", data_path)  
-
-        self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
-        self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
-
-        self.classification_type = 'multilabel'
-        self.class_type = 'multilabel'
-        
-        self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
-
-        self.devel_target, self.test_target = self.devel.target, self.test.target
-        print("devel_target:", type(self.devel_target), len(self.devel_target))
-        print("test_target:", type(self.test_target), len(self.test_target))
-
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
-        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
-        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
-        print("labels:\n", self.labels)
-
-        self.label_names = self.devel.target_names                                  # set self.labels to the class label names
-        print("self.label_names:\n", self.label_names)
-
-        self.X_raw = self.devel.data
-        self.X_raw = self.remove_stopwords(self, self.X_raw)                        # Remove stopwords from the raw text
-        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-        
-        self.target_names = self.label_names
-        
-        self.num_labels = len(self.labels)
-        self.num_label_names = len(self.label_names)
-        print("# labels, # label_names:", self.num_labels, self.num_label_names)
-        if (self.num_labels != self.num_label_names):
-            print("Warning, number of labels does not match number of label names.")
-            return None
-
-        # Encode the labels using MultiLabelBinarizer
-        mlb = MultiLabelBinarizer()
-        self.y = mlb.fit_transform(self.devel_target)   # Transform multi-label targets into a binary matrix
-        print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
-        
-        # Convert Y to a sparse matrix
-        #self.y_sparse = csr_matrix(self.y).T       # Transpose to match the expected shape
-        self.y_sparse = csr_matrix(self.y)          # without Transpose to match the expected shape
-        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
-
-        return self.label_names
 
 
     def _missing_values(self, df):

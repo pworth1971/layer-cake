@@ -730,14 +730,11 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
             X_test = avg_embeddings_test
         elif (dataset_embedding_type == 'summary'):
 
-            # summary type embeddings (i.e. CLS token) not supported in 
-            # word embeddings, so we fall back on average summary embeddings
-            if (pretrained in ['word2vec', 'glove', 'fasttext']):
-                X_train = avg_embeddings_train
-                X_test = avg_embeddings_test
-            elif (pretrained in ['bert', 'llama']):
-                X_train = summary_embeddings_train
-                X_test = summary_embeddings_test
+            # NB that summary type embeddings (i.e. CLS token) only supported with BERT embeddings
+            # but we expect them in the pickle file so we swapped them for avg_embeddings when 
+            # we compuet them in LCDataset class 
+            X_train = summary_embeddings_train
+            X_test = summary_embeddings_test
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None   
