@@ -30,17 +30,15 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
-
-
-
-import torch
-from transformers import BertTokenizerFast, LlamaTokenizerFast
-from transformers import BertModel, LlamaModel
-
 from gensim.models import KeyedVectors
 
-from torch.utils.data import DataLoader, Dataset
+from contextlib import nullcontext
 
+import torch
+
+from torch.utils.data import DataLoader, Dataset
+from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
+from transformers import BertModel, LlamaModel, RobertaModel
 
 
 VECTOR_CACHE = '../.vector_cache'
@@ -52,6 +50,7 @@ MAX_VOCAB_SIZE = 10000                                      # max feature size f
 BERT_MODEL = 'bert-base-uncased'                            # dimension = 768
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096
 #LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
+ROBERTA_MODEL = 'roberta-base'                              # dimension = 768
 
 TOKEN_TOKENIZER_MAX_LENGTH = 512
 
@@ -60,7 +59,7 @@ TEST_SIZE = 0.2
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
 DEFAULT_GPU_BATCH_SIZE = 16
-MPS_BATCH_SIZE = 16
+MPS_BATCH_SIZE = 32
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -230,7 +229,6 @@ class LCDataset:
     def custom_tokenizer(self, text):
         # Tokenize the text using the tokenizer with truncation
         return self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
-
     
     
     def vectorize(self):
@@ -248,51 +246,67 @@ class LCDataset:
         self.embedding_vocab_matrix = None
         self.vocab = None
 
+        print("self.vectorization_type:", self.vectorization_type)
+        print("self.embedding_type:", self.embedding_type)
+        print("self.pretrained:", self.pretrained)
+        print("self.pretrained_path:", self.pretrained_path)
+
         # Choose the vectorization and tokenization strategy based on embedding type
         if self.embedding_type == 'word':
+
             print("Using word-level vectorization...")
             
             if self.vectorization_type == 'tfidf':
+
+                print("using TFIDS vectorization...")
+
+                """
                 self.vectorizer = TfidfVectorizer(
                     max_features=MAX_VOCAB_SIZE, 
-                    tokenizer=self.custom_tokenizer  # Removed the self from partial
+                    tokenizer=self.custom_tokenizer  
                 )
+                """
+                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)
+
             elif self.vectorization_type == 'count':
+
+                print("using Count vectorization...")
+
+                """
                 self.vectorizer = CountVectorizer(
                     max_features=MAX_VOCAB_SIZE, 
-                    tokenizer=self.custom_tokenizer  # Removed the self from partial
+                    tokenizer=self.custom_tokenizer  
                 )
+                """
+                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)
             else:
                 raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
             
-            self.X_vectorized = self.vectorizer.fit_transform(self.X_raw)                   # Fit and transform the text data to obtain tokenized features
-            
+            self.X_vectorized = self.vectorizer.fit_transform(self.X)                       # Fit and transform the text data to obtain tokenized features
+
         elif self.embedding_type == 'token':
             
             print(f"Using token-level vectorization with {self.pretrained.upper()} embeddings...")
 
-            from functools import partial
-
             if self.pretrained == 'bert': 
                 self.tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
                 self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT').to(self.device)
+            elif self.pretrained == 'roberta':
+                self.tokenizer = RobertaTokenizerFast.from_pretrained(ROBERTA_MODEL, cache_dir=VECTOR_CACHE+'/RoBERTa')
+                self.model = RobertaModel.from_pretrained(ROBERTA_MODEL, cache_dir=VECTOR_CACHE+'/RoBERTa').to(self.device)
             elif self.pretrained == 'llama':
                 self.tokenizer = LlamaTokenizerFast.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
                 self.model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa').to(self.device)
             else:
-                raise ValueError("Invalid embedding type. Use 'bert' or 'llama' for token embeddings.")
-            
+                raise ValueError("Invalid embedding type. Use 'bert', 'roberta', or 'llama' for token embeddings.")
+ 
             print("model:\n", self.model)
+            print("tokenizer:\n", self.tokenizer)
 
             # Ensure padding token is available
             if self.tokenizer.pad_token is None:
                 #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
                 self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-    
-            # NB: Our custom_tokenizer() method needs access to the object instance (self), so 
-            # we need to use functools.partial to bind the self argument. With functools.partial, the 
-            # self argument is automatically passed when calling the custom_tokenizer method, making it 
-            # compatible with TfidfVectorizer.
 
             if self.vectorization_type == 'tfidf':
                 self.vectorizer = TfidfVectorizer(
@@ -307,12 +321,12 @@ class LCDataset:
             else:
                 raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
-            print("fitting training data... X_raw type and length:", type(self.X_raw), len(self.X_raw))
+            print("fitting training data... X_raw type and length:", type(self.X), len(self.X))
 
             # Fit and transform the text data to obtain tokenized features, 
             # note the requirement for the partial() method to bind the self 
             # argument when we call fit_transform() here 
-            self.X_vectorized = self.vectorizer.fit_transform(self.X_raw)
+            self.X_vectorized = self.vectorizer.fit_transform(self.X)
 
         else:
             raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
@@ -341,45 +355,13 @@ class LCDataset:
         
         self.vocab_ = self.vectorizer.vocabulary_
         print("vocab_:", type(self.vocab_), len(self.vocab_))
-        
         self.vocab_dict = {k.lower(): v for k, v in self.vectorizer.vocabulary_.items()}              # Ensure the vocabulary is all lowercased to avoid case mismatches
-        print("vocab_dict:", type(self.vocab_dict), len(self.vocab_dict))
-        """
-        for i, (word, index) in enumerate(vocab_dict.items()):
-            if i >= 10:
-                break
-            print(f"{i+1:3}: {word} -> {index}")
-        """
-        
+        print("vocab_dict:", type(self.vocab_dict), len(self.vocab_dict))    
         self.vocab_ndarr = self.vectorizer.get_feature_names_out()
         print("vocab_ndarr:", type(self.vocab_ndarr), len(self.vocab_ndarr))
-        """
-        count = 0
-        for x in vocab_ndarr:
-            print(f'vocab_ndarr[{count}: {x}')
-            count+=1
-            if (count > 10):
-                break
-        """
-        
         self.vocab = self.vocab_dict
         print("vocab:", type(self.vocab), len(self.vocab))
         
-        """    
-        if not hasattr(self, 'Xtr') or not hasattr(self, 'Xte'):
-
-            print("self does not have Xtr or Xte attributes, transforming and sorting...")
-
-            self.Xtr = self._vectorizer.transform(self.devel_raw)
-            self.Xte = self._vectorizer.transform(self.test_raw)
-            self.Xtr.sort_indices()
-            self.Xte.sort_indices()
-        
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        
-        return self.Xtr, self.Xte
-        """
 
         return self.X_vectorized
 
@@ -391,34 +373,58 @@ class LCDataset:
         
         print("generating dataset embedding representation forms...")
         
-        if (self.pretrained in ['bert', 'llama']):
+        if (self.pretrained in ['bert', 'llama', 'roberta']):
 
-            # BERT embeddings        
-            if (self.pretrained == 'bert'): 
+            # BERT or RoBERTa embeddings        
+            if (self.pretrained in ['bert', 'roberta']): 
 
-                print("generating BERT embeddings...")
+                print("generating BERT or RoBERTa embeddings...")
 
+                """
                 self.weighted_embeddings = self.get_weighted_bert_embeddings(
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
                     )  
+                """
+
+                self.weighted_embeddings = self.get_weighted_transformer_embeddings(
+                    texts=self.X_raw, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
 
                 print("weighted_embeddings:", type(self.weighted_embeddings), self.weighted_embeddings.shape)
                 
+                """
                 self.avg_embeddings = self.get_avg_bert_embeddings(
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
                     )  
-                
+                """
+
+                self.avg_embeddings = self.get_avg_transformer_embeddings(
+                    texts=self.X_raw, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
+
                 print("avg_embeddings (cls):", type(self.avg_embeddings), self.avg_embeddings.shape)
                 
+                """
                 self.summary_embeddings = self.get_bert_embedding_cls(
                     texts=self.X_raw, 
                     batch_size=self.batch_size, 
                     max_len=TOKEN_TOKENIZER_MAX_LENGTH
                     )  
+                """
+
+                self.summary_embeddings = self.get_transformer_embedding_cls(
+                    texts=self.X_raw, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
 
                 print("summary_embeddings (cls):", type(self.summary_embeddings), self.summary_embeddings.shape)
 
@@ -728,54 +734,183 @@ class LCDataset:
 
 
 
+    def get_weighted_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute weighted document embeddings using a pretrained BERT or RoBERTa model and TF-IDF weights.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's weighted embedding.
+        """
+        print(f"Getting weighted {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)  # Ensure the model is on the correct device
+        self.model.eval()
+
+        with torch.no_grad():  # Disable gradient computation
+            for batch in tqdm(dataloader, desc=f"Building weighted {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
+                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
+                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+                token_type_ids = batch['token_type_ids'].to(self.device)
+
+                #outputs = self.model(input_ids, attention_mask=attention_mask)
+                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                    tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                    tfidf_vector = self.vectorizer.transform([texts[i]]).toarray()[0]
+
+                    weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
+                    total_weight = 0.0
+
+                    for j, token in enumerate(tokens):
+                        if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
+                            weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
+                            total_weight += token_weight
+
+                    if total_weight > 0:
+                        doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                    else:
+                        doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
+
+                    embeddings.append(doc_embedding)
+
+        return np.vstack(embeddings)
+
+
+
+
+
+    def get_avg_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute document embeddings using a pretrained BERT or RoBERTa model by averaging token embeddings.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's averaged embedding.
+        """
+
+        print(f"Getting averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)  # Move model to correct device
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc=f"Building averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
+                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
+                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                for i in range(token_embeddings.size(0)):
+                    doc_embedding = token_embeddings[i].mean(dim=0).cpu().numpy()  # Average over sequence length
+                    embeddings.append(doc_embedding)
+
+        return np.vstack(embeddings)
+
+
+    def get_transformer_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Gets the associated BERT or RoBERTa embeddings for a given input text(s) using just the CLS 
+        Token Embeddings as a summary of the related doc (text), which is the first token 
+        in the BERT/Roberta input sequence.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's CLS token embedding.
+        """
+
+        print(f"Getting CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)  # Move model to correct device
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc=f"Building CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
+                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
+                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                # Take only the embedding for the first token ([CLS]), which encodes the entire document's context.
+                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+
+                embeddings.append(cls_embeddings.cpu().numpy())  # Move to CPU before appending
+
+        return np.vstack(embeddings)
+        
+
 
     def get_avg_llama_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
         """
         Compute LLaMA document embeddings by averaging token embeddings for each document.
-
-        Args:
-        - texts: List of input text documents.
-        - batch_size: Batch size for processing.
-        - max_len: Maximum length of tokenized sequences.
-
-        Returns:
-        - embeddings: Numpy array of averaged embeddings for each document.
         """
 
         print("getting average LLaMa embeddings...")
 
         # Convert texts into dataset and dataloader
         dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=2)
 
         embeddings = []
 
-        # Set model to evaluation mode and move to device
         self.model.to(self.device)
         self.model.eval()
 
         # Disable gradient computation
         with torch.no_grad():
-            for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
+            # Use autocast for CUDA devices to improve performance
+            autocast_context = torch.cuda.amp.autocast if self.device.type == 'cuda' else nullcontext()
 
-                # Get the model outputs (token embeddings)
-                outputs = self.model(input_ids, attention_mask=attention_mask)
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+            with autocast_context():
+                for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
 
-                # Average the token embeddings across the sequence length axis
-                avg_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_dim)
+                    # Get the model outputs (token embeddings)
+                    outputs = self.model(input_ids, attention_mask=attention_mask)
+                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
 
-                # Convert to numpy and append to list
-                embeddings.append(avg_embeddings.cpu().numpy())
+                    # Average the token embeddings across the sequence length axis
+                    avg_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_dim)
+
+                    # Convert to numpy and append to list
+                    embeddings.append(avg_embeddings.cpu().numpy())
 
         # Stack the individual embeddings into a single numpy array
         embeddings = np.vstack(embeddings)
 
         return embeddings
-
-
 
 
     def get_weighted_llama_embeddings(self, texts, vocab_embeddings, vocab):
@@ -945,7 +1080,7 @@ class LCDataset:
                     # If the word is not found in the pretrained model, use a random vector or zeros
                     self.embedding_vocab_matrix[idx] = np.random.normal(size=(self.embedding_dim,))
         
-        elif self.pretrained in ['bert', 'llama']:
+        elif self.pretrained in ['bert', 'roberta', 'llama']:
             
             # NB: tokenizer and model should be initialized in the embedding_type == 'token' block
             
@@ -965,7 +1100,7 @@ class LCDataset:
 
             self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
             
-            if self.pretrained == 'bert':
+            if self.pretrained in ['bert', 'roberta']:
                 self.vocab_size = len(self.vocab_dict)
             elif self.pretrained == 'llama':
                 self.vocab_size = len(self.vocab_ndarr)
@@ -982,7 +1117,7 @@ class LCDataset:
             #
             # NB we use different embedding vocab matrices here depending upon the pretrained model
             #
-            if (self.pretrained == 'bert'):
+            if (self.pretrained in ['bert', 'roberta']):
                 self.embedding_vocab_matrix = self.embedding_vocab_matrix_orig
             elif (self.pretrained == 'llama'):
                 print("creating vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary...")
@@ -1140,8 +1275,8 @@ class LCDataset:
             self.y, 
             test_size = TEST_SIZE, 
             random_state = 60,
-            shuffle=True, 
-            stratify=self.y
+            shuffle=True
+            #stratify=self.y
             )
 
 

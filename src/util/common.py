@@ -348,7 +348,6 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
             'model', 
             'pretrained', 
             'embeddings', 
-            'wc_supervised', 
             'params', 
             'epoch', 
             'tunable',
@@ -367,7 +366,6 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
     logfile.set_default('model', opt.net)
     logfile.set_default('pretrained', pretrained)
     logfile.set_default('embeddings', embeddings)
-    logfile.set_default('wc_supervised', opt.supervised)
     logfile.set_default('params', method_name)
     logfile.set_default('run', opt.seed)
     logfile.set_default('tunable', opt.tunable)
@@ -386,7 +384,7 @@ def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gp
 # 
 # Enhanced log info for ML baseline (layer cake) program suport
 #
-def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings, wc_supervised):
+def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings):
 
     print("initializing baseline layered log file...")
 
@@ -397,7 +395,6 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
             'model', 
             'pretrained', 
             'embeddings', 
-            'wc_supervised', 
             'params',
             'epoch',
             'tunable',
@@ -419,7 +416,6 @@ def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrain
     logfile.set_default('pretrained', pretrained)
     logfile.set_default('model', model)                 # method in the log file
     logfile.set_default('embeddings', embeddings)
-    logfile.set_default('wc_supervised', wc_supervised)
     logfile.set_default('params', method_name)
 
     # normalize data fields
@@ -561,6 +557,10 @@ def initialize_logging(args):
         pretrained = True
         embeddings = 'bert'
         emb_path = args.bert_path
+    elif args.pretrained == 'roberta':
+        pretrained = True
+        embeddings = 'roberta'
+        emb_path = args.roberta_path
     elif args.pretrained == 'glove':
         pretrained = True
         embeddings = 'glove'
@@ -580,11 +580,7 @@ def initialize_logging(args):
 
     print("emb_path: ", {emb_path})
 
-    supervised = False
-    if args.supervised:
-        supervised = True
-
-    print("pretrained: ", {pretrained}, "; supervised: ", {supervised}, "; embeddings: ", {embeddings})
+    print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
 
     model_type = f'{learner_name}-{args.vtype}-{args.mix}-{args.dataset_emb_comp}'
     print("model_type:", {model_type})
@@ -596,8 +592,7 @@ def initialize_logging(args):
         dataset=args.dataset, 
         model=model_type,
         pretrained=pretrained, 
-        embeddings=embeddings,
-        wc_supervised=supervised
+        embeddings=embeddings
         )
 
     # check to see if the model has been run before
@@ -606,13 +601,12 @@ def initialize_logging(args):
         embeddings=embeddings,
         model=model_type, 
         params=method_name,
-        pretrained=pretrained, 
-        wc_supervised=supervised
+        pretrained=pretrained
         )
 
     print("already_modelled:", already_modelled)
 
-    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, supervised, args.mix, method_name, logfile
+    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, args.mix, method_name, logfile
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -624,9 +618,7 @@ def set_method_name2(opt, vtype='tfidf'):
 
     if opt.pretrained:
         method_name += f'-pretrained-{opt.pretrained}-{opt.dataset_emb_comp}'
-    if opt.supervised:
-        method_name += f'-supervised-{opt.supervised_method}'
-
+    
     if (opt.mix):
         method_name += f'-{opt.mix}'
    

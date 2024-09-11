@@ -25,12 +25,13 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-declare -a mixes=("solo" "vmode" "cat" "dot")
-declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "llama")
+declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
+#declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "roberta" "llama")
+declare -a embeddings=("roberta")
 declare -a emb_comp_options=("weighted" "avg" "summary")
 
 # Embedding config params
@@ -45,6 +46,9 @@ FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/fastText/crawl-
 
 BERT="--pretrained bert --bert-path ../.vector_cache/BERT"
 #BERT_SUP="--pretrained bert --bert-path ../.vector_cache --supervised"
+
+ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
+#ROBERTA_SUP="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa --supervised"
 
 LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
 #LLAMA_SUP="--pretrained llama --llama-path ../.vector_cache --supervised"
@@ -98,11 +102,12 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
                 done
             done
         done
