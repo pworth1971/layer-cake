@@ -10,7 +10,6 @@ from joblib import Parallel, delayed
 
 import multiprocessing
 import itertools
-import pickle
 
 from util.csv_log import CSVLog
 
@@ -707,27 +706,4 @@ def get_system_resources():
 
 
 
-    
-def save_to_pickle(X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings, pickle_file):
-    
-    print(f"Saving pickle file: {pickle_file}...")
-    
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    #print("embedding_matrix[0]:\n", embedding_matrix[0])
-    
-    with open(pickle_file, 'wb') as f:
-        # Save the sparse matrices and vocabulary as a tuple
-        pickle.dump((X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings), f)
 
-
-def load_from_pickle(pickle_file):
-    
-    print(f"Loading pickle file: {pickle_file}...")
-    
-    with open(pickle_file, 'rb') as f:
-        X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings = pickle.load(f)
-
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    #print("embedding_matrix[0]:\n", embedding_matrix[0])
-
-    return X, y, target_names, class_type, embedding_matrix, weighted_embeddings, avg_embeddings, summary_embeddings

@@ -27,11 +27,11 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 
 declare -a datasets=("ohsumed" "20newsgroups" "reuters21578" "bbc-news")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
-declare -a learners=("svm")
+declare -a learners=("svm" "lr" "nb")
 declare -a vtypes=("tfidf")
 declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
 #declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "roberta" "llama")
-declare -a embeddings=("roberta" "bert")
+declare -a embeddings=("word2vec", "fasttext" "bert" "glove" "roberta")
 declare -a emb_comp_options=("weighted" "avg" "summary")
 
 # Embedding config params
@@ -102,10 +102,10 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
                 done
