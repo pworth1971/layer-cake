@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score, f1_score, recall_score, hamming_loss
 from sklearn.metrics import classification_report, make_scorer, precision_score
 from sklearn.model_selection import GridSearchCV, train_test_split, StratifiedKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
+from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.class_weight import compute_class_weight
 
 from data.lc_dataset import LCDataset
@@ -59,9 +59,7 @@ DEFAULT_GPU_BATCH_SIZE = 64
 MPS_BATCH_SIZE = 16
 
 
-#EPOCHS = 30
 EPOCHS = 30
-
 
 NUM_UNFROZEN_MODEL_LAYERS = 2
 
@@ -551,14 +549,14 @@ def classify(dataset='20newsgrouops', args=None, device='cpu'):
 
 
 def get_model_data(dataset='reuters21578'):
-
-    print("getting model data...")
+    print("Getting model data...")
 
     # Load data    
     print(f"Loading data set {dataset}...")
     lcd = LCDataset(dataset)
 
-    X_train, X_test, y_train, y_test = lcd.split()  # Split data
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = lcd.split()
 
     print("X_train:", type(X_train), len(X_train))
     print("X_test:", type(X_test), len(X_test))
@@ -568,22 +566,18 @@ def get_model_data(dataset='reuters21578'):
 
     print("class_type:", lcd.class_type)
 
+    # For multilabel datasets, y_train and y_test are already in the correct format (no need for binarization)
     if lcd.class_type in ['multilabel', 'multi-label']:
-        print("Multilabel classification detected. Using MultiLabelBinarizer...")
-        mlb = MultiLabelBinarizer()
-        y_train = mlb.fit_transform(y_train)
-        y_test = mlb.transform(y_test)
+        print("Multilabel classification detected. Data is already in binary format, skipping binarization.")
     else:
-        print("Single-label classification detected. Using LabelEncoder...")
-        label_encoder = LabelEncoder()
-        y_train = label_encoder.fit_transform(y_train)
-        y_test = label_encoder.transform(y_test)
+        print("Single-label classification detected. Data is already encoded, skipping LabelEncoder.")
+        # No need for additional processing as the data is already encoded
 
     print("y_train:", type(y_train), y_train.shape)
     print("y_test:", type(y_test), y_test.shape)
-    
-    return X_train, X_test, y_train, y_test, lcd.target_names, lcd.nC, lcd.class_type
 
+    # Return all necessary information
+    return X_train, X_test, y_train, y_test, lcd.target_names, lcd.nC, lcd.class_type
 
 
 
@@ -777,7 +771,6 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
 
 
 
-
 def evaluate_model(model, test_loader, device, target_names, threshold=0.5, multilabel=False):
     """
     Evaluate the model on the test set and generate a classification report.
@@ -825,31 +818,35 @@ def evaluate_model(model, test_loader, device, target_names, threshold=0.5, mult
     # Debugging: print the shapes of the targets and predictions
     print(f"all_targets shape: {all_targets.shape}, all_preds shape: {all_preds.shape}")
 
-    # Check if multilabel is set to True and ensure the shapes of y_true and y_pred match
     if multilabel:
-        # Ensure that both y_true and y_pred are 2D arrays (binary matrices) for multilabel classification
-        if len(all_targets.shape) == 1:  # In case targets are not in the correct shape, reshape them
-            all_targets = np.expand_dims(all_targets, axis=-1)
-        if len(all_preds.shape) == 1:  # In case preds are not in the correct shape, reshape them
-            all_preds = np.expand_dims(all_preds, axis=-1)
-
+        # Multilabel classification metrics
         print("Multilabel Classification Report:")
-        print(classification_report(y_true=all_targets, y_pred=all_preds, target_names=target_names, digits=4, zero_division=0))
+        report = classification_report(y_true=all_targets, y_pred=all_preds, target_names=target_names, digits=4, zero_division=0, output_dict=True)
+        
+        # Calculate subset accuracy for multilabel classification
+        subset_acc = accuracy_score(all_targets, all_preds)
+        print(f"Subset Accuracy: {subset_acc:.4f}")
+
     else:
-        # For single-label classification, ensure y_true and y_pred are 1D arrays
-        if len(all_targets.shape) > 1:  # If targets are 2D, flatten them
-            all_targets = np.argmax(all_targets, axis=1)
-        if len(all_preds.shape) > 1:  # If preds are 2D, flatten them
-            all_preds = np.argmax(all_preds, axis=1)
-
-        # Ensure the number of classes in y_pred matches the length of target_names
-        num_pred_classes = len(np.unique(all_preds))  # Number of unique classes in predictions
-        if num_pred_classes != len(target_names):
-            # Adjust target_names to match the number of unique classes in predictions
-            target_names = target_names[:num_pred_classes]
-
+        # Single-label classification report
         print("Single-label Classification Report:")
-        print(classification_report(y_true=all_targets, y_pred=all_preds, target_names=target_names, digits=4, zero_division=0))
+        report = classification_report(y_true=all_targets, y_pred=all_preds, target_names=target_names, digits=4, zero_division=0, output_dict=True)
+
+    # Print the detailed classification report
+    for label, metrics in report.items():
+        if label in target_names:  # Only print actual class labels, skip "accuracy", "macro avg", etc.
+            print(f"Class: {label}")
+            print(f"  Precision: {metrics['precision']:.4f}")
+            print(f"  Recall: {metrics['recall']:.4f}")
+            print(f"  F1-score: {metrics['f1-score']:.4f}")
+            print(f"  Support: {metrics['support']}")
+
+    # Summary statistics
+    print(f"\nSummary:")
+    if 'macro avg' in report:
+        print(f"Macro Avg: Precision: {report['macro avg']['precision']:.4f}, Recall: {report['macro avg']['recall']:.4f}, F1-score: {report['macro avg']['f1-score']:.4f}")
+    if 'weighted avg' in report:
+        print(f"Weighted Avg: Precision: {report['weighted avg']['precision']:.4f}, Recall: {report['weighted avg']['recall']:.4f}, F1-score: {report['weighted avg']['f1-score']:.4f}")
 
 
 
@@ -965,7 +962,7 @@ def fine_tune_model2(args, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max
     train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, multilabel=(class_type == 'multilabel'))
 
     # Test the model on test set
-    evaluate_model(model, test_loader, device, category_names)
+    evaluate_model(model, test_loader, device, category_names, multilabel=(class_type == 'multilabel'))
 
 
 

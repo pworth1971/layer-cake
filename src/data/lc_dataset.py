@@ -321,7 +321,7 @@ class LCDataset:
             else:
                 raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
-            print("fitting training data... X_raw type and length:", type(self.X), len(self.X))
+            print("fitting training data... X type and length:", type(self.X), len(self.X))
 
             # Fit and transform the text data to obtain tokenized features, 
             # note the requirement for the partial() method to bind the self 
@@ -359,7 +359,9 @@ class LCDataset:
         print("vocab_dict:", type(self.vocab_dict), len(self.vocab_dict))    
         self.vocab_ndarr = self.vectorizer.get_feature_names_out()
         print("vocab_ndarr:", type(self.vocab_ndarr), len(self.vocab_ndarr))
-        self.vocab = self.vocab_dict
+        #self.vocab = self.vocab_dict
+        self.vocab = self.vocab_
+
         print("vocab:", type(self.vocab), len(self.vocab))
         
 
@@ -719,7 +721,7 @@ class LCDataset:
 
                     for j, token in enumerate(tokens):
                         if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
-                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token.lower()]]
+                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
                             weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
                             total_weight += token_weight
 
@@ -775,6 +777,7 @@ class LCDataset:
 
                     for j, token in enumerate(tokens):
                         if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                            #token_weight = tfidf_vector[self.vectorizer.vocabulary_[token.lower()]]
                             token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
                             weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
                             total_weight += token_weight
@@ -1381,7 +1384,7 @@ class LCDataset:
         print("self.X_raw:", type(self.X_raw), len(self.X_raw))
         print("self.X_raw[0]:\n", self.X_raw[0])
 
-        self.X = self._preprocess(self.X_raw)
+        self.X = self._preprocess(pd.Series(self.X_raw))
         print("self.X:", type(self.X), self.X.shape)
         print("self.X[0]:\n", self.X[0])
 
@@ -1440,9 +1443,9 @@ class LCDataset:
 
         self.X_raw = self.devel.data
         print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-        print("self.X[0]:\n", self.X[0])
+        print("self.X_raw[0]:\n", self.X_raw[0])
 
-        self.X = self._preprocess(self.X_raw)
+        self.X = self._preprocess(pd.Series(self.X_raw))
         print("self.X:", type(self.X), self.X.shape)
         print("self.X[0]:\n", self.X[0])
 
