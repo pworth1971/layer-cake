@@ -23,10 +23,11 @@ GLOVE="--pretrained glove --glove-path ../.vector_cache"
 WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
 FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec"
 BERT="--pretrained bert --bert-path ../.vector_cache"
+ROBERTA="--pretrained roberta --roberta-path ../.vector_cache"
 LLAMA="--pretrained llama --llama-path ../.vector_cache"
 
-PY="python ../src/layer_cake.py"                                # source file
-LOG="--log-file ../log/nn_attn_rcv1.test"                       # output log file for metrics
+PY="python ../src/layer_cake.py"                                    # source file
+LOG="--log-file ../log/nn_attn_bbc-news.test"                       # output log file for metrics
 
 # dataset config
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
@@ -34,7 +35,7 @@ LOG="--log-file ../log/nn_attn_rcv1.test"                       # output log fil
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                            # RCV1-v2 (multi-label, 101 classes)
  
-dataset="--dataset rcv1 --pickle-dir ../pickles"                        
+dataset="--dataset bbc-news --pickle-dir ../pickles"                        
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -72,12 +73,19 @@ $PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$BERT --tunable --seed $ru
 $PY $LOG $dataset	$ATTN	--channels 128	$BERT  --supervised --seed $run    --nepochs $EP
 $PY $LOG $dataset	$ATTN	--channels 128	$BERT  --supervised	--tunable --seed $run   --nepochs $EP
 
+## RoBERTa
+$PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$ROBERTA --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --supervised	--tunable --seed $run   --nepochs $EP
+
 ## LLAMA
-$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --seed $run   --nepochs $EP
-$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --tunable --seed $run   --nepochs $EP
-$PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$LLAMA --tunable --seed $run --droptype learn    --nepochs $EP
-$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --supervised --seed $run    --nepochs $EP
-$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --supervised	--tunable --seed $run   --nepochs $EP
+#$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --seed $run   --nepochs $EP
+#$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --tunable --seed $run   --nepochs $EP
+#$PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$LLAMA --tunable --seed $run --droptype learn    --nepochs $EP
+#$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --supervised --seed $run    --nepochs $EP
+#$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --supervised	--tunable --seed $run   --nepochs $EP
 
 
 done

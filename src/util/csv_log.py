@@ -32,8 +32,8 @@ class CSVLog:
 
     def already_calculated(self, **kwargs):
         df = self.df
-        #print("self.df:", df)
-        #print("kwargs:", kwargs)
+        print("self.df:", df)
+        print("kwargs:", kwargs)
         
         if df.shape[0] == 0:
             return False
@@ -42,7 +42,7 @@ class CSVLog:
             kwargs = self.defaults
         
         for key,val in kwargs.items():
-            #print("key, val:", key, val)
+            print("key, val:", key, val)
             
             # Convert to string and to lower case only if the column exists and is of type string
             if df[key].dtype == 'object':  # Typically, 'object' dtype in pandas means string
@@ -54,23 +54,10 @@ class CSVLog:
             else:
                 df = df[df[key] == val]  # Direct comparison without conversion if not string
             
-            #print("df:", df)
-            #print("df size:", df.size)
-            #print("df.shape[0]:", df.shape[0])
+            print("df:", df)
+            print("df size:", df.size)
+            print("df.shape[0]:", df.shape[0])
             
-            if df.shape[0] == 0:
-                return False
-        return True
-
-
-    def already_calculated_deprecated(self, **kwargs):
-        df = self.df
-        if df.shape[0] == 0:
-            return False
-        if len(kwargs) == 0:
-            kwargs = self.defaults
-        for key,val in kwargs.items():
-            df = df.loc[df[key] == val]
             if df.shape[0] == 0:
                 return False
         return True
@@ -83,7 +70,7 @@ class CSVLog:
 
     # ----------------------------------------------------------------------------------------------------------
     
-    def add_layered_row(self, **kwargs):
+    def insert(self, **kwargs):
 
         #print("CSVLog::add_layered_row()")
         #print('--defaults--\n\t', {self.defaults.keys})
@@ -91,18 +78,17 @@ class CSVLog:
         # set defaults
         for key in self.defaults.keys():
             if key not in kwargs:
-                #print("key ", {key}, "not found, setting default")
+                print("key ", {key}, "not found, setting default")
                 kwargs[key]=self.defaults[key]
 
         local_columns = sorted(list(kwargs.keys()))
         values = [kwargs[col_i] for col_i in local_columns]
 
-        #print(self.columns)
-        #print(local_columns)
-        #print(values)
+        print(self.columns)
+        print(local_columns)
+        print(values)
 
         s = pd.Series(values, index=self.columns)
-        #self.df = self.df.append(s, ignore_index=True)      # Dataframe.append deprecated as of pandas 2.0
         self.df = self.df._append(s, ignore_index=True)     
         if self.autoflush: self.flush()
         self.tell(kwargs)

@@ -1,10 +1,6 @@
 import argparse
 from time import time
-import matplotlib.pyplot as plt
-import os
 import logging
-
-import torchtext
 
 import scipy
 from scipy.sparse import csr_matrix
@@ -19,14 +15,12 @@ from model.classification import NeuralClassifier
 
 from util.early_stop import EarlyStopping
 from util.common import *
-from util.csv_log import CSVLog
 from util.file import create_if_not_exist
 from util.metrics import *
 
-from data.dataset import *
-from collections import defaultdict
+from data.lc_dataset import *
+
 import argparse
-import copy
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -478,9 +472,11 @@ def set_method_name(opt):
     return method_name
 
 
-def initialize_logfile(opt):
+def initialize_neural_logger(opt):
 
     print("initializing log file...")
+
+    print("opt:", opt)
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
@@ -538,7 +534,7 @@ def initialize_logfile(opt):
 # --------------------------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    available_datasets = Dataset.dataset_available
+    available_datasets = LCDataset.dataset_available
     available_dropouts = {'sup','none','full','learn'}
 
     # Training settings
@@ -547,6 +543,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='reuters21578', metavar='str',
                         help=f'dataset, one in {available_datasets}')
     
+    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
+                        help=f'dataset base vectorization strategy, in [tfidf, count]')
+
     parser.add_argument('--batch-size', type=int, default=100, metavar='int',
                         help='input batch size (default: 100)')
     
@@ -641,7 +640,12 @@ if __name__ == '__main__':
     
     parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'directory to BERT pretrained vectors (e.g. bert-base-uncased-20newsgroups.pkl), used only with --pretrained bert')
+                        help=f'directory to BERT pretrained vectors, used only with --pretrained bert')
+
+    parser.add_argument('--roberta-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to RoBERTa pretrained vectors, used only with --pretrained roberta')
+
 
     parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
@@ -670,11 +674,23 @@ if __name__ == '__main__':
     print("opt:", type(opt), opt)
 
     # set device and seed
-    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(f'RUNNING ON DEVICE == {opt.device}')
-
-    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
+    #opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    
+    #assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
+    # Setup device prioritizing CUDA, then MPS, then CPU
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        batch_size = DEFAULT_GPU_BATCH_SIZE
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        batch_size = MPS_BATCH_SIZE
+    else:
+        device = torch.device("cpu")
+        batch_size = DEFAULT_CPU_BATCH_SIZE
+        
     torch.manual_seed(opt.seed)
+
+    print(f'RUNNING ON DEVICE == {device}')
 
     # single run case
     if (opt.batch_file is None):                        # running single command 
@@ -715,14 +731,26 @@ if __name__ == '__main__':
         already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(opt)
 
         # check to see if model params have been computed already
-        assert already_modelled and not opt.force, \
-            f'--- model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---'
-            
+        if (already_modelled and not opt.force):
+            print(f'--- model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+            exit(0)
+    
         pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
 
+        if (pretrained in ['bert', 'roberta', 'llama']):
+            embedding_type = 'token'
+        else:
+            embedding_type = 'word'
+
         print(f"initializing dataset: {opt.dataset}")
-        dataset = Dataset.load(dataset_name=opt.dataset, vectorization_type='tfidf', base_pickle_path=opt.pickle_dir).show()
-        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
+        lcd = LCDataset.load_nn(
+            dataset_name=opt.dataset,                       # dataset name
+            vectorization_type=opt.vtype,                   # vectorization type 
+            embedding_type=embedding_type,                  # embedding type ('word or 'token')
+            base_pickle_path=opt.pickle_dir                 # base pickle path
+        ).show()
+        
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
         # run layer_cake
         layer_cake(
@@ -730,7 +758,7 @@ if __name__ == '__main__':
             logfile,
             pretrained_vectors, 
             method_name,
-            dataset, 
+            lcd, 
             word2index, 
             out_of_vocabulary, 
             pad_index, 
@@ -840,7 +868,7 @@ if __name__ == '__main__':
             if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
                 print(f"initializing dataset: {current_config.dataset}")
 
-                dataset = Dataset.load(dataset_name=current_config.dataset, base_pickle_path=current_config.pickle_dir).show()
+                dataset = LCDataset.load(dataset_name=current_config.dataset, base_pickle_path=current_config.pickle_dir).show()
                 word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
 
             # run layer_cake

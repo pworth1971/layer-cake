@@ -41,14 +41,39 @@ class NeuralClassifier(nn.Module):
                  drop_embedding_prop=0):
         super(NeuralClassifier, self).__init__()
 
+        # Initialize the custom embedding layer with pre-trained or learnable embeddings.
+        # This will combine pretrained and learnable embeddings.
         self.embed = EmbeddingCustom(vocab_size, learnable_length, pretrained, drop_embedding_range, drop_embedding_prop)
+
+        # Initialize the projection layer (CNN, LSTM, or Attention) based on the net_type.
         self.projection = init__projection(net_type)(self.embed.dim(), hidden_size)
+
+        # Linear layer to map the document embedding to output size (number of classes).
         self.label = nn.Linear(self.projection.dim(), output_size)
 
     def forward(self, input):
-        word_emb = self.embed(input)
+        """
+        Expected input:
+        - input: A list or tensor of tokenized words/subwords.
+                 - If using pre-trained embeddings, the input should be a tensor of token indices.
+                 - If using a tokenizer (e.g., BERT), input should be a list of tokens to be passed through the tokenizer.
+                 
+        Example:
+        - For BERT: [["hello", "world"], ["example", "sentence"]]
+        - For word embeddings: [[1, 2, 3], [4, 5, 6]]  (numerical indices)
+        
+        Returns:
+        - logits: A tensor of shape [batch_size, output_size] representing class scores.
+        """
+        # Get word embeddings from the input tokens.
+        word_emb = self.embed(input)                
+
+        # Project word embeddings into document embeddings using CNN, LSTM, or Attention.
         doc_emb = self.projection(word_emb)
+
+        # Get the logits (class scores) by passing document embeddings through the linear layer.
         logits = self.label(doc_emb)
+        
         return logits
 
     def finetune_pretrained(self):
@@ -132,18 +157,39 @@ class BertWCEClassifier(nn.Module):
                  token2wce_embeddings):
         super(BertWCEClassifier, self).__init__()
 
+        # Compute the total embedding dimension by combining BERT and WCE embeddings
         emb_dim = token2bert_embeddings.dim() + (0 if token2wce_embeddings is None else token2wce_embeddings.dim())
         print(f'Embedding dimensions {emb_dim}')
 
+        # BERT embeddings object
         self.token2bert_embeddings = token2bert_embeddings
+
+        # Word Context Embeddings (WCE) object (optional)
         self.token2wce_embeddings = token2wce_embeddings
+
+        # Projection layer (CNN, LSTM, or Attention) initialized based on the net type
         self.projection = init__projection(net_type)(emb_dim, hidden_size)
+
+        # Linear layer to map document embeddings to output class scores
         self.label = nn.Linear(self.projection.dim(), output_size)
 
+
     def forward(self, input): # list of lists of tokens
-        # convert tokens to id for Bert, pad, and get contextualized embeddings
+        """
+        Expected input:
+        - input: A list of lists of tokenized words/subwords.
+                 - Each list represents a document or sentence.
+                 - Tokens should be pre-processed and tokenized before passing to this method.
+                 - Example: [["hello", "world"], ["example", "sentence"]] (for raw tokens)
+
+        Returns:
+        - logits: A tensor of shape [batch_size, output_size] representing class scores.
+        """
+
+        # BERT Embeddings: convert tokens to BERT token ids, apply padding, and get BERT embeddings
         contextualized_embeddings = self.token2bert_embeddings.embeddings(input)
 
+        # WCE Embeddings: If WCE is used, get the embeddings for each token
         # convert tokens to ids for WCE, pad, and get WCEs
         if self.token2wce_embeddings is not None:
             wce_embeddings = self.token2wce_embeddings(input)
@@ -153,9 +199,15 @@ class BertWCEClassifier(nn.Module):
         else:
             word_emb = contextualized_embeddings
 
+        # Project the concatenated embeddings into a document-level embedding
         doc_emb = self.projection(word_emb)
+
+        # Get class logits from the document embeddings
         logits = self.label(doc_emb)
+
         return logits
+
+
 
     def finetune_pretrained(self):
         self.token2wce_embeddings.finetune_pretrained()

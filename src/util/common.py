@@ -1,23 +1,12 @@
 import numpy as np
-
 from tqdm import tqdm
-
 import torch
-
 from scipy.sparse import issparse, csr_matrix
-
 from joblib import Parallel, delayed
-
 import multiprocessing
 import itertools
-
 from util.csv_log import CSVLog
-
 import matplotlib.pyplot as plt
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import LinearSVC
-from sklearn.naive_bayes import MultinomialNB
 
 from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
@@ -32,9 +21,19 @@ import argparse
 
 
 
+
+
+NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn', 'nn-transformer']
+ML_MODELS = ['svm', 'lr', 'nb', 'dt']
+
+
+
+
 # pretrained model types
 DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
 DEFAULT_LLAMA_PRETRAINED_MODEL = 'meta-llama/Llama-2-7b-hf'
+
+
 
 # embedding cache directory
 VECTOR_CACHE = '../.vector_cache'                                   # assumes everything is run from /bin directory
@@ -504,129 +503,6 @@ def tosparse(y):
     """Ensure matrix is in CSR format for efficient arithmetic operations."""
     return y if issparse(y) else csr_matrix(y)
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize_logging(args):
-
-    print("\n\tinitializing logging...")
-    
-    # set up model type
-    if args.learner == 'svm':
-        learner = LinearSVC
-        learner_name = 'SVM' 
-    elif args.learner == 'lr':
-        learner = LogisticRegression
-        learner_name = 'LR'
-    elif args.learner == 'nb':
-        learner = MultinomialNB
-        #learner = GaussianNB
-        learner_name = 'NB'
-    else:
-        print("** Unknown learner, possible values are svm, lr or nb **")
-        return
-
-    print("learner:", learner)
-    print("learner_name: ", {learner_name})
-    
-    """
-    # disable warnings
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    """
-
-    # default to tfidf vectorization type unless 'count' specified explicitly
-    if args.vtype == 'count':
-        vtype = 'count'
-    else:
-        vtype = 'tfidf'             
-        
-    print("vtype:", {vtype})
-    
-    #method_name = f'{learner_name}-{vtype}-{"opC" if args.optimc else "default"}'
-    method_name = set_method_name2(args, vtype)
-    print("method_name: ", {method_name})
-
-    pretrained = False
-    embeddings ='none'
-    emb_path = VECTOR_CACHE
-
-    if args.pretrained == 'bert':
-        pretrained = True
-        embeddings = 'bert'
-        emb_path = args.bert_path
-    elif args.pretrained == 'roberta':
-        pretrained = True
-        embeddings = 'roberta'
-        emb_path = args.roberta_path
-    elif args.pretrained == 'glove':
-        pretrained = True
-        embeddings = 'glove'
-        emb_path = args.glove_path
-    elif args.pretrained == 'word2vec':
-        pretrained = True
-        embeddings = 'word2vec'
-        emb_path = args.word2vec_path
-    elif args.pretrained == 'fasttext':
-        pretrained = True
-        embeddings = 'fasttext'
-        emb_path = args.fasttext_path
-    elif args.pretrained == 'llama':
-        pretrained = True
-        embeddings = 'llama'
-        emb_path = args.llama_path
-
-    print("emb_path: ", {emb_path})
-
-    print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
-
-    model_type = f'{learner_name}-{args.vtype}-{args.mix}-{args.dataset_emb_comp}'
-    print("model_type:", {model_type})
-    
-    #print("initializing logfile embeddings value to:", {embeddings})
-    logfile = init_layered_baseline_logfile(                             
-        logfile=args.log_file,
-        method_name=method_name, 
-        dataset=args.dataset, 
-        model=model_type,
-        pretrained=pretrained, 
-        embeddings=embeddings
-        )
-
-    # check to see if the model has been run before
-    already_modelled = logfile.already_calculated(
-        dataset=args.dataset,
-        embeddings=embeddings,
-        model=model_type, 
-        params=method_name,
-        pretrained=pretrained
-        )
-
-    print("already_modelled:", already_modelled)
-
-    return already_modelled, vtype, learner, pretrained, embeddings, emb_path, args.mix, method_name, logfile
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def set_method_name2(opt, vtype='tfidf'):
-
-    method_name = f'{opt.learner}-{vtype}'
-
-    if opt.pretrained:
-        method_name += f'-pretrained-{opt.pretrained}-{opt.dataset_emb_comp}'
-    
-    if (opt.mix):
-        method_name += f'-{opt.mix}'
-   
-    if (opt.optimc):
-        method_name += f'-optC'
-    else:
-        method_name += f'-defC'
-         
-    return method_name
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
