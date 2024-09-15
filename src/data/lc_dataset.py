@@ -445,14 +445,16 @@ class LCDataset:
 
                 # Generate the weighted average embeddings for the dataset
                 self.Xtr_weighted_embeddings_new = self.get_weighted_llama_embeddings(
-                    self.Xtr.toarray(),
+                    #self.Xtr.toarray(),
+                    self.Xtr,
                     self.llama_vocab_embeddings,
                     self.vocab_ndarr
                     )
 
                 # Generate the weighted average embeddings for the dataset
                 self.Xte_weighted_embeddings_new = self.get_weighted_llama_embeddings(
-                    self.Xte.toarray(),
+                    #self.Xte.toarray(),
+                    self.Xte,
                     self.llama_vocab_embeddings,
                     self.vocab_ndarr
                     )
@@ -1845,7 +1847,7 @@ class LCDataset:
                         pickle.dump(dataset, file)
                     print("data successfully pickled at:", full_pickle_path)
                 except Exception as e:
-                    print(f'Exception raised, failed to pickle data: {e}')
+                    print(f'\n\tERROR: Exception raised, failed to pickle data: {e}')
 
         else:
             print(f'loading dataset {dataset_name}')
@@ -1857,19 +1859,41 @@ class LCDataset:
 # end class
 #
 
+
+
+
 def save_to_pickle(Xtr, Xte, y_train, y_test, target_names, class_type, embedding_matrix, Xtr_weighted_embeddings, Xte_weighted_embeddings, Xtr_avg_embeddings, 
         Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings, pickle_file):
     
     print(f'saving {pickle_file} to pickle...')
 
-    #print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
+    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
     #print("embedding_matrix[0]:\n", embedding_matrix[0])
 
     # Open the file for writing and write the pickle data
     try:
 
+        # Combine multiple variables into a dictionary
+        lc_pt_data = {
+            'Xtr': Xtr,
+            'Xte': Xte,
+            'y_train': y_train,
+            'y_test': y_test,
+            'target_names': target_names,
+            'class_type': class_type,
+            'embedding_matrix': embedding_matrix,
+            'Xtr_weighted_embeddings': Xtr_weighted_embeddings,
+            'Xte_weighted_embeddings': Xte_weighted_embeddings,
+            'Xtr_avg_embeddings': Xtr_avg_embeddings,
+            'Xte_avg_embeddings': Xte_avg_embeddings,
+            'Xtr_summary_embeddings': Xtr_summary_embeddings,
+            'Xte_summary_embeddings': Xte_summary_embeddings
+        }
+
         with open(pickle_file, 'wb', pickle.HIGHEST_PROTOCOL) as f:
-        
+            pickle.dump(lc_pt_data, f)
+
+        """
             pickle.dump(
                 Xtr,                                # vectorized dataset training data 
                 Xte,                                # vectorized dataset test data
@@ -1886,25 +1910,45 @@ def save_to_pickle(Xtr, Xte, y_train, y_test, target_names, class_type, embeddin
                 Xte_summary_embeddings,             # summary embedding representation of dataset test data
                 f                                   # file
             )
-
+        """
+        
         print("data successfully pickled at:", pickle_file)
+
+        return True
 
     except Exception as e:
         print(f'Exception raised, failed to pickle data to {pickle_file}: {e}')
+        return False
         
    
 
 def load_from_pickle(pickle_file):
     
     print(f"Loading pickle file: {pickle_file}...")
-            
-    with open(pickle_file, 'rb') as f:
-        try:        
-            Xtr, Xte, y_train, y_test, target_names, class_type, embedding_matrix, Xtr_weighted_embeddings, Xte_weighted_embeddings, \
-                            Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = pickle.load(f)
-        except EOFError:
-            print("Error: Unexpected end of file while reading the pickle file.")
 
+    try:
+        # open the pickle file for reading
+        with open(pickle_file, 'rb') as f:
+            data_loaded = pickle.load(f)                # load the data from the pickle file
+
+        # Access the individual variables
+        Xtr = data_loaded['Xtr']
+        Xte = data_loaded['Xte']
+        y_train = data_loaded['y_train']
+        y_test = data_loaded['y_test']
+        target_names = data_loaded['target_names']
+        class_type = data_loaded['class_type']
+        embedding_matrix = data_loaded['embedding_matrix']
+        Xtr_weighted_embeddings = data_loaded['Xtr_weighted_embeddings']
+        Xte_weighted_embeddings = data_loaded['Xte_weighted_embeddings']
+        Xtr_avg_embeddings = data_loaded['Xtr_avg_embeddings']
+        Xte_avg_embeddings = data_loaded['Xte_avg_embeddings']
+        Xtr_summary_embeddings = data_loaded['Xtr_summary_embeddings']
+        Xte_summary_embeddings = data_loaded['Xte_summary_embeddings']
+
+    except EOFError:
+        print("\n\tError: Unexpected end of file while reading the pickle file.")
+        return None
 
     print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
     #print("embedding_matrix[0]:\n", embedding_matrix[0])
