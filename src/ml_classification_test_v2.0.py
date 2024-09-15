@@ -1,6 +1,7 @@
 import numpy as np
 import argparse
 from time import time
+import os
 
 from scipy.sparse import csr_matrix, csc_matrix
 
@@ -12,7 +13,7 @@ from data.lc_dataset import LCDataset
 
 from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
 
-from data.lc_dataset import LCDataset, loadpt_data, MAX_VOCAB_SIZE
+from data.lc_dataset import LCDataset, MAX_VOCAB_SIZE, save_to_pickle, load_from_pickle
 from model.classification import run_model
 
 from util.csv_log import CSVLog
@@ -220,7 +221,7 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # classify_data(): Core processing function
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, method=None, logfile=None, args=None):
+def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, method=None, optimized=False, logfile=None, args=None):
     """
     Core function for classifying text data using various configurations like embeddings, methods, and models.
 
@@ -247,12 +248,12 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
 
     print("\n\tclassifying...")
     
-    if (pretrained_embeddings in ['bert', 'roberta', 'llama']):
+    if (args.pretrained is not None and args.pretrained in ['bert', 'roberta', 'llama']):
         embedding_type = 'token'
     else:
         embedding_type = 'word'
     
-    print("pretrained_embeddings:", pretrained_embeddings)    
+    print("embeddings:", embeddings)    
     print("embedding_type:", embedding_type)
     
     #
@@ -301,8 +302,6 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
     print("y_train after transformation:", type(y_train), y_train.shape)
     print("y_test after transformation:", type(y_test), y_test.shape)
 
-    data = None
-
     if args.pretrained is None:        # no embeddings in this case
         sup_tend = 0
     else:                              # embeddings are present
@@ -316,7 +315,7 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
             y_train=y_train, 
             X_test=Xte, 
             dataset=dataset,
-            pretrained=pretrained_embeddings,
+            pretrained=embeddings,
             pretrained_vectors_dictionary=embedding_vocab_matrix,
             weighted_embeddings_train=Xtr_weighted_embeddings,
             weighted_embeddings_test=Xte_weighted_embeddings,
@@ -334,18 +333,128 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
 
     tend += sup_tend
 
-    dims = X_train.shape[1] if data is not None else 0
+    dims = X_train.shape[1]
+    print("# dimensions:", dims)
 
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
+    comp_method = get_model_computation_method(args, embedding_type)
+    print("comp_method:", comp_method)
+
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def get_model_computation_method(args, embedding_type='word'):
+
+    print("calculating model computation method...")
+    print("embedding_type:", embedding_type)
+
+    if (args.pretrained in ['bert', 'roberta', 'llama']):
+        pt_type = 'attention'
+    elif (args.pretrained in ['glove', 'word2vec', 'fasttext']):
+        pt_type = 'co-occurrence'
+    else:
+        pt_type = 'unkwnown'
+        
+    if args.pretrained == 'fasttext':
+        embedding_type = 'subword'
+        
+    pt_type = f'{embedding_type}:{pt_type}'
+
+    if (args.learner in ML_MODELS): 
+
+        if args.mix == 'solo':
+            return pt_type
+            
+        elif args.mix == 'vmode':
+            return 'frequency'
+
+        elif args.mix == 'cat':
+            return f'frequency+{pt_type}'
+
+        elif args.mix == 'dot':
+            return f'frequency.{pt_type}'
+
+        elif args.mix == 'lsa':
+            return f'frequency->SVD'
+
+        
+    elif (args.learner in NEURAL_MODELS):
+        pass
+
+
+
+def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word'):
+
+    print("loadpt_data():", dataset, PICKLE_DIR)
+
+    #
+    # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
+    #
+    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{MAX_VOCAB_SIZE}_tokenized.pickle'
+
+    print(f"Loading data set {dataset}...")
+
+    pickle_file = PICKLE_DIR + pickle_file_name                                     
+        
+    print("pretrained:", pretrained)
+    
+    #
+    # we pick up the vectorized dataset along with the associated pretrained 
+    # embedding matrices when e load the data - either from data files directly
+    # if the first time parsing the dataset or from the pickled file if it exists
+    # and the data has been cached for faster loading
+    #
+    if os.path.exists(pickle_file):                                                 # if the pickle file exists
+        
+        print(f"Loading tokenized data from '{pickle_file}'...")
+        
+        Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = load_from_pickle(pickle_file)
+
+        return Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings
+
+    else:
+        print(f"'{pickle_file}' not found, loading {dataset}...")
+        
+        lcd = LCDataset(
+            name=dataset,                               # dataset name 
+            vectorization_type=vtype,                   # vectorization type (one of 'tfidf', 'count')
+            embedding_type=emb_type,                    # embedding type (one of 'word', 'token')
+            pretrained=pretrained,                      # pretrained embeddings (model type or None)
+        )    
+
+        lcd.init_embedding_matrices(
+            pretrained=pretrained,                      # pretrained embeddings
+            pretrained_path=embedding_path              # path to embeddings
+            )
+
+        # Save the tokenized matrices to a pickle file
+        save_to_pickle(
+            lcd.Xtr_vectorized,                         # vectorized training data
+            lcd.Xte_vectorized,                         # vectorized test data
+            lcd.y_train_sparse,                         # training data labels
+            lcd.y_test_sparse,                          # test data labels
+            lcd.target_names,                           # target names
+            lcd.class_type,                             # class type (single-label or multi-label):
+            lcd.embedding_vocab_matrix,                 # vector representation of the dataset vocabulary
+            lcd.Xtr_weighted_embeddings,                # weighted avg embedding representation of dataset training data
+            lcd.Xte_weighted_embeddings,                # weighted avg embedding representation of dataset test data
+            lcd.Xtr_avg_embeddings,                     # avg embedding representation of dataset training data
+            lcd.Xte_avg_embeddings,                     # avg embedding representation of dataset test data
+            lcd.Xtr_summary_embeddings,                 # summary embedding representation of dataset training data
+            lcd.Xte_summary_embeddings,                 # summary embedding representation of dataset test data
+            pickle_file)         
+
+        return lcd.Xtr_vectorized, lcd.Xte_vectorized, lcd.y_train_sparse, lcd.y_test_sparse, lcd.target_names, lcd.class_type, lcd.embedding_vocab_matrix, \
+            lcd.Xtr_weighted_embeddings, lcd.Xte_weighted_embeddings, lcd.Xtr_avg_embeddings, lcd.Xte_avg_embeddings, lcd.Xtr_summary_embeddings, lcd.Xte_summary_embeddings
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -394,19 +503,8 @@ def initialize_ml_testing(args):
     if (args.pretrained is None) and (args.pretrained in NEURAL_MODELS or args.pretrained in ML_MODELS):
         pretrained = True
 
-    if (args.pretrained == 'bert'):
-        emb_path = args.bert_path
-    elif args.pretrained == 'roberta':
-        emb_path = args.roberta_path
-    elif args.pretrained == 'glove':
-        emb_path = args.glove_path
-    elif args.pretrained == 'word2vec':
-        emb_path = args.word2vec_path
-    elif args.pretrained == 'fasttext':
-        emb_path = args.fasttext_path
-    elif args.pretrained == 'llama':
-        emb_path = args.llama_path
-
+    # get the path to the embeddings
+    emb_path = get_embeddings_path(args.pretrained, args)
     print("emb_path: ", {emb_path})
 
     model_type = f'{learner_name}-{args.vtype}-{args.mix}-{args.dataset_emb_comp}'
@@ -425,9 +523,10 @@ def initialize_ml_testing(args):
             'class_type',
             'model', 
             'embeddings',
+            'comp_method',
             'representation',
             'optimized',
-            'dimensions'
+            'dimensions',
             'measure', 
             'value',
             'timelapse',
@@ -452,11 +551,13 @@ def initialize_ml_testing(args):
     ml_logger.set_default('os', system.get_os())
     ml_logger.set_default('cpus', system.get_cpu_details())
     ml_logger.set_default('mem', system.get_total_mem())
-    ml_logger.set_default('gpus', system.get_gpu_summary())
+    
+    gpus = system.get_gpu_summary()
+    if gpus is None:
+        gpus = -1   
+    ml_logger.set_default('gpus', gpus)
 
-    #
-    # normalize data fields - these are NA for ML models
-    #
+    # epoch and run fields are deprecated
     ml_logger.set_default('epoch', -1)
     ml_logger.set_default('run', -1)
 
@@ -480,7 +581,28 @@ def initialize_ml_testing(args):
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def get_embeddings_path(pretrained, args):
+    
+    if (pretrained == 'bert'):
+        return args.bert_path
+    elif pretrained == 'roberta':
+        return args.roberta_path
+    elif pretrained == 'glove':
+        return args.glove_path
+    elif pretrained == 'word2vec':
+        return args.word2vec_path
+    elif pretrained == 'fasttext':
+        return args.fasttext_path
+    elif pretrained == 'llama':
+        return args.llama_path
+    else:
+        return None
+
+
+
 def get_embeddings(args):
+
+    emb = ''                # initialize to empty string
 
     if (args.pretrained and args.wce is False):
         emb += args.pretrained
