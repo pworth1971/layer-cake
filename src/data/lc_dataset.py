@@ -69,8 +69,8 @@ TEST_SIZE = 0.3
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
-DEFAULT_GPU_BATCH_SIZE = 64
-MPS_BATCH_SIZE = 32
+DEFAULT_GPU_BATCH_SIZE = 8
+MPS_BATCH_SIZE = 16
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -84,6 +84,8 @@ HF_TOKEN2 = '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'
 NUM_DL_WORKERS = 3      # number of workers to handle DataLoader tasks
 
 
+nltk.download('stopwords')
+nltk.download('punkt_tab')
 
 stop_words = set(stopwords.words('english'))
 
@@ -821,7 +823,7 @@ class LCDataset:
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
         
-        print(f'getting word embedding representations of text using {'Word2Vec' if self.pretrained == 'word2vec' else 'GloVe' if self.pretrained == 'glove' else 'fastText'} pretrained embeddings......')
+        print(f"getting word embedding representations of text using {'Word2Vec' if self.pretrained == 'word2vec' else 'GloVe' if self.pretrained == 'glove' else 'fastText'} pretrained embeddings......")
 
         print("texts:", type(texts), len(texts))
         print("vectorizer:", type(vectorizer))
