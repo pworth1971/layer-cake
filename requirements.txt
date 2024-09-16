@@ -17,3 +17,4 @@ psutil
 GPUtil
 plotly
 nltk
+fasttext
