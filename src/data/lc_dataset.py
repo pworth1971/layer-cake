@@ -1598,7 +1598,7 @@ class LCDataset:
 
         print("Train Size =", self.X_train_raw.shape, "\nTest Size = ", self.X_test_raw.shape)
 
-        # preprocess the text (stopword removal, lemmatization, etc)
+        # preprocess the text (stopword removal, mask numbers, etc)
         self.Xtr = self._preprocess(self.X_train_raw)
         print("Xtr:", type(self.Xtr), self.Xtr.shape)
         #print("Xtr[0]:\n", self.Xtr[0])
@@ -1635,14 +1635,20 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        print("encoding labels...")
+
         # Encode the labels
         label_encoder = LabelEncoder()
         self.y_train = label_encoder.fit_transform(self.devel_target)
-        self.y_test = label_encoder.fit_transform(self.test_target)
-        
-        # Convert Y to a sparse matrix
-        self.y_train_sparse = csr_matrix(self.y_train).T         # Transpose to match the expected shape
-        self.y_test_sparse = csr_matrix(self.y_test).T         # Transpose to match the expected shape
+        self.y_test = label_encoder.transform(self.test_target)
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
+
+        # Convert y matrices to sparse matrices
+        self.y_train_sparse = csr_matrix(self.y_train).T                                        # Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test).T                                          # Transpose to match the expected shape
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
 
         return self.target_names
 
@@ -1671,28 +1677,31 @@ class LCDataset:
         self.classification_type = 'singlelabel'
         self.class_type = 'singlelabel'
         
+        # training data
+        self.Xtr = self._preprocess(pd.Series(self.devel.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        # test data
+        self.Xte = self._preprocess(pd.Series(self.test.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+
         #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
-        self.devel_target, self.test_target = self.devel.target, self.test.target
-        
+        self.devel_target, self.test_target = self.devel.target, self.test.target        
         print("devel_target:", type(self.devel_target), len(self.devel_target))
         print("test_target:", type(self.test_target), len(self.test_target))
 
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
-
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
-
         print("self.labels:", type(self.labels), len(self.labels))
 
         self.label_names = self.devel.target_names           # set self.labels to the class label names
-
-        self.X_raw = pd.Series(self.devel.data)              # convert to Series object (from list)
-        print("X_raw:", type(self.X_raw), len(self.X_raw))
-        print("X_raw[0]:\n", self.X_raw[0])
-
-        self.X = self._preprocess(self.X_raw)
-        print("self.X:", type(self.X), self.X.shape)
-        print("self.X[0]:\n", self.X[0])
+        print("self.label_names:\n", self.label_names) 
 
         self.target_names = self.label_names
         print("target_names:", type(self.target_names), len(self.target_names))
@@ -1704,14 +1713,23 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        print("encoding labels...")
+
         # Encode the labels
         label_encoder = LabelEncoder()
-        self.y = label_encoder.fit_transform(self.devel_target)
-        
-        # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(self.y).T                   # Transpose to match the expected shape
+        self.y_train = label_encoder.fit_transform(self.devel_target)
+        self.y_test = label_encoder.transform(self.test_target)
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
 
-        return self.label_names
+        # Convert y matrices to sparse matrices
+        self.y_train_sparse = csr_matrix(self.y_train).T                                                    # Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test).T                                                      # Transpose to match the expected shape
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+
+        return self.target_names
+
 
 
 
@@ -1797,13 +1815,24 @@ class LCDataset:
 
         print("data_path:", data_path)  
 
-        self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
-        self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
-
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
         
-        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+        self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        # training data
+        self.Xtr = self._preprocess(pd.Series(self.devel.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        # test data
+        self.Xte = self._preprocess(pd.Series(self.test.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
 
         self.devel_target, self.test_target = self.devel.target, self.test.target
         print("devel_target:", type(self.devel_target), len(self.devel_target))
@@ -1815,15 +1844,7 @@ class LCDataset:
         print("labels:\n", self.labels)
 
         self.label_names = self.devel.target_names                                  # set self.labels to the class label names
-        print("self.label_names:\n", self.label_names)
-
-        self.X_raw = self.devel.data
-        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-        print("self.X_raw[0]:\n", self.X_raw[0])
-
-        self.X = self._preprocess(pd.Series(self.X_raw))
-        print("self.X:", type(self.X), self.X.shape)
-        print("self.X[0]:\n", self.X[0])
+        print("self.label_names:\n", self.label_names)        
 
         self.target_names = self.label_names
         print("target_names:", type(self.target_names), len(self.target_names))
@@ -1835,15 +1856,19 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        print("encoding labels...")
         # Encode the labels using MultiLabelBinarizer
         mlb = MultiLabelBinarizer()
-        self.y = mlb.fit_transform(self.devel_target)   # Transform multi-label targets into a binary matrix
-        print("y (after MultiLabelBinarizer):", type(self.y), self.y.shape)
+        self.y_train = mlb.fit_transform(self.devel_target)     # Transform multi-label targets into a binary matrix
+        self.y_test = mlb.transform(self.test_target)           # Transform multi-label targets into a binary matrix
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
         
         # Convert Y to a sparse matrix
-        #self.y_sparse = csr_matrix(self.y).T       # Transpose to match the expected shape
-        self.y_sparse = csr_matrix(self.y)          # without Transpose to match the expected shape
-        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
+        self.y_train_sparse = csr_matrix(self.y_train)                                       # without Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
 
         return self.label_names
 

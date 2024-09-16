@@ -25,10 +25,10 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("bbc-news" "ohsumed" "20newsgroups")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
+declare -a datasets=("ohsumed" "20newsgroups")
+declare -a pickle_paths=("../pickles" "../pickles")
 declare -a learners=("svm" "lr" "nb")
-declare -a vtypes=("tfidf" "count")
+declare -a vtypes=("tfidf")
 declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
 declare -a embeddings=("bert" "roberta" "llama")
 #declare -a embeddings=("glove" "word2vec", "fasttext" "bert" "roberta" "llama")
