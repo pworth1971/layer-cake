@@ -48,7 +48,8 @@ import fasttext.util
 from scipy.special._precompute.expn_asy import generate_A
 
 
-
+# Disable Hugging Face tokenizers parallelism to avoid fork issues
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 VECTOR_CACHE = '../.vector_cache'
@@ -68,7 +69,7 @@ TEST_SIZE = 0.3
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
-DEFAULT_GPU_BATCH_SIZE = 16
+DEFAULT_GPU_BATCH_SIZE = 64
 MPS_BATCH_SIZE = 32
 
 #
@@ -80,6 +81,10 @@ HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
 
+NUM_DL_WORKERS = 3      # number of workers to handle DataLoader tasks
+
+
+
 stop_words = set(stopwords.words('english'))
 
 
@@ -87,6 +92,7 @@ stop_words = set(stopwords.words('english'))
 # ------------------------------------------------------------------------------------------------------------------------
 # BERT Embeddings functions
 # ------------------------------------------------------------------------------------------------------------------------
+"""
 class TextDataset(Dataset):
 
     def __init__(self, texts, tokenizer, max_len):
@@ -114,7 +120,55 @@ class TextDataset(Dataset):
             'attention_mask': encoding['attention_mask'].flatten(),
             'token_type_ids': encoding['token_type_ids'].flatten()
         }
+"""
 
+
+class TextDataset(Dataset):
+    def __init__(self, texts, tokenizer, max_len, use_token_type_ids=True):
+        """
+        Dataset class for tokenized texts compatible with BERT, RoBERTa, and LLaMa.
+        
+        Args:
+        - texts: A list of texts to be tokenized.
+        - tokenizer: A tokenizer instance (BERT, RoBERTa, LLaMa, etc.).
+        - max_len: The maximum length of the tokenized sequences. Longer sequences will be truncated,
+                  and shorter ones will be padded.
+        - use_token_type_ids: A boolean flag indicating whether 'token_type_ids' should be returned.
+                              This is needed for BERT but not for LLaMa.
+        """
+        self.texts = texts
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+        self.use_token_type_ids = use_token_type_ids  # Flag to control whether 'token_type_ids' are used
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        text = self.texts[item]
+
+        # Tokenizing the text with truncation and padding to the specified max_len
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,            # Add special tokens like [CLS], [SEP] (depends on the model)
+            max_length=self.max_len,            # Truncate sequences to max_len
+            padding='max_length',               # Pad sequences to max_len
+            truncation=True,                    # Ensure truncation if the sequence exceeds max_len
+            return_attention_mask=True,         # Return the attention mask
+            return_token_type_ids=self.use_token_type_ids,  # Only return token_type_ids if needed
+            return_tensors='pt',                # Return PyTorch tensors
+        )
+
+        # Return dictionary with input_ids and attention_mask, conditionally include token_type_ids
+        item_dict = {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten()
+        }
+
+        if self.use_token_type_ids and 'token_type_ids' in encoding:
+            item_dict['token_type_ids'] = encoding['token_type_ids'].flatten()
+
+        return item_dict
 
 
 class LCDataset:
@@ -246,14 +300,23 @@ class LCDataset:
     def custom_tokenizer(self, text):
         """
         Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
         """
-        # Tokenize text into words/subwords
+        # Tokenize the text into words/subwords
         tokens = self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
+        
+        # Define special tokens to remove based on the model in use
+        special_tokens = []
+        if self.pretrained == 'bert' or self.pretrained == 'roberta':
+            special_tokens = ["[CLS]", "[SEP]"]
+        elif self.pretrained == 'llama':
+            special_tokens = ["<s>", "</s>"]  # Modify based on actual special tokens of LLaMA
 
-        # Optionally, remove special tokens like [CLS], [SEP] if the tokenizer adds them
-        tokens = [token for token in tokens if token not in ["[CLS]", "[SEP]"]]
+        # Optionally, remove special tokens (like [CLS], [SEP], or others based on the model)
+        tokens = [token for token in tokens if token not in special_tokens]
 
         return tokens
+
 
 
     def vectorize(self):
@@ -410,15 +473,37 @@ class LCDataset:
 
 
 
-    def generate_transfromer_embeddings(self, batch_size):
+    def generate_transfromer_embeddings(self, batch_size=DEFAULT_GPU_BATCH_SIZE):
         
         print("generating transformer embeddings...")
         
-        # BERT or RoBERTa embeddings        
-        if (self.pretrained in ['bert', 'roberta']): 
+        print("batch_size:", batch_size)
 
-            print("generating BERT or RoBERTa embeddings...")
+        print("Xtr:", type(self.Xtr), len(self.Xtr))
+        print("Xtr[0]:", self.Xtr[0])
+        print("Xte:", type(self.Xte), len(self.Xte))
+        print("Xte[0]:", self.Xte[0])
 
+        #
+        # BERT, RoBERTa or LlaMa embeddings (transformer architectures)
+        #         
+        if (self.pretrained in ['bert', 'roberta', 'llama']): 
+
+            print("generating BERT, RoBERTa or LlaMa embeddings...")
+
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.get_transformer_embeddings(
+                texts=self.Xtr, 
+                batch_size=self.batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
+            )
+
+            self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.get_transformer_embeddings(
+                texts=self.Xte, 
+                batch_size=self.batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
+            )
+    
+            """
             self.Xtr_weighted_embeddings = self.get_weighted_transformer_embeddings(
                 texts=self.Xtr, 
                 batch_size=self.batch_size, 
@@ -430,10 +515,7 @@ class LCDataset:
                 batch_size=self.batch_size, 
                 max_len=TOKEN_TOKENIZER_MAX_LENGTH
                 )
-
-            print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
-            print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
-
+            
             self.Xtr_avg_embeddings = self.get_avg_transformer_embeddings(
                 texts=self.Xtr, 
                 batch_size=self.batch_size, 
@@ -445,79 +527,34 @@ class LCDataset:
                 batch_size=self.batch_size, 
                 max_len=TOKEN_TOKENIZER_MAX_LENGTH
                 )
-
-            print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
-            print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
-
-            self.Xtr_summary_embeddings = self.get_transformer_embedding_cls(
-                texts=self.Xtr, 
-                batch_size=self.batch_size, 
-                max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )
-
-            self.Xte_summary_embeddings = self.get_transformer_embedding_cls(
-                texts=self.Xte, 
-                batch_size=self.batch_size, 
-                max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )
-
-            print("Xtr_summary_embeddings (cls):", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-            print("Xte_summary_embeddings (cls):", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
-
-
-        # LLaMa embeddings
-        elif (self.pretrained == 'llama'):
-            
-            print("generating LlaMa embeddings...")
-
-            print("Xtr:", type(self.Xtr), len(self.Xtr))
-            print("Xtr[0]:", self.Xtr[0])
-            print("Xte:", type(self.Xte), len(self.Xte))
-            print("Xte[0]:", self.Xte[0])
-
-            # Generate the weighted average embeddings for the dataset
-            self.Xtr_weighted_embeddings_new = self.get_weighted_llama_embeddings(
-                self.Xtr_vectorized,
-                self.llama_vocab_embeddings,
-                self.vocab_ndarr
-                )
-
-            # Generate the weighted average embeddings for the dataset
-            self.Xte_weighted_embeddings_new = self.get_weighted_llama_embeddings(
-                self.Xte_vectorized,
-                self.llama_vocab_embeddings,
-                self.vocab_ndarr
-                )
-
-            print("Xtr_weighted_embeddings_new:", type(self.Xtr_weighted_embeddings_new), self.Xtr_weighted_embeddings_new.shape)
-            print("Xte_weighted_embeddings_new:", type(self.Xte_weighted_embeddings_new), self.Xte_weighted_embeddings_new.shape)
-            
-            self.Xtr_weighted_embeddings = self.Xtr_weighted_embeddings_new
-            self.Xte_weighted_embeddings = self.Xte_weighted_embeddings_new
+            """
 
             print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
             print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
-            self.Xtr_avg_embeddings = self.get_avg_llama_embeddings(
-                texts=self.Xtr_vectorized, 
-                batch_size=self.batch_size, 
-                max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )  
-            
-            self.Xte_avg_embeddings = self.get_avg_llama_embeddings(
-                texts=self.Xte_vectorized, 
-                batch_size=self.batch_size, 
-                max_len=TOKEN_TOKENIZER_MAX_LENGTH
-                )  
-
             print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
             print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
 
-            self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
-            self.Xte_summary_embeddings = self.Xte_avg_embeddings
+            # only BERT and RoBERTa models have CLS token embeddings
+            if (self.pretrained in ['bert', 'roberta']):
+                self.Xtr_summary_embeddings = self.get_transformer_embedding_cls(
+                    texts=self.Xtr, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
 
-            print("Xtr_summary_embeddings set to avg_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-            print("Xte_summary_embeddings set to avg_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+                self.Xte_summary_embeddings = self.get_transformer_embedding_cls(
+                    texts=self.Xte, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
+            else:
+                self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
+                self.Xte_summary_embeddings = self.Xte_avg_embeddings
+
+            print("Xtr_summary_embeddings (cls):", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
+            print("Xte_summary_embeddings (cls):", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+
         else:
             raise ValueError("Invalid pretrained model. Use 'bert', 'roberta', or 'llama'.")
 
@@ -566,6 +603,19 @@ class LCDataset:
 
         print("generating word embeddings...")
 
+        self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.get_word_embeddings(
+            self.Xtr, 
+            self.vectorizer, 
+            self.embedding_vocab_matrix
+        )
+
+        self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.get_word_embeddings(
+            self.Xte, 
+            self.vectorizer, 
+            self.embedding_vocab_matrix
+        )
+
+        """
         self.Xtr_weighted_embeddings = self.get_weighted_word_embeddings(
             self.Xtr, 
             self.vectorizer, 
@@ -578,10 +628,6 @@ class LCDataset:
             self.embedding_vocab_matrix
             )
 
-        print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
-        print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
-
-        # Word-based embeddings
         self.Xtr_avg_embeddings = self.get_avg_word_embeddings(
             self.Xtr, 
             self.vectorizer, 
@@ -593,6 +639,10 @@ class LCDataset:
             self.vectorizer, 
             self.embedding_vocab_matrix
             )
+        """
+
+        print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
+        print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
         print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
         print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
@@ -631,67 +681,23 @@ class LCDataset:
         print("self.pretrained:", self.pretrained)
         print("self.pretrained_path:", self.pretrained_path)
 
-        if (self.pretrained in ['bert', 'llama', 'roberta']):
+        if (self.pretrained in ['bert', 'llama', 'roberta']):                               # transformaer based embeddings
             self.generate_transfromer_embeddings(batch_size=self.batch_size)
 
-        # FastText embeddings (subword-level embeddings)
-        elif self.pretrained == 'fasttext':                                                         # fastText, subword embeddings
-            self.generate_fasttext_embeddings()
-
-        elif (self.pretrained in ['word2vec', 'glove']):                                            # word based embeddins
+        elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddins
             self.generate_word_embeddings()
             
+        print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
+        print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
-        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings
+        print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
+        print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+
+        print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
+        print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
+
+        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings, 
         
-
-
-
-    def get_avg_word_embeddings(self, texts, vectorizer, embedding_vocab_matrix):
-        """
-        Compute document embeddings by averaging the word embeddings for each token in the document.
-        For FastText, this will use model[token] to retrieve word embeddings since get_word_vector is not available in KeyedVectors.
-
-        Args:
-        - texts: List of input documents (as raw text).
-        - vectorizer: Fitted vectorizer (e.g., TF-IDF) that contains the vocabulary.
-        - embedding_vocab_matrix: Matrix of pre-trained word embeddings for Word2Vec/GloVe.
-
-        Returns:
-        - document_embeddings: Numpy array of averaged document embeddings for each document.
-        """
-
-        print("Computing word embeddings, average embedding (np.mean) method...")
-
-        document_embeddings = []
-
-        for doc in texts:
-            tokens = doc.split()
-            valid_embeddings = []
-
-            for token in tokens:
-                # For Word2Vec/GloVe
-                if self.pretrained in ['word2vec', 'glove']:
-                    token_id = vectorizer.vocabulary_.get(token.lower(), None)
-                    if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
-                        valid_embeddings.append(embedding_vocab_matrix[token_id])
-
-                # For FastText (using subword-level embeddings for OOV words)
-                elif self.pretrained == 'fasttext':
-                    if token in self.model:  # Check if the word exists in the FastText model
-                        valid_embeddings.append(self.model[token])  # Use KeyedVectors to get the word embedding
-                    else:
-                        valid_embeddings.append(np.random.normal(size=(embedding_vocab_matrix.shape[1],)))  # Handle OOV with random embedding
-
-            # Compute the average of embeddings if there are valid tokens
-            if valid_embeddings:
-                avg_embedding = np.mean(valid_embeddings, axis=0)
-            else:
-                avg_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-
-            document_embeddings.append(avg_embedding)
-
-        return np.array(document_embeddings)
 
 
 
@@ -754,251 +760,372 @@ class LCDataset:
 
 
 
-
-    def get_bert_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+    def get_avg_word_embeddings(self, texts, vectorizer, embedding_vocab_matrix):
         """
-        Gets the aasociated BERT embeddings for a given input text(s) using just the CLS 
-        Token Embeddings as a summmary of the related doc (text), which is the first token 
-        in the BERT input sequence. NB: the BERT model is trained so that the [CLS] token 
-        contains a summary of the entire sequence, making it suitable for tasks like classification.
+        Compute document embeddings by averaging the word embeddings for each token in the document.
+        For FastText, this will use model[token] to retrieve word embeddings since get_word_vector is not available in KeyedVectors.
+
+        Args:
+        - texts: List of input documents (as raw text).
+        - vectorizer: Fitted vectorizer (e.g., TF-IDF) that contains the vocabulary.
+        - embedding_vocab_matrix: Matrix of pre-trained word embeddings for Word2Vec/GloVe.
+
+        Returns:
+        - document_embeddings: Numpy array of averaged document embeddings for each document.
+        """
+
+        print("Computing word embeddings, average embedding (np.mean) method...")
+
+        document_embeddings = []
+
+        for doc in texts:
+            tokens = doc.split()
+            valid_embeddings = []
+
+            for token in tokens:
+                # For Word2Vec/GloVe
+                if self.pretrained in ['word2vec', 'glove']:
+                    token_id = vectorizer.vocabulary_.get(token.lower(), None)
+                    if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
+                        valid_embeddings.append(embedding_vocab_matrix[token_id])
+
+                # For FastText (using subword-level embeddings for OOV words)
+                elif self.pretrained == 'fasttext':
+                    if token in self.model:  # Check if the word exists in the FastText model
+                        valid_embeddings.append(self.model[token])  # Use KeyedVectors to get the word embedding
+                    else:
+                        valid_embeddings.append(np.random.normal(size=(embedding_vocab_matrix.shape[1],)))  # Handle OOV with random embedding
+
+            # Compute the average of embeddings if there are valid tokens
+            if valid_embeddings:
+                avg_embedding = np.mean(valid_embeddings, axis=0)
+            else:
+                avg_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+
+            document_embeddings.append(avg_embedding)
+
+        return np.array(document_embeddings)
+
+
+    def get_word_embeddings(self, texts, vectorizer, embedding_vocab_matrix):
+        """
+        Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
         
         Args:
+        - texts: List of input documents (as raw text).
+        - vectorizer: Fitted vectorizer (e.g., TF-IDF) that contains the vocabulary.
+        - embedding_vocab_matrix: Matrix of pre-trained word embeddings for Word2Vec/GloVe/FastText.
+
+        Returns:
+        - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
+        - avg_document_embeddings: Numpy array of average document embeddings for each document.
+        """
+        
+        print(f'getting word embedding representations of text using {'Word2Vec' if self.pretrained == 'word2vec' else 'GloVe' if self.pretrained == 'glove' else 'fastText'} pretrained embeddings......')
+
+        print("texts:", type(texts), len(texts))
+        print("vectorizer:", type(vectorizer))
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+
+        weighted_document_embeddings = []
+        avg_document_embeddings = []
+
+        for doc in texts:
+            # Tokenize the document
+            tokens = doc.split()
+
+            # Calculate TF-IDF weights for the tokens
+            tfidf_vector = vectorizer.transform([doc]).toarray()[0]
+
+            weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
+            avg_sum = np.zeros(embedding_vocab_matrix.shape[1])
+            total_weight = 0.0
+            valid_embeddings = []
+
+            for token in tokens:
+                # For Word2Vec/GloVe
+                if self.pretrained in ['word2vec', 'glove']:
+                    token_id = vectorizer.vocabulary_.get(token.lower(), None)
+                    if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
+                        embedding = embedding_vocab_matrix[token_id]
+                        weight = tfidf_vector[token_id]
+
+                        # Accumulate for weighted embedding
+                        weighted_sum += embedding * weight
+                        total_weight += weight
+
+                        # Accumulate for average embedding
+                        valid_embeddings.append(embedding)
+
+                # For FastText (using subword-level embeddings for OOV words)
+                elif self.pretrained == 'fasttext':
+                    if token in self.model:  # Check if the word exists in the FastText model
+                        embedding = self.model[token]  # Use KeyedVectors to get the word embedding
+                    else:
+                        embedding = np.random.normal(size=(embedding_vocab_matrix.shape[1],))  # Handle OOV with random embedding
+                    
+                    weight = tfidf_vector[vectorizer.vocabulary_.get(token.lower(), 0)]
+
+                    # Accumulate for weighted embedding
+                    weighted_sum += embedding * weight
+                    total_weight += weight
+
+                    # Accumulate for average embedding
+                    valid_embeddings.append(embedding)
+
+            # Compute the weighted embedding for the document
+            if total_weight > 0:
+                weighted_doc_embedding = weighted_sum / total_weight
+            else:
+                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])
+
+            # Compute the average embedding for the document
+            if valid_embeddings:
+                avg_doc_embedding = np.mean(valid_embeddings, axis=0)
+            else:
+                avg_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+
+            weighted_document_embeddings.append(weighted_doc_embedding)
+            avg_document_embeddings.append(avg_doc_embedding)
+
+        print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
+        print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
+
+        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+
+
+
+
+
+    def get_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute both basic average (np.mean) and weighted average (using tfidf vectorized values) representations of 
+        data (texts), supporting BERT, RoBERTa, or LLaMa based transformer architecture pretrained embeddings models
+
+        Args:
         - texts: List of input text documents.
-        - batch_size: Number of samples to process in a single batch during BERT inference.
+        - batch_size: Number of samples to process in a single batch during BERT, RoBERTa, or LLaMa inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A tuple (weighted_embeddings, avg_embeddings), where:
+            - weighted_embeddings: A 2D numpy array where each row corresponds to a document's weighted embedding.
+            - avg_embeddings: A 2D numpy array where each row corresponds to a document's averaged embedding.
+        """
+
+        print(f"Getting transformer embeddings representations of dataset using {'BERT' if self.pretrained == 'bert' else 'RoBERTa' if self.pretrained == 'roberta' else 'LLaMa'} pretrained embeddings...")
+
+        print("texts:", type(texts), len(texts))
+        print("batch_size:", batch_size)
+        print("mx_len:", max_len)
+
+        # Create dataset and dataloader for the input texts
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=NUM_DL_WORKERS)
+
+        avg_embeddings = []
+        weighted_embeddings = []
+
+        # Prepare TF-IDF vectors in bulk outside the loop using 
+        # self.vectorizer which has already been instantiated appropriately
+        tfidf_vectors = self.vectorizer.transform(texts).toarray()  # Vectorize all texts in one go
+
+        # Model should already be on the appropriate device
+        self.model.eval()
+
+        with torch.no_grad():
+            # Use AMP for CUDA devices, nullcontext otherwise
+
+            # Choose AMP for CUDA, otherwise use nullcontext
+            autocast_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext()
+
+            with autocast_context:
+                for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"computing transformer embedding representations...")):
+                    input_ids = batch['input_ids'].to(self.device, non_blocking=True)  # Move data to GPU asynchronously
+                    attention_mask = batch['attention_mask'].to(self.device, non_blocking=True)
+
+                    # Handle BERT and RoBERTa embeddings with token_type_ids
+                    if self.pretrained in ['bert', 'roberta']:
+                        token_type_ids = batch['token_type_ids'].to(self.device, non_blocking=True)
+                        outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                    else:
+                        # Handle LLaMa embeddings without token_type_ids
+                        outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                    for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                        tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                        
+                        # Conditionally convert to float32 if using MPS
+                        if self.device.type == 'mps':
+                            tfidf_vector = tfidf_vectors[batch_idx * batch_size + i].astype(np.float32)  # Convert to float32 for MPS
+                        else:
+                            tfidf_vector = tfidf_vectors[batch_idx * batch_size + i]  # Keep original dtype for CUDA/CPU
+
+                        weighted_sum = torch.zeros(token_embeddings.size(2), device=self.device)  # Initialize weighted sum on the GPU
+                        total_weight = 0.0
+
+                        for j, token in enumerate(tokens):
+                            if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                                token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
+                                weighted_sum += token_embeddings[i, j] * token_weight  # Stay on the GPU for computations
+                                total_weight += token_weight
+
+                        # Normalize weighted embeddings and compute average embeddings
+                        if total_weight > 0:
+                            weighted_doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                        else:
+                            weighted_doc_embedding = torch.zeros(token_embeddings.size(2), device=self.device)  # Handle cases with no valid tokens
+
+                        avg_doc_embedding = token_embeddings[i].mean(dim=0)  # Average embeddings
+
+                        weighted_embeddings.append(weighted_doc_embedding)  # Stay on GPU for now
+                        avg_embeddings.append(avg_doc_embedding)
+
+            # Once all embeddings are collected, move to CPU in a single step
+            weighted_embeddings = torch.stack(weighted_embeddings).cpu().numpy()
+            avg_embeddings = torch.stack(avg_embeddings).cpu().numpy()
+
+        print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
+        print("avg_embeddings:", type(avg_embeddings), avg_embeddings.shape)
+
+        return weighted_embeddings, avg_embeddings
+
+
+    
+
+
+
+
+    def get_avg_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute document embeddings using a pretrained BERT, RoBERTa, or LLaMa model by averaging token embeddings.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT, RoBERTa, or LLaMa inference.
         - max_len: Maximum sequence length for tokenizing the documents.
 
         Returns:
         - A 2D numpy array where each row corresponds to a document's averaged embedding.
         """
-         
-        print("getting CLS BERT embeddings...")
-        
+
+        print(f"Getting averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa' if self.pretrained == 'roberta' else 'LLaMa'} embeddings...")
+
+        # Use the appropriate tokenizer and dataset
         dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=NUM_DL_WORKERS)
 
         embeddings = []
 
-        self.model.to(self.device)
+        # Model should already be on the appropriate device
         self.model.eval()
 
-        with torch.cuda.amp.autocast(), torch.no_grad():
-            for batch in tqdm(dataloader, desc="building BERT embeddings for dataset..."):
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                token_type_ids = batch['token_type_ids'].to(self.device)
-                
-                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        # Disable gradient computation
+        with torch.no_grad():
 
-                
-                # take only the embedding for the first token ([CLS]), 
-                # which is expected to encode the entire document's context.
-                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+            # Enable AMP for CUDA, use nullcontext for CPU
+            autocast_context = torch.cuda.amp.autocast if self.device.type == 'cuda' else nullcontext
 
-                embeddings.append(cls_embeddings.cpu().numpy())
+            with autocast_context():
+                for batch in tqdm(dataloader, desc=f"Building averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa' if self.pretrained == 'roberta' else 'LLaMa'} embeddings..."):
+                    input_ids = batch['input_ids'].to(self.device, non_blocking=True)  # Use non_blocking transfer
+                    attention_mask = batch['attention_mask'].to(self.device, non_blocking=True)
 
+                    if self.pretrained in ['bert', 'roberta']:  # Handle BERT and RoBERTa embeddings
+                        token_type_ids = batch['token_type_ids'].to(self.device, non_blocking=True)
+                        outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                    else:  # Handle LLaMa embeddings, which don't need token_type_ids
+                        outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                    # Average the token embeddings for each document in the batch
+                    doc_embeddings = token_embeddings.mean(dim=1)  # Average over sequence length on GPU
+
+                    # Append to embeddings list (convert to CPU only at the end to reduce overhead)
+                    embeddings.append(doc_embeddings.cpu().numpy())
+
+        # Stack the individual embeddings into a single numpy array
         embeddings = np.vstack(embeddings)
 
         return embeddings
 
 
-    def get_avg_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-        """
-        Compute document embeddings using a pretrained BERT model by averaging token embeddings.
-
-        Args:
-        - texts: List of input text documents.
-        - batch_size: Number of samples to process in a single batch during BERT inference.
-        - max_len: Maximum sequence length for tokenizing the documents.
-
-        Returns:
-        - A 2D numpy array where each row corresponds to a document's averaged embedding.
-        """
-
-        print("getting averaged bert embeddings (without TF-IDF weights)...")
-
-        # Create a dataset from the input texts and prepare it for batch processing.
-        dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
-
-        # Initialize a list to store the embeddings for each document.
-        embeddings = []
-
-        # Move the model to the appropriate device (CPU, GPU, etc.) and set it to evaluation mode.
-        self.model.to(self.device)
-        self.model.eval()
-
-        # Disable gradient computation and enable mixed precision for inference (if available on GPU).
-        with torch.cuda.amp.autocast(), torch.no_grad():
-            # Iterate over the dataset in batches.
-            for batch in tqdm(dataloader, desc="building BERT embeddings for dataset..."):
-                # Move the batch data to the device (input IDs, attention mask, and token type IDs).
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                token_type_ids = batch['token_type_ids'].to(self.device)
-
-                # Pass the batch through the BERT model to get the token embeddings.
-                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                # Iterate over each document in the batch.
-                for i in range(token_embeddings.size(0)):
-                    # Average the token embeddings across the sequence length dimension.
-                    # This produces a single vector per document by averaging all token embeddings.
-                    doc_embedding = token_embeddings[i].mean(dim=0).cpu().numpy()
-
-                    # Append the document's embedding to the list of embeddings.
-                    embeddings.append(doc_embedding)
-
-        # Return a 2D numpy array where each row is a document's final averaged embedding.
-        return np.vstack(embeddings)
-
-
-    def get_weighted_bert_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-        """
-        Compute weighted document embeddings using a pretrained BERT model and TF-IDF weights.
-
-        Args:
-        - texts: List of input text documents.
-        - batch_size: Number of samples to process in a single batch during BERT inference.
-        - max_len: Maximum sequence length for tokenizing the documents.
-
-        Returns:
-        - A 2D numpy array where each row corresponds to a document's weighted embedding.
-        """
-        print("getting weighted bert embeddings...")
-        
-        dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
-
-        embeddings = []
-
-        self.model.to(self.device)
-        self.model.eval()
-
-        with torch.cuda.amp.autocast(), torch.no_grad():
-            for batch in tqdm(dataloader, desc="building weighted BERT embeddings for dataset..."):
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                token_type_ids = batch['token_type_ids'].to(self.device)
-
-                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
-                    tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
-                    tfidf_vector = self.vectorizer.transform([texts[i]]).toarray()[0]
-
-                    weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
-                    total_weight = 0.0
-
-                    for j, token in enumerate(tokens):
-                        if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
-                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
-                            weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
-                            total_weight += token_weight
-
-                    if total_weight > 0:
-                        doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
-                    else:
-                        doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
-
-                    embeddings.append(doc_embedding)
-
-        return np.vstack(embeddings)
-
 
     def get_weighted_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
         """
-        Compute weighted document embeddings using a pretrained BERT or RoBERTa model and TF-IDF weights.
+        Compute weighted document embeddings using a pretrained BERT, RoBERTa, or LLaMa model and TF-IDF weights.
 
         Args:
         - texts: List of input text documents.
-        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - batch_size: Number of samples to process in a single batch during BERT, RoBERTa, or LLaMa inference.
         - max_len: Maximum sequence length for tokenizing the documents.
 
         Returns:
         - A 2D numpy array where each row corresponds to a document's weighted embedding.
         """
-        print(f"Getting weighted {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+        print(f"Getting weighted {'BERT' if self.pretrained == 'bert' else 'RoBERTa' if self.pretrained == 'roberta' else 'LLaMa'} embeddings...")
 
+        # Create dataset and dataloader for the input texts
         dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=NUM_DL_WORKERS)
 
         embeddings = []
+        
+        # Prepare TF-IDF vectors in bulk outside the loop
+        tfidf_vectors = self.vectorizer.transform(texts).toarray()  # Vectorize all texts in one go
 
-        self.model.to(self.device)  # Ensure the model is on the correct device
-        self.model.eval()
-
-        with torch.no_grad():  # Disable gradient computation
-            for batch in tqdm(dataloader, desc=f"Building weighted {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
-                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
-                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
-                token_type_ids = batch['token_type_ids'].to(self.device)
-
-                #outputs = self.model(input_ids, attention_mask=attention_mask)
-                outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
-                    tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
-                    tfidf_vector = self.vectorizer.transform([texts[i]]).toarray()[0]
-
-                    weighted_sum = np.zeros(token_embeddings.size(2))  # Initialize weighted sum for this document
-                    total_weight = 0.0
-
-                    for j, token in enumerate(tokens):
-                        if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
-                            #token_weight = tfidf_vector[self.vectorizer.vocabulary_[token.lower()]]
-                            token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
-                            weighted_sum += token_embeddings[i, j].cpu().numpy() * token_weight
-                            total_weight += token_weight
-
-                    if total_weight > 0:
-                        doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
-                    else:
-                        doc_embedding = np.zeros(token_embeddings.size(2))  # Handle cases with no valid tokens
-
-                    embeddings.append(doc_embedding)
-
-        return np.vstack(embeddings)
-
-
-    def get_avg_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-        """
-        Compute document embeddings using a pretrained BERT or RoBERTa model by averaging token embeddings.
-
-        Args:
-        - texts: List of input text documents.
-        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
-        - max_len: Maximum sequence length for tokenizing the documents.
-
-        Returns:
-        - A 2D numpy array where each row corresponds to a document's averaged embedding.
-        """
-
-        print(f"Getting averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
-
-        dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
-
-        embeddings = []
-
-        self.model.to(self.device)  # Move model to correct device
+        # Model should already be on the appropriate device
         self.model.eval()
 
         with torch.no_grad():
-            for batch in tqdm(dataloader, desc=f"Building averaged {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
-                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
-                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+            # Use AMP for CUDA devices, nullcontext otherwise
+            autocast_context = torch.cuda.amp.autocast if self.device.type == 'cuda' else nullcontext
 
-                outputs = self.model(input_ids, attention_mask=attention_mask)
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+            with autocast_context():
+                for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"Building weighted embeddings...")):
+                    input_ids = batch['input_ids'].to(self.device, non_blocking=True)  # Move data to GPU asynchronously
+                    attention_mask = batch['attention_mask'].to(self.device, non_blocking=True)
 
-                for i in range(token_embeddings.size(0)):
-                    doc_embedding = token_embeddings[i].mean(dim=0).cpu().numpy()  # Average over sequence length
-                    embeddings.append(doc_embedding)
+                    # Handle BERT and RoBERTa embeddings with token_type_ids
+                    if self.pretrained in ['bert', 'roberta']:
+                        token_type_ids = batch['token_type_ids'].to(self.device, non_blocking=True)
+                        outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                    else:
+                        # Handle LLaMa embeddings without token_type_ids
+                        outputs = self.model(input_ids, attention_mask=attention_mask)
 
+                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                    for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                        tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                        
+                        # Use the precomputed TF-IDF vectors
+                        tfidf_vector = tfidf_vectors[batch_idx * batch_size + i]
+
+                        weighted_sum = torch.zeros(token_embeddings.size(2), device=self.device)  # Initialize weighted sum on the GPU
+                        total_weight = 0.0
+
+                        for j, token in enumerate(tokens):
+                            if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                                token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
+                                weighted_sum += token_embeddings[i, j] * token_weight  # Stay on the GPU for computations
+                                total_weight += token_weight
+
+                        if total_weight > 0:
+                            doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                        else:
+                            doc_embedding = torch.zeros(token_embeddings.size(2), device=self.device)  # Handle cases with no valid tokens
+
+                        embeddings.append(doc_embedding.cpu().numpy())  # Move the result back to CPU
+
+        # Stack the individual embeddings into a single numpy array
         return np.vstack(embeddings)
+
+
+
 
 
     def get_transformer_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
@@ -1057,14 +1184,16 @@ class LCDataset:
         print("getting average LLaMa embeddings...")
 
         # Handle sparse matrix input properly
+        """
         if isinstance(texts, csr_matrix):  # If sparse matrix
             print("Converting sparse matrix to dense for tokenization...")
             texts = texts.toarray()  # Convert sparse matrix to dense array
-            texts = [" ".join(map(str, row)) for row in texts]                      # Convert array to string format if needed
+            texts = [" ".join(map(str, row)) for row in texts]  # Convert array to string format if needed
+        """
 
         # Convert texts into dataset and dataloader
         dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=2)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=NUM_DL_WORKERS)
 
         embeddings = []
 
@@ -1073,27 +1202,9 @@ class LCDataset:
 
         # Disable gradient computation
         with torch.no_grad():
+            autocast_context = torch.cuda.amp.autocast if self.device.type == 'cuda' else nullcontext
 
-            # Conditionally set the autocast context depending on whether CUDA is available
-            if (self.device.type == 'cuda'):
-                
-                with torch.cuda.amp.autocast:
-
-                    for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
-                        input_ids = batch['input_ids'].to(self.device)
-                        attention_mask = batch['attention_mask'].to(self.device)
-
-                        # Get the model outputs (token embeddings)
-                        outputs = self.model(input_ids, attention_mask=attention_mask)
-                        token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                        # Average the token embeddings across the sequence length axis
-                        avg_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_dim)
-
-                        # Convert to numpy and append to list
-                        embeddings.append(avg_embeddings.cpu().numpy())
-            else:
-
+            with autocast_context():
                 for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
                     input_ids = batch['input_ids'].to(self.device)
                     attention_mask = batch['attention_mask'].to(self.device)
@@ -1108,73 +1219,12 @@ class LCDataset:
                     # Convert to numpy and append to list
                     embeddings.append(avg_embeddings.cpu().numpy())
 
-
         # Stack the individual embeddings into a single numpy array
         embeddings = np.vstack(embeddings)
 
         return embeddings
 
 
-
-
-    def get_avg_llama_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
-        """
-        Compute LLaMA document embeddings by averaging token embeddings for each document.
-        """
-
-        print("getting average LLaMa embeddings...")
-
-        # Convert texts into dataset and dataloader
-        dataset = TextDataset(texts, self.tokenizer, max_len)
-        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=2)
-
-        embeddings = []
-
-        self.model.to(self.device)
-        self.model.eval()
-
-        # Disable gradient computation
-        with torch.no_grad():
-
-            if self.device.type == 'cuda':
-                # Use autocast for CUDA devices to improve performance
-            
-                with torch.cuda.amp.autocast:
-                    for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
-                        input_ids = batch['input_ids'].to(device)
-                        attention_mask = batch['attention_mask'].to(device)
-
-                        # Get the model outputs (token embeddings)
-                        outputs = self.model(input_ids, attention_mask=attention_mask)
-                        token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                        # Average the token embeddings across the sequence length axis
-                        avg_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_dim)
-
-                        # Convert to numpy and append to list
-                        embeddings.append(avg_embeddings.cpu().numpy())
-            else:       
-                # regular batch processing in tihs case
-
-                for batch in tqdm(dataloader, desc="building LLaMa average embeddings for dataset..."):
-                    input_ids = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-
-                    # Get the model outputs (token embeddings)
-                    outputs = self.model(input_ids, attention_mask=attention_mask)
-                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
-
-                    # Average the token embeddings across the sequence length axis
-                    avg_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_dim)
-
-                    # Convert to numpy and append to list
-                    embeddings.append(avg_embeddings.cpu().numpy())
-            
-
-        # Stack the individual embeddings into a single numpy array
-        embeddings = np.vstack(embeddings)
-
-        return embeddings
 
 
     def get_weighted_llama_embeddings(self, texts, vocab_embeddings, vocab):
@@ -1195,7 +1245,7 @@ class LCDataset:
         print("tfidf_vectors:", type(texts), texts.shape)
         print("vocab_embeddings:", type(vocab_embeddings), len(vocab_embeddings))
         print("vocab:", type(vocab), len(vocab))
-        
+
         # Initialize an empty matrix for the final projected embeddings.
         embedding_dim = list(vocab_embeddings.values())[0].shape[0]  # Get the embedding dimension from LLaMA embeddings
         embedded_vectors = np.zeros((texts.shape[0], embedding_dim))  # Initialize embedding matrix
@@ -1210,20 +1260,31 @@ class LCDataset:
                 row = texts.getrow(i)  # Sparse row
                 indices, data = row.indices, row.data  # Non-zero elements in the sparse row
             else:
-                # If texts is a dense NumPy array, ensure it's numerical, not string-based
                 row = texts[i]  # Dense row
                 if isinstance(row, np.ndarray):  # If it's a NumPy array
                     indices, data = np.nonzero(row)[0], row[np.nonzero(row)]  # Non-zero elements in the dense row
                 else:
                     raise TypeError(f"Expected numerical data but got {type(row)} at index {i}.")
 
+            # Now, instead of directly using vocab[j], use the tokenizer to get token embeddings
             for j, tfidf_value in zip(indices, data):  # Iterate through non-zero elements
-                token = str(vocab[j])  # Convert numpy.str_ to regular Python string
-                if token in vocab_embeddings:  # Check if the token has a corresponding LLaMA embedding
-                    # Multiply the TF-IDF value with the LLaMA embedding and sum them for each document
-                    embedded_vectors[i] += tfidf_value * vocab_embeddings[token].squeeze()
+                # Use self.tokenizer to tokenize the vocab term
+                token_str = vocab[j]  # Get the original token from the vocabulary
+                input_ids = self.tokenizer.encode(token_str, add_special_tokens=False)
+
+                # Sum the embeddings of all tokens (subwords) generated by the tokenizer
+                token_embeddings = np.zeros((embedding_dim,))
+                for input_id in input_ids:
+                    token = self.tokenizer.convert_ids_to_tokens([input_id])[0]  # Convert ID to token
+                    if token in vocab_embeddings:  # Check if the token has a corresponding LLaMA embedding
+                        token_embeddings += vocab_embeddings[token].squeeze() * tfidf_value
+
+                # Accumulate the token embeddings into the document-level embedding
+                embedded_vectors[i] += token_embeddings
 
         return embedded_vectors
+
+
 
 
 
@@ -1887,6 +1948,46 @@ class LCDataset:
     def _preprocess(self, text_series):
         """
         Preprocess a pandas Series of texts, tokenizing, removing punctuation, stopwords, 
+        and applying a custom number masking function.
+
+        Parameters:
+        - text_series: A pandas Series containing text data (strings).
+
+        Returns:
+        - processed_texts: A NumPy array containing processed text strings with the shape property.
+        """
+        print("preprocessing text...")
+        print("text_series:", type(text_series), text_series.shape)
+
+        processed_texts = []
+
+        for train_text in text_series:
+            # Remove punctuation
+            train_text = self._remove_punctuation(train_text)
+
+            # Word tokenization
+            tokenized_train_set = word_tokenize(train_text.lower())
+
+            # Stop word removal
+            stop_words = set(stopwords.words('english'))
+            stopwordremove = [i for i in tokenized_train_set if i not in stop_words]
+
+            # Join words into sentence
+            stopwordremove_text = ' '.join(stopwordremove)
+
+            # Apply custom number masking instead of removing numbers
+            masked_text = _mask_numbers([stopwordremove_text])  # Input as list to fit mask_numbers function signature
+
+            processed_texts.append(masked_text[0])  # Since mask_numbers returns a list, we access the first element
+
+        return np.array(processed_texts)  # Convert processed texts to NumPy array to support .shape
+
+
+
+
+    def _preprocess_deprecated(self, text_series):
+        """
+        Preprocess a pandas Series of texts, tokenizing, removing punctuation, stopwords, 
         and applying stemming and lemmatization.
 
         Parameters:
@@ -2264,7 +2365,17 @@ def load_fasttext_format(path):
     return docs,labels
 
 
-def mask_numbers(data, number_mask='numbermask'):
+def _mask_numbers(data, number_mask='numbermask'):
+    """
+    Masks numbers in the given text data with a placeholder.
+    """
+    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+    masked = [mask.sub(number_mask, text) for text in data]
+
+    return masked
+
+
+def _mask_numbers_deprecated(data, number_mask='numbermask'):
     """
     Masks numbers in the given text data with a placeholder.
     """
