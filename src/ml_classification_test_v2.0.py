@@ -221,22 +221,29 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # classify_data(): Core processing function
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, method=None, optimized=False, logfile=None, args=None):
+def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, representation=None, optimized=False, logfile=None, args=None):
     """
     Core function for classifying text data using various configurations like embeddings, methods, and models.
 
     Parameters:
     - dataset (str): The name of the dataset to use (e.g., '20newsgroups', 'ohsumed').
     - vtype (str): The vectorization type (e.g., 'tfidf', 'count').
-    - pretrained_embeddings (str or None): Specifies the type of pretrained embeddings to use (e.g., 'bert', 'llama'). If None, no embeddings are used.
+    - embeddings (str or None): Specifies the type of pretrained embeddings to use (e.g., 'bert', 'llama'). If None, no embeddings are used.
     - embedding_path (str): Path to the pretrained embeddings file or directory.
-    - method (str or None): Specifies the classification method (optional).
-    - args: Argument parser object, containing various flags for optimization and configuration (e.g., --optimc).
+    - representation (str or None): Specifies the classification method (optional).
+    - optimized (bool): Whether the model is optimized for performance. 
     - logfile: Logfile object to store results and performance metrics.
-    - system: System object containing hardware information like CPU and GPU details.
+    - args: Argument parser object, containing various flags for optimization and configuration (e.g., --optimc).
 
     Returns:
-    None: The function does not return anything, but it prints results and logs them into the specified logfile.
+    acc: Accuracy of the model.
+    Mf1: Macro F1 score of the model.
+    mf1: Micro F1 score of the model.
+    h_loss: Hamming loss of the model.
+    precision: Precision of the model.
+    recall: Recall of the model.
+    j_index: Jaccard index of the model.
+    tend: Time taken to run the model.
 
     Workflow:
     - Loads the dataset and the corresponding embeddings.
@@ -247,7 +254,11 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
     """
 
     print("\n\tclassifying...")
-    
+
+    print("representation:", representation)
+    print("optimize:", optimized)
+
+
     if (args.pretrained is not None and args.pretrained in ['bert', 'roberta', 'llama']):
         embedding_type = 'token'
     else:
@@ -339,13 +350,15 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
     comp_method = get_model_computation_method(args, embedding_type)
     print("comp_method:", comp_method)
 
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=method_name, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
+
+    return acc, Mf1, mf1, h_loss, precision, recall, j_index, tend
 
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -459,6 +472,33 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def initialize_ml_testing(args):
+
+    """
+    Initializes machine learning testing based on the provided arguments.
+
+    Args:
+    - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
+      Expected fields:
+        - learner (str): Type of learner to use ('svm', 'lr', or 'nb').
+        - vtype (str): Vectorization type, either 'count' or 'tfidf'.
+        - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
+        - dataset (str): Name of the dataset.
+        - logfile (str): Path to the log file where results will be stored.
+        - mix (str): Dataset and embedding comparison method.
+        - dataset_emb_comp (str): Dataset embedding comparison method.
+    
+    Returns:
+    - already_computed (bool): Whether the current configuration has already been computed.
+    - vtype (str): Vectorization type ('count' or 'tfidf').
+    - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
+    - pretrained (bool): Whether to use a pretrained model or embeddings.
+    - embeddings (str): Type of embeddings to use.
+    - emb_path (str): Path to the embeddings or pretrained model files.
+    - mix (str): The dataset and embedding comparison method.
+    - representation (str): Type of data representation used for training.
+    - ml_logger (CSVLog): Logger object to store model run details.
+    - optimized (bool): Whether the model is optimized for performance.
+    """
 
     print("\n\tinitializing ML testing...")
     
@@ -665,6 +705,8 @@ def get_representation(args):
     else:
         method_name += ':(def)'
     
+    print("method_name:", method_name)
+
     return method_name, optimized
 
 
@@ -753,7 +795,7 @@ if __name__ == '__main__':
         exit(0)
                 
     # initialize log file and run params
-    already_modelled, vtype, learner, pretrained, embeddings, emb_path, mix, method_name, logfile, optimized = initialize_ml_testing(args)
+    already_modelled, vtype, learner, pretrained, embeddings, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args)
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
@@ -771,7 +813,7 @@ if __name__ == '__main__':
         vtype=vtype,
         embeddings=embeddings,
         embedding_path=emb_path,
-        method=method_name,
+        representation=representation,
         optimized=optimized,
         logfile=logfile, 
         args=args
