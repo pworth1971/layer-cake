@@ -3,10 +3,11 @@ from tabulate import tabulate
 import os
 import plotly.express as px
 import argparse
-
 import seaborn as sns
-
+from datetime import datetime
 import matplotlib.pyplot as plt
+
+
 
 
 Y_AXIS_THRESHOLD = 0.3               # when to start the Y axis to show differentiation in the plot
@@ -91,21 +92,15 @@ def results_analysis(df, output_path='../out'):
         print(final_formatted_table)
 
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import os
-from datetime import datetime
-
-def generate_combined_charts(df, output_path='../out'):
-    print("Generating combined charts...")
+def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD):
+    print("Generating separate charts per model and dataset...")
 
     # Filter to only include specific measures
     measures = ['final-te-macro-F1', 'final-te-micro-F1']
 
-    # Set up color palette and plot style
+    # Set up a colorblind-friendly color palette and plot style
     sns.set(style="whitegrid")
-    color_palette = sns.color_palette("tab10")  # Use a color palette for better distinction between models
+    color_palette = sns.color_palette("colorblind")  # Use a colorblind-friendly palette
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -116,52 +111,49 @@ def generate_combined_charts(df, output_path='../out'):
 
     for measure in measures:
         for dataset in df['dataset'].unique():
-            plt.figure(figsize=(14, 8))
+            for model in df['model'].unique():
+                plt.figure(figsize=(14, 8))
 
-            # Filter the dataframe for the current dataset and measure
-            subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset)]
+                # Filter the dataframe for the current dataset, model, and measure
+                subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
 
-            if subset_df.empty:
-                print(f"No data available for {measure} in dataset {dataset}")
-                continue
+                if subset_df.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}")
+                    continue
 
-            # Combine model, embeddings, and representation into a single label for x-axis
-            subset_df['model_embedding_rep'] = subset_df.apply(
-                lambda row: f"{row['model']}-{row['embeddings']}-{row['representation']}", axis=1)
+                # Combine embeddings, representation, and dimensions into a single label for x-axis
+                subset_df.loc[:, 'embedding_rep_dim'] = subset_df.apply(
+                    lambda row: f"{row['embeddings']}-{row['representation']}:{row['dimensions']}", axis=1
+                )
 
-            # Sort by x-axis labels for a cleaner plot
-            subset_df = subset_df.sort_values(by='model_embedding_rep')
+                # Sort by embeddings and then by dimensions in descending order (highest dimension first)
+                subset_df = subset_df.sort_values(by=['embeddings', 'dimensions'], ascending=[True, False])
 
-            # Create a bar plot
-            sns.barplot(
-                data=subset_df,
-                x='model_embedding_rep',
-                y='value',
-                hue='model',
-                palette=color_palette
-            )
+                # Create a bar plot
+                sns.barplot(
+                    data=subset_df,
+                    x='embedding_rep_dim',
+                    y='value',
+                    hue='embeddings',
+                    palette=color_palette
+                )
 
-            # Customize plot
-            plt.title(f"{measure} for {dataset} dataset", fontsize=14, weight='bold')
-            plt.xlabel("Model-Embeddings-Representation", fontsize=10)
-            plt.ylabel("F1 Score", fontsize=10)
-            plt.ylim(0.2, 1)  # Set y-axis range
-            plt.xticks(rotation=90, fontsize=8)  # Rotate x-axis labels for better readability
-            plt.yticks(fontsize=10)  # Set y-axis font size
-            plt.legend(title="Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=10)
-            plt.tight_layout()
+                # Customize plot
+                plt.title(f"{dataset} dataset: {measure} - {model}", fontsize=15, weight='bold')
+                plt.xlabel("Embeddings-Representation:Dimensions", fontsize=9)
+                plt.ylabel(measure, fontsize=10)
+                plt.ylim(y_axis_threshold, 1)  # Set y-axis range
+                plt.xticks(rotation=45, ha='right', fontsize=8)  # Rotate x-axis labels at an angle
+                plt.yticks(fontsize=9)  # Set y-axis font size
+                plt.legend(title="Embeddings", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=10)
+                plt.tight_layout()
 
-            # Save the plot with today's date and 'matplotlib' in the filename
-            plot_file_name = f"{dataset}_{measure}_f1_scores_{today}_matplotlib.png"
-            plt.savefig(os.path.join(output_path, plot_file_name))
-            print(f"Saved plot {plot_file_name} to {output_path}")
+                # Save the plot with today's date and 'matplotlib' in the filename
+                plot_file_name = f"{dataset}_{measure}_{model}_{today}_matplotlib.png"
+                plt.savefig(os.path.join(output_path, plot_file_name))
+                print(f"Saved plot {plot_file_name} to {output_path}")
 
-            plt.show()
-
-# Example usage
-# df = pd.read_csv('path_to_your_data.csv')  # Load your dataframe
-# generate_combined_charts(df)
-
+                plt.show()
 
 
 
@@ -399,9 +391,10 @@ def main():
             )
             """
             
-            generate_combined_charts(
+            generate_charts_matplotlib(
                 df, 
-                args.output_dir
+                args.output_dir,
+                y_axis_threshold=args.ystart
             )
         
     else:
