@@ -1,1 +1,1 @@
-python ../src/results_analysis.py ../log/emb_mix_cuda.test -show -c -s 
+python ../src/results_analysis.py ../log/emb_mix2.test -show -c -s 

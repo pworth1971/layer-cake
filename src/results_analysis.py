@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 
 
 
+# measures filter: report on these specific measures
+measures = ['final-te-macro-F1', 'final-te-micro-F1']
+
+
 
 Y_AXIS_THRESHOLD = 0.3               # when to start the Y axis to show differentiation in the plot
 
@@ -49,7 +53,6 @@ def results_analysis(df, output_path='../out'):
     final_result.sort_values(by=['dataset', 'model', 'embeddings', 'representation', 'measure'], inplace=True)
 
     print("final result:", final_result)
-
 
     # Format the table
     formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
@@ -92,15 +95,24 @@ def results_analysis(df, output_path='../out'):
         print(final_formatted_table)
 
 
-def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD):
+
+
+
+
+def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+
     print("Generating separate charts per model and dataset...")
 
-    # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    print("filtering for measures:", measures)
+
+    df_measures = df[df['measure'].isin(measures)]
+    print("df shape after filtering for measures:", df_measures.shape)
+    if df_measures.empty:
+        print("Error: No data available for the specified measures")
+        return
 
     # Set up a colorblind-friendly color palette and plot style
     sns.set(style="whitegrid")
-    color_palette = sns.color_palette("colorblind")  # Use a colorblind-friendly palette
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -129,6 +141,10 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 # Sort by embeddings and then by dimensions in descending order (highest dimension first)
                 subset_df = subset_df.sort_values(by=['embeddings', 'dimensions'], ascending=[True, False])
 
+                # Dynamically adjust the palette to match the number of unique embeddings
+                unique_embeddings = subset_df['embeddings'].nunique()
+                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
                 # Create a bar plot
                 sns.barplot(
                     data=subset_df,
@@ -139,7 +155,7 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 )
 
                 # Customize plot
-                plt.title(f"{dataset} dataset: {measure} - {model}", fontsize=15, weight='bold')
+                plt.title(f"{dataset}-{model}:{measure}", fontsize=15, weight='bold')
                 plt.xlabel("Embeddings-Representation:Dimensions", fontsize=9)
                 plt.ylabel(measure, fontsize=10)
                 plt.ylim(y_axis_threshold, 1)  # Set y-axis range
@@ -153,24 +169,20 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 plt.savefig(os.path.join(output_path, plot_file_name))
                 print(f"Saved plot {plot_file_name} to {output_path}")
 
-                plt.show()
+                if (show_charts):
+                    plt.show()
 
 
 
 
 
-def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_threshold=Y_AXIS_THRESHOLD):
-    print("generating charts to output directory:", output_path)
+def generate_charts_plotly(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
 
-    # Filter to only include specific measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    print("generating plotly charts to output directory:", output_path)
 
     print("filtering for measures:", measures)
-
     df_measures = df[df['measure'].isin(measures)]
-
     print("df shape after filtering for measures:", df_measures.shape)
-
     if df_measures.empty:
         print("Error: No data available for the specified measures")
         return
@@ -178,9 +190,6 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
-
-    # Using a color-blind-friendly palette
-    color_palette = px.colors.qualitative.Safe
 
     # Generate charts for different measures, datasets, and models
     for measure in measures:
@@ -202,13 +211,17 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
                 # Print to see if any data is missing
                 print(f"Subset for {dataset} and model {model}:\n", subset_df)
 
+                # Dynamically adjust the palette to match the number of unique embeddings
+                unique_embeddings = subset_df['embeddings'].nunique()
+                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
                 # Create the plot with all embedding-representation combinations for the current dataset and model
                 fig = px.bar(subset_df, 
                              x='embeddings', 
                              y='value', 
                              color='representation', 
                              barmode='group', 
-                             title=f'{measure} for {model} on {dataset}',
+                             title=f'{dataset}-{model}:{measure}',
                              labels={"value": "F1 Score", "embeddings": "Embeddings"},
                              color_discrete_sequence=color_palette,
                              hover_data=['model', 'embeddings', 'representation'])
@@ -246,11 +259,23 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
                 if show_charts:
                     fig.show()
 
-    print("Charts generation completed.")
+    print("plotly charts generation completed.")
+
+    return df_measures
 
 
-    # Handle the timelapse plots
-    print("df_timelapse shape after filtering:", df_timelapse.shape)
+
+
+
+def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
+
+    print("generating timelapse plots...")
+
+    print("filtering for measures:", measures)
+    df_measures = df[df['measure'].isin(measures)]
+    df_timelapse = df[['dataset', 'model', 'embeddings', 'timelapse']].drop_duplicates()
+    print("df shape after filtering for measures:", df_measures.shape)
+    print("df shape after filtering for timelapse:", df_timelapse.shape)
 
     if df_timelapse.empty:
         print("Error: No data available for timelapse analysis.")
@@ -309,8 +334,9 @@ def generate_charts_plotly(df, output_path='../out', show_charts=False, y_axis_t
         if show_charts:
             fig.show()
 
+    print("timelapse plots generation completed.")
 
-
+    return df_timelapse
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -349,17 +375,17 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
-    parser.add_argument('-output_dir', type=str, default='../out', help='Directory to save the output files, default is "../out"')
-    
-    parser.add_argument('-c', '--charts', action='store_true', help='Generate charts')
-    parser.add_argument('-s', '--summary', action='store_true', help='Generate summary')
+    parser.add_argument('-o', '--output_dir', type=str, default='../out', help='Directory to save the output files, default is "../out"')
+    parser.add_argument('-c', '--charts', action='store_true', default=True, help='Generate charts')
+    parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
+    parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-d', action='store_true', default=False, help='debug mode')
-    
-    parser.add_argument('-ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
-
+    parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
     parser.add_argument('-show', action='store_true', help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
+
+    print("args: ", args)
 
     # Ensure at least one operation is specified
     if not (args.charts or args.summary):
@@ -394,8 +420,19 @@ def main():
             generate_charts_matplotlib(
                 df, 
                 args.output_dir,
-                y_axis_threshold=args.ystart
+                show_charts=args.show,
+                y_axis_threshold=args.ystart,
+                debug=debug
+                
             )
+
+            if (args.runtimes):
+                gen_timelapse_plots(
+                    df, 
+                    args.output_dir, 
+                    show_charts=args.show,
+                    debug=debug
+                )
         
     else:
         print("Error: Data file not found or empty")

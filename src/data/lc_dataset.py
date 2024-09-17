@@ -1750,8 +1750,19 @@ class LCDataset:
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
         
-        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
-        
+        # training data
+        self.Xtr = self._preprocess(pd.Series(self.devel.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        # test data
+        self.Xte = self._preprocess(pd.Series(self.test.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
+
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
@@ -1771,17 +1782,6 @@ class LCDataset:
         self.label_names = self.devel.target_names              # Set labels to class label names
         print("self.label_names:\n", self.label_names)
         
-        self.X_raw = self.devel.data
-        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-
-        self.X_raw = pd.Series(self.X_raw)                      # convert to Series object (from tuple)
-        print("self.X_raw:", type(self.X_raw), len(self.X_raw))
-        print("self.X_raw[0]:\n", self.X_raw[0])
-
-        self.X = self._preprocess(pd.Series(self.X_raw))
-        print("self.X:", type(self.X), self.X.shape)
-        print("self.X[0]:\n", self.X[0])
-
         self.target_names = self.label_names
         print("target_names:", type(self.target_names), len(self.target_names))
 
@@ -1792,14 +1792,29 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
-        # Now self.devel_target is already a dense NumPy array with shape (9603, 115), so no need for MultiLabelBinarizer.
+        # Now self.devel_target is already a dense NumPy array 
+        # with shape (9603, 115), so no need for MultiLabelBinarizer.
+
+        self.y_train = self.devel_target                                    # Transform multi-label targets into a binary matrix
+        self.y_test = self.test_target                                      # Transform multi-label targets into a binary matrix
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
+        
+        # Convert Y to a sparse matrix
+        self.y_train_sparse = csr_matrix(self.y_train)                                       # without Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+
+
+        """
         self.y = self.devel_target
         print("y:", type(self.y), self.y.shape)
 
         # Convert Y to a sparse matrix
         self.y_sparse = csr_matrix(self.y)  # No need for transpose
         print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
-
+        """
 
         return self.label_names
 

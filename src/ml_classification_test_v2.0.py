@@ -799,7 +799,7 @@ if __name__ == '__main__':
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
-        print(f'Assertion warning: model {method_name} with embeddings {embeddings} for {args.dataset} already calculated.')
+        print(f'Assertion warning: model {representation} with embeddings {embeddings} for {args.dataset} already calculated.')
         print("Run with --force option to override, exiting...")
         exit(0)
 
