@@ -976,7 +976,7 @@ class LCDataset:
 
         print("texts:", type(texts), len(texts))
         print("batch_size:", batch_size)
-        print("mx_len:", max_len)
+        print("max_len:", max_len)
 
         # Create dataset and dataloader for the input texts
         dataset = TextDataset(texts, self.tokenizer, max_len)
@@ -1052,6 +1052,45 @@ class LCDataset:
         return weighted_embeddings, avg_embeddings
 
 
+
+    def get_transformer_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Gets the associated BERT or RoBERTa embeddings for a given input text(s) using just the CLS 
+        Token Embeddings as a summary of the related doc (text), which is the first token 
+        in the BERT/Roberta input sequence.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's CLS token embedding.
+        """
+
+        print(f"Getting CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)  # Move model to correct device
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc=f"Building CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
+                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
+                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                # Take only the embedding for the first token ([CLS]), which encodes the entire document's context.
+                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+
+                embeddings.append(cls_embeddings.cpu().numpy())  # Move to CPU before appending
+
+        return np.vstack(embeddings)
 
 
     
@@ -1327,7 +1366,6 @@ class LCDataset:
 
 
 
-
     def _load_ohsumed(self):
 
         print("\n\tloading ohsumed dataset...")
@@ -1399,9 +1437,13 @@ class LCDataset:
 
     def _load_rcv1(self):
 
-        data_path = '../datasets/RCV1-v2/rcv1/'               
+        print("\n\tloading rcv1 dataset...")
 
-        print("\n\tloading rcv1 LCDataset (_load_rcv1) from path:", data_path)
+        #data_path = '../datasets/RCV1-v2/rcv1/'               
+        
+        data_path = os.path.join(DATASET_DIR, 'rcv1')
+
+        print("data_path:", data_path)
 
         """
         print('Downloading rcv1v2-ids.dat.gz...')
@@ -1427,10 +1469,14 @@ class LCDataset:
         """
         # ----------------------------------------------------------------
 
-        print("fetching training and test data...")
-        devel = fetch_RCV1(subset='train', data_path=data_path, debug=False)
-        test = fetch_RCV1(subset='test', data_path=data_path, debug=False)
+        #print("fetching training and test data...")
+        self.devel = fetch_RCV1(subset='train', data_path=data_path, debug=False)
+        self.test = fetch_RCV1(subset='test', data_path=data_path, debug=False)
 
+        self.classification_type = 'multilabel'
+        self.class_type = 'multilabel'
+
+        """
         print("training data:", type(devel))
         print("training data:", type(devel.data), len(devel.data))
         print("training targets:", type(devel.target), len(devel.target))
@@ -1438,14 +1484,84 @@ class LCDataset:
         print("testing data:", type(test))
         print("testing data:", type(test.data), len(test.data))
         print("testing targets:", type(test.target), len(test.target))
+        """
+        
+        # training data
+        self.Xtr = self._preprocess(pd.Series(self.devel.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
 
-        self.classification_type = 'multilabel'
+        # test data
+        self.Xte = self._preprocess(pd.Series(self.test.data))
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
 
-        print("masking numbers...")
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(devel.target, test.target)
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels:\n", self.labels)
+
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+        print("devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("test_target:", type(self.test_target), self.test_target.shape)
 
+
+        # Convert sparse targets to dense arrays
+        print("Converting devel_target from sparse matrix to dense array...")
+        self.devel_target = self.devel_target.toarray()                           # Convert to dense
+        self.test_target = self.test_target.toarray()                             # Convert to dense
+        print("devel_target (after processing):", type(self.devel_target), self.devel_target.shape)
+        print("test_target (after processing):", type(self.test_target), self.test_target.shape)
+
+        self.label_names = self.devel.target_names              # Set labels to class label names
+        print("self.label_names:\n", self.label_names)
+        
+        self.target_names = self.label_names
+        print("target_names:", type(self.target_names), len(self.target_names))
+
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        # Now self.devel_target is already a dense NumPy array 
+        # with shape (9603, 115), so no need for MultiLabelBinarizer.
+
+        self.y_train = self.devel_target                                    # Transform multi-label targets into a binary matrix
+        self.y_test = self.test_target                                      # Transform multi-label targets into a binary matrix
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
+        
+        # Convert Y to a sparse matrix
+        self.y_train_sparse = csr_matrix(self.y_train)                                       # without Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+
+
+        """
+        self.y = self.devel_target
+        print("y:", type(self.y), self.y.shape)
+
+        # Convert Y to a sparse matrix
+        self.y_sparse = csr_matrix(self.y)  # No need for transpose
+        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
+        """
+
+        return self.label_names
+
+
+
+
+
+    # ------------------------------------------------------------------------------------------------------------------------
+    # ancillary support methods
+    # ------------------------------------------------------------------------------------------------------------------------
 
     def split(self):
         
