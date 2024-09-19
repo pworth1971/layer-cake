@@ -275,10 +275,18 @@ We use four variants of pre-trained word embeddings to drive and test the variou
 The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following pre-trained embeddings are tested, and can be downloaded from the following URLs (as of June 2024)
 
 
+### GloVe
+
+Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. 
+
+We use, consistent with (Moreo et al 2019), the glove.840B.300d variant,
+which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
+
+
 
 ### Word2Vec
 
-We use GoogleNews-vectors-negative300 (trained on Google News, dimension == 300, but other models are also available from gensim:
+We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
 
 ['fasttext-wiki-news-subwords-300',
  'conceptnet-numberbatch-17-06-300',
@@ -297,14 +305,6 @@ Also kaggle download: https://www.kaggle.com/datasets/leadbest/googlenewsvectors
 
 Other available downloads: https://wikipedia2vec.github.io/wikipedia2vec/pretrained/
 
-
-
-### GloVe
-
-Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. 
-
-We use, consistent with (Moreo et al 2019), the glove.840B.300d variant,
-which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
 
 
 

@@ -687,11 +687,11 @@ def get_representation(args):
     # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
     # as the dataset representation into the model
     elif (args.mix == 'vmode'):
-        method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}'
+        method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}.({args.pretrained})'
     # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):
-        method_name += f'{args.vtype}->LSA/SVD'
+        method_name += f'{args.vtype}->LSA/SVD.({args.pretrained})'
 
     #
     # set optimized field to true if its a neural model 

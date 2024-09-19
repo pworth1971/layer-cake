@@ -174,94 +174,120 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
 
 
 
+import os
+import plotly.express as px
 
+def generate_charts_plotly(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
 
-def generate_charts_plotly(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+    # Define the measures of interest
+    measures_of_interest = ['final-te-macro-F1', 'final-te-micro-F1']
+
+    # Filter the dataframe for the measures of interest right away
+    df = df[df['measure'].isin(measures_of_interest)]
+    
+    if df.empty:
+        print("No data available for the specified measures")
+        return
 
     print("generating plotly charts to output directory:", output_path)
-
-    print("filtering for measures:", measures)
-    df_measures = df[df['measure'].isin(measures)]
-    print("df shape after filtering for measures:", df_measures.shape)
-    if df_measures.empty:
-        print("Error: No data available for the specified measures")
-        return
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # Generate charts for different measures, datasets, and models
-    for measure in measures:
-        for dataset in df['dataset'].unique():
-            for model in df['model'].unique():
-                print(f"Generating plots for {measure} in dataset {dataset} for model {model}...")
+    # Generate a separate chart for each measure within each dataset
+    for dataset in df['dataset'].unique():
 
-                # Filter the dataframe for the current dataset, model, and measure
-                subset_df = df_measures[
-                    (df_measures['measure'] == measure) &
-                    (df_measures['dataset'] == dataset) &
-                    (df_measures['model'] == model)
-                ]
+        print("processing dataset:", dataset)
 
-                if subset_df.empty:
-                    print(f"No data available for {measure} in dataset {dataset} for model {model}")
-                    continue
+        for measure in measures_of_interest:
 
-                # Print to see if any data is missing
-                print(f"Subset for {dataset} and model {model}:\n", subset_df)
+            print(f"Generating plots for dataset {dataset} with measure {measure}...")
 
-                # Dynamically adjust the palette to match the number of unique embeddings
-                unique_embeddings = subset_df['embeddings'].nunique()
-                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+            # Filter the dataframe for the current dataset and measure
+            subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
+            print("subset_df1:\n", subset_df1)
 
-                # Create the plot with all embedding-representation combinations for the current dataset and model
-                fig = px.bar(subset_df, 
-                             x='embeddings', 
-                             y='value', 
-                             color='representation', 
-                             barmode='group', 
-                             title=f'{dataset}-{model}:{measure}',
-                             labels={"value": "F1 Score", "embeddings": "Embeddings"},
-                             color_discrete_sequence=color_palette,
-                             hover_data=['model', 'embeddings', 'representation'])
+            # Group by representation, model, and dimensions to find maximum values
+            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings']).agg({'value': 'max'}).reset_index()
 
-                fig.update_layout(
-                    title={
-                        'text': f'{measure} for {model} on {dataset}',
-                        'y': 0.95,
-                        'x': 0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top',
-                        'font': dict(
-                            family="Arial",
-                            size=16,
-                            color='black',
-                            weight='bold'
-                        )
-                    },
-                    legend_title_text='Representation'
-                )
+            if subset_df2.empty:
+                print(f"No data available for dataset {dataset} with measure {measure}")
+                continue
 
-                fig.update_xaxes(title_text='Embeddings')
-                fig.update_yaxes(
-                    title_text='F1 Score', 
-                    range=[min(y_axis_threshold, subset_df['value'].min()), subset_df['value'].max() * 1.1])
+            # Create a new column that appends the dimensions to the representation label
+            #subset_df['representation_with_dim'] = subset_df['representation'] + '{' + subset_df['dimensions'].astype(str) + '}'
 
-                # Save each plot in the specified output directory
-                if output_path:
-                    plot_file_name = f"{dataset}_{model}_{measure}_f1_scores.html"
-                    plot_file = os.path.join(output_path, plot_file_name)
-                    fig.write_html(plot_file)
+            # Sorting by representation
+            subset_df2.sort_values(by=['representation'], inplace=True)
+            print("subset_df2:\n", subset_df2)
 
-                    print(f"Saved plot for {measure} in dataset {dataset} for model {model} at {plot_file}")
+            # Define the sorted order for the x-axis
+            model_rep_order = subset_df2['representation'].tolist()
 
-                if show_charts:
-                    fig.show()
+            # Create the plot, coloring by model and spreading bars on the x-axis
+            fig = px.bar(subset_df2, 
+                         x='representation',  # Use representation for x-axis
+                         y='value', 
+                         color='model',  # Color by model
+                         title=f'{measure} Performance Comparison on {dataset}',
+                         labels={"value": "Performance Metric", "representation": "Representation"},
+                         hover_data=['representation', 'value'],                # Include representation and value in hover
+                         category_orders={"representation": model_rep_order})  # Explicit sorting order
+
+            # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
+            fig.update_layout(
+                title={
+                    'text': f'{measure} Performance Across Models and Representations on {dataset}',
+                    'y': 0.95,
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': dict(
+                        family="Arial",
+                        size=16,
+                        color='black',
+                        weight='bold'
+                    )
+                },
+                legend_title_text='Model',
+                legend=dict(
+                    orientation="v",
+                    y=1,
+                    x=1,
+                    xanchor='right',
+                    yanchor='top'
+                ),
+                bargap=0.2,  # Increase spacing between bars
+            )
+
+            # Ensure the x-axis is treated as categorical and sorted
+            fig.update_xaxes(
+                title_text='Model - Representation (Dimensions)',
+                type='category'  # Treat x-axis as categorical to prevent reordering
+            )
+
+            fig.update_yaxes(
+                title_text='Performance Metric', 
+                range=[y_axis_threshold, 1]
+            )
+
+            # Save the plot in the specified output directory
+            plot_file_name = f"{dataset}_{measure}_performance_comparison.html"
+            plot_file = os.path.join(output_path, plot_file_name)
+            fig.write_html(plot_file)
+
+            print(f"Saved plot for {measure} on dataset {dataset} at {plot_file}")
+
+            if show_charts:
+                fig.show()
 
     print("plotly charts generation completed.")
 
-    return df_measures
+    return df
+
+
+
 
 
 
@@ -292,14 +318,18 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
             continue
 
         # Aggregate to find the average timelapse per model and embeddings
-        avg_timelapse_df = subset_df.groupby(['model', 'embeddings']).agg({timelapse_col: 'mean'}).reset_index()
+        avg_timelapse_df = subset_df.groupby(['model', 'embeddings']).agg({'timelapse': 'mean'}).reset_index()
 
+        # Dynamically adjust the palette to match the number of unique embeddings
+        unique_vals = avg_timelapse_df['model', 'embeddings'].nunique()
+        color_palette = sns.color_palette("colorblind", n_colors=unique_vals)
+        
         title_text = f'Dataset: {dataset.upper()}; Timelapse [by Model and Embeddings Type]'
 
         # Create the plot using Plotly Express
-        fig = px.bar(avg_timelapse_df, x='model', y=timelapse_col, color='embeddings', barmode='group',
+        fig = px.bar(avg_timelapse_df, x='model', y='timelapse', color='embeddings', barmode='group',
                      title=title_text,
-                     labels={timelapse_col: "Average Time (seconds)", "model": "Model"},
+                     labels={timelapse: "Average Time (seconds)", "model": "Model"},
                      color_discrete_sequence=color_palette,
                      hover_data=['model', 'embeddings'])
 
@@ -321,7 +351,7 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
         )
 
         fig.update_xaxes(title_text='Model')
-        fig.update_yaxes(title_text='Average Time (seconds)', range=[0, avg_timelapse_df[timelapse_col].max() * 1.1])
+        fig.update_yaxes(title_text='Average Time (seconds)', range=[0, avg_timelapse_df['timelapse'].max() * 1.1])
 
         # Save each plot in the specified output directory
         if output_path:
@@ -408,15 +438,18 @@ def main():
 
         if args.charts:
             
-            """
             generate_charts_plotly(
                 df, 
                 args.output_dir, 
                 show_charts=args.show, 
                 y_axis_threshold=args.ystart
             )
-            """
             
+            """
+            #
+            # matplotlib option is less interactive but handles more test cases - its split by dataset 
+            # and model as opposed to just dataset as the plotly graphs are designed for 
+            #
             generate_charts_matplotlib(
                 df, 
                 args.output_dir,
@@ -425,6 +458,8 @@ def main():
                 debug=debug
                 
             )
+            """
+
 
             if (args.runtimes):
                 gen_timelapse_plots(
