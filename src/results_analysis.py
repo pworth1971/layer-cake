@@ -167,7 +167,7 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 # Save the plot with today's date and 'matplotlib' in the filename
                 plot_file_name = f"{dataset}_{measure}_{model}_{today}_matplotlib.png"
                 plt.savefig(os.path.join(output_path, plot_file_name))
-                print(f"Saved plot {plot_file_name} to {output_path}")
+                print(f"Saved plot to {output_path}/{plot_file_name}")
 
                 if (show_charts):
                     plt.show()
@@ -289,50 +289,65 @@ def generate_charts_plotly(df, output_path='../out', y_axis_threshold=0, show_ch
 
 
 
-
-
-
-
 def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
 
     print("generating timelapse plots...")
 
-    print("filtering for measures:", measures)
-    df_measures = df[df['measure'].isin(measures)]
-    df_timelapse = df[['dataset', 'model', 'embeddings', 'timelapse']].drop_duplicates()
-    print("df shape after filtering for measures:", df_measures.shape)
+    # Ensure that only relevant columns are used
+    df_timelapse = df[['dataset', 'model', 'embeddings', 'representation', 'dimensions', 'timelapse']].drop_duplicates()
     print("df shape after filtering for timelapse:", df_timelapse.shape)
 
     if df_timelapse.empty:
         print("Error: No data available for timelapse analysis.")
         return
 
-    # Generate charts for timelapse (time taken by each model)
+    # Generate charts for timelapse (time taken by each model and representation)
     for dataset in df_timelapse['dataset'].unique():
-        print(f"generating timelapse plots for dataset {dataset}...")
+        print(f"Generating timelapse plots for dataset {dataset}...")
 
-        subset_df = df_timelapse[df_timelapse['dataset'] == dataset]
+        # Explicitly copy the subset to avoid SettingWithCopyWarning
+        subset_df = df_timelapse[df_timelapse['dataset'] == dataset].copy()
 
         if subset_df.empty:
             print(f"No timelapse data available for dataset {dataset}")
             continue
 
-        # Aggregate to find the average timelapse per model and embeddings
-        avg_timelapse_df = subset_df.groupby(['model', 'embeddings']).agg({'timelapse': 'mean'}).reset_index()
+        # Sort by dimensions in descending order (highest dimension first)
+        subset_df = subset_df.sort_values(by='dimensions', ascending=False)
+        print("subset_df:\n", subset_df)
+
+        # Create a new column to append the dimensions to the representation label
+        subset_df['representation_with_dim'] = subset_df['representation'] + ' (' + subset_df['dimensions'].astype(str) + ')'
+
+        # Aggregate to find the average timelapse per model, embeddings, and representation_with_dim
+        avg_timelapse_df = subset_df.groupby(['model', 'embeddings', 'representation_with_dim']).agg({'timelapse': 'mean'}).reset_index()
 
         # Dynamically adjust the palette to match the number of unique embeddings
-        unique_vals = avg_timelapse_df['model', 'embeddings'].nunique()
-        color_palette = sns.color_palette("colorblind", n_colors=unique_vals)
-        
-        title_text = f'Dataset: {dataset.upper()}; Timelapse [by Model and Embeddings Type]'
+        unique_vals = avg_timelapse_df['embeddings'].nunique()
+        print(f"unique_vals (embeddings): {unique_vals}")
 
-        # Create the plot using Plotly Express
-        fig = px.bar(avg_timelapse_df, x='model', y='timelapse', color='embeddings', barmode='group',
+        # Use Seaborn palette and convert it to a list of hex colors for Plotly
+        color_palette = sns.color_palette("colorblind", n_colors=unique_vals).as_hex()
+
+        # Get the sorted order of representations with dimensions
+        sorted_representation_with_dim = subset_df['representation_with_dim'].tolist()
+
+        title_text = f'Dataset: {dataset.upper()}; Timelapse [by Model, Embeddings, and Representation]'
+
+        # Create the plot using Plotly Express, coloring by embeddings
+        fig = px.bar(avg_timelapse_df, 
+                     x='representation_with_dim',  # Representations with dimensions on the x-axis
+                     y='timelapse', 
+                     color='embeddings',  # Color by embeddings
+                     barmode='group',
                      title=title_text,
-                     labels={timelapse: "Average Time (seconds)", "model": "Model"},
-                     color_discrete_sequence=color_palette,
-                     hover_data=['model', 'embeddings'])
+                     labels={'timelapse': "Average Time (seconds)", 'representation_with_dim': "Representation (Dimensions)"},
+                     color_discrete_sequence=color_palette,                                                                         # Use the corrected color palette
+                     hover_data=['model', 'embeddings', 'representation_with_dim'],                                                 # Include model, embeddings, and representation in hover
+                     category_orders={"representation_with_dim": sorted_representation_with_dim}                                    # Enforce sorted x-axis order
+                )
 
+        # Set up the layout, including the legend and x-axis configuration
         fig.update_layout(
             title={
                 'text': title_text,
@@ -347,15 +362,24 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
                     weight='bold'
                 )
             },
-            legend_title_text='Embeddings'
+            legend_title_text='Embeddings',  # Set legend title for embeddings
+            legend=dict(
+                orientation="v",
+                y=1,
+                x=1,
+                xanchor="right",
+                yanchor="top"
+            ),
+            bargap=0.2  # Control space between bars
         )
 
-        fig.update_xaxes(title_text='Model')
+        # Angle the x-axis labels to make them easier to read
+        fig.update_xaxes(title_text='Representation (Dimensions)', tickangle=-45)  # Rotate the labels for readability
         fig.update_yaxes(title_text='Average Time (seconds)', range=[0, avg_timelapse_df['timelapse'].max() * 1.1])
 
         # Save each plot in the specified output directory
         if output_path:
-            plot_file_name = f"{dataset}_timelapse_pretrained.html"
+            plot_file_name = f"{dataset}_timelapse_by_representation_with_dimensions.html"
             plot_file = os.path.join(output_path, plot_file_name)
             fig.write_html(plot_file)
 
@@ -364,9 +388,14 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
         if show_charts:
             fig.show()
 
-    print("timelapse plots generation completed.")
+    print("Timelapse plots generation completed.")
 
     return df_timelapse
+
+
+
+
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -438,13 +467,13 @@ def main():
 
         if args.charts:
             
+            """
             generate_charts_plotly(
                 df, 
                 args.output_dir, 
                 show_charts=args.show, 
                 y_axis_threshold=args.ystart
             )
-            
             """
             #
             # matplotlib option is less interactive but handles more test cases - its split by dataset 
@@ -458,8 +487,7 @@ def main():
                 debug=debug
                 
             )
-            """
-
+            
 
             if (args.runtimes):
                 gen_timelapse_plots(

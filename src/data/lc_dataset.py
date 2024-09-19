@@ -106,6 +106,7 @@ nltk.download('punkt_tab')
 
 stop_words = set(stopwords.words('english'))
 
+MIN_DF_COUNT = 5
 
 
 class TextDataset(Dataset):
@@ -289,10 +290,11 @@ class LCDataset:
             
             if self.vectorization_type == 'tfidf':
                 print("using TF-IDF vectorization...")
-                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)
+                #self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)
+                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
             elif self.vectorization_type == 'count':
                 print("using Count vectorization...")
-                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)
+                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
             else:
                 raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
@@ -308,10 +310,11 @@ class LCDataset:
 
             if self.vectorization_type == 'tfidf':
                 print("using TF-IDF vectorization...")
-                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)
+                #self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE)
+                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
             elif self.vectorization_type == 'count':
                 print("using Count vectorization...")
-                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE)
+                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
             else:
                 raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
@@ -354,9 +357,11 @@ class LCDataset:
 
             # Use the custom tokenizer for both TF-IDF and CountVectorizer
             if self.vectorization_type == 'tfidf':
-                self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer)
+                #self.vectorizer = TfidfVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer)
+                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True, tokenizer=self.custom_tokenizer)
             elif self.vectorization_type == 'count':
-                self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer)
+                #self.vectorizer = CountVectorizer(max_features=MAX_VOCAB_SIZE, tokenizer=self.custom_tokenizer)
+                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT, tokenizer=self.custom_tokenizer)
             else:
                 raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
