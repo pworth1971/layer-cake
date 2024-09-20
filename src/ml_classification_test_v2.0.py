@@ -369,9 +369,11 @@ def get_model_computation_method(args, embedding_type='word'):
     print("embedding_type:", embedding_type)
 
     if (args.pretrained in ['bert', 'roberta', 'llama']):
-        pt_type = 'attention'
-    elif (args.pretrained in ['glove', 'word2vec', 'fasttext']):
-        pt_type = 'co-occurrence'
+        pt_type = 'attention:tokenized'
+    elif (args.pretrained in ['glove', 'word2vec']):
+        pt_type = 'co-occurrence:word'
+    elif (args.pretrained in ['fasttext']):
+        pt_type = 'co-occurrence:subword'
     else:
         pt_type = 'unkwnown'
         
@@ -386,18 +388,17 @@ def get_model_computation_method(args, embedding_type='word'):
             return pt_type
             
         elif args.mix == 'vmode':
-            return 'frequency'
+            return f'frequency:{args.vtype}'
 
         elif args.mix == 'cat':
-            return f'frequency+{pt_type}'
+            return f'frequency:{args.vtype}+{pt_type}'
 
         elif args.mix == 'dot':
-            return f'frequency.{pt_type}'
+            return f'frequency:{args.vtype}.{pt_type}'
 
         elif args.mix == 'lsa':
-            return f'frequency->SVD'
-
-        
+            return f'frequency:{args.vtype}->SVD'
+       
     elif (args.learner in NEURAL_MODELS):
         pass
 
@@ -687,7 +688,8 @@ def get_representation(args):
     # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
     # as the dataset representation into the model
     elif (args.mix == 'vmode'):
-        method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}.({args.pretrained})'
+        #method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}.({args.pretrained}'
+        method_name += f'{args.vtype}[{args.pretrained}]'
     # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):

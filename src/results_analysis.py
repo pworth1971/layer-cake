@@ -52,7 +52,7 @@ def results_analysis(df, output_path='../out'):
     final_result = unique_result[columns_order].copy()
     final_result.sort_values(by=['dataset', 'model', 'embeddings', 'representation', 'measure'], inplace=True)
 
-    print("final result:", final_result)
+    print("final result:\n", final_result)
 
     # Format the table
     formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
@@ -314,7 +314,7 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
         # Sort by dimensions in descending order (highest dimension first)
         subset_df = subset_df.sort_values(by='dimensions', ascending=False)
-        print("subset_df:\n", subset_df)
+        #print("subset_df:\n", subset_df)
 
         # Create a new column to append the dimensions to the representation label
         subset_df['representation_with_dim'] = subset_df['representation'] + ' (' + subset_df['dimensions'].astype(str) + ')'
