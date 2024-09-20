@@ -7,7 +7,7 @@ import seaborn as sns
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-
+import numpy as np
 
 # measures filter: report on these specific measures
 measures = ['final-te-macro-F1', 'final-te-micro-F1']
@@ -100,11 +100,27 @@ def results_analysis(df, output_path='../out'):
 
 
 def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+    """
+    The generate_charts_matplotlib function generates bar charts for each combination of model, dataset, and measure from a 
+    given DataFrame. It uses Matplotlib and Seaborn to create plots that are colorblind-friendly, showing the performance of 
+    models based on a specific measure for a given dataset.
+
+    Arguments:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - y_axis_threshold (default: Y_AXIS_THRESHOLD): The minimum value for the y-axis (used to set a threshold).
+    - show_charts (default: False): Boolean flag to control whether the charts are displayed interactively.
+    - debug (default: False): Boolean flag to print additional debug information during execution.
+
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output
+    """
 
     print("Generating separate charts per model and dataset...")
 
-    print("filtering for measures:", measures)
-
+    print("Filtering for measures:", measures)
+    
+    # Filter for the specific measures of interest
     df_measures = df[df['measure'].isin(measures)]
     print("df shape after filtering for measures:", df_measures.shape)
     if df_measures.empty:
@@ -124,7 +140,8 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
     for measure in measures:
         for dataset in df['dataset'].unique():
             for model in df['model'].unique():
-                plt.figure(figsize=(14, 8))
+                # Increase the figure size for better visibility
+                plt.figure(figsize=(20, 12))  # Larger figure size
 
                 # Filter the dataframe for the current dataset, model, and measure
                 subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
@@ -133,13 +150,13 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                     print(f"No data available for {measure}, {model}, in dataset {dataset}")
                     continue
 
-                # Combine embeddings, representation, and dimensions into a single label for x-axis
-                subset_df.loc[:, 'embedding_rep_dim'] = subset_df.apply(
+                # Combine embeddings, representation, and dimensions into a single label for the x-axis
+                subset_df['embedding_rep_dim'] = subset_df.apply(
                     lambda row: f"{row['embeddings']}-{row['representation']}:{row['dimensions']}", axis=1
                 )
 
-                # Sort by embeddings and then by dimensions in descending order (highest dimension first)
-                subset_df = subset_df.sort_values(by=['embeddings', 'dimensions'], ascending=[True, False])
+                # Sort by dimensions in descending order (highest dimension first)
+                subset_df = subset_df.sort_values(by='dimensions', ascending=False)
 
                 # Dynamically adjust the palette to match the number of unique embeddings
                 unique_embeddings = subset_df['embeddings'].nunique()
@@ -148,29 +165,43 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 # Create a bar plot
                 sns.barplot(
                     data=subset_df,
-                    x='embedding_rep_dim',
+                    x='embedding_rep_dim',  # Use the combined field with embeddings, representation, and dimensions
                     y='value',
                     hue='embeddings',
-                    palette=color_palette
+                    palette=color_palette,
+                    order=subset_df['embedding_rep_dim']  # Explicitly set the order based on sorted dimensions
                 )
 
                 # Customize plot
-                plt.title(f"{dataset}-{model}:{measure}", fontsize=15, weight='bold')
-                plt.xlabel("Embeddings-Representation:Dimensions", fontsize=9)
-                plt.ylabel(measure, fontsize=10)
+                plt.title(f"{dataset}-{model}:{measure}", fontsize=20, weight='bold')  # Increased title size
+                plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)  # Larger x-axis label
+                plt.ylabel(measure, fontsize=14)  # Larger y-axis label
                 plt.ylim(y_axis_threshold, 1)  # Set y-axis range
-                plt.xticks(rotation=45, ha='right', fontsize=8)  # Rotate x-axis labels at an angle
-                plt.yticks(fontsize=9)  # Set y-axis font size
-                plt.legend(title="Embeddings", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=10)
+
+                # Adjust y-axis ticks for more granularity (twice as many ticks, e.g., every 0.05)
+                plt.yticks(np.arange(y_axis_threshold, 1.01, 0.05), fontsize=10, fontweight='bold')  # Smaller, bold y-axis labels
+
+                # Change x-axis label font style (smaller, bold)
+                plt.xticks(rotation=45, ha='right', fontsize=10, fontweight='bold')  # Smaller, bold font for x-axis labels
+                
+                # Customize the legend
+                plt.legend(title="Embeddings", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=14)  # Larger legend
                 plt.tight_layout()
 
                 # Save the plot with today's date and 'matplotlib' in the filename
                 plot_file_name = f"{dataset}_{measure}_{model}_{today}_matplotlib.png"
-                plt.savefig(os.path.join(output_path, plot_file_name))
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)  # Increased DPI for better resolution
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
-                if (show_charts):
+                # Optionally display the plot
+                if show_charts:
                     plt.show()
+
+
+
+
+
+
 
 
 
