@@ -411,7 +411,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
     #
-    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{MAX_VOCAB_SIZE}_tokenized.pickle'
+    pickle_file_name=f'{dataset}_{vtype}_{pretrained}.pickle'
 
     print(f"Loading data set {dataset}...")
 

@@ -29,9 +29,11 @@ import pickle
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.corpus import stopwords, wordnet
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+
+from joblib import Parallel, delayed
 
 from gensim.models import KeyedVectors, FastText
 from gensim.models.fasttext import load_facebook_model
@@ -1235,8 +1237,8 @@ class LCDataset:
 
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -1308,8 +1310,8 @@ class LCDataset:
 
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -1393,8 +1395,8 @@ class LCDataset:
 
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -1475,8 +1477,8 @@ class LCDataset:
         # ----------------------------------------------------------------
 
         #print("fetching training and test data...")
-        self.devel = fetch_RCV1(subset='train', data_path=data_path, debug=False)
-        self.test = fetch_RCV1(subset='test', data_path=data_path, debug=False)
+        self.devel = fetch_RCV1(subset='train', data_path=data_path, debug=True)
+        self.test = fetch_RCV1(subset='test', data_path=data_path, debug=True)
 
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
@@ -1498,8 +1500,8 @@ class LCDataset:
 
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -1625,7 +1627,52 @@ class LCDataset:
         
         return texts
 
+
+
+
     def _preprocess(self, text_series):
+        """
+        Preprocess a pandas Series of texts: tokenizing, removing punctuation, stopwords, 
+        and applying a custom number masking function.
+
+        Parameters:
+        - text_series: A pandas Series containing text data (strings).
+
+        Returns:
+        - processed_texts: A NumPy array containing processed text strings with the shape property.
+        """
+        print("preprocessing text...")
+        print("text_series:", type(text_series), text_series.shape)
+
+        # Load stop words once outside the loop
+        stop_words = set(stopwords.words('english'))
+
+        # Vectorize punctuation removal
+        text_series = text_series.apply(self._remove_punctuation)
+
+        # Parallelize tokenization and stop word removal using joblib for multi-core processing
+        def process_text(text):
+            # Tokenize text
+            tokenized_text = word_tokenize(text.lower())
+            
+            # Remove stop words
+            filtered_words = [word for word in tokenized_text if word not in stop_words]
+            
+            # Join back into a string
+            filtered_text = ' '.join(filtered_words)
+            
+            # Apply custom number masking
+            masked_text = _mask_numbers([filtered_text])  # Input as list to fit mask_numbers function signature
+            return masked_text[0]
+
+        # Parallel processing with multiple cores
+        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+        # Return as NumPy array
+        return np.array(processed_texts)
+
+
+    def _preprocess_old(self, text_series):
         """
         Preprocess a pandas Series of texts, tokenizing, removing punctuation, stopwords, 
         and applying a custom number masking function.

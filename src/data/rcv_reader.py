@@ -32,7 +32,14 @@ class IDRangeException(Exception): pass
 nwords = []
 
 def parse_document(xml_content, valid_id_range=None):
-    root = ET.fromstring(xml_content)
+
+    #print("parsing XML doc ...")
+
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError as e:
+        print(f"Error parsing XML file: {e}")
+        return None
 
     doc_id = root.attrib['itemid']
     if valid_id_range is not None:
@@ -85,7 +92,7 @@ def fetch_RCV1_raw(data_path, subset='all'):
     for dir_name in os.listdir(data_path):                                          # list all the directories 
         if re.match('199\d{5}$', dir_name):                                         # if they start with '199*' and are 8 digits long
             target_dir = os.path.join(data_path, dir_name)
-            #print("parsing xml files in target_dir...")
+            print("parsing xml files in target_dir...")
             for file_name in os.listdir(target_dir):                                # for each file in directory
                 if file_name.endswith('.xml'):
                     xmlfile_path = os.path.join(target_dir, file_name)
@@ -99,7 +106,7 @@ def fetch_RCV1_raw(data_path, subset='all'):
                             read_documents += 1
                         except (IDRangeException, ValueError) as e:
                             pass
-                        print('\r[{}] read {} documents'.format(dir_name, len(request)), end='')
+                        #print('\r[{}] read {} documents'.format(dir_name, len(request)), end='')
                         if read_documents == expected:
                             break
             if read_documents == expected:
@@ -109,10 +116,50 @@ def fetch_RCV1_raw(data_path, subset='all'):
 
 
 def fetch_RCV1(data_path, subset='all', debug=False):
+    """
+    Fetches the RCV1 dataset by parsing zipped XML files from the specified directory.
 
-    if (debug):
-        print("fetch_RVCV1(data_path):", data_path)
-        print("subset:", subset)
+    This function loads and parses a portion of the Reuters Corpus Volume 1 (RCV1) dataset
+    based on the provided subset. The function expects the dataset to be stored in zipped 
+    XML format within the `data_path` directory. Depending on the `subset` parameter, it 
+    fetches the 'train', 'test', or 'all' portions of the dataset.
+
+    Parameters:
+    ----------
+    data_path : str
+        The path to the directory where the zipped XML files of the RCV1 dataset are stored.
+    
+    subset : str, optional
+        Specifies which subset of the dataset to load. It can be one of the following:
+        - 'train': Loads the training subset.
+        - 'test': Loads the testing subset.
+        - 'all' : Loads the entire dataset (both training and testing).
+        Default is 'all'.
+    
+    debug : bool, optional
+        If True, prints debugging information such as file paths and ZIP contents. Default is False.
+
+    Returns:
+    -------
+    LabelledDocuments
+        A collection of the parsed documents, with their associated text, labels, and label names.
+        - `data`: List of document texts.
+        - `target`: List of document categories (labels).
+        - `target_names`: List of all unique categories (labels) found.
+
+    Raises:
+    -------
+    AssertionError
+        If the `subset` argument is not one of ['train', 'test', 'all'].
+
+    Notes:
+    ------
+    The function assumes that the XML files are stored in a zipped format, where the parent directory
+    contains multiple zip files, each corresponding to a part of the dataset.
+    """
+
+    print('fetch_RCV1(data_path):', data_path)
+    print("subset:", subset)
 
     assert subset in ['train', 'test', 'all'], 'split should either be "train", "test", or "all"'
 
@@ -141,19 +188,14 @@ def fetch_RCV1(data_path, subset='all', debug=False):
     for part in list_files(data_path):
         if not re.match('\d+\.zip', part): continue
         target_file = join(data_path, part)
-        if (debug):
-            print("\ntarget_file:", target_file)
+        print("target_file:", target_file)
         assert exists(target_file), \
             "You don't seem to have the file "+part+" in " + data_path + ", and the RCV1 corpus can not be downloaded"+\
             " w/o a formal permission. Please, refer to " + RCV1_BASE_URL + " for more information."
         zipfile = ZipFile(target_file)
-        if (debug):
-            print("zipfile:", zipfile)
+        #print("zipfile:", zipfile)
         for xmlfile in zipfile.namelist():
-            """
-            if (debug):
-                print("\nxmlfile:", xmlfile)
-            """
+            #print("\nxmlfile:", xmlfile)
             xmlcontent = zipfile.open(xmlfile).read()
             try:
                 doc = parse_document(xmlcontent, valid_id_range=split_range)
@@ -162,7 +204,8 @@ def fetch_RCV1(data_path, subset='all', debug=False):
                 read_documents += 1
             except (IDRangeException,ValueError) as e:
                 pass
-            print('\r[{}] read {} documents'.format(part, len(request)), end='')
+            #print('\r[{}] read {} documents'.format(part, len(request)), end='')
+            #print("\n")
             if read_documents == expected: break
         if read_documents == expected: break
 

@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_vector.test"
+LOG="--logfile ../log/ml_mps_rcv1.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -25,11 +25,11 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
-#declare -a learners=("svm" "lr" "nb")
-declare -a learners=("svm")
-declare -a vtypes=("tfidf" "count")
+#declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
+declare -a datasets=("rcv1")
+declare -a pickle_paths=("../pickles")
+declare -a learners=("svm" "lr" "nb")
+declare -a vtypes=("tfidf")
 declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
 #declare -a embeddings=("glove" "word2vec", "fasttext")
 declare -a embeddings=("glove" "word2vec", "fasttext" "bert" "roberta")
