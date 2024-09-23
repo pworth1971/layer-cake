@@ -47,8 +47,7 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 from model.CustomRepresentationLearning import DEFAULT_CPU_BATCH_SIZE, DEFAULT_GPU_BATCH_SIZE, MPS_BATCH_SIZE, TOKEN_TOKENIZER_MAX_LENGTH
-from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL, WORD2VEC_MODEL, GLOVE_MODEL, FASTTEXT_MODEL
-from model.CustomRepresentationLearning import BERTLCRepresentationModel, RoBERTaLCRepresentationModel, LlaMaLCRepresentationModel
+from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
 
 from util.common import VECTOR_CACHE, DATASET_DIR
 
@@ -138,7 +137,7 @@ class LCDataset:
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
     
 
-    def __init__(self, name, vectorization_type='tfidf', pretrained=None, embedding_type='word', embedding_path=VECTOR_CACHE, embedding_comp_type='avg'):
+    def __init__(self, name, vectorization_type, embedding_type, pretrained=None):
         """
         Initializes the LCDataset object with the specified dataset and vectorization parameters. This method
         both loads the dataset into the respective LCDataset variables as well as sets up the proper model and 
@@ -161,21 +160,12 @@ class LCDataset:
         self.vectorization_type = vectorization_type
         print("vectorization_type:", self.vectorization_type)
 
-        self.pretrained = pretrained
-        print("pretrained:", self.pretrained)
-
         self.embedding_type = embedding_type
         print("embedding_type:", self.embedding_type)
 
-        self.embedding_path = embedding_path
-        print("embedding_path:", self.embedding_path)
-
-        self.pretrained_path = embedding_path
-        print("pretrained_path:", self.pretrained_path)
-
-        self.embedding_comp_type = embedding_comp_type
-        print("embedding_comp_type:", self.embedding_comp_type)
-
+        self.pretrained = pretrained
+        print("pretrained:", self.pretrained)
+        
         self.loaded = False
         self.initialized = False
 
@@ -193,9 +183,6 @@ class LCDataset:
         print("device:", self.device)
         print("batch_size:", self.batch_size)
 
-        #
-        # load and preprocess the dataset
-        #
         if name=='reuters21578':
             self._load_reuters()
         elif name == '20newsgroups':
@@ -207,81 +194,12 @@ class LCDataset:
         elif name == 'bbc-news':
             self._load_bbc_news()
 
-        #
-        # instantiate representation model if token/transformer based 
-        # we offload this code to another class
-        #
-        self.lcr_model = None          # custom representation model class object
-
-        if (pretrained in ['bert', 'roberta', 'llama']):
-
-            if pretrained == 'bert':
-                print("Using BERT pretrained embeddings...")
-                self.lcr_model = BERTLCRepresentationModel(
-                    model_name=BERT_MODEL, 
-                    model_dir=embedding_path, 
-                    device=self.device
-                )
-            
-            elif pretrained == 'roberta':
-                print("Using RoBERTa pretrained embeddings...")
-                self.lcr_model = RoBERTaLCRepresentationModel(
-                    model_name=ROBERTA_MODEL, 
-                    model_dir=embedding_path, 
-                    device=self.device
-                )
-
-            elif pretrained == 'llama':
-                print("Using LLaMA pretrained embeddings...")
-                self.lcr_model = LlaMaLCRepresentationModel(
-                    model_name=LLAMA_MODEL, 
-                    model_dir=embedding_path,  
-                    device=self.device
-                )
-
-            self.model = self.lcr_model.model
-            self.tokenizer = self.lcr_model.tokenizer
-            
-        elif pretrained == 'word2vec':
-            print("Using Word2Vec pretrained embeddings...")
-            
-            # Append the Word2Vec model name to the pretrained_path
-            word2vec_model_path = self.pretrained_path + '/' + WORD2VEC_MODEL  
-            print("word2vec_model_path:", word2vec_model_path)
-
-            self.model = KeyedVectors.load_word2vec_format(word2vec_model_path, binary=True)
-
-        elif pretrained == 'glove':
-            print("Using GloVe pretrained embeddings...")
-            
-            # Append the GloVe model name to the pretrained_path
-            glove_input_file = self.pretrained_path + '/' + GLOVE_MODEL
-            print("glove_input_file:", glove_input_file)
-
-            word2vec_output_file = glove_input_file + '.word2vec'
-            glove2word2vec(glove_input_file, word2vec_output_file)
-            self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
-
-        elif pretrained == 'fasttext':
-            print("Using FastText pretrained embeddings with subwords...")
-            
-            # Append the FastText model name to the pretrained_path
-            fasttext_model_path = self.pretrained_path + '/' + FASTTEXT_MODEL
-            print("fasteext_model_path:", fasttext_model_path)
-
-            # Use load_facebook_model to load FastText model from Facebook's pre-trained binary files
-            self.model = load_facebook_model(fasttext_model_path)
-        else:
-            raise ValueError("Error: Invalid pretrained type.")
-            
+        self.vectorize()
 
         self.nC = self.num_labels
         print("nC:", self.nC)
 
         self.loaded = True
-        self.initialized = True
-
-        print("LCDataset initialized...\n")
 
 
 
@@ -324,15 +242,13 @@ class LCDataset:
         the embeddings such that they align with pretrained embeddings tokenization method
         """
 
-        print("\n\t vectorizing dataset...")
+        print("building vector representation of dataset...")
 
         # initialize local variables
-        """
         self.model = None
         self.embedding_dim = 0
         self.embedding_vocab_matrix = None
         self.vocab = None
-        """
 
         print("self.vectorization_type:", self.vectorization_type)
         print("self.embedding_type:", self.embedding_type)
@@ -386,14 +302,7 @@ class LCDataset:
                 self.embedding_vocab_matrix[idx] = self.model.get_word_vector(word)
 
         elif self.embedding_type == 'token':
-
-            print(f"Using token-level vectorization...")
             
-            #
-            # NB: model and tokenizer instantiated when class object instantiated
-            #
-
-            """
             if self.pretrained == 'bert': 
                 self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT').to(self.device)
                 self.tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
@@ -405,14 +314,16 @@ class LCDataset:
                 self.tokenizer = LlamaTokenizerFast.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
             else:
                 raise ValueError("Invalid embedding type. Use 'bert', 'roberta', or 'llama' for token embeddings.")
-            """
-
+ 
             print("model:\n", self.model)
             print("tokenizer:\n", self.tokenizer)
 
             # Ensure padding token is available
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
+
+
+            print(f"Using token-level vectorization...")
 
             # Use the custom tokenizer for both TF-IDF and CountVectorizer
             if self.vectorization_type == 'tfidf':
@@ -479,17 +390,21 @@ class LCDataset:
     
 
 
-    def init_embedding_matrices(self):
+    def init_embedding_matrices(self, pretrained=None, pretrained_path=None):
         """
         Initialize the dataset with pretrained embeddings.
+        
+        Parameters:
+        - pretrained: 'word2vec', 'glove', 'fasttext', 'bert', 'roberta' or 'llama' for the pretrained embeddings to use.
+        - pretrained_path: Path to the pretrained embeddings file.
         """
 
-        print("\n\tinitializing embedding matrices...")
+        print("initializing embedding matrices...")
         
-        print("self.pretrained:", self.pretrained)
-
-        self.pretrained_path = self.embedding_path
-        print("self.pretrained_path:", self.pretrained_path)
+        self.pretrained = pretrained
+        self.pretrained_path = pretrained_path
+        print("pretrained:", self.pretrained)
+        print("pretrained_path:", self.pretrained_path)
 
         # build the embedding vocabulary matrix to align with the dataset vocabulary and embedding type
         self.build_embedding_vocab_matrix()
@@ -599,6 +514,39 @@ class LCDataset:
         
         # Load the pre-trained embeddings based on the specified model
         if self.pretrained in ['word2vec', 'fasttext', 'glove']:
+        
+            if self.pretrained == 'word2vec':
+                print("Using Word2Vec pretrained embeddings...")
+                
+                # Append the Word2Vec model name to the pretrained_path
+                word2vec_model_path = self.pretrained_path + '/' + WORD2VEC_MODEL  
+                print("word2vec_model_path:", word2vec_model_path)
+
+                self.model = KeyedVectors.load_word2vec_format(word2vec_model_path, binary=True)
+
+            elif self.pretrained == 'glove':
+                print("Using GloVe pretrained embeddings...")
+                
+                # Append the GloVe model name to the pretrained_path
+                glove_input_file = self.pretrained_path + '/' + GLOVE_MODEL
+                print("glove_input_file:", glove_input_file)
+
+                word2vec_output_file = glove_input_file + '.word2vec'
+                glove2word2vec(glove_input_file, word2vec_output_file)
+                self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+
+            elif self.pretrained == 'fasttext':
+                print("Using FastText pretrained embeddings with subwords...")
+                
+                # Append the FastText model name to the pretrained_path
+                fasttext_model_path = self.pretrained_path + '/' + FASTTEXT_MODEL
+                print("fasteext_model_path:", fasttext_model_path)
+
+                # Use load_facebook_model to load FastText model from Facebook's pre-trained binary files
+                self.model = load_facebook_model(fasttext_model_path)
+            
+            else:
+                raise ValueError("Invalid pretrained type.")
             
             print("model:", type(self.model))
             print("model.vector_size:", self.model.vector_size)
@@ -637,10 +585,8 @@ class LCDataset:
             
             print("creating (pretrained) embedding vocab matrix which aligns with dataset vocabulary...")
             
-            print("self.model:\n", self.model)
-            print("self.tokenizer:\n", self.tokenizer)
-
             print("Tokenizer vocab size:", self.tokenizer.vocab_size)
+
             print("Model vocab size:", self.model.config.vocab_size)
 
             self.model.eval()  # Set model to evaluation mode            
@@ -750,19 +696,22 @@ class LCDataset:
         # should be a numpy array 
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
 
+
         return self.embedding_vocab_matrix
             
-
 
     def generate_dataset_embeddings(self):
         """
         Generate embedding representation of dataset docs in three forms for both the training preprocessed data (Xtr)
         and the test preprocessed data (Xte). The three forms are:
 
+        - weighted_embeddings: Weighted average of word embeddings using TF-IDF scores.
         - summary_embeddings: CLS token embeddings from BERT or RoBERTa models.
         - avg_embeddings: Average of token embeddings from BERT or RoBERTa models.
         
         Returns:
+        - Xtr_weighted_embeddings: Weighted average embeddings for training data.
+        - Xte_weighted_embeddings: Weighted average embeddings for test data.
         - Xtr_summary_embeddings: CLS token embeddings for training data.
         - Xte_summary_embeddings: CLS token embeddings for test data.
         - Xtr_avg_embeddings: Average embeddings for training data.
@@ -774,27 +723,14 @@ class LCDataset:
         print("self.pretrained:", self.pretrained)
         print("self.pretrained_path:", self.pretrained_path)
 
-        # generate dataset embedding representations depending on underlyinbg 
-        # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'llama', 'roberta']):                               
-            self.Xtr_avg_embeddings = self.lcr_model.encode_sentences(self.Xtr.tolist(), comp_method='mean')                                     # encode the dataset in the specified form
-            self.Xte_avg_embeddings = self.lcr_model.encode_sentences(self.Xte.tolist(), comp_method='mean')                                     # encode the dataset in the specified form
-            print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
-            print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
-
-            self.Xtr_summary_embeddings = self.lcr_model.encode_sentences(self.Xtr.tolist(), comp_method='summary')                                     # encode the dataset in the specified form
-            self.Xte_summary_embeddings = self.lcr_model.encode_sentences(self.Xte.tolist(), comp_method='summary')                                     # encode the dataset in the specified form
-            print("Xtr_summary_embeddings (cls):", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-            print("Xte_summary_embeddings (cls):", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
-
-            # not supported weighted average comp method for transformer based models due to
-            # complexity of vectorization and tokenization mapping across models 
-            # word embedding models like word2vec, GloVe or fasTtext
-            self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
-            self.Xte_weighted_embeddings = self.Xte_avg_embeddings
+        if (self.pretrained in ['bert', 'llama', 'roberta']):                               # transformaer based embeddings
+            self.generate_transformer_embeddings(batch_size=self.batch_size)
 
         elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddins
             self.generate_word_embeddings()
+            
+        print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
+        print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
         print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
         print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
@@ -802,7 +738,7 @@ class LCDataset:
         print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
         print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
 
-        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
+        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings, 
         
 
     def generate_word_embeddings(self):
@@ -928,6 +864,210 @@ class LCDataset:
         print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
 
         return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+    
+
+
+    def generate_transformer_embeddings(self, batch_size=DEFAULT_GPU_BATCH_SIZE):
+        
+        print("generating transformer embeddings...")
+        
+        print("batch_size:", batch_size)
+
+        print("Xtr:", type(self.Xtr), len(self.Xtr))
+        print("Xtr[0]:", self.Xtr[0])
+        print("Xte:", type(self.Xte), len(self.Xte))
+        print("Xte[0]:", self.Xte[0])
+
+        #
+        # BERT, RoBERTa or LlaMa embeddings (transformer architectures)
+        #         
+        if (self.pretrained in ['bert', 'roberta', 'llama']): 
+
+            print("generating BERT, RoBERTa or LlaMa embeddings...")
+
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.get_transformer_embeddings(
+                texts=self.Xtr, 
+                batch_size=self.batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
+            )
+
+            self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.get_transformer_embeddings(
+                texts=self.Xte, 
+                batch_size=self.batch_size, 
+                max_len=TOKEN_TOKENIZER_MAX_LENGTH
+            )
+
+            print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
+            print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
+
+            print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
+            print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
+
+            # only BERT and RoBERTa models have CLS token embeddings
+            if (self.pretrained in ['bert', 'roberta']):
+                self.Xtr_summary_embeddings = self.get_transformer_embedding_cls(
+                    texts=self.Xtr, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
+
+                self.Xte_summary_embeddings = self.get_transformer_embedding_cls(
+                    texts=self.Xte, 
+                    batch_size=self.batch_size, 
+                    max_len=TOKEN_TOKENIZER_MAX_LENGTH
+                    )
+            else:
+                self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
+                self.Xte_summary_embeddings = self.Xte_avg_embeddings
+
+            print("Xtr_summary_embeddings (cls):", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
+            print("Xte_summary_embeddings (cls):", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+
+        else:
+            raise ValueError("Invalid pretrained model. Use 'bert', 'roberta', or 'llama'.")
+
+        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings
+
+
+    def get_transformer_embeddings(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Compute both basic average (np.mean) and weighted average (using tfidf vectorized values) representations of 
+        data (texts), supporting BERT, RoBERTa, or LLaMa based transformer architecture pretrained embeddings models
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT, RoBERTa, or LLaMa inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A tuple (weighted_embeddings, avg_embeddings), where:
+            - weighted_embeddings: A 2D numpy array where each row corresponds to a document's weighted embedding.
+            - avg_embeddings: A 2D numpy array where each row corresponds to a document's averaged embedding.
+        """
+
+        print(f"Getting transformer embeddings representations of dataset using {'BERT' if self.pretrained == 'bert' else 'RoBERTa' if self.pretrained == 'roberta' else 'LLaMa'} pretrained embeddings...")
+
+        print("texts:", type(texts), len(texts))
+        print("batch_size:", batch_size)
+        print("max_len:", max_len)
+
+        # Create dataset and dataloader for the input texts
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=NUM_DL_WORKERS)
+
+        avg_embeddings = []
+        weighted_embeddings = []
+
+        # Prepare TF-IDF vectors in bulk outside the loop using 
+        # self.vectorizer which has already been instantiated appropriately
+        tfidf_vectors = self.vectorizer.transform(texts).toarray()  # Vectorize all texts in one go
+
+        # Model should already be on the appropriate device
+        self.model.eval()
+
+        with torch.no_grad():
+            # Use AMP for CUDA devices, nullcontext otherwise
+
+            # Choose AMP for CUDA, otherwise use nullcontext
+            autocast_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext()
+
+            with autocast_context:
+                for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"computing transformer embedding representations...")):
+                    input_ids = batch['input_ids'].to(self.device, non_blocking=True)  # Move data to GPU asynchronously
+                    attention_mask = batch['attention_mask'].to(self.device, non_blocking=True)
+
+                    # Handle BERT and RoBERTa embeddings with token_type_ids
+                    if self.pretrained in ['bert', 'roberta']:
+                        token_type_ids = batch['token_type_ids'].to(self.device, non_blocking=True)
+                        outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                    else:
+                        # Handle LLaMa embeddings without token_type_ids
+                        outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                    token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_dim)
+
+                    for i in range(token_embeddings.size(0)):  # Iterate over each document in the batch
+                        tokens = self.tokenizer.convert_ids_to_tokens(input_ids[i].cpu().numpy())
+                        
+                        # Conditionally convert to float32 if using MPS
+                        if self.device.type == 'mps':
+                            tfidf_vector = tfidf_vectors[batch_idx * batch_size + i].astype(np.float32)  # Convert to float32 for MPS
+                        else:
+                            tfidf_vector = tfidf_vectors[batch_idx * batch_size + i]  # Keep original dtype for CUDA/CPU
+
+                        weighted_sum = torch.zeros(token_embeddings.size(2), device=self.device)  # Initialize weighted sum on the GPU
+                        total_weight = 0.0
+
+                        for j, token in enumerate(tokens):
+                            if token in self.vectorizer.vocabulary_:  # Only consider tokens in the vectorizer's vocab
+                                token_weight = tfidf_vector[self.vectorizer.vocabulary_[token]]
+                                weighted_sum += token_embeddings[i, j] * token_weight  # Stay on the GPU for computations
+                                total_weight += token_weight
+
+                        # Normalize weighted embeddings and compute average embeddings
+                        if total_weight > 0:
+                            weighted_doc_embedding = weighted_sum / total_weight  # Normalize by the sum of weights
+                        else:
+                            weighted_doc_embedding = torch.zeros(token_embeddings.size(2), device=self.device)  # Handle cases with no valid tokens
+
+                        avg_doc_embedding = token_embeddings[i].mean(dim=0)  # Average embeddings
+
+                        weighted_embeddings.append(weighted_doc_embedding)  # Stay on GPU for now
+                        avg_embeddings.append(avg_doc_embedding)
+
+            # Once all embeddings are collected, move to CPU in a single step
+            weighted_embeddings = torch.stack(weighted_embeddings).cpu().numpy()
+            avg_embeddings = torch.stack(avg_embeddings).cpu().numpy()
+
+        print("weighted_embeddings:", type(weighted_embeddings), weighted_embeddings.shape)
+        print("avg_embeddings:", type(avg_embeddings), avg_embeddings.shape)
+
+        return weighted_embeddings, avg_embeddings
+
+
+
+    def get_transformer_embedding_cls(self, texts, batch_size=DEFAULT_GPU_BATCH_SIZE, max_len=TOKEN_TOKENIZER_MAX_LENGTH):
+        """
+        Gets the associated BERT or RoBERTa embeddings for a given input text(s) using just the CLS 
+        Token Embeddings as a summary of the related doc (text), which is the first token 
+        in the BERT/Roberta input sequence.
+
+        Args:
+        - texts: List of input text documents.
+        - batch_size: Number of samples to process in a single batch during BERT/Roberta inference.
+        - max_len: Maximum sequence length for tokenizing the documents.
+
+        Returns:
+        - A 2D numpy array where each row corresponds to a document's CLS token embedding.
+        """
+
+        print(f"Getting CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings...")
+
+        dataset = TextDataset(texts, self.tokenizer, max_len)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+
+        embeddings = []
+
+        self.model.to(self.device)  # Move model to correct device
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc=f"Building CLS {'BERT' if self.pretrained == 'bert' else 'RoBERTa'} embeddings..."):
+                input_ids = batch['input_ids'].to(self.device)  # Move input IDs to device
+                attention_mask = batch['attention_mask'].to(self.device)  # Move attention mask to device
+
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+
+                # Take only the embedding for the first token ([CLS]), which encodes the entire document's context.
+                cls_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
+
+                embeddings.append(cls_embeddings.cpu().numpy())  # Move to CPU before appending
+
+        return np.vstack(embeddings)
+
+
+    
+
 
 
     #
@@ -1487,7 +1627,7 @@ class LCDataset:
         # Return as NumPy array
         return np.array(processed_texts)
     
-
+    
 
     def _preprocess_deprecated(self, text_series):
         """

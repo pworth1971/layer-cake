@@ -6,26 +6,33 @@ import os
 from scipy.sparse import csr_matrix, csc_matrix
 
 from sklearn.decomposition import TruncatedSVD
-
-from data.lc_dataset import LCDataset
-
-#from embedding import supervised
-
-from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
-
-from data.lc_dataset import LCDataset, MAX_VOCAB_SIZE, save_to_pickle, load_from_pickle
-from model.classification import run_model
-
-from util.csv_log import CSVLog
-
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import MultinomialNB
 
-import torch
+from embedding.supervised import get_supervised_embeddings
+
+from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
+from util.common import SUPPORTED_LMS, SUPPORTED_TRANSFORMER_LMS
+
+from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
+from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
+
+from model.classification import run_model
+
+from util.csv_log import CSVLog
+
+from model.CustomRepresentationLearning import BERTRepresentationModel, RoBERTaRepresentationModel, LlaMaRepresentationModel
+
+
+import pickle
+
+from util import file
+
 
 import warnings
 warnings.filterwarnings('ignore')
+
 
 
 #
@@ -35,48 +42,117 @@ PICKLE_DIR = '../pickles/'
 VECTOR_CACHE = '../.vector_cache'
 OUT_DIR = '../out/'
 
-TEST_SIZE = 0.2
+TEST_SIZE = 0.25
+
+
+
+
+def embedding_matrix(dataset, pretrained=False, pretrained_vectors=None, supervised=False):
+    
+    """
+    Constructs and returns embedding matrices using either pre-trained or supervised embeddings. Support for GloVe, Word2Vec
+    FastText and BERT pre-trained embeddings supported (tested).
+
+    Parameters:
+    - dataset: The dataset object that contains vocabulary and other dataset-specific parameters.
+    - pretrained: Boolean indicating whether to use pretrained embeddings.
+    - pretrained_type: Type of pre-trained embeddings to use (e.g., 'glove', 'bert').
+    - supervised: Boolean indicating whether to use supervised embeddings.
+    - emb_path: Path to the directory containing embedding files.
+    
+    Returns:
+    - vocabulary: Sorted list of vocabulary terms.
+    - pretrained_embeddings: Numpy array of stacked embeddings from all specified sources.
+    """
+
+    print('----- embedding_matrix()-----')
+    
+    assert pretrained or supervised, 'useless call without requiring pretrained and/or supervised embeddings'
+    
+    vocabulary = dataset.vocabulary
+    vocabulary = np.asarray(list(zip(*sorted(vocabulary.items(), key=lambda x: x[1])))[0])
+
+    print("vocabulary:", type(vocabulary), vocabulary.shape)
+
+    pretrained_embeddings = []
+    
+    print("pretrained:", {pretrained})
+    print("supervised:", {supervised})
+
+    # NB: embeddings should be already loaded and sent in as a param in this case
+
+    if pretrained and pretrained_vectors:
+
+        print("pretrained and pretrained_vectors, extracting vocab and building pretrained embeddings...")
+
+        P = pretrained_vectors.extract(vocabulary).numpy()
+        print("pretrained_vectors: ", type(P), {P.shape})
+
+        pretrained_embeddings.append(P)
+        print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
+
+    if supervised:
+        print('\t[supervised-matrix]')
+
+        Xtr, _ = dataset.vectorize()
+        Ytr = dataset.devel_labelmatrix
+
+        print("Xtr:", type(Xtr), Xtr.shape)
+        print("Ytr:", type(Ytr), Ytr.shape)
+
+        S = get_supervised_embeddings(Xtr, Ytr)
+        print("supervised_embeddings:", type(S), {S.shape})
+
+        pretrained_embeddings.append(S)
+        print(f'pretrained embeddings count after appending supervised: {len(pretrained_embeddings[1])}')
+
+    pretrained_embeddings = np.hstack(pretrained_embeddings)
+    print("after np.hstack(): pretrained_embeddings:", type(pretrained_embeddings), {pretrained_embeddings.shape})
+
+    return vocabulary, pretrained_embeddings
+
+# -----------------------------------------------------------------------------------------------------------------------------------
+
 
 
 # -------------------------------------------------------------------------------------------------------------------
 # gen_embeddings()
 # -------------------------------------------------------------------------------------------------------------------
-def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None, pretrained_vectors_dictionary=None, weighted_embeddings_train=None, weighted_embeddings_test=None, \
-    avg_embeddings_train=None, avg_embeddings_test=None, summary_embeddings_train=None, summary_embeddings_test=None, dataset_embedding_type='weighted', mix='solo', supervised=False):
+def gen_embeddings(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test, dataset='bbc-news', pretrained=None, pretrained_vectors_dictionary=None, \
+                   weighted_embeddings_train=None, weighted_embeddings_test=None, avg_embeddings_train=None, avg_embeddings_test=None, summary_embeddings_train=None, \
+                    summary_embeddings_test=None, dataset_embedding_type='weighted', mix='solo', supervised=False):
     
     print("\n\tgenerating embeddings...")
-        
-    print('X_train:', type(X_train), X_train.shape)
-    print("y_train:", type(y_train), y_train.shape)
-    print('X_test:', type(X_test), X_test.shape)
-    
-    print("dataset:", dataset)
-    
+ 
+    print("dataset:", dataset)    
     print("pretrained:", pretrained)
     
     # should be a numpy array
-    print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Shape:", pretrained_vectors_dictionary.shape)
-    
+    print("pretrained_vectors_dictionary:", type(pretrained_vectors_dictionary), "Shape:", pretrained_vectors_dictionary.shape)    
     print("weighted_embeddings_train:", type(weighted_embeddings_train), weighted_embeddings_train.shape)
     print("weighted_embeddings_test:", type(weighted_embeddings_test), weighted_embeddings_test.shape)
-    
     print("avg_embeddings_train:", type(avg_embeddings_train), avg_embeddings_train.shape)
     print("avg_embeddings_test:", type(avg_embeddings_test), avg_embeddings_test.shape)
-
-    
     print("summary_embeddings_train:", type(summary_embeddings_train), summary_embeddings_train.shape)
     print("summary_embeddings_test:", type(summary_embeddings_test), summary_embeddings_test.shape)
-
     print("mix:", mix)
     print("dataset_embedding_type:", dataset_embedding_type)
+      
+    print('Xtr_raw:', type(Xtr_raw), Xtr_raw.shape)
+    print("Xtr_vectorized:", type(Xtr_vectorized), Xtr_vectorized.shape)
+    print("y_train:", type(y_train), y_train.shape)
+    print("Xte_raw:", type(Xte_raw), Xte_raw.shape)
+    print("Xte_vectorized:", type(Xte_vectorized), Xte_vectorized.shape)
+    print('y_test:', type(y_test), y_test.shape)
 
+    """
     # build vocabulary numpy array
-    #vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
-    #print("vocabulary:", type(vocabulary), vocabulary.shape)
+    vocabulary = np.asarray(list(zip(*sorted(vocab.items(), key=lambda x: x[1])))[0])
+    print("vocabulary:", type(vocabulary), vocabulary.shape)
+    
+    pretrained_embeddings = []                                  # List to store embedding matrix
 
-    pretrained_embeddings = []                  # List to store pretrained embeddings
-
-    if (pretrained in ['word2vec', 'glove', 'fasttext', 'bert', 'roberta', 'llama']) or supervised:
+    if (pretrained in SUPPORTED_LMS):
         
         print("setting up pretrained embeddings...")
 
@@ -86,23 +162,68 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         pretrained_embeddings.append(pretrained_vectors_dictionary)
         print(f'pretrained embeddings count after loading pretrained embeddings: {len(pretrained_embeddings[0])}')
 
-        """         
-        word_list = get_word_list(word2index, out_of_vocabulary)
-        weights = pretrained.extract(word_list)
-        pretrained_embeddings.append(weights)
-        print('\t[pretrained-matrix]', weights.shape)
-        del pretrained
-        """
+    
+    if supervised:
+        print('supervised...')
 
-        
-        if supervised:
-            # add supervised logic here
-            pass    
-            
+        #Xtr, _ = dataset.vectorize()
+        #Ytr = dataset.devel_labelmatrix
 
+        print("X_train:", type(X_train), X_train.shape)
+        print("y_train:", type(y_train), y_train.shape)
 
-    embedding_matrix = np.hstack(pretrained_embeddings)
-    print("after np.hstack():", type(embedding_matrix), {embedding_matrix.shape})
+        S = get_supervised_embeddings(X_train, y_train)
+        print("supervised_embeddings:", type(S), {S.shape})
+
+        pretrained_embeddings.append(S)
+        print(f'pretrained embeddings count after appending supervised: {len(pretrained_embeddings[1])}')
+    """
+    
+    
+    #
+    # TESTING
+    #
+    # load the appropriate custom (LC) pretrained representation model
+    #
+    """
+    lcr_model = None          # custom representation model class object
+
+    if pretrained == 'bert':
+        lcr_model = BERTLCRepresentationModel(
+            model_name=BERT_MODEL, 
+            model_dir=args.bert_path, 
+            comp_method=dataset_embedding_type, 
+            device=None
+        )
+    
+    elif pretrained == 'roberta':
+        lcr_model = RoBERTaLCRepresentationModel(
+            model_name=ROBERTA_MODEL, 
+            model_dir=args.roberta_path, 
+            comp_method=dataset_embedding_type, 
+            device=None
+        )
+
+    elif pretrained == 'llama':
+        lcr_model = LlaMaLCRepresentationModel(
+            model_name=LLAMA_MODEL, 
+            model_dir=args.llama_path, 
+            comp_method=dataset_embedding_type, 
+            device=None
+        )
+    else:    
+        print(f"ValueError: Unsupported pretrained embeddings type '{pretrained}'")
+        return None
+    
+    avg_embeddings_train = lcr_model.encode_sentences(Xtr_raw.tolist())                                     # encode the dataset in the specified form
+    print("avg_embeddings_train:", type(avg_embeddings_train), avg_embeddings_train.shape)
+
+    avg_embeddings_test = lcr_model.encode_sentences(Xte_raw.tolist())
+    print("avg_embeddings_test:", type(avg_embeddings_test), avg_embeddings_test.shape)
+    """
+    #
+    # 
+    # END TESTING
 
     if mix == 'solo':
         
@@ -137,14 +258,14 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         # of dataset embedding representation 
         #  
         if (dataset_embedding_type == 'weighted'):
-            X_train = np.hstack([X_train.toarray(), weighted_embeddings_train])
-            X_test = np.hstack([X_test.toarray(), weighted_embeddings_test])
+            X_train = np.hstack([Xtr_vectorized.toarray(), weighted_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), weighted_embeddings_test])
         elif (dataset_embedding_type == 'avg'):
-            X_train = np.hstack([X_train.toarray(), avg_embeddings_train])
-            X_test = np.hstack([X_test.toarray(), avg_embeddings_test])
+            X_train = np.hstack([Xtr_vectorized.toarray(), avg_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), avg_embeddings_test])
         elif (dataset_embedding_type == 'summary'):
-            X_train = np.hstack([X_train.toarray(), summary_embeddings_train])
-            X_test = np.hstack([X_test.toarray(), summary_embeddings_test])
+            X_train = np.hstack([Xtr_vectorized.toarray(), summary_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), summary_embeddings_test])
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None
@@ -157,19 +278,12 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
         # using matrix multiplication, i.e. dot product 
         #
-        """
-        X_train = X_train.toarray().dot(embedding_matrix)
-        X_test = X_test.toarray().dot(embedding_matrix)
-        """
-        
         print("before dot product...")
         
-        X_train = X_train.toarray()
-        X_test = X_test.toarray()
-        
+        X_train = Xtr_vectorized.toarray()
+        X_test = Xte_vectorized.toarray()
         print("X_train:", type(X_train), X_train.shape)
         #print("X_train[0]:\n", X_train[0])
-        
         print("X_test:", type(X_test), X_test.shape)
         #print("X_test[0]\n:", X_test[0])
         
@@ -180,10 +294,8 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         X_test = np.dot(X_test, pretrained_vectors_dictionary)
         
         print("after dot product...")
-        
         print("X_train:", type(X_train), X_train.shape)
         #print("X_train[0]:\n", X_train[0])
-        
         print("X_test:", type(X_test), X_test.shape)
         #print("X_test[0]:\n", X_test[0])
     
@@ -196,13 +308,13 @@ def gen_embeddings(X_train, y_train, X_test, dataset='bbc-news', pretrained=None
         
         # reset X_train and X_test to the original tfidf vectors
         # using the svd model
-        X_train = svd.fit_transform(X_train)
-        X_test = svd.transform(X_test)
+        X_train = svd.fit_transform(Xtr_vectorized)
+        X_test = svd.transform(Xte_vectorized)
 
     elif mix == 'vmode':
-        # we simply return X_train and X_test as is here
-        pass
-    
+        X_train = Xtr_vectorized
+        X_test = Xte_vectorized
+
     else:
         print(f"Unsupported mix mode '{mix}'")
         return None    
@@ -271,18 +383,23 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
     # Load the dataset and the associated (pretrained) embedding structures
     # to be fed into the model
     #                                                          
-    Xtr, Xte, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, Xte_weighted_embeddings, \
-        Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = loadpt_data(
-                                                                                                    dataset=dataset,                                # Dataset name
-                                                                                                    vtype=args.vtype,                               # Vectorization type
-                                                                                                    pretrained=args.pretrained,                     # pretrained embeddings type
-                                                                                                    embedding_path=embedding_path,                  # path to pretrained embeddings
-                                                                                                    emb_type=embedding_type                         # embedding type (word or token)
-                                                                                                    )                                                
+    Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+        Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, \
+            Xte_summary_embeddings = loadpt_data(
+                                            dataset=dataset,                                # Dataset name
+                                            vtype=args.vtype,                               # Vectorization type
+                                            pretrained=args.pretrained,                     # pretrained embeddings type
+                                            embedding_path=embedding_path,                  # path to pretrained embeddings
+                                            emb_type=embedding_type                         # embedding type (word or token)
+                                            )                                                
+    
     print("Tokenized data loaded.")
  
-    print("Xtr:", type(Xtr), Xtr.shape)
-    print("Xte:", type(Xte), Xte.shape)
+    print("Xtr_raw:", type(Xtr_raw), Xtr_raw.shape)
+    print("Xte_raw:", type(Xte_raw), Xte_raw.shape)
+
+    print("Xtr_vectorized:", type(Xtr_vectorized), Xtr_vectorized.shape)
+    print("Xte_vectorized:", type(Xte_vectorized), Xte_vectorized.shape)
 
     print("y_train_sparse:", type(y_train_sparse), y_train_sparse.shape)
     print("y_test_sparse:", type(y_test_sparse), y_test_sparse.shape)
@@ -322,9 +439,12 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
 
         # Generate embeddings
         X_train, X_test = gen_embeddings(
-            X_train=Xtr,
+            Xtr_raw=Xtr_raw, 
+            Xtr_vectorized=Xtr_vectorized, 
             y_train=y_train, 
-            X_test=Xte, 
+            Xte_raw=Xte_raw,
+            Xte_vectorized=Xte_vectorized, 
+            y_test=y_test, 
             dataset=dataset,
             pretrained=embeddings,
             pretrained_vectors_dictionary=embedding_vocab_matrix,
@@ -404,7 +524,7 @@ def get_model_computation_method(args, embedding_type='word'):
 
 
 
-def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word'):
+def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg'):
 
     print("loadpt_data():", dataset, PICKLE_DIR)
 
@@ -429,10 +549,10 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         
         print(f"Loading tokenized data from '{pickle_file}'...")
         
-        Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+        Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
             Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = load_from_pickle(pickle_file)
 
-        return Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+        return Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
             Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings
 
     else:
@@ -443,15 +563,18 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
             vectorization_type=vtype,                   # vectorization type (one of 'tfidf', 'count')
             embedding_type=emb_type,                    # embedding type (one of 'word', 'token')
             pretrained=pretrained,                      # pretrained embeddings (model type or None)
+            embedding_path=embedding_path,              # path to embeddings
+            embedding_comp_type=embedding_comp_type     # embedding computation type (one of 'avg', 'weighted', 'summary')
         )    
 
-        lcd.init_embedding_matrices(
-            pretrained=pretrained,                      # pretrained embeddings
-            pretrained_path=embedding_path              # path to embeddings
-            )
+        lcd.vectorize()                             # vectorize the dataset
+
+        lcd.init_embedding_matrices()               # initialize the embedding matrices
 
         # Save the tokenized matrices to a pickle file
         save_to_pickle(
+            lcd.Xtr,                                    # raw training data (not vectorized)
+            lcd.Xte,                                    # raw test data (not vectorized)
             lcd.Xtr_vectorized,                         # vectorized training data
             lcd.Xte_vectorized,                         # vectorized test data
             lcd.y_train_sparse,                         # training data labels
@@ -467,7 +590,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
             lcd.Xte_summary_embeddings,                 # summary embedding representation of dataset test data
             pickle_file)         
 
-        return lcd.Xtr_vectorized, lcd.Xte_vectorized, lcd.y_train_sparse, lcd.y_test_sparse, lcd.target_names, lcd.class_type, lcd.embedding_vocab_matrix, \
+        return lcd.Xtr, lcd.Xte, lcd.Xtr_vectorized, lcd.Xte_vectorized, lcd.y_train_sparse, lcd.y_test_sparse, lcd.target_names, lcd.class_type, lcd.embedding_vocab_matrix, \
             lcd.Xtr_weighted_embeddings, lcd.Xte_weighted_embeddings, lcd.Xtr_avg_embeddings, lcd.Xte_avg_embeddings, lcd.Xtr_summary_embeddings, lcd.Xte_summary_embeddings
 
 
@@ -564,6 +687,7 @@ def initialize_ml_testing(args):
             'class_type',
             'model', 
             'embeddings',
+            'mode',
             'comp_method',
             'representation',
             'optimized',
@@ -588,11 +712,14 @@ def initialize_ml_testing(args):
     system = SystemResources()
     print("system:\n", system)
 
+    run_mode = args.dataset + ':' + args.learner + ':' + args.mix + ':' + args.dataset_emb_comp
+
     # set defauklt system params
     ml_logger.set_default('os', system.get_os())
     ml_logger.set_default('cpus', system.get_cpu_details())
     ml_logger.set_default('mem', system.get_total_mem())
-    
+    ml_logger.set_default('mode', run_mode)
+
     gpus = system.get_gpu_summary()
     if gpus is None:
         gpus = -1   

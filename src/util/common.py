@@ -21,23 +21,20 @@ import argparse
 
 
 
-
-
 NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn', 'nn-transformer']
 ML_MODELS = ['svm', 'lr', 'nb', 'dt']
 
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta' 'llama']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'llama']
+
+
+VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
+DATASET_DIR = '../datasets/'                        # dataset directory
+PICKLE_DIR = '../pickles/'                          # pickled data directory
+OUT_DIR = '../out/'                                 # output directory
 
 
 
-# pretrained model types
-DEFAULT_BERT_PRETRAINED_MODEL = 'bert-base-uncased'
-DEFAULT_LLAMA_PRETRAINED_MODEL = 'meta-llama/Llama-2-7b-hf'
-
-
-
-# embedding cache directory
-VECTOR_CACHE = '../.vector_cache'                                   # assumes everything is run from /bin directory
-OUT_DIR = '../out/'
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # load_pretrained_embeddings()

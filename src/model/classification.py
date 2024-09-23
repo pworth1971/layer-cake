@@ -316,8 +316,6 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
     
     print("\n\trunning SVM model...")
 
-    print("Training Support Vector Machine model using OneVsRestClassifier...")
-
     # Check if it's a multilabel problem, and use OneVsRestClassifier if true
     if class_type in ['multilabel', 'multi-label']:
         print("Multilabel classification detected. Using OneVsRestClassifier...")
@@ -327,12 +325,15 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
         classifier = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
 
     if not args.optimc:
-        svc = LinearSVC(dual='auto', max_iter=1000)
+
+        print("Running default Support Vector Machine model using LinearSVC and OneVsRestClassifier...")
+
+        svc = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
         ovr_svc = OneVsRestClassifier(svc)
         ovr_svc.fit(X_train, y_train)
+
         y_pred_default = ovr_svc.predict(X_test)
 
-        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_default
@@ -381,7 +382,6 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
         # Predict on test set
         y_pred_best = best_model.predict(X_test)
 
-        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_best
@@ -486,12 +486,15 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
         classifier = MultinomialNB()
 
     if not args.optimc:
+
+        print("Running default Naive Bayes model using MultinomialNB and OneVsRestClassifier...")
+
         nb = MultinomialNB()
         ovr_nb = OneVsRestClassifier(nb) if class_type in ['multilabel', 'multi-label'] else nb
         ovr_nb.fit(X_train, y_train)
+        
         y_pred_default = ovr_nb.predict(X_test)
 
-        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_default
@@ -637,12 +640,13 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
         classifier = LogisticRegression(max_iter=1000, class_weight='balanced')
 
     if not args.optimc:
+
+        print("Running default Logistic Regression model using LogisticRegression and OneVsRestClassifier...")
         lr = LogisticRegression(max_iter=1000, class_weight='balanced')
         ovr_lr = OneVsRestClassifier(lr)
         ovr_lr.fit(X_train, y_train)
         y_pred_default = ovr_lr.predict(X_test)
 
-        #print(f"Accuracy: {accuracy_score(y_test, y_pred_default):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_default
