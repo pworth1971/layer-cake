@@ -498,14 +498,13 @@ def main():
 
         if args.charts:
             
-            """
             generate_charts_plotly(
                 df, 
                 args.output_dir, 
                 show_charts=args.show, 
                 y_axis_threshold=args.ystart
             )
-            """
+            
             #
             # matplotlib option is less interactive but handles more test cases - its split by dataset 
             # and model as opposed to just dataset as the plotly graphs are designed for 

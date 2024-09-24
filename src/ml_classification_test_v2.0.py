@@ -17,6 +17,7 @@ from util.common import SUPPORTED_LMS, SUPPORTED_TRANSFORMER_LMS
 
 from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
 from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
+from model.CustomRepresentationLearning import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 
 from model.classification import run_model
 
@@ -531,7 +532,22 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
     #
-    pickle_file_name=f'{dataset}_{vtype}_{pretrained}.pickle'
+    if (pretrained == 'glove'):
+        model_name = GLOVE_MODEL
+    elif(pretrained == 'word2vec'):
+        model_name = WORD2VEC_MODEL
+    elif(pretrained == 'fasttext'):
+        model_name = FASTTEXT_MODEL
+    elif(pretrained == 'bert'):
+        model_name = BERT_MODEL
+    elif (pretrained == 'roberta'):
+        model_name = ROBERTA_MODEL
+    elif (pretrained == 'llama'):
+        model_name = LLAMA_MODEL
+    else:
+        model_name = None
+
+    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
 
     print(f"Loading data set {dataset}...")
 

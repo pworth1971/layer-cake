@@ -17,7 +17,6 @@ import pickle
 
 
 from sklearn.datasets import fetch_20newsgroups
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import LabelEncoder
@@ -31,8 +30,6 @@ from nltk.corpus import stopwords
 
 from joblib import Parallel, delayed
 
-from gensim.models import KeyedVectors, FastText
-from gensim.models.fasttext import load_facebook_model
 from gensim.scripts.glove2word2vec import glove2word2vec
 
 from contextlib import nullcontext
@@ -46,9 +43,7 @@ from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
-from model.CustomRepresentationLearning import DEFAULT_CPU_BATCH_SIZE, DEFAULT_GPU_BATCH_SIZE, MPS_BATCH_SIZE, TOKEN_TOKENIZER_MAX_LENGTH
-from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL, WORD2VEC_MODEL, GLOVE_MODEL, FASTTEXT_MODEL
-from model.CustomRepresentationLearning import BERTLCRepresentationModel, RoBERTaLCRepresentationModel, LlaMaLCRepresentationModel
+from model.LCRepresentationModel import *
 
 from util.common import VECTOR_CACHE, DATASET_DIR
 
@@ -78,55 +73,6 @@ nltk.download('stopwords')
 nltk.download('punkt_tab')
 
 stop_words = set(stopwords.words('english'))
-
-
-
-class TextDataset(Dataset):
-    def __init__(self, texts, tokenizer, max_len, use_token_type_ids=True):
-        """
-        Dataset class for tokenized texts compatible with BERT, RoBERTa, and LLaMa.
-        
-        Args:
-        - texts: A list of texts to be tokenized.
-        - tokenizer: A tokenizer instance (BERT, RoBERTa, LLaMa, etc.).
-        - max_len: The maximum length of the tokenized sequences. Longer sequences will be truncated,
-                  and shorter ones will be padded.
-        - use_token_type_ids: A boolean flag indicating whether 'token_type_ids' should be returned.
-                              This is needed for BERT but not for LLaMa.
-        """
-        self.texts = texts
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        self.use_token_type_ids = use_token_type_ids  # Flag to control whether 'token_type_ids' are used
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, item):
-        text = self.texts[item]
-
-        # Tokenizing the text with truncation and padding to the specified max_len
-        encoding = self.tokenizer.encode_plus(
-            text,
-            add_special_tokens=True,            # Add special tokens like [CLS], [SEP] (depends on the model)
-            max_length=self.max_len,            # Truncate sequences to max_len
-            padding='max_length',               # Pad sequences to max_len
-            truncation=True,                    # Ensure truncation if the sequence exceeds max_len
-            return_attention_mask=True,         # Return the attention mask
-            return_token_type_ids=self.use_token_type_ids,  # Only return token_type_ids if needed
-            return_tensors='pt',                # Return PyTorch tensors
-        )
-
-        # Return dictionary with input_ids and attention_mask, conditionally include token_type_ids
-        item_dict = {
-            'input_ids': encoding['input_ids'].flatten(),
-            'attention_mask': encoding['attention_mask'].flatten()
-        }
-
-        if self.use_token_type_ids and 'token_type_ids' in encoding:
-            item_dict['token_type_ids'] = encoding['token_type_ids'].flatten()
-
-        return item_dict
 
 
 class LCDataset:
@@ -212,68 +158,64 @@ class LCDataset:
         # we offload this code to another class
         #
         self.lcr_model = None          # custom representation model class object
-
-        if (pretrained in ['bert', 'roberta', 'llama']):
-
-            if pretrained == 'bert':
-                print("Using BERT pretrained embeddings...")
-                self.lcr_model = BERTLCRepresentationModel(
-                    model_name=BERT_MODEL, 
-                    model_dir=embedding_path, 
-                    device=self.device
-                )
-            
-            elif pretrained == 'roberta':
-                print("Using RoBERTa pretrained embeddings...")
-                self.lcr_model = RoBERTaLCRepresentationModel(
-                    model_name=ROBERTA_MODEL, 
-                    model_dir=embedding_path, 
-                    device=self.device
-                )
-
-            elif pretrained == 'llama':
-                print("Using LLaMA pretrained embeddings...")
-                self.lcr_model = LlaMaLCRepresentationModel(
-                    model_name=LLAMA_MODEL, 
-                    model_dir=embedding_path,  
-                    device=self.device
-                )
-
-            self.model = self.lcr_model.model
-            self.tokenizer = self.lcr_model.tokenizer
-            
-        elif pretrained == 'word2vec':
+    
+        if (pretrained == 'word2vec':
             print("Using Word2Vec pretrained embeddings...")
             
-            # Append the Word2Vec model name to the pretrained_path
-            word2vec_model_path = self.pretrained_path + '/' + WORD2VEC_MODEL  
-            print("word2vec_model_path:", word2vec_model_path)
-
-            self.model = KeyedVectors.load_word2vec_format(word2vec_model_path, binary=True)
-
+            self.lcr_model = WordLCRepresentationModel(
+                model_name=WORD2VEC_MODEL, 
+                model_dir=embedding_path, 
+                vtype=vectorization_type
+            )
         elif pretrained == 'glove':
             print("Using GloVe pretrained embeddings...")
             
-            # Append the GloVe model name to the pretrained_path
-            glove_input_file = self.pretrained_path + '/' + GLOVE_MODEL
-            print("glove_input_file:", glove_input_file)
-
-            word2vec_output_file = glove_input_file + '.word2vec'
-            glove2word2vec(glove_input_file, word2vec_output_file)
-            self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+            self.lcr_model = WordLCRepresentationModel(
+                model_name=GLOVE_MODEL, 
+                model_dir=embedding_path, 
+                vtype=vectorization_type
+            )
 
         elif pretrained == 'fasttext':
             print("Using FastText pretrained embeddings with subwords...")
             
-            # Append the FastText model name to the pretrained_path
-            fasttext_model_path = self.pretrained_path + '/' + FASTTEXT_MODEL
-            print("fasteext_model_path:", fasttext_model_path)
+            self.lcr_model = SubWordLCRepresentationModel(
+                model_name=FASTTEXT_MODEL, 
+                model_dir=embedding_path, 
+                vtype=vectorization_type
+            )
 
-            # Use load_facebook_model to load FastText model from Facebook's pre-trained binary files
-            self.model = load_facebook_model(fasttext_model_path)
+        elif (pretrained == 'bert'):
+            print("Using BERT pretrained embeddings...")
+            self.lcr_model = BERTLCRepresentationModel(
+                model_name=BERT_MODEL, 
+                model_dir=embedding_path,
+                vtype=vectorization_type
+            )
+        
+        elif (pretrained == 'roberta'):
+            print("Using RoBERTa pretrained embeddings...")
+            self.lcr_model = RoBERTaLCRepresentationModel(
+                model_name=ROBERTA_MODEL, 
+                model_dir=embedding_path, 
+                vtype=vectorization_type
+            )
+
+        elif (pretrained == 'llama'):
+            print("Using LLaMA pretrained embeddings...")
+            self.lcr_model = LlaMaLCRepresentationModel(
+                model_name=LLAMA_MODEL, 
+                model_dir=embedding_path,  
+                vtype=vectorization_type
+            )
+        
         else:
-            raise ValueError("Error: Invalid pretrained type.")
-            
+            self.lcr_model = None
+            raise ValueError(f'Invalid pretrained type: {pretrained}. Failed to instantiate representation model.')
+
+        self.model = self.lcr_model.model
+        self.tokenizer = self.lcr_model.tokenizer           # note only transformer models have tokenizers
+        self.vectorizer = self.lccr_model.vectorizer
 
         self.nC = self.num_labels
         print("nC:", self.nC)
@@ -296,29 +238,9 @@ class LCDataset:
             filtered_texts.append(" ".join(filtered_words))
         return filtered_texts
 
-
-    def custom_tokenizer(self, text):
-        """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        """
-        # Tokenize the text into words/subwords
-        tokens = self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
-        
-        # Define special tokens to remove based on the model in use
-        special_tokens = []
-        if self.pretrained == 'bert' or self.pretrained == 'roberta':
-            special_tokens = ["[CLS]", "[SEP]"]
-        elif self.pretrained == 'llama':
-            special_tokens = ["<s>", "</s>"]  # Modify based on actual special tokens of LLaMA
-
-        # Optionally, remove special tokens (like [CLS], [SEP], or others based on the model)
-        tokens = [token for token in tokens if token not in special_tokens]
-
-        return tokens
     
 
-    def vectorize(self):
+    def vectorize(self, debug=True):
         """
         Build vector representation of data set using TF-IDF or CountVectorizer and constructing 
         the embeddings such that they align with pretrained embeddings tokenization method
@@ -326,113 +248,21 @@ class LCDataset:
 
         print("\n\t vectorizing dataset...")
 
-        # initialize local variables
-        """
-        self.model = None
-        self.embedding_dim = 0
-        self.embedding_vocab_matrix = None
-        self.vocab = None
-        """
-
-        print("self.vectorization_type:", self.vectorization_type)
-        print("self.embedding_type:", self.embedding_type)
         
-        # Choose the vectorization and tokenization strategy based on embedding type
-        if self.embedding_type == 'word':
-
-            print("Using word-level vectorization...")
-            
-            if self.vectorization_type == 'tfidf':
-                print("using TF-IDF vectorization...")
-                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
-            elif self.vectorization_type == 'count':
-                print("using Count vectorization...")
-                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
-            else:
-                raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
-
-            # Fit and transform the text data to obtain tokenized features
-            # NB we need to vectorize training and test data, both of which
-            # are loaded when the dataset is initialized 
-            self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)                       
-            self.Xte_vectorized = self.vectorizer.transform(self.Xte)          
-
-        # Subword-Level Embeddings (FastText)
-        elif self.embedding_type == 'subword':
-
-            print(f"Using subword-level vectorization (e.g. fastText)...")
-
-            if self.vectorization_type == 'tfidf':
-                print("using TF-IDF vectorization...")
-                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
-            elif self.vectorization_type == 'count':
-                print("using Count vectorization...")
-                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
-            else:
-                raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
-
-            # Fit and transform the text data
-            self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)                       
-            self.Xte_vectorized = self.vectorizer.transform(self.Xte)
-
-            # NB fastText models hould already be loaded, here we
-            # create the embedding matrix that aligns with the vocabulary
-            self.vocab_size = len(self.vectorizer.vocabulary_)
-            print('vocab_size:', self.vocab_size)
-            self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-
-            for word, idx in self.vectorizer.vocabulary_.items():
-                # FastText automatically handles subwords, so retrieve the word vector directly
-                self.embedding_vocab_matrix[idx] = self.model.get_word_vector(word)
-
-        elif self.embedding_type == 'token':
-
-            print(f"Using token-level vectorization...")
-            
-            #
-            # NB: model and tokenizer instantiated when class object instantiated
-            #
-
-            """
-            if self.pretrained == 'bert': 
-                self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT').to(self.device)
-                self.tokenizer = BertTokenizerFast.from_pretrained(BERT_MODEL, cache_dir=VECTOR_CACHE+'/BERT')
-            elif self.pretrained == 'roberta':
-                self.model = RobertaModel.from_pretrained(ROBERTA_MODEL, cache_dir=VECTOR_CACHE+'/RoBERTa').to(self.device)
-                self.tokenizer = RobertaTokenizerFast.from_pretrained(ROBERTA_MODEL, cache_dir=VECTOR_CACHE+'/RoBERTa')
-            elif self.pretrained == 'llama':
-                self.model = LlamaModel.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa').to(self.device)
-                self.tokenizer = LlamaTokenizerFast.from_pretrained(LLAMA_MODEL, cache_dir=VECTOR_CACHE+'/LLaMa')
-            else:
-                raise ValueError("Invalid embedding type. Use 'bert', 'roberta', or 'llama' for token embeddings.")
-            """
-
+        if (debug):
             print("model:\n", self.model)
             print("tokenizer:\n", self.tokenizer)
+            print("vectorizer:\n", self.vectorizer)
+            print("self.vectorization_type:", self.vectorization_type)
+            print("self.embedding_type:", self.embedding_type)
+        
+        print("fitting training data...")
+        print("Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("Xte:", type(self.Xte), self.Xte.shape)
 
-            # Ensure padding token is available
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-
-            # Use the custom tokenizer for both TF-IDF and CountVectorizer
-            if self.vectorization_type == 'tfidf':
-                self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True, tokenizer=self.custom_tokenizer)
-            elif self.vectorization_type == 'count':
-                self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT, tokenizer=self.custom_tokenizer)
-            else:
-                raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
-
-            print("fitting training data...")
-            print("Xtr:", type(self.Xtr), self.Xtr.shape)
-            print("Xte:", type(self.Xte), self.Xte.shape)
-
-            # Fit and transform the text data
-            self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
-            self.Xte_vectorized = self.vectorizer.transform(self.Xte)
-
-        else:
-            raise ValueError("Invalid embedding type. Use 'word' for word embeddings or 'token' for BERT/LLaMa embeddings.")
-
+        # Fit and transform the text data
+        self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
+        self.Xte_vectorized = self.vectorizer.transform(self.Xte)
         print("Xtr_vectorized:", type(self.Xtr_vectorized), self.Xtr_vectorized.shape)
         print("Xte_vectorized:", type(self.Xte_vectorized), self.Xte_vectorized.shape)
 
@@ -458,13 +288,13 @@ class LCDataset:
         
         self.vocab_ = self.vectorizer.vocabulary_
         print("vocab_:", type(self.vocab_), len(self.vocab_))
-        #self.vocab_dict = {k.lower(): v for k, v in self.vectorizer.vocabulary_.items()}              # Ensure the vocabulary is all lowercased to avoid case mismatches
-        #print("vocab_dict:", type(self.vocab_dict), len(self.vocab_dict))    
+
         self.vocab_ndarr = self.vectorizer.get_feature_names_out()
         print("vocab_ndarr:", type(self.vocab_ndarr), len(self.vocab_ndarr))
-        #self.vocab = self.vocab_dict
+
         self.vocab = self.vocab_
         print("vocab:", type(self.vocab), len(self.vocab))
+
         self.vocabulary = self.vectorizer.vocabulary_
         print("vocabulary:", type(self.vocabulary), len(self.vocabulary))
 
@@ -474,6 +304,7 @@ class LCDataset:
 
         if not isinstance(self.Xte_vectorized, csr_matrix):
             self.Xte_vectorized = csr_matrix(self.Xte_vectorized)
+
 
         return self.Xtr_vectorized, self.Xte_vectorized
     
@@ -486,9 +317,8 @@ class LCDataset:
 
         print("\n\tinitializing embedding matrices...")
         
-        print("self.pretrained:", self.pretrained)
-
         self.pretrained_path = self.embedding_path
+        print("self.pretrained:", self.pretrained)=
         print("self.pretrained_path:", self.pretrained_path)
 
         # build the embedding vocabulary matrix to align with the dataset vocabulary and embedding type
@@ -597,9 +427,10 @@ class LCDataset:
         print("self.pretrained:", self.pretrained)
         print("self.pretrained_path:", self.pretrained_path)
         
-        # Load the pre-trained embeddings based on the specified model
-        if self.pretrained in ['word2vec', 'fasttext', 'glove']:
+        if (self.pretrained in ['word2vec', 'glove']):
             
+            print("word based embeddings...")
+
             print("model:", type(self.model))
             print("model.vector_size:", self.model.vector_size)
 
@@ -630,13 +461,24 @@ class LCDataset:
                         # Get subword-based embedding for OOV words
                         self.embedding_vocab_matrix[idx] = self.model.wv[word]
                     
-            
+        elif (self.pretrained == 'fastText'):
+
+            print(f"subword based embeddings...")
+
+            # create the embedding matrix that aligns with the vocabulary
+            self.vocab_size = len(self.vectorizer.vocabulary_)
+            print('vocab_size:', self.vocab_size)
+            self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+
+            for word, idx in self.vectorizer.vocabulary_.items():
+                # FastText automatically handles subwords, so retrieve the word vector directly
+                self.embedding_vocab_matrix[idx] = self.model.get_word_vector(word)
+
+
         elif self.pretrained in ['bert', 'roberta', 'llama']:
-            
-            # NB: tokenizer and model should be initialized in the embedding_type == 'token' block
-            
-            print("creating (pretrained) embedding vocab matrix which aligns with dataset vocabulary...")
-            
+                        
+            print("token based embeddings...
+                  
             print("self.model:\n", self.model)
             print("self.tokenizer:\n", self.tokenizer)
 
@@ -679,9 +521,6 @@ class LCDataset:
 
                 self.llama_vocab_embeddings = {}                # Initialize an empty dictionary to store the embeddings
 
-                # Batch size for processing tokens
-                batch_size = MPS_BATCH_SIZE                     # You can adjust this based on available GPU memory
-
                 # Collect all tokens that need encoding
                 # NBL we use the tokenizer's vocabulary 
                 # instead of vocab_ndarr (which comes from 
@@ -693,6 +532,8 @@ class LCDataset:
 
                 print("tokens:", type(tokens), len(tokens))
                 print("num_tokens:", num_tokens)
+
+                batch_size = BATCH_SIZE
 
                 # Process tokens in batches
                 for batch_start in tqdm(range(0, num_tokens, batch_size), desc="batch encoding dataset vocabulary using LLaMa..."):
@@ -761,7 +602,8 @@ class LCDataset:
 
         - summary_embeddings: CLS token embeddings from BERT or RoBERTa models.
         - avg_embeddings: Average of token embeddings from BERT or RoBERTa models.
-        
+        - weighted_embeddings: Weighted average of token embeddings using TF-IDF weights.
+
         Returns:
         - Xtr_summary_embeddings: CLS token embeddings for training data.
         - Xte_summary_embeddings: CLS token embeddings for test data.
@@ -776,158 +618,40 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'llama', 'roberta']):                               
-            self.Xtr_avg_embeddings = self.lcr_model.encode_sentences(self.Xtr.tolist(), comp_method='mean')                                     # encode the dataset in the specified form
-            self.Xte_avg_embeddings = self.lcr_model.encode_sentences(self.Xte.tolist(), comp_method='mean')                                     # encode the dataset in the specified form
-            print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
-            print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
+        if (self.pretrained in ['bert', 'llama', 'roberta']):    
 
-            self.Xtr_summary_embeddings = self.lcr_model.encode_sentences(self.Xtr.tolist(), comp_method='summary')                                     # encode the dataset in the specified form
-            self.Xte_summary_embeddings = self.lcr_model.encode_sentences(self.Xte.tolist(), comp_method='summary')                                     # encode the dataset in the specified form
-            print("Xtr_summary_embeddings (cls):", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-            print("Xte_summary_embeddings (cls):", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+            print("generating transformer / token based dataset representations...")
+
+            self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_sentences_opt(self.Xtr.tolist())                                  
+            self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_sentences_opt(self.Xte.tolist())
 
             # not supported weighted average comp method for transformer based models due to
             # complexity of vectorization and tokenization mapping across models 
             # word embedding models like word2vec, GloVe or fasTtext
             self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
             self.Xte_weighted_embeddings = self.Xte_avg_embeddings
-
+            
         elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddins
-            self.generate_word_embeddings()
+            
+            print("generating word / subword based dataset repressentations...")
+            
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = lcr_model.encode_docs(self.Xtr.tolist(), self.embedding_vocab_matrix)
+            self.self.Xte_weighted_embeddings, self.Xte_avg_embeddings = lcr_model.encode_docs(self.Xte.tolist(), self.embedding_vocab_matrix)
 
-        print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-        print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+            # CLS token summary embeddings not supported in pretrained 
+            # word embedding models like word2vec, GloVe or fasTtext
+            self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
+            self.Xte_summary_embeddings = self.Xte_avg_embeddings
 
         print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
+        print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
         print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
+        print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+        print("self.Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
+        print("self.Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
         return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
-        
 
-    def generate_word_embeddings(self):
-
-        print("generating word embeddings...")
-
-        self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.get_word_embeddings(
-            self.Xtr, 
-            self.vectorizer, 
-            self.embedding_vocab_matrix
-        )
-
-        self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.get_word_embeddings(
-            self.Xte, 
-            self.vectorizer, 
-            self.embedding_vocab_matrix
-        )
-
-        print("Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
-        print("Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
-
-        print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
-        print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
-
-        # CLS token summary embeddings not supported in pretrained 
-        # word embedding models like word2vec, GloVe or fasTtext
-        self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
-        self.Xte_summary_embeddings = self.Xte_avg_embeddings
-
-        print("Xtr_summary_embeddings set to Xtr_avg_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
-        print("Xte_summary_embeddings set to Xte_avg_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
-
-        return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings
-
-
-
-    def get_word_embeddings(self, texts, vectorizer, embedding_vocab_matrix):
-        """
-        Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
-        
-        Args:
-        - texts: List of input documents (as raw text).
-        - vectorizer: Fitted vectorizer (e.g., TF-IDF) that contains the vocabulary.
-        - embedding_vocab_matrix: Matrix of pre-trained word embeddings for Word2Vec/GloVe/FastText.
-
-        Returns:
-        - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
-        - avg_document_embeddings: Numpy array of average document embeddings for each document.
-        """
-        
-        print(f"getting word embedding representations of text using {'Word2Vec' if self.pretrained == 'word2vec' else 'GloVe' if self.pretrained == 'glove' else 'fastText'} pretrained embeddings......")
-
-        print("texts:", type(texts), len(texts))
-        print("vectorizer:", type(vectorizer))
-        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
-
-        weighted_document_embeddings = []
-        avg_document_embeddings = []
-
-        for doc in texts:
-            # Tokenize the document
-            tokens = doc.split()
-
-            # Calculate TF-IDF weights for the tokens
-            tfidf_vector = vectorizer.transform([doc]).toarray()[0]
-
-            weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
-            avg_sum = np.zeros(embedding_vocab_matrix.shape[1])
-            total_weight = 0.0
-            valid_embeddings = []
-
-            for token in tokens:
-                token_lower = token.lower()
-
-                # For Word2Vec/GloVe
-                if self.pretrained in ['word2vec', 'glove']:
-                    token_id = vectorizer.vocabulary_.get(token.lower(), None)
-                    if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
-                        embedding = embedding_vocab_matrix[token_id]
-                        weight = tfidf_vector[token_id]
-
-                        # Accumulate for weighted embedding
-                        weighted_sum += embedding * weight
-                        total_weight += weight
-
-                        # Accumulate for average embedding
-                        valid_embeddings.append(embedding)
-
-                # For FastText (using subword-level embeddings for OOV words)
-                elif self.pretrained == 'fasttext':
-                    if token_lower in self.model.wv.key_to_index:
-                        embedding = self.model.wv[token_lower]  # Use FastText word embedding
-                    else:
-                        # Get subword-based embedding for OOV words using FastText
-                        embedding = self.model.wv.get_vector(token_lower)
-
-                    # Get TF-IDF weight if available, else assign default weight
-                    weight = tfidf_vector[vectorizer.vocabulary_.get(token_lower, 0)]
-
-                    # Accumulate for weighted embedding
-                    weighted_sum += embedding * weight
-                    total_weight += weight
-
-                    # Accumulate for average embedding
-                    valid_embeddings.append(embedding)
-
-            # Compute the weighted embedding for the document
-            if total_weight > 0:
-                weighted_doc_embedding = weighted_sum / total_weight
-            else:
-                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])
-
-            # Compute the average embedding for the document
-            if valid_embeddings:
-                avg_doc_embedding = np.mean(valid_embeddings, axis=0)
-            else:
-                avg_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-
-            weighted_document_embeddings.append(weighted_doc_embedding)
-            avg_document_embeddings.append(avg_doc_embedding)
-
-        print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
-        print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
-
-        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
 
 
     #

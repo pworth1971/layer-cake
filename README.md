@@ -275,7 +275,17 @@ We use four variants of pre-trained word embeddings to drive and test the variou
 The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following pre-trained embeddings are tested, and can be downloaded from the following URLs (as of June 2024)
 
 
-### GloVe
+### GloVe (Global Vectors for Word Representation)
+
+Model: glove.42B.300d.txt
+
+Dimension: 300
+
+Architecture: GloVe is an unsupervised learning algorithm that generates word embeddings by aggregating global word-word co-occurrence statistics from a corpus. It learns representations by factoring the co-occurrence matrix of words in a corpus. Unlike Word2Vec, GloVe uses a matrix factorization approach rather than a neural network.
+
+Training Data: The referenced GloVe model (glove.42B.300d.txt) was trained on a massive corpus containing 42 billion tokens from Common Crawl. Another popular GloVe model is trained on Wikipedia and Gigaword.
+
+Training Objective: GloVe optimizes the embeddings such that word vectors are learned in a way that their dot products approximate word co-occurrence probabilities.
 
 Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. 
 
@@ -285,6 +295,18 @@ which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d
 
 
 ### Word2Vec
+
+Model: GoogleNews-vectors-negative300.bin
+
+Dimension: 300
+
+Architecture: Word2Vec uses a shallow neural network to create word embeddings. It has two major approaches:
+- Skip-gram: Predicts context words given a target word.
+- CBOW (Continuous Bag of Words): Predicts the target word based on surrounding context words. Word2Vec treats words as independent units and doesn't consider subword information (which FastText later improved upon).
+
+Training Data: The GoogleNews-vectors-negative300.bin model was trained on part of the Google News dataset, consisting of 100 billion words. It provides 300-dimensional embeddings for 3 million words and phrases.
+
+Training Objective: The training objective is to predict words in context (either target-to-context or context-to-target), effectively learning dense word embeddings based on co-occurrence patterns.
 
 We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
 
@@ -308,32 +330,74 @@ Other available downloads: https://wikipedia2vec.github.io/wikipedia2vec/pretrai
 
 
 
-### fastText
+### FASTTEXT
+
+Model: crawl-300d-2M-subword.bin
+
+Dimension: 300
+
+Architecture: FastText is a shallow neural network embedding model developed by Facebook. It builds on Word2Vec, but its key innovation is the use of subword information (i.e., it learns vectors for character n-grams in addition to full words). This allows FastText to handle rare words or misspellings more robustly than Word2Vec or GloVe.
+
+Training Data: The model referenced here is trained on Common Crawl with 2 million word vectors. FastText models are trained on text corpora that consist of billions of words from across the web.
+
+Training Objective: FastText uses the skip-gram model with negative sampling (like Word2Vec) but augments it by using subwords. This allows the model to predict not just individual words but subword representations.
 
 We use the crawl-300d-2M.vec set of fastText word embeddings which is 2 million word vectors (pre) trained on Common Crawl (600B tokens). These can
 be downloaded, along with other English variants, from https://fasttext.cc/docs/en/english-vectors.html, or directly from https://fasttext.cc/docs/en/crawl-vectors.html
 
 
 
-### BERT
+### BERT (Bidirectional Encoder Representations from Transformers)
 
 For BERT we use the (English) bert-base-uncased model which can be downloaded here: https://github.com/google-research/bert.
 
-The BERT-base-uncased model, developed by researchers at Google AI Language, is based on the BERT (Bidirectional Encoder Representations from Transformers) 
-architecture, and is pre-trained on a large corpus that combines two specific text sources:
+Model: bert-base-cased
 
-- BookCorpus: This dataset contains over 11,000 books, covering a diverse range of genres and topics. This corpus is particularly valuable for its broad and rich language usage.
-- English Wikipedia: The entirety of the English Wikipedia is used (excluding lists, tables, and headers), which provides a vast range of knowledge across countless subjects.
+Dimension: 768
 
-The "uncased" version of BERT means that the text has been lowercased before tokenization, and it uses a vocabulary that does not distinguish case. This is typically 
-beneficial for tasks where the capitalization of words doesn't add useful distinction, and it helps in reducing the model's vocabulary size. The "base" version of BERT 
-includes 12 transformer blocks (layers), with a hidden size of 768, and 12 self-attention heads, totaling about 110 million parameters. This makes it significantly smaller 
-than the "large" version of BERT but still quite powerful.
+Architecture: BERT uses a transformer-based architecture with both encoder and decoder layers. The main innovation in BERT is its bidirectional training using the transformer encoder, 
+which allows the model to look at both the left and right context of a token in all layers. It is trained on two tasks:
+
+- Masked Language Modeling (MLM): A percentage of words in the input are randomly masked, and the model predicts the missing words.
+- Next Sentence Prediction (NSP): The model is trained to predict whether two sentences follow each other in a sequence.
+
+Training Data: BERT is pre-trained on the BooksCorpus (800M words) and English Wikipedia (2.5B words). This combination provides a large amount of general-domain text. The "cased" version 
+of BERT means that the text is case sensitive, ie case is not lowered, and it uses a vocabulary that distinguishes case. The "base" version of BERT includes 12 transformer 
+blocks (layers), with a hidden size of 768, and 12 self-attention heads, totaling about 110 million parameters. This makes it significantly smaller than the 
+"large" version of BERT but still quite powerful.
 
 BERT is trained using two unsupervised tasks:
 
 1) Masked Language Model (MLM): Random tokens are masked out of the input, and the model is trained to predict the original token based on its context.
 2) Next Sentence Prediction (NSP): Given pairs of sentences, the model predicts whether the second sentence in a pair is the actual next sentence in the original document.
+
+
+
+### RoBERTa (Robustly Optimized BERT Pretraining Approach)
+
+Model: roberta-base
+
+Dimension: 768
+
+Architecture: RoBERTa is a variant of BERT, but it improves on BERT's pretraining process by optimizing the architecture. It removes the NSP task and trains with much larger batch sizes and datasets for longer periods, resulting in improved performance on various benchmarks. Like BERT, it is based on a transformer encoder and uses bidirectional training.
+
+Training Data: RoBERTa is trained on a larger and more diverse dataset compared to BERT. The dataset includes CommonCrawl News, OpenWebText, Stories, and Wikipedia, totaling over 160GB of text, making it significantly more data-rich.
+
+Training Objective: RoBERTa is trained on the MLM task only, focusing on maximizing the model's ability to understand context within a sentence.
+
+
+
+### LLAMA (LLaMA 2)
+
+Model: meta-llama/Llama-2-7b-hf or meta-llama/Llama-2-13b-hf
+
+Dimension: 4096
+
+Architecture: LLaMA (Large Language Model Meta AI) is a transformer-based architecture designed to handle large-scale language tasks. It uses a decoder-only architecture, meaning it's similar to GPT models, where the entire input is processed as a sequence, and the model autoregressively predicts the next token. It focuses on efficient scaling and reduced inference costs compared to GPT-3.
+
+Training Data: LLaMA 2 is trained on a diverse set of publicly available text data, including CommonCrawl, Wikipedia, books, research papers, and more. The model has access to hundreds of billions of tokens, making it one of the largest language models to date.
+
+Training Objective: The model is trained using a standard autoregressive language modeling task, which means it predicts the next word in a sequence, given the previous context.
 
 
 
