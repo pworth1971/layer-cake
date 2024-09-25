@@ -208,6 +208,48 @@ class WordLCRepresentationModel(LCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
         
 
+
+    def build_embedding_vocab_matrix(self):
+        
+        print("building [word based] embedding representation (matrix) of dataset vocabulary...")
+
+        print("model:", type(self.model))
+        print("model.vector_size:", self.model.vector_size)
+
+        self.embedding_dim = self.model.vector_size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+        print("embedding_dim:", self.embedding_dim)
+        print("vocab_size:", self.vocab_size)
+
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+
+        # Dictionary to store the index-token mapping
+        self.token_to_index_mapping = {}
+
+        oov_tokens = 0
+
+        # Loop through the dataset vocabulary and fill the embedding matrix
+        for word, idx in self.vectorizer.vocabulary_.items():
+            self.token_to_index_mapping[idx] = word  # Store the token at its index
+
+            # For Word2Vec and GloVe (retrieving word vectors)
+            if word in self.model.key_to_index:  # Check if the word exists in the pretrained model
+                self.embedding_vocab_matrix[idx] = self.model[word]
+            else:
+                #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
+                # Handle OOV words with a random embedding (you could also use a zero vector if preferred)
+                self.embedding_vocab_matrix[idx] = np.random.normal(size=(self.embedding_dim,))
+                oov_tokens += 1
+
+        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+        print("oov_tokens:", oov_tokens)
+
+        return self.embedding_vocab_matrix, self.token_to_index_mapping
+
+
+
+
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
         Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
@@ -359,6 +401,48 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
 
+    def build_embedding_vocab_matrix(self):
+
+        print("building [subword based] embedding representation (matrix) of dataset vocabulary...")
+
+        print("model:", type(self.model))
+        print("model.vector_size:", self.model.vector_size)
+
+        self.embedding_dim = self.model.vector_size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+        print("embedding_dim:", self.embedding_dim)
+        print("vocab_size:", self.vocab_size)
+
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+
+        # Dictionary to store the index-token mapping
+        self.token_to_index_mapping = {}
+
+        oov_tokens = 0
+        
+        #
+        # create the embedding matrix that aligns with the vocabulary
+        #
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+
+        # Loop through the dataset vocabulary
+        for word, idx in self.vectorizer.vocabulary_.items():
+            self.token_to_index_mapping[idx] = word  # Store the token at its index
+
+            if word in self.model.wv.key_to_index:  # If the word exists in FastText's vocabulary
+                self.embedding_vocab_matrix[idx] = self.model.wv[word]
+            else:
+                #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
+                # FastText automatically handles subword embeddings for OOV words
+                self.embedding_vocab_matrix[idx] = self.model.wv.get_vector(word)
+                oov_tokens += 1
+
+        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+        print("oov_tokens:", oov_tokens)
+
+        return self.embedding_vocab_matrix, self.token_to_index_mapping
+
 
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
@@ -434,7 +518,191 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
 
 
-class BERTLCRepresentationModel(LCRepresentationModel):
+
+
+class BERTRootLCRepresentationModel(LCRepresentationModel):
+    """
+    Shared class for BERT and RoBERTa models to implement common functionality, such as tokenization.
+    """
+    
+    def __init__(self, model_name, model_dir, vtype='tfidf'):
+        super().__init__(model_name, model_dir)
+        
+        # Use the custom tokenizer for both TF-IDF and CountVectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+    
+    
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
+        This method works for both BERT and RoBERTa models.
+        """
+        inputs = self.tokenizer(
+            texts,
+            return_tensors='pt',    # Return PyTorch tensors
+            padding=True,           # Pad the sequences to the longest sequence in the batch
+            truncation=True,        # Truncate sequences that exceed the max length
+            max_length=self.max_length  # Use the tokenizer's max length
+        )
+        
+        return inputs['input_ids'], inputs['attention_mask']
+    
+
+    def build_embedding_vocab_matrix(self):
+        """
+        Build the embedding vocabulary matrix for BERT and RoBERTa models.
+        """
+        print("building [BERT/RoBERTa based] embedding representation (matrix) of dataset vocabulary...")
+
+        self.model.eval()  # Set model to evaluation mode            
+        self.model = self.model.to(self.device)
+        print(f"Using device: {self.device}")  # To confirm which device is being used
+        print("model:", type(self.model))
+        
+        #
+        # NB we use different embedding vocab matrices here depending upon the pretrained model
+        #
+        self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+
+        print("embedding_dim:", self.embedding_dim)
+        print("dataset vocab size:", self.vocab_size)   
+
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+
+        # Dictionary to store the index-token mapping
+        self.token_to_index_mapping = {}
+
+        # -------------------------------------------------------------------------------------------------------------
+        def _bert_embedding_vocab_matrix(vocab, batch_size=DEFAULT_CPU_BATCH_SIZE, max_len=512):
+            """
+            Construct the embedding vocabulary matrix for BERT and RoBERTa models.
+            """
+
+            print("_bert_embedding_vocab_matrix...")
+
+            print("batch_size:", batch_size)
+            print("max_len:", max_len)
+
+            embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
+            batch_words = []
+            word_indices = []
+            
+            def process_batch(batch_words, max_len):
+
+                inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=max_len)
+                
+                # move input tensors to proper device
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
+                max_vocab_size = self.model.config.vocab_size
+
+                # check for out of range tokens
+                out_of_range_ids = input_ids[input_ids >= max_vocab_size]
+                if len(out_of_range_ids) > 0:
+                    print("Warning: The following input IDs are out of range for the model's vocabulary:")
+                    for out_id in out_of_range_ids.unique():
+                        token = self.tokenizer.decode(out_id.item())
+                        print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
+                
+                # Perform inference, ensuring that the model is on the same device as the inputs
+                self.model.to(self.device)
+                with torch.no_grad():
+                    #outputs = model(**inputs)
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                # Return the embeddings and ensure they are on the CPU for further processing
+                return outputs.last_hidden_state[:, 0,:].cpu().numpy()
+
+
+            with tqdm(total=len(vocab), desc="processing bert / roberta embedding vocab matrix construction batches") as pbar:
+                for word, idx in vocab.items():
+                    batch_words.append(word)
+                    word_indices.append(idx)
+
+                    if len(batch_words) == batch_size:
+                        embeddings = process_batch(batch_words, max_len)
+                        for i, embedding in zip(word_indices, embeddings):
+                            if i < len(embedding_vocab_matrix):
+                                embedding_vocab_matrix[i] = embedding
+                            else:
+                                print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
+                                oov_tokens += 1
+                        
+                        batch_words = []
+                        word_indices = []
+                        pbar.update(batch_size)
+
+                if batch_words:
+                    embeddings = process_batch(batch_words, max_len)
+                    for i, embedding in zip(word_indices, embeddings):
+                        if i < len(embedding_vocab_matrix):
+                            embedding_vocab_matrix[i] = embedding
+                        else:
+                            print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
+                            oov_tokens += 1
+                    
+                    pbar.update(len(batch_words))
+
+            return embedding_vocab_matrix
+
+        #tokenize and prepare inputs
+        max_length = self.tokenizer.model_max_length
+        #print("max_length:", max_length)
+
+        self.embedding_vocab_matrix = _bert_embedding_vocab_matrix(self.vocab, batch_size=BATCH_SIZE, max_len=max_length)
+        
+        # Add to token-to-index mapping for BERT and RoBERTa
+        for word, idx in self.vectorizer.vocabulary_.items():
+            self.token_to_index_mapping[idx] = word  # Store the token at its index
+
+        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+
+        return self.embedding_vocab_matrix, self.token_to_index_mapping
+
+
+
+
+class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
     """
     BERTRepresentation subclass implementing sentence encoding using BERT
     """
@@ -477,60 +745,7 @@ class BERTLCRepresentationModel(LCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
-
-
-    def _custom_tokenizer(self, text):
-        """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        
-        Parameters:
-        - text: The input text to be tokenized.
-        
-        Returns:
-        - tokens: A list of tokens with special tokens removed based on the model in use.
-        """
-
-        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
-        
-        # Retrieve special tokens from the tokenizer object
-        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
-        
-        # Optionally, remove special tokens
-        tokens = [token for token in tokens if token not in special_tokens]
-
-        return tokens
     
-
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using the BERT tokenizer, returning token IDs and attention masks.
-
-        Parameters:
-        ----------
-        texts : list of str
-            List of sentences to tokenize.
-
-        Returns:
-        -------
-        input_ids : torch.Tensor
-            Tensor of token IDs for each sentence.
-        attention_mask : torch.Tensor
-            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
-        """
-
-        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
-        inputs = self.tokenizer(
-            texts,
-            return_tensors='pt',            # Return PyTorch tensors
-            padding=True,                   # Pad the sequences to the longest sequence in the batch
-            truncation=True,                # Truncate sequences that exceed the max length
-            max_length=self.max_length           # Define a max length (usually 512 for BERT)
-        )
-        
-        # Return input IDs and attention mask as tensors
-        return inputs['input_ids'], inputs['attention_mask']
-
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
@@ -584,7 +799,7 @@ class BERTLCRepresentationModel(LCRepresentationModel):
 
 
 
-class RoBERTaLCRepresentationModel(LCRepresentationModel):
+class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
     """
     RoBERTaRepresentationModel subclass implementing sentence encoding using RoBERTa
     """
@@ -621,59 +836,6 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
-
-
-    def _custom_tokenizer(self, text):
-        """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        
-        Parameters:
-        - text: The input text to be tokenized.
-        
-        Returns:
-        - tokens: A list of tokens with special tokens removed based on the model in use.
-        """
-
-        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
-        
-        # Retrieve special tokens from the tokenizer object
-        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
-        
-        # Optionally, remove special tokens
-        tokens = [token for token in tokens if token not in special_tokens]
-
-        return tokens
-    
-
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using the BERT tokenizer, returning token IDs and attention masks.
-
-        Parameters:
-        ----------
-        texts : list of str
-            List of sentences to tokenize.
-
-        Returns:
-        -------
-        input_ids : torch.Tensor
-            Tensor of token IDs for each sentence.
-        attention_mask : torch.Tensor
-            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
-        """
-
-
-        inputs = self.tokenizer(
-            texts,
-            return_tensors='pt',            # Return PyTorch tensors
-            padding=True,                   # Pad the sequences to the longest sequence in the batch
-            truncation=True,                # Truncate sequences that exceed the max length
-            max_length=self.max_length           # Define a max length (usually 512 for BERT)
-        )
-        
-        # Return input IDs and attention mask as tensors
-        return inputs['input_ids'], inputs['attention_mask']
     
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
@@ -826,6 +988,72 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         
         # Return input IDs and attention mask as tensors
         return inputs['input_ids'], inputs['attention_mask']
+
+
+    def build_embedding_vocab_matrix(self):
+
+        print("building [LlaMa based] embedding representation (matrix) of dataset vocabulary...")
+
+        self.model.eval()  # Set model to evaluation mode            
+        self.model = self.model.to(self.device)
+        print(f"Using device: {self.device}")  # To confirm which device is being used
+        print("model:", type(self.model))
+        
+        #
+        # NB we use different embedding vocab matrices here depending upon the pretrained model
+        #
+        self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+
+        print("embedding_dim:", self.embedding_dim)
+        print("dataset vocab size:", self.vocab_size)   
+
+        # Dictionary to store the index-token mapping
+        self.token_to_index_mapping = {}
+
+        # Collect all tokens from the vectorizer's vocabulary
+        tokens = list(self.vectorizer.vocabulary_.keys())
+        num_tokens = len(tokens)
+        print("Number of tokens to encode:", num_tokens)
+
+        # Batch size for processing
+        batch_size = BATCH_SIZE
+
+        # Initialize an empty NumPy array to store the embeddings
+        self.embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
+
+        # Process tokens in batches
+        for batch_start in tqdm(range(0, num_tokens, batch_size), desc="encoding dataset with LLaMa embeddings..."):
+            batch_tokens = tokens[batch_start: batch_start + batch_size]
+
+            # Tokenize the batch of tokens using the LLaMA tokenizer
+            input_ids = self.tokenizer(
+                batch_tokens,
+                return_tensors='pt',
+                padding=True,
+                truncation=True,
+                #max_length=max_length                  # should pick up max length from the underlying model
+            ).input_ids.to(self.device)
+
+            # Get the embeddings from the LLaMA model
+            with torch.no_grad():
+                outputs = self.model(input_ids)
+            
+            # Mean pooling to get sentence-level embeddings for each token
+            batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+            # Store each token's embedding in the embedding matrix (direct index assignment)
+            for i, token in enumerate(batch_tokens):
+                # Find the index of the token in the vectorizer's vocabulary
+                token_index = self.vectorizer.vocabulary_[token]
+                self.embedding_matrix[token_index] = batch_embeddings[i]
+                self.token_to_index_mapping[token_index] = token  # Store the token at its index
+
+        print("embedding_matrix:", type(self.embedding_matrix), self.embedding_matrix.shape)
+        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+
+        return self.embedding_matrix, self.token_to_index_mapping       
+
 
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
