@@ -14,21 +14,21 @@ from embedding.supervised import get_supervised_embeddings
 
 from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
 from util.common import SUPPORTED_LMS, SUPPORTED_TRANSFORMER_LMS
+from util.common import VECTOR_CACHE, PICKLE_DIR, DATASET_DIR
 
 from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
-from model.CustomRepresentationLearning import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
-from model.CustomRepresentationLearning import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 
 from model.classification import run_model
 
 from util.csv_log import CSVLog
 
-from model.CustomRepresentationLearning import BERTRepresentationModel, RoBERTaRepresentationModel, LlaMaRepresentationModel
+#from model.CustomRepresentationLearning import BERTRepresentationModel, RoBERTaRepresentationModel, LlaMaRepresentationModel
+from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
 
+#import pickle
 
-import pickle
-
-from util import file
+#from util import file
 
 
 import warnings
@@ -36,12 +36,7 @@ warnings.filterwarnings('ignore')
 
 
 
-#
-# we assume everything runs from bin directory
-#
-PICKLE_DIR = '../pickles/'
-VECTOR_CACHE = '../.vector_cache'
-OUT_DIR = '../out/'
+
 
 TEST_SIZE = 0.25
 

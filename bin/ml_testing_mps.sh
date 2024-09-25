@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_repmodel.test"
+LOG="--logfile ../log/ml_mps_repmodel2.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -34,7 +34,7 @@ declare -a vtypes=("tfidf")
 #declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
 declare -a mixes=("solo" "dot" "lsa" "vmode")
 #declare -a embeddings=("glove" "word2vec", "fasttext" "bert" "roberta" "llama")
-declare -a embeddings=("glove" "bert" "roberta" "llama")
+declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "llama")
 declare -a emb_comp_options=("weighted" "avg" "summary")
 
 # Embedding config params
@@ -107,8 +107,8 @@ for i in "${!datasets[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"

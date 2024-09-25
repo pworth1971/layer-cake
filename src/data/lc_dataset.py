@@ -55,18 +55,11 @@ from scipy.special._precompute.expn_asy import generate_A
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-
-
 MIN_DF_COUNT = 5
 MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
 TEST_SIZE = 0.25
 
-
 NUM_DL_WORKERS = 3      # number of workers to handle DataLoader tasks
-
-
-
-
 
 
 nltk.download('stopwords')
@@ -82,7 +75,6 @@ class LCDataset:
     """
 
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
-    
 
     def __init__(self, name, vectorization_type='tfidf', pretrained=None, embedding_type='word', embedding_path=VECTOR_CACHE, embedding_comp_type='avg'):
         """
@@ -159,24 +151,26 @@ class LCDataset:
         #
         self.lcr_model = None          # custom representation model class object
     
-        if (pretrained == 'word2vec':
+        if (pretrained == 'word2vec'):
             print("Using Word2Vec pretrained embeddings...")
             
             self.lcr_model = WordLCRepresentationModel(
                 model_name=WORD2VEC_MODEL, 
                 model_dir=embedding_path, 
-                vtype=vectorization_type
+                vtype=vectorization_type,
+                model_type='word2vec'
             )
-        elif pretrained == 'glove':
+        elif (pretrained == 'glove'):
             print("Using GloVe pretrained embeddings...")
             
             self.lcr_model = WordLCRepresentationModel(
                 model_name=GLOVE_MODEL, 
                 model_dir=embedding_path, 
-                vtype=vectorization_type
+                vtype=vectorization_type,
+                model_type='glove'
             )
 
-        elif pretrained == 'fasttext':
+        elif (pretrained == 'fasttext'):
             print("Using FastText pretrained embeddings with subwords...")
             
             self.lcr_model = SubWordLCRepresentationModel(
@@ -318,7 +312,7 @@ class LCDataset:
         print("\n\tinitializing embedding matrices...")
         
         self.pretrained_path = self.embedding_path
-        print("self.pretrained:", self.pretrained)=
+        print("self.pretrained:", self.pretrained)
         print("self.pretrained_path:", self.pretrained_path)
 
         # build the embedding vocabulary matrix to align with the dataset vocabulary and embedding type
@@ -477,7 +471,7 @@ class LCDataset:
 
         elif self.pretrained in ['bert', 'roberta', 'llama']:
                         
-            print("token based embeddings...
+            print("token based embeddings...")
                   
             print("self.model:\n", self.model)
             print("self.tokenizer:\n", self.tokenizer)
@@ -514,76 +508,52 @@ class LCDataset:
                 
                 self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
                 self.vocab_size = len(self.vectorizer.vocabulary_)
-
                 print("embedding_dim:", self.embedding_dim)
                 print("dataset vocab size:", self.vocab_size)
-                #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
 
                 self.llama_vocab_embeddings = {}                # Initialize an empty dictionary to store the embeddings
 
-                # Collect all tokens that need encoding
-                # NBL we use the tokenizer's vocabulary 
-                # instead of vocab_ndarr (which comes from 
-                # TfidfVectorizer features_out)
-                tokens = list(self.vectorizer.vocabulary_.keys())       # Get the vocabulary keys (tokens)
+                # Initialize an empty NumPy array to store the embeddings
+                embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
 
-                #tokens = list(self.vocab_ndarr)
+                # Collect all tokens from the vectorizer's vocabulary
+                tokens = list(self.vectorizer.vocabulary_.keys())
                 num_tokens = len(tokens)
+                print("Number of tokens to encode:", num_tokens)
 
-                print("tokens:", type(tokens), len(tokens))
-                print("num_tokens:", num_tokens)
-
+                # Batch size for processing
                 batch_size = BATCH_SIZE
 
                 # Process tokens in batches
-                for batch_start in tqdm(range(0, num_tokens, batch_size), desc="batch encoding dataset vocabulary using LLaMa..."):
+                for batch_start in tqdm(range(0, num_tokens, batch_size), desc="Batch encoding dataset vocabulary using LLaMA..."):
                     batch_tokens = tokens[batch_start: batch_start + batch_size]
-                    
-                    # Tokenize the entire batch at once
+
+                    # Tokenize the batch of tokens using the LLaMA tokenizer
                     input_ids = self.tokenizer(
-                        batch_tokens, 
-                        return_tensors='pt', 
-                        padding=True, 
+                        batch_tokens,
+                        return_tensors='pt',
+                        padding=True,
                         truncation=True,
-                        max_length=TOKEN_TOKENIZER_MAX_LENGTH       # specify max_length for truncation
+                        max_length=TOKEN_TOKENIZER_MAX_LENGTH
                     ).input_ids.to(self.device)
-                    
-                    # Get model outputs for the batch
+
+                    # Get the embeddings from the LLaMA model
                     with torch.no_grad():
                         outputs = self.model(input_ids)
                     
-                    # Extract and store the embeddings for each token in the batch
+                    # Mean pooling to get sentence-level embeddings for each token
                     batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-                    
-                    # Store each embedding in the dictionary
-                    for token, embedding in zip(batch_tokens, batch_embeddings):
-                        self.llama_vocab_embeddings[token] = embedding
 
-                print("llama_vocab_embeddings:", type(self.llama_vocab_embeddings), len(self.llama_vocab_embeddings))
+                    # Store each token's embedding in the embedding matrix (direct index assignment)
+                    for i, token in enumerate(batch_tokens):
+                        # Find the index of the token in the vectorizer's vocabulary
+                        token_index = self.vectorizer.vocabulary_[token]
+                        embedding_matrix[token_index] = batch_embeddings[i]
 
-                # Function to convert llama_vocab_embeddings (dict) to a numpy matrix
-                def convert_dict_to_matrix(vocab_embeddings, vocab, embedding_dim):
-                    print("converting dict to matrix...")
+                print("LLaMA embeddings computed, converting to NumPy matrix.")
 
-                    # Assuming all embeddings have the same dimension and it's correctly 4096 as per the LLaMA model dimension
-                    embedding_matrix = np.zeros((len(vocab), embedding_dim))  # Shape (vocab_size, embedding_dim)
-
-                    for i, token in enumerate(vocab):
-                        if token in vocab_embeddings:
-                            # Direct assignment of the embedding which is already in the correct shape (4096,)
-                            embedding_matrix[i, :] = vocab_embeddings[token]
-                        else:
-                            # Initialize missing tokens with zeros or a small random value
-                            embedding_matrix[i, :] = np.zeros(embedding_dim)
-
-                    return embedding_matrix
-
-                # Convert the dictionary of embeddings to a matrix
-                self.embedding_vocab_matrix_new = convert_dict_to_matrix(self.llama_vocab_embeddings, self.vocab_ndarr, self.embedding_dim)
-                print("embedding_vocab_matrix_new:", type(self.embedding_vocab_matrix_new), self.embedding_vocab_matrix_new.shape)
-
-                # Assign the new embedding matrix
-                self.embedding_vocab_matrix = self.embedding_vocab_matrix_new
+                # Assign the new embedding matrix to the model's embedding_vocab_matrix attribute
+                self.embedding_vocab_matrix = embedding_matrix
 
         else:
             raise ValueError("Invalid pretrained type.")
@@ -622,8 +592,8 @@ class LCDataset:
 
             print("generating transformer / token based dataset representations...")
 
-            self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_sentences_opt(self.Xtr.tolist())                                  
-            self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_sentences_opt(self.Xte.tolist())
+            self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_docs(self.Xtr.tolist())                                  
+            self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_docs(self.Xte.tolist())
 
             # not supported weighted average comp method for transformer based models due to
             # complexity of vectorization and tokenization mapping across models 
@@ -635,8 +605,8 @@ class LCDataset:
             
             print("generating word / subword based dataset repressentations...")
             
-            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = lcr_model.encode_docs(self.Xtr.tolist(), self.embedding_vocab_matrix)
-            self.self.Xte_weighted_embeddings, self.Xte_avg_embeddings = lcr_model.encode_docs(self.Xte.tolist(), self.embedding_vocab_matrix)
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(self.Xtr.tolist(), self.embedding_vocab_matrix)
+            self.self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(self.Xte.tolist(), self.embedding_vocab_matrix)
 
             # CLS token summary embeddings not supported in pretrained 
             # word embedding models like word2vec, GloVe or fasTtext
@@ -1176,7 +1146,6 @@ class LCDataset:
         return texts
 
 
-
     def _preprocess(self, text_series: pd.Series):
         """
         Preprocess a pandas Series of texts by removing punctuation and stopwords.
@@ -1211,52 +1180,6 @@ class LCDataset:
         # Return as NumPy array
         return np.array(processed_texts)
     
-
-
-    def _preprocess_deprecated(self, text_series):
-        """
-        Preprocess a pandas Series of texts: tokenizing, removing punctuation, stopwords, 
-        and applying a custom number masking function.
-
-        Parameters:
-        - text_series: A pandas Series containing text data (strings).
-
-        Returns:
-        - processed_texts: A NumPy array containing processed text strings with the shape property.
-        """
-        print("preprocessing text...")
-        print("text_series:", type(text_series), text_series.shape)
-
-        # Load stop words once outside the loop
-        stop_words = set(stopwords.words('english'))
-
-        # Vectorize punctuation removal
-        text_series = text_series.apply(self._remove_punctuation)
-
-        # Parallelize tokenization and stop word removal using joblib for multi-core processing
-        def process_text(text):
-            # Tokenize text
-            #tokenized_text = word_tokenize(text.lower())
-            
-            # Remove stop words
-            #filtered_words = [word for word in tokenized_text if word not in stop_words]
-            filtered_words = [word for word in text if word not in stop_words]
-            
-            # Join back into a string
-            filtered_text = ' '.join(filtered_words)
-            
-            # Apply custom number masking
-            #masked_text = _mask_numbers([filtered_text])  # Input as list to fit mask_numbers function signature
-            #return masked_text[0]
-
-            return filtered_text
-
-        # Parallel processing with multiple cores
-        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
-
-        # Return as NumPy array
-        return np.array(processed_texts)
-
 
     def show(self):
         nTr_docs = len(self.devel_raw)

@@ -20,7 +20,6 @@ import GPUtil
 import argparse
 
 
-
 NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn', 'nn-transformer']
 ML_MODELS = ['svm', 'lr', 'nb', 'dt']
 
@@ -32,7 +31,6 @@ VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
 DATASET_DIR = '../datasets/'                        # dataset directory
 PICKLE_DIR = '../pickles/'                          # pickled data directory
 OUT_DIR = '../out/'                                 # output directory
-
 
 
 

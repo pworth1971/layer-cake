@@ -183,7 +183,7 @@ class LCRepresentationModel(RepresentationModel, ABC):
     
 
     @abstractmethod
-    def encode_sentences(self, text_list):
+    def encode_docs(self, text_list, embedding_vocab_matrix):
         """
         Abstract method to be implemented by all subclasses.
         """
@@ -199,7 +199,7 @@ class WordLCRepresentationModel(LCRepresentationModel):
     It computes sentence embeddings by averaging, summing, or computing TF-IDF weighted embeddings.
     """
 
-    def __init__(self, model_name, embedding_path, vtype='tfidf'):
+    def __init__(self, model_name, model_dir, vtype='tfidf', model_type='word2vec'):
         """
         Initialize the word-based representation model (e.g., Word2Vec, GloVe).
         
@@ -214,12 +214,25 @@ class WordLCRepresentationModel(LCRepresentationModel):
         """
         print("Initializing WordBasedRepresentationModel...")
 
-        super().__init__(model_name, model_dir=embedding_path)  # parent constructor
+        super().__init__(model_name, model_dir=model_dir)  # parent constructor
 
-        # Load the pre-trained word embedding model
+        path_to_embeddings = model_dir + '/' + model_name
+        print("path_to_embeddings:", path_to_embeddings)
+
+        if (model_type == 'word2vec'):
+            print("Using Word2Vec pretrained embeddings...")
+            self.model = KeyedVectors.load_word2vec_format(path_to_embeddings, binary=True)
+        elif (model_type == 'glove'):
+            print("Using GloVe pretrained embeddings...")
+            from gensim.scripts.glove2word2vec import glove2word2vec
+            glove_input_file = path_to_embeddings
+            word2vec_output_file = glove_input_file + '.word2vec'
+            glove2word2vec(glove_input_file, word2vec_output_file)
+            self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+        else:
+            raise ValueError("Invalid model type. Use 'word2vec' or 'glove'.")
         
-        self.model = KeyedVectors.load_word2vec_format(embedding_path, binary=True)
-        
+
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
@@ -354,7 +367,7 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
     It computes sentence embeddings by averaging, summing, or computing TF-IDF weighted embeddings.
     """
 
-    def __init__(self, model_name=FASTTEXT_MODEL, embedding_path=VECTOR_CACHE+'/fastText', vtype='tfidf'):
+    def __init__(self, model_name=FASTTEXT_MODEL, model_dir=VECTOR_CACHE+'/fastText', vtype='tfidf'):
         """
         Initialize the word-based representation model (e.g., Word2Vec, GloVe).
         
@@ -362,7 +375,7 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         ----------
         model_name : str
             Name of the pre-trained word embedding model (e.g. 'crawl-300d-2M-subword.bin').
-        embedding_path : str
+        model_dir : str
             Path to the pre-trained embedding file (e.g., '../.vector_cache/fastText').
         vtype : str, optional
             vectorization type, either 'tfidf' or 'count'.
@@ -370,11 +383,11 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
         print("Initializing SubWordBasedRepresentationModel...")
 
-        super().__init__(model_name, model_dir=embedding_path)  # parent constructor
+        super().__init__(model_name, model_dir=model_dir)  # parent constructor
 
         # Load the pre-trained word embedding model
         # Append the FastText model name to the pretrained_path
-        fasttext_model_path = embedding_path + '/' + model_name
+        fasttext_model_path = model_dir + '/' + model_name
         print("fasteext_model_path:", fasttext_model_path)
 
         # Use load_facebook_model to load FastText model from Facebook's pre-trained binary files
@@ -517,60 +530,7 @@ class BERTLCRepresentationModel(LCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
 
 
-    def encode_sentences(self, text_list, comp_method='mean'):
-        """
-        Generates embeddings for a list of text sentences using BERT.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to encode.
-        comp_method : str, optional
-            Strategy for combining word embeddings. Defaults to 'mean' but also supports 'summary' which uses the [CLS] token (index 0).
-            - 'mean': Mean of all token embeddings.
-            - 'summary': Use the [CLS] token embedding.
-
-        Returns:
-        -------
-        embeddings : np.ndarray
-            Array of sentence embeddings.
-        """
-
-        print("encoding sentences (BERT style)...")
-
-        if (comp_method in ['avg', 'average', 'mean']):
-            self.combine_strategy = 'mean'
-        elif (comp_method in ['cls', 'summary', 'summ', 'cls_token', 'first']):
-            self.combine_strategy = 'summary'
-        else:
-            self.combine_stratgey = 'mean'              # default to mean
-        
-        print("self.combine_strategy:", self.combine_strategy)
-
-        self.model.eval()
-        embeddings = []
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]
-
-                if (self.combine_strategy == "mean"):
-                    batch_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                elif (self.combine_strategy == "summary"):
-                    # Select the [CLS] token embedding, at index 0
-                    batch_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()            # should be CLS token
-                 
-                embeddings.append(batch_embeddings)
-
-        embeddings = np.concatenate(embeddings, axis=0)
-
-        return embeddings
-
-
-    def encode_sentences_opt(self, text_list):
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
         Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
         
@@ -624,11 +584,6 @@ class BERTLCRepresentationModel(LCRepresentationModel):
         return mean_embeddings, first_token_embeddings
 
 
-
-
-
-
-
 class RoBERTaLCRepresentationModel(LCRepresentationModel):
     """
     RoBERTaRepresentationModel subclass implementing sentence encoding using RoBERTa
@@ -640,6 +595,7 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
 
         super().__init__(model_name, model_dir)                             # parent constructor
 
+        #full_model_path = model_dir + '/' + model_name
         self.model = RobertaModel.from_pretrained(model_name, cache_dir=model_dir)
         self.tokenizer = RobertaTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
     
@@ -658,63 +614,7 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
 
 
-
-    def encode_sentences(self, text_list, comp_method='mean'):
-        """
-        Generates embeddings for a list of text sentences using BERT.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to encode.
-        comp_method : str, optional
-            Strategy for combining word embeddings. Defaults to 'mean' but also supports 'summary' which uses the [CLS] token (index 0).
-            - 'mean': Mean of all token embeddings.
-            - 'summary': Use the [CLS] token embedding.
-
-        Returns:
-        -------
-        embeddings : np.ndarray
-            Array of sentence embeddings.
-        """
-
-        print("encoding sentences (BERT style)...")
-
-        if (comp_method in ['avg', 'average', 'mean']):
-            self.combine_strategy = 'mean'
-        elif (comp_method in ['summary', 'summ', 'first', 'aggregate']):
-            self.combine_strategy = 'summary'
-        else:
-            self.combine_stratgey = 'mean'              # default to mean
-        
-        print("self.combine_strategy:", self.combine_strategy)
-
-        self.model.eval()
-        embeddings = []
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]
-
-                if (self.combine_strategy == "mean"):
-                    batch_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                elif (self.combine_strategy == "summary"):
-                    # Select the first token, not a [CLS] token but still 
-                    # contains aggregate information about sentence 
-                    batch_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()     
-                 
-                embeddings.append(batch_embeddings)
-
-        embeddings = np.concatenate(embeddings, axis=0)
-
-        return embeddings
-    
-
-
-    def encode_sentences_opt(self, text_list):
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
         Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
         
@@ -793,66 +693,7 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
 
 
-
-    def encode_sentences(self, text_list, comp_method='mean'):
-        """
-        Generates embeddings for a list of text sentences using LLaMa.
-        
-        LLaMa does not use [CLS] tokens. Instead, it can return:
-        - The mean of all token embeddings.
-        - The last token embedding which is a (representation of the) summary of the sentence.
-        
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to encode.
-        comp_method : str, optional
-            Strategy for combining word embeddings. Defaults to 'mean' but supports 'last' (use the last token embedding).
-            - 'mean': Mean of all token embeddings.
-            - 'last': Use the last token embedding.
-
-        Returns:
-        -------
-        embeddings : np.ndarray
-            Array of sentence embeddings.
-        """
-        print("Encoding sentences for LLaMa...")
-        
-        if comp_method in ['avg', 'average', 'mean']:
-            self.combine_strategy = 'mean'
-        elif comp_method in ['summary', 'last', 'summ']:
-            self.combine_strategy = 'last'
-        else:
-            raise ValueError("Invalid combine_strategy. Supported: 'mean' or 'last'.")
-
-        self.model.eval()
-        embeddings = []
-
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from LLaMa
-
-                if self.combine_strategy == 'last':
-                    # Use the last token embedding for each sequence
-                    batch_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
-                elif self.combine_strategy == 'mean':
-                    # Mean of all token embeddings
-                    batch_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                else:
-                    raise ValueError("Invalid combine_strategy. Supported: 'mean' or 'last'.")
-
-                embeddings.append(batch_embeddings)
-
-        embeddings = np.concatenate(embeddings, axis=0)
-        
-        return embeddings
-    
-
-    def encode_sentences_opt(self, text_list):
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
         Generates both the mean and last token embeddings for a list of text sentences using LLaMa.
         
