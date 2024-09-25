@@ -24,7 +24,6 @@ from sklearn.model_selection import train_test_split
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
@@ -32,12 +31,11 @@ from joblib import Parallel, delayed
 
 from gensim.scripts.glove2word2vec import glove2word2vec
 
-from contextlib import nullcontext
-
 import torch
-from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
-from transformers import BertModel, LlamaModel, RobertaModel
+
+#from torch.utils.data import DataLoader, Dataset
+#from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
+#from transformers import BertModel, LlamaModel, RobertaModel
 
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -49,17 +47,19 @@ from util.common import VECTOR_CACHE, DATASET_DIR
 
 import fasttext
 import fasttext.util
+
 from scipy.special._precompute.expn_asy import generate_A
 
-
+#
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
+#
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-MIN_DF_COUNT = 5
-MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
-TEST_SIZE = 0.25
+MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
 
-NUM_DL_WORKERS = 3      # number of workers to handle DataLoader tasks
+TEST_SIZE = 0.25                    # test size for train/test split
+
+NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
 
 
 nltk.download('stopwords')
@@ -209,7 +209,7 @@ class LCDataset:
 
         self.model = self.lcr_model.model
         self.tokenizer = self.lcr_model.tokenizer           # note only transformer models have tokenizers
-        self.vectorizer = self.lccr_model.vectorizer
+        self.vectorizer = self.lcr_model.vectorizer
 
         self.nC = self.num_labels
         print("nC:", self.nC)
@@ -241,7 +241,6 @@ class LCDataset:
         """
 
         print("\n\t vectorizing dataset...")
-
         
         if (debug):
             print("model:\n", self.model)
@@ -323,90 +322,12 @@ class LCDataset:
 
         self.initialized = True
 
-    
-
 
     #
     # -------------------------------------------------------------------------------------------------------------
     # embedding vocab construction
     # -------------------------------------------------------------------------------------------------------------
     #
-
-
-
-    # -------------------------------------------------------------------------------------------------------------
-    # vocab embedding matrix construction helper functions
-    #
-    def process_batch(self, batch_words):
-
-        #tokenize and prepare inputs
-        inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=TOKEN_TOKENIZER_MAX_LENGTH)
-        
-        # move input tensors to proper device
-        input_ids = inputs['input_ids'].to(self.device)
-        attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
-        max_vocab_size = self.model.config.vocab_size
-
-        # check for out of range tokens
-        out_of_range_ids = input_ids[input_ids >= max_vocab_size]
-        if len(out_of_range_ids) > 0:
-            print("Warning: The following input IDs are out of range for the model's vocabulary:")
-            for out_id in out_of_range_ids.unique():
-                token = self.tokenizer.decode(out_id.item())
-                print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
-        
-        # Perform inference, ensuring that the model is on the same device as the inputs
-        self.model.to(self.device)
-        with torch.no_grad():
-            #outputs = model(**inputs)
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-
-        # Return the embeddings and ensure they are on the CPU for further processing
-        return outputs.last_hidden_state[:, 0,:].cpu().numpy()
-        
-
-    def build_embedding_vocab_matrix_core(self, vocab, batch_size=MPS_BATCH_SIZE):
-        
-        print("core embedding dataset vocab matrix construction...")
-        
-        print("vocab:", type(vocab), len(vocab))
-        print("batch_size:", batch_size)
-        
-        embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
-        batch_words = []
-        word_indices = []
-
-        with tqdm(total=len(vocab), desc="Processing embedding vocab matrix construction batches") as pbar:
-            for word, idx in vocab.items():
-                batch_words.append(word)
-                word_indices.append(idx)
-
-                if len(batch_words) == batch_size:
-                    embeddings = self.process_batch(batch_words)
-                    for i, embedding in zip(word_indices, embeddings):
-                        if i < len(embedding_vocab_matrix):
-                            embedding_vocab_matrix[i] = embedding
-                        else:
-                            print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
-                    
-                    batch_words = []
-                    word_indices = []
-                    pbar.update(batch_size)
-
-            if batch_words:
-                embeddings = self.process_batch(batch_words)
-                for i, embedding in zip(word_indices, embeddings):
-                    if i < len(embedding_vocab_matrix):
-                        embedding_vocab_matrix[i] = embedding
-                    else:
-                        print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
-                
-                pbar.update(len(batch_words))
-
-        return embedding_vocab_matrix
-
-
-
     def build_embedding_vocab_matrix(self):
         """
         build the vector representation of the dataset vocabulary, ie the representation of the features that 
@@ -414,6 +335,7 @@ class LCDataset:
 
         Returns:
         - embedding_vocab_matrix: Matrix of embeddings for the dataset vocabulary.
+        - token_to_index_mapping: Mapping of token indices to their respective words.
         """
 
         print("\n\tconstructing (pretrained) embeddings dataset vocabulary matrix...")    
@@ -421,6 +343,11 @@ class LCDataset:
         print("self.pretrained:", self.pretrained)
         print("self.pretrained_path:", self.pretrained_path)
         
+        # Dictionary to store the index-token mapping
+        self.token_to_index_mapping = {}
+
+        oov_tokens = 0
+
         if (self.pretrained in ['word2vec', 'glove']):
             
             print("word based embeddings...")
@@ -434,42 +361,57 @@ class LCDataset:
             print("vocab_size:", self.vocab_size)
 
             print("creating (pretrained) embedding matrix which aligns with dataset vocabulary...")
+            
+            #
+            # create the embedding matrix that aligns with the vocabulary
+            #
             self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
 
-            # Extract pretrained embeddings for words in the vocabulary
+            # Loop through the dataset vocabulary and fill the embedding matrix
             for word, idx in self.vectorizer.vocabulary_.items():
-                
+                self.token_to_index_mapping[idx] = word  # Store the token at its index
+
                 # For Word2Vec and GloVe (retrieving word vectors)
-                if self.pretrained in ['word2vec', 'glove']:
-                    if word in self.model.key_to_index:  # Check if the word is in the model's vocabulary
-                        self.embedding_vocab_matrix[idx] = self.model[word]
-                    else:
-                        # Handle OOV words with a random embedding
-                        self.embedding_vocab_matrix[idx] = np.random.normal(size=(self.embedding_dim,))
-                
-                # For FastText (supports subword-level embeddings for OOV words)
-                elif self.pretrained == 'fasttext':
-                    if word in self.model.wv.key_to_index:  # If the word exists in the FastText vocabulary
-                        self.embedding_vocab_matrix[idx] = self.model.wv[word]
-                    else:
-                        # Get subword-based embedding for OOV words
-                        self.embedding_vocab_matrix[idx] = self.model.wv[word]
+                if word in self.model.key_to_index:  # Check if the word exists in the pretrained model
+                    self.embedding_vocab_matrix[idx] = self.model[word]
+                else:
+                    #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
+                    # Handle OOV words with a random embedding (you could also use a zero vector if preferred)
+                    self.embedding_vocab_matrix[idx] = np.random.normal(size=(self.embedding_dim,))
+                    oov_tokens += 1
                     
-        elif (self.pretrained == 'fastText'):
+        elif (self.pretrained == 'fasttext'):
 
             print(f"subword based embeddings...")
 
-            # create the embedding matrix that aligns with the vocabulary
+            print("model:", type(self.model))
+            print("model.vector_size:", self.model.vector_size)
+
+            self.embedding_dim = self.model.vector_size
             self.vocab_size = len(self.vectorizer.vocabulary_)
-            print('vocab_size:', self.vocab_size)
+            print("embedding_dim:", self.embedding_dim)
+            print("vocab_size:", self.vocab_size)
+
+            print("creating (pretrained) embedding matrix which aligns with dataset vocabulary...")
+            
+            #
+            # create the embedding matrix that aligns with the vocabulary
+            #
             self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
 
+            # Loop through the dataset vocabulary
             for word, idx in self.vectorizer.vocabulary_.items():
-                # FastText automatically handles subwords, so retrieve the word vector directly
-                self.embedding_vocab_matrix[idx] = self.model.get_word_vector(word)
+                self.token_to_index_mapping[idx] = word  # Store the token at its index
 
+                if word in self.model.wv.key_to_index:  # If the word exists in FastText's vocabulary
+                    self.embedding_vocab_matrix[idx] = self.model.wv[word]
+                else:
+                    #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
+                    # FastText automatically handles subword embeddings for OOV words
+                    self.embedding_vocab_matrix[idx] = self.model.wv.get_vector(word)
+                    oov_tokens += 1
 
-        elif self.pretrained in ['bert', 'roberta', 'llama']:
+        elif self.pretrained in ['bert', 'roberta']:
                         
             print("token based embeddings...")
                   
@@ -486,84 +428,168 @@ class LCDataset:
             #
             # NB we use different embedding vocab matrices here depending upon the pretrained model
             #
-            if (self.pretrained in ['bert', 'roberta']):                                                                # BERT and RoBERTa
+            self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
+            self.vocab_size = len(self.vectorizer.vocabulary_)
 
-                self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
-                self.vocab_size = len(self.vectorizer.vocabulary_)
+            self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+            
+            print("embedding_dim:", self.embedding_dim)
+            print("dataset vocab size:", self.vocab_size)   
+    
+            # -------------------------------------------------------------------------------------------------------------
+            def _bert_embedding_vocab_matrix(vocab, batch_size=DEFAULT_CPU_BATCH_SIZE, max_len=512):
+                """
+                Construct the embedding vocabulary matrix for BERT and RoBERTa models.
+                """
 
-                self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+                print("_bert_embedding_vocab_matrix...")
+
+                print("batch_size:", batch_size)
+                print("max_len:", max_len)
+
+                embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
+                batch_words = []
+                word_indices = []
                 
-                print("embedding_dim:", self.embedding_dim)
-                print("dataset vocab size:", self.vocab_size)
-                #print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)         
+                def process_batch(batch_words, max_len):
 
-                self.embedding_vocab_matrix_orig = self.build_embedding_vocab_matrix_core(self.vocab, batch_size=MPS_BATCH_SIZE)
-                print("embedding_vocab_matrix_orig:", type(self.embedding_vocab_matrix_orig), self.embedding_vocab_matrix_orig.shape)
-
-                self.embedding_vocab_matrix = self.embedding_vocab_matrix_orig
-                
-            elif self.pretrained == 'llama':
-
-                print("creating vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary...")
-                
-                self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
-                self.vocab_size = len(self.vectorizer.vocabulary_)
-                print("embedding_dim:", self.embedding_dim)
-                print("dataset vocab size:", self.vocab_size)
-
-                self.llama_vocab_embeddings = {}                # Initialize an empty dictionary to store the embeddings
-
-                # Initialize an empty NumPy array to store the embeddings
-                embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
-
-                # Collect all tokens from the vectorizer's vocabulary
-                tokens = list(self.vectorizer.vocabulary_.keys())
-                num_tokens = len(tokens)
-                print("Number of tokens to encode:", num_tokens)
-
-                # Batch size for processing
-                batch_size = BATCH_SIZE
-
-                # Process tokens in batches
-                for batch_start in tqdm(range(0, num_tokens, batch_size), desc="Batch encoding dataset vocabulary using LLaMA..."):
-                    batch_tokens = tokens[batch_start: batch_start + batch_size]
-
-                    # Tokenize the batch of tokens using the LLaMA tokenizer
-                    input_ids = self.tokenizer(
-                        batch_tokens,
-                        return_tensors='pt',
-                        padding=True,
-                        truncation=True,
-                        max_length=TOKEN_TOKENIZER_MAX_LENGTH
-                    ).input_ids.to(self.device)
-
-                    # Get the embeddings from the LLaMA model
-                    with torch.no_grad():
-                        outputs = self.model(input_ids)
+                    inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=max_len)
                     
-                    # Mean pooling to get sentence-level embeddings for each token
-                    batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+                    # move input tensors to proper device
+                    input_ids = inputs['input_ids'].to(self.device)
+                    attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
+                    max_vocab_size = self.model.config.vocab_size
 
-                    # Store each token's embedding in the embedding matrix (direct index assignment)
-                    for i, token in enumerate(batch_tokens):
-                        # Find the index of the token in the vectorizer's vocabulary
-                        token_index = self.vectorizer.vocabulary_[token]
-                        embedding_matrix[token_index] = batch_embeddings[i]
+                    # check for out of range tokens
+                    out_of_range_ids = input_ids[input_ids >= max_vocab_size]
+                    if len(out_of_range_ids) > 0:
+                        print("Warning: The following input IDs are out of range for the model's vocabulary:")
+                        for out_id in out_of_range_ids.unique():
+                            token = self.tokenizer.decode(out_id.item())
+                            print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
+                    
+                    # Perform inference, ensuring that the model is on the same device as the inputs
+                    self.model.to(self.device)
+                    with torch.no_grad():
+                        #outputs = model(**inputs)
+                        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
 
-                print("LLaMA embeddings computed, converting to NumPy matrix.")
+                    # Return the embeddings and ensure they are on the CPU for further processing
+                    return outputs.last_hidden_state[:, 0,:].cpu().numpy()
 
-                # Assign the new embedding matrix to the model's embedding_vocab_matrix attribute
-                self.embedding_vocab_matrix = embedding_matrix
+
+                with tqdm(total=len(vocab), desc="processing bert / roberta embedding vocab matrix construction batches") as pbar:
+                    for word, idx in vocab.items():
+                        batch_words.append(word)
+                        word_indices.append(idx)
+
+                        if len(batch_words) == batch_size:
+                            embeddings = process_batch(batch_words, max_len)
+                            for i, embedding in zip(word_indices, embeddings):
+                                if i < len(embedding_vocab_matrix):
+                                    embedding_vocab_matrix[i] = embedding
+                                else:
+                                    print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
+                                    oov_tokens += 1
+                            
+                            batch_words = []
+                            word_indices = []
+                            pbar.update(batch_size)
+
+                    if batch_words:
+                        embeddings = process_batch(batch_words, max_len)
+                        for i, embedding in zip(word_indices, embeddings):
+                            if i < len(embedding_vocab_matrix):
+                                embedding_vocab_matrix[i] = embedding
+                            else:
+                                print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
+                                oov_tokens += 1
+                        
+                        pbar.update(len(batch_words))
+
+                return embedding_vocab_matrix
+            # -------------------------------------------------------------------------------------------------------------
+
+            #tokenize and prepare inputs
+            max_length = self.tokenizer.model_max_length
+            #print("max_length:", max_length)
+
+            self.embedding_vocab_matrix = _bert_embedding_vocab_matrix(self.vocab, batch_size=BATCH_SIZE, max_len=max_length)
+            
+            # Add to token-to-index mapping for BERT and RoBERTa
+            for word, idx in self.vectorizer.vocabulary_.items():
+                self.token_to_index_mapping[idx] = word  # Store the token at its index
+
+        elif self.pretrained == 'llama':
+
+            print("creating vocabulary list of LLaMA encoded tokens based on the vectorizer vocabulary...")
+            
+            self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
+            self.vocab_size = len(self.vectorizer.vocabulary_)
+            print("embedding_dim:", self.embedding_dim)
+            print("dataset vocab size:", self.vocab_size)
+
+            self.llama_vocab_embeddings = {}                # Initialize an empty dictionary to store the embeddings
+
+            # Initialize an empty NumPy array to store the embeddings
+            embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
+
+            # Collect all tokens from the vectorizer's vocabulary
+            tokens = list(self.vectorizer.vocabulary_.keys())
+            num_tokens = len(tokens)
+            print("Number of tokens to encode:", num_tokens)
+
+            # Batch size for processing
+            batch_size = BATCH_SIZE
+
+            # Process tokens in batches
+            for batch_start in tqdm(range(0, num_tokens, batch_size), desc="encoding dataset vocabulary using LLaMA..."):
+                batch_tokens = tokens[batch_start: batch_start + batch_size]
+
+                # Tokenize the batch of tokens using the LLaMA tokenizer
+                input_ids = self.tokenizer(
+                    batch_tokens,
+                    return_tensors='pt',
+                    padding=True,
+                    truncation=True,
+                    #max_length=max_length                  # should pick up max length from the underlying model
+                ).input_ids.to(self.device)
+
+                # Get the embeddings from the LLaMA model
+                with torch.no_grad():
+                    outputs = self.model(input_ids)
+                
+                # Mean pooling to get sentence-level embeddings for each token
+                batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                # Store each token's embedding in the embedding matrix (direct index assignment)
+                for i, token in enumerate(batch_tokens):
+                    # Find the index of the token in the vectorizer's vocabulary
+                    token_index = self.vectorizer.vocabulary_[token]
+                    embedding_matrix[token_index] = batch_embeddings[i]
+                    self.token_to_index_mapping[token_index] = token  # Store the token at its index
+
+            print("LLaMA embeddings computed, converting to NumPy matrix.")
+
+            # Assign the new embedding matrix to the model's embedding_vocab_matrix attribute
+            self.embedding_vocab_matrix = embedding_matrix
 
         else:
             raise ValueError("Invalid pretrained type.")
         
         # should be a numpy array 
-        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        #print(self.embedding_vocab_matrix)
 
-        return self.embedding_vocab_matrix
-            
+        print("self.token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+        #print(self.token_to_index_mapping)
 
+        print("oov_words:", oov_tokens)
+
+        return self.embedding_vocab_matrix, self.token_to_index_mapping
+    
+
+    # -------------------------------------------------------------------------------------------------------------
 
     def generate_dataset_embeddings(self):
         """
@@ -601,12 +627,19 @@ class LCDataset:
             self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
             self.Xte_weighted_embeddings = self.Xte_avg_embeddings
             
-        elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddins
+        elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddings
             
             print("generating word / subword based dataset repressentations...")
+
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
+                self.Xtr.tolist(), 
+                self.embedding_vocab_matrix
+            )
             
-            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(self.Xtr.tolist(), self.embedding_vocab_matrix)
-            self.self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(self.Xte.tolist(), self.embedding_vocab_matrix)
+            self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(
+                self.Xte.tolist(), 
+                self.embedding_vocab_matrix
+            )
 
             # CLS token summary embeddings not supported in pretrained 
             # word embedding models like word2vec, GloVe or fasTtext
@@ -681,16 +714,29 @@ class LCDataset:
             random_state = 1
         )
 
-        print("Train Size =", self.X_train_raw.shape, "\nTest Size = ", self.X_test_raw.shape)
+        # reset indeces
+        self.X_train_raw = self.X_train_raw.reset_index(drop=True)
+        self.X_test_raw = self.X_test_raw.reset_index(drop=True)
+
+        #
+        # inspect the raw text
+        #
+        print("self.X_train_raw:", type(self.X_train_raw), self.X_train_raw.shape)
+        print("self.X_train_raw[0]:\n", self.X_train_raw[0])
+
+        print("self.X_test_raw:", type(self.X_test_raw), self.X_test_raw.shape)
+        print("self.X_test_raw[0]:\n", self.X_test_raw[0])
+
+        print("preprocessing raw text...")
 
         # preprocess the text (stopword removal, mask numbers, etc)
         self.Xtr = self._preprocess(self.X_train_raw)
-        print("Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("Xtr[0]:\n", self.Xtr[0])
+        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("self.Xtr[0]:\n", self.Xtr[0])
 
         self.Xte = self._preprocess(self.X_test_raw)
-        print("Xte:", type(self.Xte), self.Xte.shape)
-        print("Xte[0]:\n", self.Xte[0])       
+        print("self.Xte:", type(self.Xte), self.Xte.shape)
+        print("self.Xte[0]:\n", self.Xte[0])       
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -748,6 +794,17 @@ class LCDataset:
         self.classification_type = 'singlelabel'
         self.class_type = 'singlelabel'
         
+        #
+        # inspect the raw text
+        #
+        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data[0]:\n", self.devel.data[0])
+
+        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data[0]:\n", self.test.data[0])
+
+        print("preprocessing raw text...")
+
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
@@ -815,11 +872,19 @@ class LCDataset:
         self.devel = fetch_reuters21578(subset='train', data_path=data_path)
         self.test = fetch_reuters21578(subset='test', data_path=data_path)
 
-        #print("dev target names:", type(devel), devel.target_names)
-        #print("test target names:", type(test), test.target_names)
-
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
+
+        #
+        # inspect the raw text
+        #
+        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data[0]:\n", self.devel.data[0])
+
+        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data[0]:\n", self.test.data[0])
+
+        print("preprocessing raw text...")
         
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -877,16 +942,6 @@ class LCDataset:
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
 
-
-        """
-        self.y = self.devel_target
-        print("y:", type(self.y), self.y.shape)
-
-        # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(self.y)  # No need for transpose
-        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
-        """
-
         return self.label_names
 
 
@@ -900,11 +955,22 @@ class LCDataset:
 
         print("data_path:", data_path)  
 
-        self.classification_type = 'multilabel'
-        self.class_type = 'multilabel'
-        
         self.devel = fetch_ohsumed50k(subset='train', data_path=data_path)
         self.test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        self.classification_type = 'multilabel'
+        self.class_type = 'multilabel'
+
+        #
+        # inspect the raw text
+        #
+        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data[0]:\n", self.devel.data[0])
+
+        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data[0]:\n", self.test.data[0])
+
+        print("preprocessing raw text...")
 
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -1001,16 +1067,17 @@ class LCDataset:
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
 
-        """
-        print("training data:", type(devel))
-        print("training data:", type(devel.data), len(devel.data))
-        print("training targets:", type(devel.target), len(devel.target))
+        #
+        # inspect the raw text
+        #
+        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data[0]:\n", self.devel.data[0])
 
-        print("testing data:", type(test))
-        print("testing data:", type(test.data), len(test.data))
-        print("testing targets:", type(test.target), len(test.target))
-        """
-        
+        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data[0]:\n", self.test.data[0])
+
+        print("preprocessing raw text...")
+
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
@@ -1067,16 +1134,6 @@ class LCDataset:
         self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
-
-
-        """
-        self.y = self.devel_target
-        print("y:", type(self.y), self.y.shape)
-
-        # Convert Y to a sparse matrix
-        self.y_sparse = csr_matrix(self.y)  # No need for transpose
-        print("y_sparse:", type(self.y_sparse), self.y_sparse.shape)
-        """
 
         return self.label_names
 
@@ -1148,7 +1205,8 @@ class LCDataset:
 
     def _preprocess(self, text_series: pd.Series):
         """
-        Preprocess a pandas Series of texts by removing punctuation and stopwords.
+        Preprocess a pandas Series of texts by removing punctuation and stopwords. NB we do NOT lowercase
+        the text so we allow the tokenizers and language models to work with case-sensitive data.
 
         Parameters:
         - text_series: A pandas Series containing text data (strings).
@@ -1156,6 +1214,7 @@ class LCDataset:
         Returns:
         - processed_texts: A NumPy array containing processed text strings.
         """
+
         print("preprocessing text...")
         print("text_series:", type(text_series), text_series.shape)
 
@@ -1168,9 +1227,9 @@ class LCDataset:
             # Remove punctuation
             text = text.translate(punctuation_table)
             
-            # Tokenize and remove stopwords
-            filtered_words = [word for word in text.lower().split() if word not in stop_words]
-            
+            # Tokenize and remove stopwords without lowercasing the text
+            filtered_words = [word for word in text.split() if word.lower() not in stop_words]  # Ensure stopwords match correctly
+
             # Join back into a single string
             return ' '.join(filtered_words)
 

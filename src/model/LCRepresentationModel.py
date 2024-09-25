@@ -48,6 +48,13 @@ else:
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+
+WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
+
+FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
+
 #BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
 BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
@@ -56,16 +63,7 @@ ROBERTA_MODEL = 'roberta-large'
 
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096, case sensitive
 #LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
-
-FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
-
-WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
-
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
 # -------------------------------------------------------------------------------------------------------
-
-TOKEN_TOKENIZER_MAX_LENGTH = 512
 
 
 MIN_DF_COUNT = 5
@@ -79,8 +77,6 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
-
-
 
 
 
@@ -127,54 +123,6 @@ class LCRepresentationModel(RepresentationModel, ABC):
 
         self.initialized = True
 
-
-    def _tokenize(self, text_list):
-        """Tokenizes a list of text strings."""
-        encoded = self.tokenizer.batch_encode_plus(
-            text_list,
-            add_special_tokens=True,                                            
-            return_attention_mask=True,
-            padding=True,                                                       # Pad to the longest sequence in the batch
-            truncation=True,                                                    # Truncate to model max input length
-            max_length=TOKEN_TOKENIZER_MAX_LENGTH,                              # specify max_length for truncation
-            return_tensors='pt'                                                 # Return PyTorch tensors
-        )
-        
-        return encoded['input_ids'], encoded['attention_mask']
-
-
-    def _custom_tokenizer(self, text):
-        """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        
-        Parameters:
-        - text: The input text to be tokenized.
-        
-        Returns:
-        - tokens: A list of tokens with special tokens removed based on the model in use.
-        """
-        # Tokenize the text into words/subwords
-        tokens = self.tokenizer.tokenize(text, max_length=TOKEN_TOKENIZER_MAX_LENGTH, truncation=True)
-        
-        # Define special tokens based on the model in use
-        special_tokens = []
-        if self.pretrained == 'bert':
-            # BERT special tokens
-            special_tokens = ["[CLS]", "[SEP]"]
-        elif self.pretrained == 'roberta':
-            # RoBERTa special tokens
-            special_tokens = ["<s>", "</s>"]  # RoBERTa uses <s> for CLS and </s> for SEP
-        elif self.pretrained == 'llama':
-            # LLaMA special tokens
-            special_tokens = ["<s>", "</s>", "<pad>", "<unk>"]  # Adjust based on the actual tokenizer used for LLaMA
-        
-        # Optionally, remove special tokens
-        tokens = [token for token in tokens if token not in special_tokens]
-
-        return tokens
-
-
     def get_model(self):
         return self.model
     
@@ -188,7 +136,6 @@ class LCRepresentationModel(RepresentationModel, ABC):
         Abstract method to be implemented by all subclasses.
         """
         pass
-
 
 
 
@@ -232,7 +179,6 @@ class WordLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid model type. Use 'word2vec' or 'glove'.")
         
-
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
@@ -240,37 +186,27 @@ class WordLCRepresentationModel(LCRepresentationModel):
         self.embedding_dim = self.model.vector_size
         print(f"Embedding dimension: {self.embedding_dim}")
 
+        #
+        # vectorize the text, note that the Word2Vec and GloVe models we use are case sensitive
+        #
         if vtype == 'tfidf':
             print("using TF-IDF vectorization...")
-            self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
+            
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                sublinear_tf=True,                              # use sublinear TF scaling
+                lowercase=False                                 # dont lowercase the tokens
+            )              
         elif vtype == 'count':
             print("using Count vectorization...")
-            self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
+
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                lowercase=False                                 # dont lowercase the tokens
+            )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
-
-
-
-    def _tokenize(self, text_list):
-        """
-        Tokenizes the input text into words.
-        Word-based models (Word2Vec, GloVe) do not require subword tokenization like transformers.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to tokenize.
-
-        Returns:
-        -------
-        tokenized_texts : list of list of str
-            List of tokenized sentences (each sentence is a list of words).
-        """
         
-        tokenized_texts = [text.split() for text in text_list]  # Simple word tokenization by splitting on spaces
-
-        return tokenized_texts
-    
 
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
@@ -293,47 +229,46 @@ class WordLCRepresentationModel(LCRepresentationModel):
         weighted_document_embeddings = []
         avg_document_embeddings = []
 
+        unk_token_id = self.vectorizer.vocabulary_.get('<unk>', None)  # Check for the existence of an UNK token
+        print("unk_token_id:", unk_token_id)
+        
+        oov_tokens = 0
+
         for doc in texts:
-            # Tokenize the document
-            tokens = doc.split()
+
+            # Tokenize the document using the vectorizer (ensures consistency in tokenization)
+            tokens = self.vectorizer.build_analyzer()(doc)
 
             # Calculate TF-IDF weights for the tokens
             tfidf_vector = self.vectorizer.transform([doc]).toarray()[0]
 
             weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
             total_weight = 0.0
-            valid_embeddings = []
-
-            unk_token_id = self.vectorizer.vocabulary_.get('<unk>', None)  # Check for the existence of an UNK token
+            valid_embeddings = []    
 
             for token in tokens:
                 #token_lower = token.lower()
 
                 #token_id = self.vectorizer.vocabulary_.get(token.lower(), None)
                 token_id = self.vectorizer.vocabulary_.get(token, None)
+                #print("token:", token, "token_id:", token_id)
 
                 if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
-                    # Get the embedding for the token
-                    embedding = embedding_vocab_matrix[token_id]
                     
-                    # Get the TF-IDF weight for the token
-                    weight = tfidf_vector[token_id]
+                    embedding = embedding_vocab_matrix[token_id]            # Get the embedding for the token
+                    weight = tfidf_vector[token_id]                         # Get the TF-IDF weight for the token
 
                     # Accumulate the weighted embedding
                     weighted_sum += embedding * weight
                     total_weight += weight    
-                    
-                    # Add to the valid embeddings list for averaging
-                    valid_embeddings.append(embedding)
-            
+
                 elif unk_token_id is not None:
-                    # Fallback to <unk> embedding if available
-                    embedding = embedding_vocab_matrix[unk_token_id]
-                
+                    embedding = embedding_vocab_matrix[unk_token_id]        # Fallback to <unk> embedding if available
                 else:
                     # OOV token handling: Use a zero vector if no embedding is found
-                    print(f"Warning: OOV token: {token}")
+                    #print(f"Warning: OOV token: {token}")
                     embedding = np.zeros(embedding_vocab_matrix.shape[1])
+                    oov_tokens += 1
                 
                 valid_embeddings.append(embedding)
                 
@@ -354,6 +289,8 @@ class WordLCRepresentationModel(LCRepresentationModel):
 
         print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
         print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
+
+        print("oov_tokens:", oov_tokens)
 
         return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
     
@@ -400,36 +337,27 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         self.embedding_dim = self.model.vector_size
         print(f"Embedding dimension: {self.embedding_dim}")
 
+        #
+        # vectorize the text, note that the Word2Vec and GloVe models we use are case sensitive
+        #
         if vtype == 'tfidf':
             print("using TF-IDF vectorization...")
-            self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True)              # alignment with 2019 paper params
+            
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                sublinear_tf=True,                              # use sublinear TF scaling
+                lowercase=False                                 # dont lowercase the tokens
+            )              
         elif vtype == 'count':
             print("using Count vectorization...")
-            self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT)
+
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                lowercase=False                                 # dont lowercase the tokens
+            )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-
-
-    def _tokenize(self, text_list):
-        """
-        Tokenizes the input text into words.
-        Word-based models (Word2Vec, GloVe) do not require subword tokenization like transformers.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to tokenize.
-
-        Returns:
-        -------
-        tokenized_texts : list of list of str
-            List of tokenized sentences (each sentence is a list of words).
-        """
-        
-        tokenized_texts = [text.split() for text in text_list]  # Simple word tokenization by splitting on spaces
-
-        return tokenized_texts
 
 
     def encode_docs(self, texts, embedding_vocab_matrix):
@@ -453,9 +381,12 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         weighted_document_embeddings = []
         avg_document_embeddings = []
 
+        oov_tokens = 0
+
         for doc in texts:
-            # Tokenize the document
-            tokens = doc.split()
+            
+            # Tokenize the document using the vectorizer (ensures consistency in tokenization)
+            tokens = self.vectorizer.build_analyzer()(doc)
 
             # Calculate TF-IDF weights for the tokens
             tfidf_vector = self.vectorizer.transform([doc]).toarray()[0]
@@ -465,14 +396,14 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             valid_embeddings = []
 
             for token in tokens:
-
                 # Get the embedding from FastText
                 try:
                     embedding = self.model.wv.get_vector(token)  # FastText handles subword embeddings here
                 except KeyError:
                     # If the token or subwords cannot be found (rare with FastText), use a zero vector
-                    print(f"Warning: OOV token: {token}")
+                    #print(f"Warning: OOV token: {token}")
                     embedding = np.zeros(embedding_vocab_matrix.shape[1])
+                    oov_tokens += 1
 
             # Get the TF-IDF weight if available, else assign a default weight of 1 (or 0 if not in vocabulary)
             weight = tfidf_vector[self.vectorizer.vocabulary_.get(token, 0)]
@@ -496,8 +427,11 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
         print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
 
+        print("oov_tokens:", oov_tokens)
+
         return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
-    
+
+
 
 
 class BERTLCRepresentationModel(LCRepresentationModel):
@@ -513,33 +447,98 @@ class BERTLCRepresentationModel(LCRepresentationModel):
 
         # instantiate model and tokenizer
         self.model = BertModel.from_pretrained(model_name, cache_dir=model_dir)
-        self.tokenizer = BertTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
+        
+        self.tokenizer = BertTokenizerFast.from_pretrained(
+            model_name, 
+            cache_dir=model_dir,
+            do_lower_case=False                 # keep tokenizer case sensitive
+        )
 
-        # Ensure padding token is available
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
+        # NB BertTokenizerFast has a pad_token
             
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True, tokenizer=self._custom_tokenizer)
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
         elif vtype == 'count':
-            self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT, tokenizer=self._custom_tokenizer)
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
 
 
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the BERT tokenizer, returning token IDs and attention masks.
+
+        Parameters:
+        ----------
+        texts : list of str
+            List of sentences to tokenize.
+
+        Returns:
+        -------
+        input_ids : torch.Tensor
+            Tensor of token IDs for each sentence.
+        attention_mask : torch.Tensor
+            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
+        """
+
+        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
+        inputs = self.tokenizer(
+            texts,
+            return_tensors='pt',            # Return PyTorch tensors
+            padding=True,                   # Pad the sequences to the longest sequence in the batch
+            truncation=True,                # Truncate sequences that exceed the max length
+            max_length=self.max_length           # Define a max length (usually 512 for BERT)
+        )
+        
+        # Return input IDs and attention mask as tensors
+        return inputs['input_ids'], inputs['attention_mask']
+
+
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
-        Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
+        Generates both the mean and first token embeddings for a list of text sentences using BERT.
         
-        RoBERTa does not use a [CLS] token, but the first token often serves a similar purpose.
         This function computes:
         - The mean of all token embeddings.
-        - The first token embedding (position 0).
-
-        Generates embeddings for a list of text sentences using BERT.
+        - The first token embedding (position 0, [CLS] token for BERT).
 
         Parameters:
         ----------
@@ -551,10 +550,10 @@ class BERTLCRepresentationModel(LCRepresentationModel):
         mean_embeddings : np.ndarray
             Array of mean sentence embeddings (mean of all tokens).
         first_token_embeddings : np.ndarray
-            Array of sentence embeddings using the first token.
+            Array of sentence embeddings using the [CLS] token.
         """
 
-        print("Encoding sentences for RoBERTa...")
+        print("encoding docs using BERT...")
 
         self.model.eval()
         mean_embeddings = []
@@ -565,7 +564,7 @@ class BERTLCRepresentationModel(LCRepresentationModel):
                 input_ids, attention_mask = self._tokenize(batch)
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                
+
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                 token_vectors = outputs[0]  # Token-level embeddings from RoBERTa
 
@@ -582,6 +581,7 @@ class BERTLCRepresentationModel(LCRepresentationModel):
         first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
 
         return mean_embeddings, first_token_embeddings
+
 
 
 class RoBERTaLCRepresentationModel(LCRepresentationModel):
@@ -595,24 +595,86 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
 
         super().__init__(model_name, model_dir)                             # parent constructor
 
-        #full_model_path = model_dir + '/' + model_name
         self.model = RobertaModel.from_pretrained(model_name, cache_dir=model_dir)
         self.tokenizer = RobertaTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
     
-        # Ensure padding token is available
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-            
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
+        # NB RoBERTaTokenizerFast has a pad_token
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True, tokenizer=self._custom_tokenizer)
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
         elif vtype == 'count':
-            self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT, tokenizer=self._custom_tokenizer)
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
 
+
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the BERT tokenizer, returning token IDs and attention masks.
+
+        Parameters:
+        ----------
+        texts : list of str
+            List of sentences to tokenize.
+
+        Returns:
+        -------
+        input_ids : torch.Tensor
+            Tensor of token IDs for each sentence.
+        attention_mask : torch.Tensor
+            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
+        """
+
+
+        inputs = self.tokenizer(
+            texts,
+            return_tensors='pt',            # Return PyTorch tensors
+            padding=True,                   # Pad the sequences to the longest sequence in the batch
+            truncation=True,                # Truncate sequences that exceed the max length
+            max_length=self.max_length           # Define a max length (usually 512 for BERT)
+        )
+        
+        # Return input IDs and attention mask as tensors
+        return inputs['input_ids'], inputs['attention_mask']
+    
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
@@ -626,7 +688,7 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
         Parameters:
         ----------
         text_list : list of str
-            List of sentences to encode.
+            List of docs to encode.
 
         Returns:
         -------
@@ -635,7 +697,8 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
         first_token_embeddings : np.ndarray
             Array of sentence embeddings using the first token.
         """
-        print("Encoding sentences for RoBERTa...")
+
+        print("encoding docs using RoBERTa...")
 
         self.model.eval()
         mean_embeddings = []
@@ -646,7 +709,7 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
                 input_ids, attention_mask = self._tokenize(batch)
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                
+
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                 token_vectors = outputs[0]  # Token-level embeddings from RoBERTa
 
@@ -662,21 +725,29 @@ class RoBERTaLCRepresentationModel(LCRepresentationModel):
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
 
+
         return mean_embeddings, first_token_embeddings
 
     
 
-# LLAMARepresentation subclass implementing sentence encoding using LLAMA
-class LlaMaLCRepresentationModel(LCRepresentationModel):
 
+class LlaMaLCRepresentationModel(LCRepresentationModel):
+    """
+    LLAMARepresentation subclass implementing sentence encoding using LLAMA
+    """
+    
     def __init__(self, model_name=LLAMA_MODEL, model_dir=VECTOR_CACHE+'/LlaMa', vtype='tfidf'):
         
         print("initializing LLAMA representation model...")
 
-        super().__init__(model_name, model_dir, vtype)                             # parent constructor
+        super().__init__(model_name, model_dir)                             # parent constructor
     
         self.model = LlamaModel.from_pretrained(model_name, cache_dir=model_dir)
-        self.tokenizer = LlamaTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
+        
+        self.tokenizer = LlamaTokenizerFast.from_pretrained(
+            model_name, 
+            cache_dir=model_dir
+        )
 
         # Ensure padding token is available
         if self.tokenizer.pad_token is None:
@@ -684,13 +755,77 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
             
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(min_df=MIN_DF_COUNT, sublinear_tf=True, tokenizer=self._custom_tokenizer)
+            self.vectorizer = TfidfVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                lowercase=False, 
+                sublinear_tf=True, 
+                tokenizer=self._custom_tokenizer
+            )
         elif vtype == 'count':
-            self.vectorizer = CountVectorizer(min_df=MIN_DF_COUNT, tokenizer=self._custom_tokenizer)
+            self.vectorizer = CountVectorizer(
+                #min_df=MIN_DF_COUNT, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")          
 
         self.model.to(self.device)      # put the model on the appropriate device
+
+
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        #tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+
+        tokens = self.tokenizer.tokenize(text, truncation=True)         # should pick up the max_length based upon model
+
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the LLaMa tokenizer, returning token IDs and attention masks.
+
+        Parameters:
+        ----------
+        texts : list of str
+            List of sentences to tokenize.
+
+        Returns:
+        -------
+        input_ids : torch.Tensor
+            Tensor of token IDs for each sentence.
+        attention_mask : torch.Tensor
+            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
+        """
+
+        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
+        inputs = self.tokenizer(
+            texts,
+            return_tensors='pt',            # Return PyTorch tensors
+            padding=True,                   # Pad the sequences to the longest sequence in the batch
+            truncation=True                # Truncate sequences that exceed the max length
+            #max_length=self.max_length           # Define a max length (usually 512 for LLaMa)
+        )
+        
+        # Return input IDs and attention mask as tensors
+        return inputs['input_ids'], inputs['attention_mask']
 
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
@@ -713,7 +848,8 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         last_embeddings : np.ndarray
             Array of sentence embeddings using the last token.
         """
-        print("Encoding sentences for LLaMa (optimized)...")
+        
+        print("encoding docs using LLaMa...")
 
         self.model.eval()
         mean_embeddings = []
@@ -724,7 +860,7 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
                 input_ids, attention_mask = self._tokenize(batch)
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                
+
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                 token_vectors = outputs[0]  # Token-level embeddings from LLaMa
 
