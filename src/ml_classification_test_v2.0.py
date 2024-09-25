@@ -524,6 +524,8 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 
     print("loadpt_data():", dataset, PICKLE_DIR)
 
+    print("pretrained:", pretrained)
+    
     #
     # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
     #
@@ -542,14 +544,17 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
     else:
         model_name = None
 
-    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
+    print("model_name:", model_name)
 
-    print(f"Loading data set {dataset}...")
+    
+    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
+    
+    # remove '/' from the file name
+    pickle_file_name = pickle_file_name.replace("/", "_")               # Replace forward slash with an underscore
 
     pickle_file = PICKLE_DIR + pickle_file_name                                     
-        
-    print("pretrained:", pretrained)
-    
+    print("pickle_file:", pickle_file)
+
     #
     # we pick up the vectorized dataset along with the associated pretrained 
     # embedding matrices when e load the data - either from data files directly

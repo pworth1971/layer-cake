@@ -797,10 +797,10 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
-        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
         print("preprocessing raw text...")
@@ -860,7 +860,6 @@ class LCDataset:
 
 
 
-
     def _load_reuters(self):
 
         print("\n\tloading reuters21578 dataset...")
@@ -878,10 +877,10 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
-        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
         print("preprocessing raw text...")
@@ -964,10 +963,10 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
-        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
         print("preprocessing raw text...")
@@ -1070,10 +1069,10 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("self.devel.data:", type(self.devel.data), self.devel.data.shape)
+        print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
-        print("self.test.data:", type(self.test.data), self.test.data.shape)
+        print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
         print("preprocessing raw text...")
@@ -1358,7 +1357,7 @@ class LCDataset:
                         pickle.dump(dataset, file)
                     print("data successfully pickled at:", full_pickle_path)
                 except Exception as e:
-                    print(f'\n\tERROR: Exception raised, failed to pickle data: {e}')
+                    print(f'\n\t------*** ERROR: Exception raised, failed to pickle data: {e} ***------')
 
         else:
             print(f'loading dataset {dataset_name}')
@@ -1408,7 +1407,7 @@ def save_to_pickle(Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train, y_
         return True
 
     except Exception as e:
-        print(f'Exception raised, failed to pickle data to {pickle_file}: {e}')
+        print(f'\n\t------*** ERROR: Exception raised, failed to save pickle file {pickle_file}. {e} ***------')
         return False
         
    
