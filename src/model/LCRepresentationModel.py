@@ -52,7 +52,7 @@ FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, cas
 BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
 #ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
-ROBERTA_MODEL = 'roberta-large'
+ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
 
 LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096, case sensitive
 #LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
@@ -616,6 +616,7 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
 
             print("batch_size:", batch_size)
             print("max_len:", max_len)
+            print("vocab:", type(vocab), len(vocab))
 
             embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
             batch_words = []
@@ -683,7 +684,7 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         max_length = self.tokenizer.model_max_length
         #print("max_length:", max_length)
 
-        self.embedding_vocab_matrix = _bert_embedding_vocab_matrix(self.vocab, batch_size=BATCH_SIZE, max_len=max_length)
+        self.embedding_vocab_matrix = _bert_embedding_vocab_matrix(self.vectorizer.vocabulary_, batch_size=BATCH_SIZE, max_len=max_length)
         
         # Add to token-to-index mapping for BERT and RoBERTa
         for word, idx in self.vectorizer.vocabulary_.items():
