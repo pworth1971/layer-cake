@@ -238,28 +238,7 @@ class LCDataset:
         """
         Build vector representation of data set using TF-IDF or CountVectorizer and constructing 
         the embeddings such that they align with pretrained embeddings tokenization method
-        """
-
-        print("\n\t vectorizing dataset...")
         
-        if (debug):
-            print("model:\n", self.model)
-            print("tokenizer:\n", self.tokenizer)
-            print("vectorizer:\n", self.vectorizer)
-            print("self.vectorization_type:", self.vectorization_type)
-            print("self.embedding_type:", self.embedding_type)
-        
-        print("fitting training data...")
-        print("Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("Xte:", type(self.Xte), self.Xte.shape)
-
-        # Fit and transform the text data
-        self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
-        self.Xte_vectorized = self.vectorizer.transform(self.Xte)
-        print("Xtr_vectorized:", type(self.Xtr_vectorized), self.Xtr_vectorized.shape)
-        print("Xte_vectorized:", type(self.Xte_vectorized), self.Xte_vectorized.shape)
-
-        """
         NB: We have a few different variants of the vectorizer vocabulary that we need, that seem
         to work in different situations, in particular with respect to BERT and LlaMa embeddings 
         when we perform the dot product operation to project the tfidf vectorized text into the pretrained 
@@ -278,6 +257,25 @@ class LCDataset:
         column represents a term's TF-IDF score, get_feature_names_out() will tell you which term each column 
         corresponds to.
         """
+
+        print("\tvectorizing dataset...")
+        
+        if (debug):
+            print("model:\n", self.model)
+            print("tokenizer:\n", self.tokenizer)
+            print("vectorizer:\n", self.vectorizer)
+            print("self.vectorization_type:", self.vectorization_type)
+            print("self.embedding_type:", self.embedding_type)
+        
+        print("fitting training data...")
+        print("Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("Xte:", type(self.Xte), self.Xte.shape)
+
+        # Fit and transform the text data
+        self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
+        self.Xte_vectorized = self.vectorizer.transform(self.Xte)
+        print("Xtr_vectorized:", type(self.Xtr_vectorized), self.Xtr_vectorized.shape)
+        print("Xte_vectorized:", type(self.Xte_vectorized), self.Xte_vectorized.shape)
         
         self.vocab_ = self.vectorizer.vocabulary_
         print("vocab_:", type(self.vocab_), len(self.vocab_))
@@ -308,7 +306,7 @@ class LCDataset:
         Initialize the dataset with pretrained embeddings.
         """
 
-        print("\n\tinitializing embedding matrices...")
+        print("initializing embedding matrices...")
         
         self.pretrained_path = self.embedding_path
         print("self.pretrained:", self.pretrained)
@@ -473,7 +471,7 @@ class LCDataset:
         print("self.X_test_raw:", type(self.X_test_raw), self.X_test_raw.shape)
         print("self.X_test_raw[0]:\n", self.X_test_raw[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
 
         # preprocess the text (stopword removal, mask numbers, etc)
         self.Xtr = self._preprocess(self.X_train_raw)
@@ -549,7 +547,7 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
 
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -629,7 +627,7 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
         
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -715,7 +713,7 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
 
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -821,7 +819,7 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
 
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
@@ -1225,7 +1223,7 @@ def _label_matrix(tr_target, te_target):
     print("ytr:", type(ytr), ytr.shape)
     print("yte:", type(yte), yte.shape)
 
-    print("MultiLabelBinarizer.classes_:", mlb.classes_)
+    #print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
 
     return ytr, yte, mlb.classes_
 

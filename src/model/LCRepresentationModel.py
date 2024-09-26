@@ -1,27 +1,20 @@
 import numpy as np
-import os
 import torch
 from tqdm import tqdm
 
 from simpletransformers.language_representation import RepresentationModel
-from simpletransformers.language_representation.representation_model import batch_iterable, mean_across_all_tokens, \
-    concat_all_tokens
-
-from transformers import AutoModel, AutoConfig, AutoTokenizer
 from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
 from transformers import BertModel, LlamaModel, RobertaModel
-
 
 from abc import ABC, abstractmethod
 
 from gensim.models import KeyedVectors
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from gensim.models.fasttext import load_facebook_model
 
-from util.common import VECTOR_CACHE, DATASET_DIR
+from util.common import VECTOR_CACHE
 
 
 # batch sizes for pytorch encoding routines
@@ -65,10 +58,7 @@ LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096, 
 #LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
 # -------------------------------------------------------------------------------------------------------
 
-
-MIN_DF_COUNT = 5
 MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
-
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -77,8 +67,6 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
-
-
 
 
 
@@ -226,19 +214,25 @@ class WordLCRepresentationModel(LCRepresentationModel):
         # Dictionary to store the index-token mapping
         self.token_to_index_mapping = {}
 
+        # Calculate the mean of all embeddings in the model as a fallback for OOV tokens
+        mean_vector = np.mean(self.model.vectors, axis=0)
+    
         oov_tokens = 0
 
         # Loop through the dataset vocabulary and fill the embedding matrix
         for word, idx in self.vectorizer.vocabulary_.items():
             self.token_to_index_mapping[idx] = word  # Store the token at its index
 
-            # For Word2Vec and GloVe (retrieving word vectors)
-            if word in self.model.key_to_index:  # Check if the word exists in the pretrained model
+            # Check for the word in the original case first
+            if word in self.model.key_to_index:
                 self.embedding_vocab_matrix[idx] = self.model[word]
+            # If not found, check the lowercase version of the word
+            elif word.lower() in self.model.key_to_index:
+                self.embedding_vocab_matrix[idx] = self.model[word.lower()]
+            # If neither is found, handle it as an OOV token
             else:
                 #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
-                # Handle OOV words with a random embedding (you could also use a zero vector if preferred)
-                self.embedding_vocab_matrix[idx] = np.random.normal(size=(self.embedding_dim,))
+                self.embedding_vocab_matrix[idx] = mean_vector  # Use the mean of all vectors as a substitute
                 oov_tokens += 1
 
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
@@ -246,7 +240,6 @@ class WordLCRepresentationModel(LCRepresentationModel):
         print("oov_tokens:", oov_tokens)
 
         return self.embedding_vocab_matrix, self.token_to_index_mapping
-
 
 
 
@@ -412,31 +405,33 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         self.vocab_size = len(self.vectorizer.vocabulary_)
         print("embedding_dim:", self.embedding_dim)
         print("vocab_size:", self.vocab_size)
-
+        
         self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
 
         # Dictionary to store the index-token mapping
         self.token_to_index_mapping = {}
+        
+        # Calculate the mean of all embeddings in the FastText model as a fallback for OOV tokens
+        mean_vector = np.mean(self.model.wv.vectors, axis=0)
 
         oov_tokens = 0
         
-        #
-        # create the embedding matrix that aligns with the vocabulary
-        #
-        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-
         # Loop through the dataset vocabulary
         for word, idx in self.vectorizer.vocabulary_.items():
             self.token_to_index_mapping[idx] = word  # Store the token at its index
 
-            if word in self.model.wv.key_to_index:  # If the word exists in FastText's vocabulary
+            # Check for the word in the original case first
+            if word in self.model.wv.key_to_index:
                 self.embedding_vocab_matrix[idx] = self.model.wv[word]
+            # If not found, check the lowercase version of the word
+            elif word.lower() in self.model.wv.key_to_index:
+                self.embedding_vocab_matrix[idx] = self.model.wv[word.lower()]
+            # If neither is found, handle it as an OOV token (FastText can generate subword embeddings)
             else:
                 #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
-                # FastText automatically handles subword embeddings for OOV words
-                self.embedding_vocab_matrix[idx] = self.model.wv.get_vector(word)
+                self.embedding_vocab_matrix[idx] = mean_vector  # Use the mean of all vectors as a substitute
                 oov_tokens += 1
-
+                
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
         print("oov_tokens:", oov_tokens)
