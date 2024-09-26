@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+
+import os
+import plotly.express as px
+
+import imgkit
+
+
 # measures filter: report on these specific measures
 measures = ['final-te-macro-F1', 'final-te-micro-F1']
 
@@ -201,12 +208,6 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
 
 
 
-
-
-
-
-import os
-import plotly.express as px
 
 def generate_charts_plotly(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
 
@@ -426,6 +427,87 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 
 
+def generate_grouped_tables(df, output_dir):
+    # Split the 'mode' column into separate columns for dataset, model, mode, and mix
+    df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)
+
+    # Filter the dataframe for the required measures
+    measures = ['final-te-macro-F1', 'final-te-micro-F1']
+    filtered_df = df[df['measure'].isin(measures)]
+    print(filtered_df)
+
+    # Iterate through each dataset and model to generate tables
+    for (dataset, model), group_df in filtered_df.groupby(['Dataset', 'Model']):
+        output_file = f"{output_dir}/{dataset}_{model}_results.html"
+        render_grouped_table_with_pandas(group_df, dataset, model, output_file)
+
+
+def render_grouped_table_with_pandas(dataframe, dataset, model, output_file):
+    # Group the data by embeddings and mix (formerly Mode) within each embedding
+    grouped = dataframe.groupby(['embeddings', 'Mix', 'class_type'], as_index=False)
+
+    # Select only the required columns, excluding model, and moving representation
+    selected_columns = ['embeddings', 'Mix', 'comp_method', 'representation', 'measure', 'value', 'timelapse']
+
+    # Create an HTML table manually, ensuring that embeddings and mix only display once per group
+    rows = []
+    previous_embeddings = None
+    previous_mix = None
+    for (embeddings, mix, class_type), group in grouped:
+        # Determine if we need a bold line for the first embeddings group
+        group_border = "border-top: 3px solid black;" if embeddings != previous_embeddings else ""
+        
+        first_row = True
+        for _, row in group.iterrows():
+            # Format value to 3 decimal places and timelapse with comma separator
+            formatted_value = f"{row['value']:.3f}"
+            formatted_timelapse = f"{row['timelapse']:,.0f}"
+            
+            if first_row:
+                # Display embeddings in bold and mix in italics, apply the bold border for new embeddings group
+                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['embeddings']}</b></td><td><i>{row['Mix']}</i></td>"
+                first_row = False
+            else:
+                # Leave the embeddings and mix columns empty for subsequent rows, apply dotted line between Mix combinations
+                dotted_border = "border-bottom: 1px dotted gray;" if mix != previous_mix else ""
+                row_html = f"<tr style='font-size: 12px; {dotted_border}'><td></td><td></td>"
+            
+            # Add the rest of the columns (comp_method, representation, measure, formatted value, formatted timelapse)
+            row_html += f"<td>{row['comp_method']}</td><td>{row['representation']}</td><td>{row['measure']}</td><td>{formatted_value}</td><td>{formatted_timelapse}</td></tr>"
+            rows.append(row_html)
+        
+        # Update previous_embeddings and previous_mix to track the current group
+        previous_embeddings = embeddings
+        previous_mix = mix
+    
+    # Join all rows together and style the table with smaller columns and fit width
+    table_html = """
+    <table border='1' style='border-collapse: collapse; font-size: 12px; table-layout: fixed; width: 100%;'>
+    <colgroup>
+        <col style='width: 8%;'>
+        <col style='width: 8%;'>
+        <col style='width: 12%;'>
+        <col style='width: 12%;'>
+        <col style='width: 15%;'>
+        <col style='width: 10%;'>
+        <col style='width: 10%;'>
+    </colgroup>
+    <tr><th>embeddings</th><th>mix</th><th>comp_method</th><th>representation</th><th>measure</th><th>value</th><th>timelapse (seconds)</th></tr>
+    """
+    table_html += "".join(rows)
+    table_html += "</table>"
+
+    # Write the HTML table to file, including class_type in the title
+    with open(output_file, 'w') as f:
+        f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}, Class Type: {class_type}</h2>")
+        f.write(table_html)
+
+    print(f"Table saved as {output_file}.")
+
+
+
+
+
 
 
 
@@ -465,8 +547,8 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
-    parser.add_argument('-o', '--output_dir', type=str, default='../out', help='Directory to save the output files, default is "../out"')
-    parser.add_argument('-c', '--charts', action='store_true', default=True, help='Generate charts')
+    parser.add_argument('-o', '--output_dir', type=str, default='../out', help='output directory for files, defaults to ../out. Used with -s (--summary) option')
+    parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-d', action='store_true', default=False, help='debug mode')
@@ -493,8 +575,17 @@ def main():
         if (debug):
             print("Data file read successfully, df:", df.shape)
 
+
         if args.summary:
-            results_analysis(df, args.output_dir)
+
+            if (args.output_dir is None):
+                print("Error: Output file name required with -s (--summary) option")
+                return
+            
+            #results_analysis(df, args.output_dir)
+
+            generate_grouped_tables(df, args.output_dir)
+
 
         if args.charts:
             
@@ -518,14 +609,13 @@ def main():
                 
             )
             
-
-            if (args.runtimes):
-                gen_timelapse_plots(
-                    df, 
-                    args.output_dir, 
-                    show_charts=args.show,
-                    debug=debug
-                )
+        if (args.runtimes):
+            gen_timelapse_plots(
+                df, 
+                args.output_dir, 
+                show_charts=args.show,
+                debug=debug
+            )
         
     else:
         print("Error: Data file not found or empty")
