@@ -606,6 +606,13 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         # Dictionary to store the index-token mapping
         self.token_to_index_mapping = {}
 
+        # Initialize OOV token tracking
+        oov_tokens = 0
+        oov_list = []  # Keep a list of OOV words
+        
+        # Mean vector for OOV tokens
+        mean_vector = np.zeros(self.embedding_dim)
+        
         # -------------------------------------------------------------------------------------------------------------
         def _bert_embedding_vocab_matrix(vocab, batch_size=DEFAULT_CPU_BATCH_SIZE, max_len=512):
             """
@@ -613,43 +620,27 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
             """
 
             print("_bert_embedding_vocab_matrix...")
-
             print("batch_size:", batch_size)
             print("max_len:", max_len)
-            print("vocab:", type(vocab), len(vocab))
 
             embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
             batch_words = []
             word_indices = []
-            
-            def process_batch(batch_words, max_len):
 
+            def process_batch(batch_words, max_len):
                 inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=max_len)
-                
-                # move input tensors to proper device
                 input_ids = inputs['input_ids'].to(self.device)
                 attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
-                max_vocab_size = self.model.config.vocab_size
 
-                # check for out of range tokens
-                out_of_range_ids = input_ids[input_ids >= max_vocab_size]
-                if len(out_of_range_ids) > 0:
-                    print("Warning: The following input IDs are out of range for the model's vocabulary:")
-                    for out_id in out_of_range_ids.unique():
-                        token = self.tokenizer.decode(out_id.item())
-                        print(f"Token '{token}' has ID {out_id.item()} which is out of range (vocab size: {max_vocab_size}).")
-                
                 # Perform inference, ensuring that the model is on the same device as the inputs
                 self.model.to(self.device)
                 with torch.no_grad():
-                    #outputs = model(**inputs)
                     outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
 
                 # Return the embeddings and ensure they are on the CPU for further processing
-                return outputs.last_hidden_state[:, 0,:].cpu().numpy()
+                return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
-
-            with tqdm(total=len(vocab), desc="processing bert / roberta embedding vocab matrix construction batches") as pbar:
+            with tqdm(total=len(vocab), desc="processing BERT/RoBERTa embedding vocab matrix construction batches") as pbar:
                 for word, idx in vocab.items():
                     batch_words.append(word)
                     word_indices.append(idx)
@@ -662,7 +653,8 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
                             else:
                                 print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
                                 oov_tokens += 1
-                        
+                                oov_list.append(word)  # Track OOV words
+                                embedding_vocab_matrix[i] = mean_vector  # Assign mean vector for OOV
                         batch_words = []
                         word_indices = []
                         pbar.update(batch_size)
@@ -675,11 +667,13 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
                         else:
                             print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
                             oov_tokens += 1
-                    
+                            oov_list.append(batch_words[i])  # Track OOV words
+                            embedding_vocab_matrix[i] = mean_vector  # Assign mean vector for OOV
                     pbar.update(len(batch_words))
 
             return embedding_vocab_matrix
-
+        # -------------------------------------------------------------------------------------------------------------
+        
         #tokenize and prepare inputs
         max_length = self.tokenizer.model_max_length
         #print("max_length:", max_length)
@@ -689,10 +683,17 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         # Add to token-to-index mapping for BERT and RoBERTa
         for word, idx in self.vectorizer.vocabulary_.items():
             self.token_to_index_mapping[idx] = word  # Store the token at its index
-
+            
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
 
+        # Final OOV tracking output
+        print(f"Total OOV tokens: {oov_tokens}")
+        """
+        if oov_tokens > 0:
+            print("List of OOV tokens:", oov_list)
+        """    
+        
         return self.embedding_vocab_matrix, self.token_to_index_mapping
 
 
