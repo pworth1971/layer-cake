@@ -376,7 +376,15 @@ def classify_data(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embed
 
         sup_tend = time() - tinit
 
-    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(X_train, X_test, y_train, y_test, args, target_names, class_type=class_type)
+    Mf1, mf1, acc, h_loss, precision, recall, j_index, tend = run_model(
+        X_train,                                        # training data
+        X_test,                                         # test data
+        y_train,                                        # training labels
+        y_test,                                         # test labels
+        args,                                           # arguments
+        target_names,                                   # target names
+        class_type=class_type                           # class type
+    )
 
     tend += sup_tend
 

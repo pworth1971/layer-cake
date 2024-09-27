@@ -427,6 +427,9 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 
 
+
+import csv
+
 def generate_grouped_tables(df, output_dir):
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
     df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)
@@ -438,31 +441,37 @@ def generate_grouped_tables(df, output_dir):
 
     # Iterate through each dataset and model to generate tables
     for (dataset, model), group_df in filtered_df.groupby(['Dataset', 'Model']):
-        output_file = f"{output_dir}/{dataset}_{model}_results.html"
-        render_grouped_table_with_pandas(group_df, dataset, model, output_file)
+        output_html = f"{output_dir}/{dataset}_{model}_results.html"
+        output_csv = f"{output_dir}/{dataset}_{model}_results.csv"
+        render_grouped_table_with_pandas(group_df, dataset, model, output_html, output_csv)
 
 
-def render_grouped_table_with_pandas(dataframe, dataset, model, output_file):
+def render_grouped_table_with_pandas(dataframe, dataset, model, output_html, output_csv):
     # Group the data by embeddings and mix (formerly Mode) within each embedding
     grouped = dataframe.groupby(['embeddings', 'Mix', 'class_type'], as_index=False)
 
-    # Select only the required columns, excluding model, and moving representation
-    selected_columns = ['embeddings', 'Mix', 'comp_method', 'representation', 'measure', 'value', 'timelapse']
+    # Select only the required columns, including the new 'dimensions' column
+    selected_columns = ['embeddings', 'Mix', 'comp_method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
 
     # Create an HTML table manually, ensuring that embeddings and mix only display once per group
     rows = []
     previous_embeddings = None
     previous_mix = None
+
+    # Prepare CSV data
+    csv_rows = [['embeddings', 'mix', 'comp_method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+
     for (embeddings, mix, class_type), group in grouped:
         # Determine if we need a bold line for the first embeddings group
         group_border = "border-top: 3px solid black;" if embeddings != previous_embeddings else ""
-        
+
         first_row = True
         for _, row in group.iterrows():
             # Format value to 3 decimal places and timelapse with comma separator
             formatted_value = f"{row['value']:.3f}"
             formatted_timelapse = f"{row['timelapse']:,.0f}"
-            
+
+            # Prepare the HTML row
             if first_row:
                 # Display embeddings in bold and mix in italics, apply the bold border for new embeddings group
                 row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['embeddings']}</b></td><td><i>{row['Mix']}</i></td>"
@@ -471,15 +480,19 @@ def render_grouped_table_with_pandas(dataframe, dataset, model, output_file):
                 # Leave the embeddings and mix columns empty for subsequent rows, apply dotted line between Mix combinations
                 dotted_border = "border-bottom: 1px dotted gray;" if mix != previous_mix else ""
                 row_html = f"<tr style='font-size: 12px; {dotted_border}'><td></td><td></td>"
-            
-            # Add the rest of the columns (comp_method, representation, measure, formatted value, formatted timelapse)
-            row_html += f"<td>{row['comp_method']}</td><td>{row['representation']}</td><td>{row['measure']}</td><td>{formatted_value}</td><td>{formatted_timelapse}</td></tr>"
+
+            # Add the rest of the columns (comp_method, representation, dimensions, measure, formatted value, formatted timelapse)
+            row_html += f"<td>{row['comp_method']}</td><td>{row['representation']}</td><td>{row['dimensions']}</td><td>{row['measure']}</td><td>{formatted_value}</td><td>{formatted_timelapse}</td></tr>"
             rows.append(row_html)
-        
+
+            # Prepare the CSV row
+            csv_row = [row['embeddings'], row['Mix'], row['comp_method'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
+            csv_rows.append(csv_row)
+
         # Update previous_embeddings and previous_mix to track the current group
         previous_embeddings = embeddings
         previous_mix = mix
-    
+
     # Join all rows together and style the table with smaller columns and fit width
     table_html = """
     <table border='1' style='border-collapse: collapse; font-size: 12px; table-layout: fixed; width: 100%;'>
@@ -488,21 +501,31 @@ def render_grouped_table_with_pandas(dataframe, dataset, model, output_file):
         <col style='width: 8%;'>
         <col style='width: 12%;'>
         <col style='width: 12%;'>
+        <col style='width: 10%;'> <!-- Dimensions column -->
         <col style='width: 15%;'>
         <col style='width: 10%;'>
         <col style='width: 10%;'>
     </colgroup>
-    <tr><th>embeddings</th><th>mix</th><th>comp_method</th><th>representation</th><th>measure</th><th>value</th><th>timelapse (seconds)</th></tr>
+    <tr><th>embeddings</th><th>mix</th><th>comp_method</th><th>representation</th><th>dimensions</th><th>measure</th><th>value</th><th>timelapse (seconds)</th></tr>
     """
     table_html += "".join(rows)
     table_html += "</table>"
 
     # Write the HTML table to file, including class_type in the title
-    with open(output_file, 'w') as f:
+    with open(output_html, 'w') as f:
         f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}, Class Type: {class_type}</h2>")
         f.write(table_html)
 
-    print(f"Table saved as {output_file}.")
+    print(f"HTML Table saved as {output_html}.")
+
+    # Write CSV data to file
+    with open(output_csv, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerows(csv_rows)
+
+    print(f"CSV saved as {output_csv}.")
+
+
 
 
 

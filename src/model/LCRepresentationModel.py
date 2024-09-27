@@ -173,7 +173,7 @@ class WordLCRepresentationModel(LCRepresentationModel):
         # Get embedding size (dimensionality)
         self.embedding_dim = self.model.vector_size
         print(f"Embedding dimension: {self.embedding_dim}")
-
+        
         #
         # vectorize the text, note that the Word2Vec and GloVe models we use are case sensitive
         #
@@ -249,7 +249,7 @@ class WordLCRepresentationModel(LCRepresentationModel):
         
         Args:
         - texts: List of input documents (as raw text).
-        - embedding_vocab_matrix: Matrix of pre-trained word embeddings for Word2Vec/GloVe/FastText.
+        - embedding_vocab_matrix: Matrix of pre-trained word embeddings (e.g., Word2Vec, GloVe).
 
         Returns:
         - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
@@ -267,10 +267,14 @@ class WordLCRepresentationModel(LCRepresentationModel):
         unk_token_id = self.vectorizer.vocabulary_.get('<unk>', None)  # Check for the existence of an UNK token
         print("unk_token_id:", unk_token_id)
         
+        # Compute the mean embedding for OOV tokens across the entire embedding matrix
+        # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
+        self.mean_embedding = np.mean(self.embedding_vocab_matrix, axis=0)
+        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+
         oov_tokens = 0
 
         for doc in texts:
-
             # Tokenize the document using the vectorizer (ensures consistency in tokenization)
             tokens = self.vectorizer.build_analyzer()(doc)
 
@@ -282,31 +286,28 @@ class WordLCRepresentationModel(LCRepresentationModel):
             valid_embeddings = []    
 
             for token in tokens:
-                #token_lower = token.lower()
-
-                #token_id = self.vectorizer.vocabulary_.get(token.lower(), None)
+                # Get the token's index in the vocabulary
                 token_id = self.vectorizer.vocabulary_.get(token, None)
-                #print("token:", token, "token_id:", token_id)
 
                 if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
+                    # Get the embedding for the token from the embedding matrix
+                    embedding = embedding_vocab_matrix[token_id]
+                    # Get the TF-IDF weight for the token
+                    weight = tfidf_vector[token_id]
                     
-                    embedding = embedding_vocab_matrix[token_id]            # Get the embedding for the token
-                    weight = tfidf_vector[token_id]                         # Get the TF-IDF weight for the token
-
                     # Accumulate the weighted embedding
                     weighted_sum += embedding * weight
-                    total_weight += weight    
-
+                    total_weight += weight
                 elif unk_token_id is not None:
-                    embedding = embedding_vocab_matrix[unk_token_id]        # Fallback to <unk> embedding if available
+                    # Fallback to <unk> embedding if available
+                    embedding = embedding_vocab_matrix[unk_token_id]
                 else:
-                    # OOV token handling: Use a zero vector if no embedding is found
-                    #print(f"Warning: OOV token: {token}")
-                    embedding = np.zeros(embedding_vocab_matrix.shape[1])
+                    # Use the mean embedding for OOV tokens
+                    embedding = self.mean_embedding
                     oov_tokens += 1
-                
+
                 valid_embeddings.append(embedding)
-                
+                    
             # Compute the weighted embedding for the document
             if total_weight > 0:
                 weighted_doc_embedding = weighted_sum / total_weight
@@ -457,13 +458,17 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
 
+        # Compute the mean embedding for FastText (for handling OOV tokens)
+        self.mean_embedding = np.mean(self.model.wv.vectors, axis=0)
+        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+
+        
         weighted_document_embeddings = []
         avg_document_embeddings = []
 
         oov_tokens = 0
 
         for doc in texts:
-            
             # Tokenize the document using the vectorizer (ensures consistency in tokenization)
             tokens = self.vectorizer.build_analyzer()(doc)
 
@@ -479,13 +484,19 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
                 try:
                     embedding = self.model.wv.get_vector(token)  # FastText handles subword embeddings here
                 except KeyError:
-                    # If the token or subwords cannot be found (rare with FastText), use a zero vector
-                    #print(f"Warning: OOV token: {token}")
-                    embedding = np.zeros(embedding_vocab_matrix.shape[1])
+                    # If the token is OOV, use the mean embedding instead of a zero vector
+                    embedding = self.mean_embedding
                     oov_tokens += 1
 
-            # Get the TF-IDF weight if available, else assign a default weight of 1 (or 0 if not in vocabulary)
-            weight = tfidf_vector[self.vectorizer.vocabulary_.get(token, 0)]
+                # Get the TF-IDF weight if available, else assign a default weight of 1 (or 0 if not in vocabulary)
+                weight = tfidf_vector[self.vectorizer.vocabulary_.get(token, 0)]
+
+                # Accumulate the weighted sum for the weighted embedding
+                weighted_sum += weight * embedding
+                total_weight += weight
+
+                # Collect valid embeddings for average embedding calculation
+                valid_embeddings.append(embedding)
 
             # Compute the weighted embedding for the document
             if total_weight > 0:
@@ -509,8 +520,6 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         print("oov_tokens:", oov_tokens)
 
         return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
-
-
 
 
 

@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_repmodel2.test"
+LOG="--logfile ../log/ml_mps_word_subword.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -26,16 +26,13 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
 declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
-#declare -a datasets=("rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
-#declare -a learners=("svm" "lr" "nb")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
 #declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
-declare -a mixes=("solo" "dot" "lsa" "vmode")
-#declare -a embeddings=("glove" "word2vec", "fasttext" "bert" "roberta" "llama")
-declare -a embeddings=("llama")
-declare -a emb_comp_options=("avg")
+declare -a mixes=("solo" "cat")
+declare -a embeddings=("glove" "word2vec" "fasttext")
+declare -a emb_comp_options=("avg" "weighted")
 
 # Embedding config params
 
@@ -106,12 +103,12 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
                 done
             done
         done

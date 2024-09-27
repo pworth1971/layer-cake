@@ -338,7 +338,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
 
         y_preds = y_pred_default
 
-    # Case with optimization using GridSearchCV
+    # Case with optimization using RandomizedSearchCV
     else:
 
         print("Optimizing Support Vector Machine model with RandomizedSearchCV...")
@@ -387,6 +387,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
         y_preds = y_pred_best
 
         # confusion matrix reporting only works in single-label classification
+        """
         if (class_type in ['singlelabel', 'single-label']) and (args.cm):
             create_confusion_matrix(
                 y_test,
@@ -398,7 +399,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
             )
 
         y_preds = y_pred_best
-
+        """
 
         """
         print("Optimizing Support Vector Machine model with GridSearchCV...")
@@ -542,6 +543,7 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
 
         y_preds = y_pred_best
 
+        """
         # Confusion matrix reporting only works in single-label classification
         if (class_type in ['singlelabel', 'single-label']) and (args.cm):
             create_confusion_matrix(
@@ -552,7 +554,7 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
                 file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
                 debug=True
             )
-
+        """
             
         """
         print("Optimizing Naive Bayes model with GridSearchCV...")
