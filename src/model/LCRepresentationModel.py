@@ -1028,12 +1028,14 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
             devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
             
             print("devices:", devices)
-            print("num_layers:", num_layers)
 
             # Split the model into chunks and assign each chunk to a GPU
             num_layers = len(list(self.model.children()))
             layers_per_device = num_layers // len(devices)
 
+            print("num_layers:", num_layers)
+            print("layers_per_device:", layers_per_device)
+            
             # Move each block of layers to the corresponding GPU
             layers = list(self.model.children())
             for i, device in enumerate(devices):
