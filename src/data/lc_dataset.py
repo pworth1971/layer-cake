@@ -234,7 +234,7 @@ class LCDataset:
 
     
 
-    def vectorize(self, debug=True):
+    def vectorize(self, debug=False):
         """
         Build vector representation of data set using TF-IDF or CountVectorizer and constructing 
         the embeddings such that they align with pretrained embeddings tokenization method

@@ -697,7 +697,6 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
 
         return tokens
     
-    
 
     def _tokenize(self, texts):
         """
@@ -705,23 +704,16 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         This method is parallelized for faster processing.
         """
         # Tokenize texts in parallel
-        inputs = Parallel(n_jobs=NUM_JOBS)(
-            delayed(self.tokenizer)(
-                text,
+        tokenized_inputs = self.tokenizer(
+                texts,
                 return_tensors='pt',
                 padding=True,
                 truncation=True,
-                max_length=self.max_length
-            ) for text in texts
+                max_length=self.tokenizer.model_max_length,  # Use the tokenizer's maximum length (typically 512 for BERT)
+                return_attention_mask=True
         )
 
-        #return inputs['input_ids'], inputs['attention_mask']
-   
-        input_ids = torch.cat([input['input_ids'] for input in inputs], dim=0)
-        attention_mask = torch.cat([input['attention_mask'] for input in inputs], dim=0)
-
-        return input_ids, attention_mask
-        
+        return tokenized_inputs['input_ids'], tokenized_inputs['attention_mask']
          
     
     def build_embedding_vocab_matrix(self):
@@ -842,30 +834,29 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
-        Generates both the mean and first token embeddings for a list of text sentences using BERT.
+        Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
         
+        RoBERTa does not use a [CLS] token, but the first token often serves a similar purpose.
         This function computes:
         - The mean of all token embeddings.
-        - The first token embedding (position 0, [CLS] token for BERT).
+        - The first token embedding (position 0).
 
         Parameters:
         ----------
         text_list : list of str
-            List of sentences to encode.
+            List of docs to encode.
 
         Returns:
         -------
         mean_embeddings : np.ndarray
             Array of mean sentence embeddings (mean of all tokens).
         first_token_embeddings : np.ndarray
-            Array of sentence embeddings using the [CLS] token.
+            Array of sentence embeddings using the first token.
         """
 
-        print("encoding docs using BERT...")
+        print("encoding docs using BERT/RoBERTa...")
 
         self.model.eval()
-        
-        """
         mean_embeddings = []
         first_token_embeddings = []
 
@@ -890,38 +881,9 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
 
-        return mean_embeddings, first_token_embeddings
-        """
-        
-        # Define a helper function for processing each batch
-        def process_batch(batch):
-            input_ids, attention_mask = self._tokenize(batch)
-            input_ids = input_ids.to(self.device)
-            attention_mask = attention_mask.to(self.device)
-
-            with torch.no_grad():
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings
-
-                # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-
-                # Compute the first token embedding (CLS token in BERT)
-                batch_first_token_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()
-
-            return batch_mean_embeddings, batch_first_token_embeddings
-
-        # Split text_list into batches and process them in parallel
-        results = Parallel(n_jobs=NUM_JOBS)(delayed(process_batch)(text_list[i:i + self.batch_size])
-                                    for i in range(0, len(text_list), self.batch_size))
-
-        # Combine the results from all batches
-        mean_embeddings, first_token_embeddings = zip(*results)
-        
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
 
         return mean_embeddings, first_token_embeddings
+
 
 
 class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
@@ -1014,6 +976,9 @@ class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
 
     
 
+import torch.nn as nn
+from transformers import LlamaModel, LlamaTokenizerFast
+from torch.distributed.pipeline.sync import Pipe
 
 class LlaMaLCRepresentationModel(LCRepresentationModel):
     """
@@ -1054,7 +1019,37 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")          
 
-        self.model.to(self.device)      # put the model on the appropriate device
+        #
+        # With CUDA support, we distribute the model across all available GPUs using Pipeline Parallelism
+        #
+        if (self.device.type == 'cuda'):
+
+            # **Move the model layers to GPUs manually**
+            devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
+            
+            print("devices:", devices)
+            print("num_layers:", num_layers)
+
+            # Split the model into chunks and assign each chunk to a GPU
+            num_layers = len(list(self.model.children()))
+            layers_per_device = num_layers // len(devices)
+
+            # Move each block of layers to the corresponding GPU
+            layers = list(self.model.children())
+            for i, device in enumerate(devices):
+                start = i * layers_per_device
+                end = (i + 1) * layers_per_device if i != len(devices) - 1 else num_layers
+                for layer in layers[start:end]:
+                    layer.to(device)
+
+            # Now wrap the model in a pipeline parallelism Pipe
+            self.pipeline_model = Pipe(self.model, chunks=8, checkpoint='never')
+
+            # **The model is now distributed across all available GPUs**
+
+        else:
+            # put the whole model on GPU / MPS chip
+            self.model.to(self.device)              
 
 
     def _custom_tokenizer(self, text):
@@ -1085,11 +1080,8 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
 
     def _tokenize(self, texts):
         """
-        Tokenize a batch of texts using the (LlaMa) tokenizer, returning token IDs and attention masks.
-        This method is parallelized for faster processing.
-        
-        NB LlaMa models compuet the max_length automagically somehow
-        
+        Tokenize a batch of texts using the LLaMa tokenizer, returning token IDs and attention masks.
+
         Parameters:
         ----------
         texts : list of str
@@ -1102,98 +1094,36 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         attention_mask : torch.Tensor
             Tensor of attention masks (1 for real tokens, 0 for padding tokens).
         """
-        
-        # Tokenize texts in parallel
-        inputs = Parallel(n_jobs=NUM_JOBS)(
-            delayed(self.tokenizer)(
-                text,
-                return_tensors='pt',
-                padding=True,
-                truncation=True
-                #max_length=self.max_length
-            ) for text in texts
+
+        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
+        inputs = self.tokenizer(
+            texts,
+            return_tensors='pt',                            # Return PyTorch tensors
+            padding=True,                                   # Pad the sequences to the longest sequence in the batch
+            truncation=True,                                # Truncate sequences that exceed the max length
+            return_attention_mask=True
+            #max_length=self.max_length                     # Define a max length (usually 512 for LLaMa)
         )
+        
+        # Return input IDs and attention mask as tensors
+        return inputs['input_ids'], inputs['attention_mask']
 
-        #return inputs['input_ids'], inputs['attention_mask']
-   
-        input_ids = torch.cat([input['input_ids'] for input in inputs], dim=0)
-        attention_mask = torch.cat([input['attention_mask'] for input in inputs], dim=0)
 
-        return input_ids, attention_mask
 
 
     def build_embedding_vocab_matrix(self):
-        """
-        Build the LLaMa-based embedding representation (matrix) of the dataset vocabulary.
-        This function retrieves the embeddings for each token in the vocabulary using LLaMa and stores them in a matrix.
-        """
-        print("building [LLaMa-based] embedding representation (matrix) of dataset vocabulary...")
-
-        # Set the model to evaluation mode and move it to the appropriate device
-        self.model.eval()
-        self.model = self.model.to(self.device)
-        print(f"Using device: {self.device}")
-
-        # Define embedding and vocabulary sizes
-        self.embedding_dim = self.model.config.hidden_size
-        self.vocab_size = len(self.vectorizer.vocabulary_)
-        print(f"embedding_dim: {self.embedding_dim}, vocab_size: {self.vocab_size}")
-
-        # Initialize token-to-index mapping and the embedding matrix
-        self.token_to_index_mapping = {}
-        self.embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
-
-        # Collect all tokens from the vectorizer's vocabulary
-        tokens = list(self.vectorizer.vocabulary_.keys())
-        num_tokens = len(tokens)
-        print(f"Number of tokens to encode: {num_tokens}")
-
-        # Function to process a batch of tokens
-        def process_batch(batch_tokens):
-            # Tokenize the batch of tokens using the LLaMa tokenizer
-            input_ids = self.tokenizer(
-                batch_tokens,
-                return_tensors='pt',
-                padding=True,
-                truncation=True,
-            ).input_ids.to(self.device)
-
-            # Get the embeddings from the LLaMa model
-            with torch.no_grad():
-                outputs = self.model(input_ids)
-
-            # Mean pooling to get sentence-level embeddings for each token
-            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-
-        # Process tokens in parallel batches
-        batch_size = BATCH_SIZE
-        results = Parallel(n_jobs=NUM_JOBS)(
-            delayed(process_batch)(tokens[i:i + batch_size])
-            for i in range(0, num_tokens, batch_size)
-        )
-
-        # Assign embeddings to the appropriate index in the embedding matrix
-        for batch_start, batch_embeddings in zip(range(0, num_tokens, batch_size), results):
-            batch_tokens = tokens[batch_start: batch_start + batch_size]
-
-            for i, token in enumerate(batch_tokens):
-                token_index = self.vectorizer.vocabulary_[token]
-                self.embedding_matrix[token_index] = batch_embeddings[i]
-                self.token_to_index_mapping[token_index] = token  # Store the token at its index
-
-        print("embedding_matrix:", type(self.embedding_matrix), self.embedding_matrix.shape)
-        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
-
-        return self.embedding_matrix, self.token_to_index_mapping
-
-
-
-    def build_embedding_vocab_matrix_old(self):
-
+    
         print("building [LlaMa based] embedding representation (matrix) of dataset vocabulary...")
 
-        self.model.eval()  # Set model to evaluation mode            
-        self.model = self.model.to(self.device)
+        if (self.device.type == 'cuda'):
+            self.pipeline_model.eval()              # Set the pipeline model to evaluation mode (for inference)
+            
+            # **Model stays on GPUs** — we do not move the model to CPU at any point.
+            print("Model is distributed across the following devices: ", self.pipeline_model.devices)
+        
+        else:
+            self.model.eval()  # Set model to evaluation mode            
+    
         print(f"Using device: {self.device}")  # To confirm which device is being used
         print("model:", type(self.model))
         
@@ -1220,29 +1150,25 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         # Initialize an empty NumPy array to store the embeddings
         self.embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
 
-        # Process tokens in batches
-        for batch_start in tqdm(range(0, num_tokens, batch_size), desc="encoding dataset with LLaMa embeddings..."):
+        # Process tokens in batches to avoid memory overload
+        for batch_start in tqdm(range(0, num_tokens, batch_size), desc="Encoding dataset dictionary with LLaMa embeddings..."):
             batch_tokens = tokens[batch_start: batch_start + batch_size]
 
-            # Tokenize the batch of tokens using the LLaMA tokenizer
-            input_ids = self.tokenizer(
-                batch_tokens,
-                return_tensors='pt',
-                padding=True,
-                truncation=True,
-                #max_length=max_length                  # should pick up max length from the underlying model
-            ).input_ids.to(self.device)
+            # Tokenize the batch of tokens
+            inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, return_attention_mask=True)
 
-            # Get the embeddings from the LLaMA model
+            # **Move input_ids to the first GPU where the model's first layer resides**
+            input_ids = inputs.input_ids.to(self.pipeline_model.devices[0])
+
             with torch.no_grad():
-                outputs = self.model(input_ids)
-            
+                # Forward pass through the pipeline model (which spans across multiple GPUs)
+                outputs = self.pipeline_model(input_ids)
+
             # Mean pooling to get sentence-level embeddings for each token
             batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
 
-            # Store each token's embedding in the embedding matrix (direct index assignment)
+            # Store each token's embedding in the embedding matrix and update the token-to-index mapping
             for i, token in enumerate(batch_tokens):
-                # Find the index of the token in the vectorizer's vocabulary
                 token_index = self.vectorizer.vocabulary_[token]
                 self.embedding_matrix[token_index] = batch_embeddings[i]
                 self.token_to_index_mapping[token_index] = token  # Store the token at its index
@@ -1250,7 +1176,8 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         print("embedding_matrix:", type(self.embedding_matrix), self.embedding_matrix.shape)
         print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
 
-        return self.embedding_matrix, self.token_to_index_mapping       
+
+        return self.embedding_matrix, self.token_to_index_mapping     
 
 
 
@@ -1277,51 +1204,32 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         
         print("encoding docs using LLaMa...")
 
-        self.model.eval()                   # Ensure model is in evaluation mode
+        if (self.device.type == 'cuda'):
+            # Set the pipeline model to evaluation mode (for inference)
+            self.pipeline_model.eval()
 
-        # Parallel batch processing
-        def process_batch(batch):
-            input_ids, attention_mask = self._tokenize(batch)
-            input_ids = input_ids.to(self.device)
-            attention_mask = attention_mask.to(self.device)
+            # **Model stays on GPUs** — we do not move the model to CPU at any point.
+            print("Model is distributed across the following devices: ", self.pipeline_model.devices)
+        
+        else:
+            self.model.eval()  # Set model to evaluation mode            
+    
+        print(f"Using device: {self.device}")  # To confirm which device is being used
+        print("model:", type(self.model))
 
-            with torch.no_grad():
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from LLaMa
-
-                # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1)
-
-                # Compute the last token embedding
-                batch_last_embeddings = token_vectors[:, -1, :]
-
-            return batch_mean_embeddings.cpu().numpy(), batch_last_embeddings.cpu().numpy()
-
-        # Split text_list into batches and process them in parallel
-        results = Parallel(n_jobs=NUM_JOBS)(delayed(process_batch)(text_list[i:i + self.batch_size])
-                                    for i in range(0, len(text_list), self.batch_size))
-
-        # Separate mean and last token embeddings
-        mean_embeddings, last_embeddings = zip(*results)
-
-        # Concatenate the results from all batches
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        last_embeddings = np.concatenate(last_embeddings, axis=0)
-
-        return mean_embeddings, last_embeddings
-
-        """
-        mean_embeddings = []
-        last_embeddings = []
-
+        mean_embeddings, last_embeddings = []
+        
         with torch.no_grad():
+            # Process text in batches
             for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
                 input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
+                
+                # **Move input_ids to the first GPU where the model's first layer resides**
+                input_ids = input_ids.to(self.pipeline_model.devices[0])
 
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from LLaMa
+                # Forward pass through the pipeline model
+                outputs = self.pipeline_model(input_ids)
+                token_vectors = outputs.last_hidden_state
 
                 # Compute the mean of all token embeddings
                 batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
@@ -1335,8 +1243,10 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         last_embeddings = np.concatenate(last_embeddings, axis=0)
 
+        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
+        print("last_embeddings:", type(last_embeddings), last_embeddings.shape)
+
         return mean_embeddings, last_embeddings
-        """
     
 
 
