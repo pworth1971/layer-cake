@@ -396,11 +396,237 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
 
         y_preds = y_pred_best
 
+        # confusion matrix reporting only works in single-label classification
+        """
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with SVM Model',
+                file_name=f'{OUT_DIR}{dataset}_svm_confusion.png',
+                debug=True
+            )
+
+        y_preds = y_pred_best
+        """
+
+        """
+        print("Optimizing Support Vector Machine model with GridSearchCV...")
+        
+        param_grid = {
+            'estimator__penalty': ['l1', 'l2'],
+            'estimator__loss': ['hinge', 'squared_hinge'],
+            'estimator__C': np.logspace(-3, 3, 7)
+        } if class_type == 'multilabel' else {
+            'penalty': ['l1', 'l2'],
+            'loss': ['hinge', 'squared_hinge'],
+            'C': np.logspace(-3, 3, 7)
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
+        grid_search = GridSearchCV(
+            estimator=classifier,
+            param_grid=param_grid,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            #cv=StratifiedKFold(n_splits=5),
+            cv=5,
+            return_train_score=True
+        )
+
+        grid_search.fit(X_train, y_train)
+        
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        # confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with SVM Model',
+                file_name=f'{OUT_DIR}{dataset}_svm_confusion.png',
+                debug=True
+            )
+
+        y_preds = y_pred_best
+        """
+
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
         evaluation(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_nb_model()
+# ---------------------------------------------------------------------------------------------------------------------
+def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+    
+    print("\n\trunning Naive Bayes model...")
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        classifier = OneVsRestClassifier(MultinomialNB())
+    else:
+        print("Single-label classification detected. Using regular Naive Bayes...")
+        classifier = MultinomialNB()
+
+    if not args.optimc:
+
+        print("Running default Naive Bayes model using MultinomialNB and OneVsRestClassifier...")
+
+        nb = MultinomialNB()
+        ovr_nb = OneVsRestClassifier(nb) if class_type in ['multilabel', 'multi-label'] else nb
+        ovr_nb.fit(X_train, y_train)
+        
+        y_pred_default = ovr_nb.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_default
+
+    # Case with optimization using GridSearchCV
+    else:
+        print("Optimizing Naive Bayes model with RandomizedSearchCV...")
+
+        param_distributions = {
+            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        } if class_type == 'multilabel' else {
+            'alpha': [0.1, 0.5, 1.0, 2.0]
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True,
+            n_iter=10  # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        """
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Naive Bayes Model',
+                file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
+                debug=True
+            )
+        """
+            
+        """
+        print("Optimizing Naive Bayes model with GridSearchCV...")
+
+        param_grid = {
+            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        } if class_type == 'multilabel' else {
+            'alpha': [0.1, 0.5, 1.0, 2.0]
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
+        grid_search = GridSearchCV(
+            estimator=classifier,
+            param_grid=param_grid,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=-1,
+            cv=5,
+            return_train_score=True
+        )
+
+        grid_search.fit(X_train, y_train)
+        
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best)::.4f}")
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Naive Bayes Model',
+                file_name=f'{OUT_DIR}{dataset}_nb_confusion.png',
+                debug=True
+            )
+        """
+
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+    
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
 
 
 
@@ -420,25 +646,16 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
     # Check if it's a multilabel problem, and use OneVsRestClassifier if true
     if class_type in ['multilabel', 'multi-label']:
         print("Multilabel classification detected. Using OneVsRestClassifier...")
-        
-        classifier = OneVsRestClassifier(
-            estimator=LogisticRegression(max_iter=1000, class_weight='balanced', dual=False),
-            n_jobs=NUM_JOBS
-        )
+        classifier = OneVsRestClassifier(LogisticRegression(max_iter=1000, class_weight='balanced'))
     else:
         print("Single-label classification detected. Using regular Logistic Regression...")
-        classifier = LogisticRegression(max_iter=1000, class_weight='balanced', dual=False)
+        classifier = LogisticRegression(max_iter=1000, class_weight='balanced')
 
     if not args.optimc:
-        print("Running default Logistic Regression model using OneVsRestClassifier...")
-        
-        lr = LogisticRegression(max_iter=1000, class_weight='balanced', dual=False)
-        
-        ovr_lr = OneVsRestClassifier(
-            estimator=lr,
-            n_jobs=NUM_JOBS
-        )
-        
+
+        print("Running default Logistic Regression model using LogisticRegression and OneVsRestClassifier...")
+        lr = LogisticRegression(max_iter=1000, class_weight='balanced')
+        ovr_lr = OneVsRestClassifier(lr)
         ovr_lr.fit(X_train, y_train)
         y_pred_default = ovr_lr.predict(X_test)
 
@@ -475,10 +692,10 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
             param_distributions=param_distributions,
             scoring=scorers,
             refit='f1_score',
-            n_jobs=NUM_JOBS,
+            n_jobs=-1,
             cv=5,
             return_train_score=True,
-            n_iter=NUM_SAMPLED_PARAMS                       # Number of parameter settings sampled
+            n_iter=10  # Number of parameter settings sampled
         )
 
         randomized_search.fit(X_train, y_train)
@@ -492,56 +709,27 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
         print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
         y_preds = y_pred_best
 
-    # Evaluate the model
-    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
-    
-    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Logistic Regression Model',
+                file_name=f'{OUT_DIR}{dataset}_logistic_regression_confusion.png',
+                debug=True
+            )
+        """
+        print("Optimizing Logistic Regression model with GridSearchCV...")
 
-
-
-# ---------------------------------------------------------------------------------------------------------------------
-# run_nb_model()
-# ---------------------------------------------------------------------------------------------------------------------
-def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
-    
-    print("\n\trunning Naive Bayes model...")
-
-    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
-    if class_type in ['multilabel', 'multi-label']:
-        print("Multilabel classification detected. Using OneVsRestClassifier...")
-        
-        classifier = OneVsRestClassifier(
-            estimator=MultinomialNB(),
-            n_jobs=NUM_JOBS
-        )
-    else:
-        print("Single-label classification detected. Using regular Naive Bayes...")
-        
-        classifier = MultinomialNB()
-
-    if not args.optimc:
-
-        print("Running default Naive Bayes model using MultinomialNB and OneVsRestClassifier...")
-
-        nb = MultinomialNB()
-        ovr_nb = OneVsRestClassifier(estimator=nb, n_jobs=NUM_JOBS) if class_type in ['multilabel', 'multi-label'] else nb
-        ovr_nb.fit(X_train, y_train)
-        
-        y_pred_default = ovr_nb.predict(X_test)
-
-        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
-
-        y_preds = y_pred_default
-
-    # Case with optimization using GridSearchCV
-    else:
-        print("Optimizing Naive Bayes model with RandomizedSearchCV...")
-
-        param_distributions = {
-            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        param_grid = {
+            'estimator__C': np.logspace(-3, 3, 7),                      # Regularization strength
+            'estimator__penalty': ['l1', 'l2'],                         # Regularization method
+            'estimator__solver': ['liblinear', 'saga']                  # Solvers compatible with L1 and L2 regularization
         } if class_type == 'multilabel' else {
-            'alpha': [0.1, 0.5, 1.0, 2.0]
+            'C': np.logspace(-3, 3, 7),
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear', 'saga']
         }
 
         # Add zero_division=0 to precision and recall to suppress the warnings
@@ -553,35 +741,52 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
             'hamming_loss': make_scorer(hamming_loss),
         }
 
-        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
-        randomized_search = RandomizedSearchCV(
+        # Wrap GridSearchCV around OneVsRestClassifier if multilabel
+        grid_search = GridSearchCV(
             estimator=classifier,
-            param_distributions=param_distributions,
+            param_grid=param_grid,
             scoring=scorers,
             refit='f1_score',
-            n_jobs=NUM_JOBS,
+            n_jobs=-1,
             cv=5,
-            return_train_score=True,
-            n_iter=NUM_SAMPLED_PARAMS                   # Number of parameter settings sampled
+            return_train_score=True
         )
 
-        randomized_search.fit(X_train, y_train)
+        grid_search.fit(X_train, y_train)
         
-        print('Best parameters:', randomized_search.best_params_)
-        best_model = randomized_search.best_estimator_
+        print('Best parameters:', grid_search.best_params_)
+        best_model = grid_search.best_estimator_
         
         # Predict on test set
         y_pred_best = best_model.predict(X_test)
 
+        #print(f"Accuracy: {accuracy_score(y_test, y_pred_best):.4f}")
         print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
 
         y_preds = y_pred_best
+
+        # Confusion matrix reporting only works in single-label classification
+        if (class_type in ['singlelabel', 'single-label']) and (args.cm):
+        
+            create_confusion_matrix(
+                y_test,
+                y_preds,
+                target_names,
+                title=f'Confusion Matrix for {dataset} with Logistic Regression Model',
+                file_name=f'{OUT_DIR}{dataset}_logistic_regression_confusion.png',
+                debug=True
+            )
+        """
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
         evaluation(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+
 
 
 

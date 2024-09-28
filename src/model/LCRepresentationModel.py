@@ -2,20 +2,20 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from abc import ABC, abstractmethod
+
 from simpletransformers.language_representation import RepresentationModel
 from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
 from transformers import BertModel, LlamaModel, RobertaModel
-
-from abc import ABC, abstractmethod
-
 from gensim.models import KeyedVectors
-
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-
 from gensim.models.fasttext import load_facebook_model
+
+from joblib import Parallel, delayed
 
 from util.common import VECTOR_CACHE
 
+NUM_JOBS = -1           # number of jobs for parallel processing
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
@@ -194,7 +194,6 @@ class WordLCRepresentationModel(LCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
-        
 
 
     def build_embedding_vocab_matrix(self):
@@ -577,19 +576,28 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
     def _tokenize(self, texts):
         """
         Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
-        This method works for both BERT and RoBERTa models.
+        This method is parallelized for faster processing.
         """
-        inputs = self.tokenizer(
-            texts,
-            return_tensors='pt',    # Return PyTorch tensors
-            padding=True,           # Pad the sequences to the longest sequence in the batch
-            truncation=True,        # Truncate sequences that exceed the max length
-            max_length=self.max_length  # Use the tokenizer's max length
+        # Tokenize texts in parallel
+        inputs = Parallel(n_jobs=NUM_JOBS)(
+            delayed(self.tokenizer)(
+                text,
+                return_tensors='pt',
+                padding=True,
+                truncation=True,
+                max_length=self.max_length
+            ) for text in texts
         )
-        
-        return inputs['input_ids'], inputs['attention_mask']
-    
 
+        #return inputs['input_ids'], inputs['attention_mask']
+   
+        input_ids = torch.cat([input['input_ids'] for input in inputs], dim=0)
+        attention_mask = torch.cat([input['attention_mask'] for input in inputs], dim=0)
+
+        return input_ids, attention_mask
+        
+         
+    
     def build_embedding_vocab_matrix(self):
         """
         Build the embedding vocabulary matrix for BERT and RoBERTa models.
@@ -706,6 +714,88 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix, self.token_to_index_mapping
 
 
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
+        """
+        Generates both the mean and first token embeddings for a list of text sentences using BERT.
+        
+        This function computes:
+        - The mean of all token embeddings.
+        - The first token embedding (position 0, [CLS] token for BERT).
+
+        Parameters:
+        ----------
+        text_list : list of str
+            List of sentences to encode.
+
+        Returns:
+        -------
+        mean_embeddings : np.ndarray
+            Array of mean sentence embeddings (mean of all tokens).
+        first_token_embeddings : np.ndarray
+            Array of sentence embeddings using the [CLS] token.
+        """
+
+        print("encoding docs using BERT...")
+
+        self.model.eval()
+        
+        """
+        mean_embeddings = []
+        first_token_embeddings = []
+
+        with torch.no_grad():
+            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
+                input_ids, attention_mask = self._tokenize(batch)
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
+
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Token-level embeddings from RoBERTa
+
+                # Compute the mean of all token embeddings
+                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
+                mean_embeddings.append(batch_mean_embeddings)
+
+                # Compute the first token embedding (similar to [CLS] in BERT)
+                batch_first_token_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()
+                first_token_embeddings.append(batch_first_token_embeddings)
+
+        # Concatenate all batch results
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+        first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
+
+        return mean_embeddings, first_token_embeddings
+        """
+        
+        # Define a helper function for processing each batch
+        def process_batch(batch):
+            input_ids, attention_mask = self._tokenize(batch)
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Token-level embeddings
+
+                # Compute the mean of all token embeddings
+                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
+
+                # Compute the first token embedding (CLS token in BERT)
+                batch_first_token_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()
+
+            return batch_mean_embeddings, batch_first_token_embeddings
+
+        # Split text_list into batches and process them in parallel
+        results = Parallel(n_jobs=NUM_JOBS)(delayed(process_batch)(text_list[i:i + self.batch_size])
+                                    for i in range(0, len(text_list), self.batch_size))
+
+        # Combine the results from all batches
+        mean_embeddings, first_token_embeddings = zip(*results)
+        
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+        first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
+
+        return mean_embeddings, first_token_embeddings
 
 
 class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
@@ -753,55 +843,7 @@ class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
     
 
-    def encode_docs(self, text_list, embedding_vocab_matrix=None):
-        """
-        Generates both the mean and first token embeddings for a list of text sentences using BERT.
-        
-        This function computes:
-        - The mean of all token embeddings.
-        - The first token embedding (position 0, [CLS] token for BERT).
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of sentences to encode.
-
-        Returns:
-        -------
-        mean_embeddings : np.ndarray
-            Array of mean sentence embeddings (mean of all tokens).
-        first_token_embeddings : np.ndarray
-            Array of sentence embeddings using the [CLS] token.
-        """
-
-        print("encoding docs using BERT...")
-
-        self.model.eval()
-        mean_embeddings = []
-        first_token_embeddings = []
-
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from RoBERTa
-
-                # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                mean_embeddings.append(batch_mean_embeddings)
-
-                # Compute the first token embedding (similar to [CLS] in BERT)
-                batch_first_token_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()
-                first_token_embeddings.append(batch_first_token_embeddings)
-
-        # Concatenate all batch results
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
-
-        return mean_embeddings, first_token_embeddings
+    
 
 
 
@@ -843,58 +885,6 @@ class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
         
         self.model.to(self.device)      # put the model on the appropriate device
     
-
-    def encode_docs(self, text_list, embedding_vocab_matrix=None):
-        """
-        Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
-        
-        RoBERTa does not use a [CLS] token, but the first token often serves a similar purpose.
-        This function computes:
-        - The mean of all token embeddings.
-        - The first token embedding (position 0).
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of docs to encode.
-
-        Returns:
-        -------
-        mean_embeddings : np.ndarray
-            Array of mean sentence embeddings (mean of all tokens).
-        first_token_embeddings : np.ndarray
-            Array of sentence embeddings using the first token.
-        """
-
-        print("encoding docs using RoBERTa...")
-
-        self.model.eval()
-        mean_embeddings = []
-        first_token_embeddings = []
-
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from RoBERTa
-
-                # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                mean_embeddings.append(batch_mean_embeddings)
-
-                # Compute the first token embedding (similar to [CLS] in BERT)
-                batch_first_token_embeddings = token_vectors[:, 0, :].cpu().detach().numpy()
-                first_token_embeddings.append(batch_first_token_embeddings)
-
-        # Concatenate all batch results
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
-
-
-        return mean_embeddings, first_token_embeddings
 
     
 
@@ -966,10 +956,14 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         return tokens
     
 
+
     def _tokenize(self, texts):
         """
-        Tokenize a batch of texts using the LLaMa tokenizer, returning token IDs and attention masks.
-
+        Tokenize a batch of texts using the (LlaMa) tokenizer, returning token IDs and attention masks.
+        This method is parallelized for faster processing.
+        
+        NB LlaMa models compuet the max_length automagically somehow
+        
         Parameters:
         ----------
         texts : list of str
@@ -982,21 +976,93 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         attention_mask : torch.Tensor
             Tensor of attention masks (1 for real tokens, 0 for padding tokens).
         """
-
-        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
-        inputs = self.tokenizer(
-            texts,
-            return_tensors='pt',            # Return PyTorch tensors
-            padding=True,                   # Pad the sequences to the longest sequence in the batch
-            truncation=True                # Truncate sequences that exceed the max length
-            #max_length=self.max_length           # Define a max length (usually 512 for LLaMa)
-        )
         
-        # Return input IDs and attention mask as tensors
-        return inputs['input_ids'], inputs['attention_mask']
+        # Tokenize texts in parallel
+        inputs = Parallel(n_jobs=NUM_JOBS)(
+            delayed(self.tokenizer)(
+                text,
+                return_tensors='pt',
+                padding=True,
+                truncation=True
+                #max_length=self.max_length
+            ) for text in texts
+        )
+
+        #return inputs['input_ids'], inputs['attention_mask']
+   
+        input_ids = torch.cat([input['input_ids'] for input in inputs], dim=0)
+        attention_mask = torch.cat([input['attention_mask'] for input in inputs], dim=0)
+
+        return input_ids, attention_mask
 
 
     def build_embedding_vocab_matrix(self):
+        """
+        Build the LLaMa-based embedding representation (matrix) of the dataset vocabulary.
+        This function retrieves the embeddings for each token in the vocabulary using LLaMa and stores them in a matrix.
+        """
+        print("building [LLaMa-based] embedding representation (matrix) of dataset vocabulary...")
+
+        # Set the model to evaluation mode and move it to the appropriate device
+        self.model.eval()
+        self.model = self.model.to(self.device)
+        print(f"Using device: {self.device}")
+
+        # Define embedding and vocabulary sizes
+        self.embedding_dim = self.model.config.hidden_size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+        print(f"embedding_dim: {self.embedding_dim}, vocab_size: {self.vocab_size}")
+
+        # Initialize token-to-index mapping and the embedding matrix
+        self.token_to_index_mapping = {}
+        self.embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
+
+        # Collect all tokens from the vectorizer's vocabulary
+        tokens = list(self.vectorizer.vocabulary_.keys())
+        num_tokens = len(tokens)
+        print(f"Number of tokens to encode: {num_tokens}")
+
+        # Function to process a batch of tokens
+        def process_batch(batch_tokens):
+            # Tokenize the batch of tokens using the LLaMa tokenizer
+            input_ids = self.tokenizer(
+                batch_tokens,
+                return_tensors='pt',
+                padding=True,
+                truncation=True,
+            ).input_ids.to(self.device)
+
+            # Get the embeddings from the LLaMa model
+            with torch.no_grad():
+                outputs = self.model(input_ids)
+
+            # Mean pooling to get sentence-level embeddings for each token
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+        # Process tokens in parallel batches
+        batch_size = BATCH_SIZE
+        results = Parallel(n_jobs=NUM_JOBS)(
+            delayed(process_batch)(tokens[i:i + batch_size])
+            for i in range(0, num_tokens, batch_size)
+        )
+
+        # Assign embeddings to the appropriate index in the embedding matrix
+        for batch_start, batch_embeddings in zip(range(0, num_tokens, batch_size), results):
+            batch_tokens = tokens[batch_start: batch_start + batch_size]
+
+            for i, token in enumerate(batch_tokens):
+                token_index = self.vectorizer.vocabulary_[token]
+                self.embedding_matrix[token_index] = batch_embeddings[i]
+                self.token_to_index_mapping[token_index] = token  # Store the token at its index
+
+        print("embedding_matrix:", type(self.embedding_matrix), self.embedding_matrix.shape)
+        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+
+        return self.embedding_matrix, self.token_to_index_mapping
+
+
+
+    def build_embedding_vocab_matrix_old(self):
 
         print("building [LlaMa based] embedding representation (matrix) of dataset vocabulary...")
 
@@ -1085,7 +1151,40 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         
         print("encoding docs using LLaMa...")
 
-        self.model.eval()
+        self.model.eval()                   # Ensure model is in evaluation mode
+
+        # Parallel batch processing
+        def process_batch(batch):
+            input_ids, attention_mask = self._tokenize(batch)
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Token-level embeddings from LLaMa
+
+                # Compute the mean of all token embeddings
+                batch_mean_embeddings = token_vectors.mean(dim=1)
+
+                # Compute the last token embedding
+                batch_last_embeddings = token_vectors[:, -1, :]
+
+            return batch_mean_embeddings.cpu().numpy(), batch_last_embeddings.cpu().numpy()
+
+        # Split text_list into batches and process them in parallel
+        results = Parallel(n_jobs=NUM_JOBS)(delayed(process_batch)(text_list[i:i + self.batch_size])
+                                    for i in range(0, len(text_list), self.batch_size))
+
+        # Separate mean and last token embeddings
+        mean_embeddings, last_embeddings = zip(*results)
+
+        # Concatenate the results from all batches
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+        last_embeddings = np.concatenate(last_embeddings, axis=0)
+
+        return mean_embeddings, last_embeddings
+
+        """
         mean_embeddings = []
         last_embeddings = []
 
@@ -1111,7 +1210,7 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         last_embeddings = np.concatenate(last_embeddings, axis=0)
 
         return mean_embeddings, last_embeddings
-
+        """
     
 
 
