@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/emb_mix.test"
+LOG="--logfile ../log/optimus.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -25,32 +25,35 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("reuters21578" "bbc-news")
-declare -a pickle_paths=("../pickles" "../pickles")
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed" "rcv1")
+declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm" "lr" "nb")
-declare -a vtypes=("tfidf")
+declare -a vtypes=("tfidf" "count")
 declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
-declare -a embeddings=("bert" "roberta", "llama")
+declare -a embeddings=("word2vec" "glove" "fasttext" "bert" "roberta", "llama")
 declare -a emb_comp_options=("weighted" "avg" "summary")
 
+
 # Embedding config params
-GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe/glove.42B.300d.txt" 
-#GLOVE_SUP="--pretrained glove --glove-path ../.vector_cache --supervised" 
 
-WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec/GoogleNews-vectors-negative300.bin"
-#WORD2VEC_SUP="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin --supervised"
+GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
+#GLOVE_SUP="--pretrained glove --glove-path ../.vector_cache/GloVe --supervised" 
 
-FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/fastText/crawl-300d-2M.vec"
-#FASTTEXT_SUP="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec --supervised"
+WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
+#WORD2VEC_SUP="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec --supervised"
+
+FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
+#FASTTEXT_SUP="--pretrained fasttext --fasttext-path ../.vector_cache/fastText --supervised"
 
 BERT="--pretrained bert --bert-path ../.vector_cache/BERT"
-#BERT_SUP="--pretrained bert --bert-path ../.vector_cache --supervised"
+#BERT_SUP="--pretrained bert --bert-path ../.vector_cache/BERT --supervised"
 
 ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
 #ROBERTA_SUP="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa --supervised"
 
 LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
-#LLAMA_SUP="--pretrained llama --llama-path ../.vector_cache --supervised"
+#LLAMA_SUP="--pretrained llama --llama-path ../.vector_cache/LlaMa --supervised"
+
 
 # Function to run commands
 function run_command() {
@@ -77,19 +80,19 @@ function run_command() {
     echo
     echo
     echo
-    echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
-    echo "#########################################################################################################################################################################################################################################################################"
-    echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "exeuting command: $cmd"
-    eval $cmd
-    echo
-    echo
-    echo
     #echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
     #echo "#########################################################################################################################################################################################################################################################################"
     #echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    #echo "Running optimized command: $cmd_opt"
-    #eval $cmd_opt
+    #echo "exeuting command: $cmd"
+    #eval $cmd
+    #echo
+    echo
+    echo
+    echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
+    echo "#########################################################################################################################################################################################################################################################################"
+    echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+    echo "Running optimized command: $cmd_opt"
+    eval $cmd_opt
 }
 
 # Loop through datasets and run commands
@@ -101,9 +104,9 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"

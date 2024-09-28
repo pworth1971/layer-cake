@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from tqdm import tqdm
+import os
+import requests
 
 from abc import ABC, abstractmethod
 
@@ -42,7 +44,8 @@ else:
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
 #GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
@@ -67,7 +70,6 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
-
 
 
 
@@ -154,6 +156,12 @@ class WordLCRepresentationModel(LCRepresentationModel):
         path_to_embeddings = model_dir + '/' + model_name
         print("path_to_embeddings:", path_to_embeddings)
 
+        # Automatically download embeddings if not present
+        if not os.path.exists(path_to_embeddings):
+            print(f"Embedding file {path_to_embeddings} not found. Downloading...")
+            self._download_embeddings(model_name, path_to_embeddings, model_type)
+
+        # Load the approproate model type
         if (model_type == 'word2vec'):
             print("Using Word2Vec pretrained embeddings...")
             self.model = KeyedVectors.load_word2vec_format(path_to_embeddings, binary=True)
@@ -194,6 +202,69 @@ class WordLCRepresentationModel(LCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+
+
+    def _download_embeddings(self, model_name, path_to_embeddings, model_type):
+        """
+        Download pre-trained embeddings (Word2Vec or GloVe) from a URL and save them to the specified path.
+        """
+
+        print(f'downloading embeddings... model:{model_name}, model_type:{model_type}, path:{path_to_embeddings}')
+
+        if model_type == 'word2vec':
+            # Word2Vec Google News embeddings (Commonly hosted on Google Drive)
+            url = "https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz"
+        elif model_type == 'glove':
+            # GloVe embeddings (Stanford)
+            if (GLOVE_MODEL == 'glove.6B.300d.txt'):
+                url = f"http://nlp.stanford.edu/data/glove.6B.zip"
+            elif (GLOVE_MODEL == 'glove.42B.300d.txt'):
+                url = f"http://nlp.stanford.edu/data/glove.42B.zip"
+            elif (GLOVE_MODEL == 'glove.840B.300d.txt'):
+                url = f"http://nlp.stanford.edu/data/glove.840B.zip"
+        else:
+            raise ValueError(f"Unsupported model_type {model_type} for download.")
+
+        # Download the file
+        print(f"Downloading embeddings from {url} to {path_to_embeddings}...")
+        self._download_file(url, path_to_embeddings)
+
+        if model_type == 'glove':
+            # Unzip GloVe embeddings if necessary
+            self._unzip_glove_embeddings(path_to_embeddings)
+
+
+    def _download_file(self, url, destination):
+        """
+        Helper function to download a file from a URL.
+        """
+        response = requests.get(url, stream=True)
+        total_size = int(response.headers.get('content-length', 0))
+
+        with open(destination, 'wb') as file, tqdm(
+            desc=f"Downloading {os.path.basename(destination)}",
+            total=total_size,
+            unit='B',
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar:
+            for data in response.iter_content(1024):
+                file.write(data)
+                bar.update(len(data))
+
+    def _unzip_glove_embeddings(self, zip_file_path):
+        """
+        Unzip the GloVe embeddings.
+        """
+        from zipfile import ZipFile
+
+        with ZipFile(zip_file_path, 'r') as zip_ref:
+            print(f"Extracting GloVe embeddings from {zip_file_path}...")
+            zip_ref.extractall(os.path.dirname(zip_file_path))
+
+        # Delete the zip file after extraction
+        os.remove(zip_file_path)
+        print(f"Deleted zip file {zip_file_path} after extraction.")
 
 
     def build_embedding_vocab_matrix(self):
