@@ -9,6 +9,13 @@ from abc import ABC, abstractmethod
 from simpletransformers.language_representation import RepresentationModel
 from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
 from transformers import BertModel, LlamaModel, RobertaModel
+
+import torch.nn as nn
+from transformers import LlamaModel, LlamaTokenizerFast
+#from torch.distributed.pipeline.sync import Pipe
+# Import FairScale's Pipe for pipeline parallelism
+from fairscale.nn import Pipe
+
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from gensim.models.fasttext import load_facebook_model
@@ -16,6 +23,8 @@ from gensim.models.fasttext import load_facebook_model
 from joblib import Parallel, delayed
 
 from util.common import VECTOR_CACHE
+
+
 
 NUM_JOBS = -1           # number of jobs for parallel processing
 
@@ -976,9 +985,7 @@ class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
 
     
 
-import torch.nn as nn
-from transformers import LlamaModel, LlamaTokenizerFast
-from torch.distributed.pipeline.sync import Pipe
+
 
 class LlaMaLCRepresentationModel(LCRepresentationModel):
     """

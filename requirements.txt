@@ -20,3 +20,4 @@ nltk
 fasttext
 seaborn
 huggingface-hub
+fairscale
