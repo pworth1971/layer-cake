@@ -12,9 +12,9 @@ from transformers import BertModel, LlamaModel, RobertaModel
 
 import torch.nn as nn
 from transformers import LlamaModel, LlamaTokenizerFast
-#from torch.distributed.pipeline.sync import Pipe
+from torch.distributed.pipeline.sync import Pipe
 # Import FairScale's Pipe for pipeline parallelism
-from fairscale.nn import Pipe
+#from fairscale.nn import Pipe
 
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -1031,30 +1031,37 @@ class LlaMaLCRepresentationModel(LCRepresentationModel):
         #
         if (self.device.type == 'cuda'):
 
-            # **Move the model layers to GPUs manually**
+            # List of devices (GPUs)
             devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
-            
-            print("devices:", devices)
+            print(f"Devices: {devices}")
+            print(f"Number of devices: {len(devices)}")
 
-            # Split the model into chunks and assign each chunk to a GPU
-            num_layers = len(list(self.model.children()))
-            layers_per_device = num_layers // len(devices)
-
-            print("num_layers:", num_layers)
-            print("layers_per_device:", layers_per_device)
-            
-            # Move each block of layers to the corresponding GPU
+            # Get the number of layers in the model
             layers = list(self.model.children())
-            for i, device in enumerate(devices):
-                start = i * layers_per_device
-                end = (i + 1) * layers_per_device if i != len(devices) - 1 else num_layers
-                for layer in layers[start:end]:
-                    layer.to(device)
+            num_layers = len(layers)
+            print(f"Number of layers: {num_layers}")
+
+            # Check if there are more devices than layers
+            if num_layers < len(devices):
+                print("Number of layers is less than the number of devices.")
+                layers_per_device = 1  # At least one layer per device
+            else:
+                layers_per_device = num_layers // len(devices)
+
+            print(f"Layers per device: {layers_per_device}")
+
+            # Assign layers to devices
+            current_device = 0
+            for i, layer in enumerate(layers):
+                # Move layer to the current device
+                layer.to(devices[current_device])
+                
+                # If this device has enough layers, move to the next device
+                if (i + 1) % layers_per_device == 0 and current_device < len(devices) - 1:
+                    current_device += 1
 
             # Now wrap the model in a pipeline parallelism Pipe
             self.pipeline_model = Pipe(self.model, chunks=8, checkpoint='never')
-
-            # **The model is now distributed across all available GPUs**
 
         else:
             # put the whole model on GPU / MPS chip

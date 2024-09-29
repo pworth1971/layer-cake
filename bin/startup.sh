@@ -52,6 +52,9 @@ if [[ "$OS" == "macOS" ]]; then
     echo "Detected macOS (Apple Silicon). Installing PyTorch for macOS..."
     conda install pytorch torchtext -c pytorch -y
 
+#
+# NB pytorch only supports cudatoolkit 11.8 at present
+#
 elif [[ "$OS" == "ubuntu" ]]; then
     echo "Detected Ubuntu. Installing PyTorch with CUDA support..."
     conda install pytorch torchtext cudatoolkit=11.8 -c pytorch -c nvidia -y
@@ -63,11 +66,7 @@ fi
 
 # Core package dependencies
 echo "Installing core package dependencies..."
-pip install scikit-learn transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale
-
-# Install Hugging Face CLI for LLaMa models
-echo "Installing Hugging Face Hub and logging in for LLaMa models..."
-pip install huggingface_hub
+pip install scikit-learn transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale huggingface_hub
 
 # Prompt user to log in to Hugging Face
 huggingface-cli login
