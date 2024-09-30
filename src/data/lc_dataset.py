@@ -120,7 +120,7 @@ class LCDataset:
             self.batch_size = DEFAULT_GPU_BATCH_SIZE
         elif torch.backends.mps.is_available():
             self.device = torch.device("mps")
-            self.batch_size = MPS_BATCH_SIZE
+            self.batch_size = DEFAULT_MPS_BATCH_SIZE
         else:
             self.device = torch.device("cpu")
             self.batch_size = DEFAULT_CPU_BATCH_SIZE

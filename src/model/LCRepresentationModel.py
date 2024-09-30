@@ -23,9 +23,9 @@ from util.common import VECTOR_CACHE
 NUM_JOBS = -1           # number of jobs for parallel processing
 
 # batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 16
+DEFAULT_CPU_BATCH_SIZE = 8
 DEFAULT_GPU_BATCH_SIZE = 8
-MPS_BATCH_SIZE = 16
+DEFAULT_MPS_BATCH_SIZE = 8
 
 
 # Setup device prioritizing CUDA, then MPS, then CPU
@@ -34,7 +34,7 @@ if torch.cuda.is_available():
     BATCH_SIZE = DEFAULT_GPU_BATCH_SIZE
 elif torch.backends.mps.is_available():
     DEVICE = torch.device("mps")
-    BATCH_SIZE = MPS_BATCH_SIZE
+    BATCH_SIZE = DEFAULT_MPS_BATCH_SIZE
 else:
     DEVICE = torch.device("cpu")
     BATCH_SIZE = DEFAULT_CPU_BATCH_SIZE
@@ -78,6 +78,43 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
+
+
+
+def estimate_tensor_size(batch_size, sequence_length, hidden_size, dtype=torch.float32):
+    """
+    Estimate the size of a tensor based on its dimensions and data type.
+    
+    Parameters:
+    - batch_size (int): Number of samples in the batch.
+    - sequence_length (int): Number of tokens in each sequence.
+    - hidden_size (int): Dimensionality of the model's hidden layers.
+    - dtype (torch.dtype): Data type of the tensor (e.g., torch.float32, torch.float16).
+    
+    Returns:
+    - estimated_size_in_bytes (int): Estimated size of the tensor in bytes.
+    """
+    bytes_per_element = torch.finfo(dtype).bits // 8  # 4 bytes for float32, 2 bytes for float16
+    num_elements = batch_size * sequence_length * hidden_size
+    estimated_size_in_bytes = num_elements * bytes_per_element
+
+    return estimated_size_in_bytes
+
+
+def can_fit_on_mps(estimated_size_in_bytes, mps_limit=4 * 1024 ** 3):
+    """
+    Check if the estimated tensor size can fit within the MPS memory limit (4GB).
+    
+    Parameters:
+    - estimated_size_in_bytes (int): Estimated size of the tensor in bytes.
+    - mps_limit (int): Maximum allowable memory size for MPS (default 4GB).
+    
+    Returns:
+    - bool: True if the tensor can fit, False otherwise.
+    """
+    return estimated_size_in_bytes <= mps_limit
+
+
 
 
 
@@ -987,6 +1024,13 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         print("self.max_length:", self.max_length)
         """
 
+        if (XLNET_MODEL == 'xlnet-base-cased'):
+            self.max_length = 512                  
+        elif (XLNET_MODEL == 'xlnet-large-cased'):
+            self.max_length = 1024
+        else:
+            raise ValueError("Invalid XLNet model. Must be in [xlnet-base-cased, xlnet-large-cased].")
+            
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
@@ -1002,8 +1046,8 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
-        self.model.to(self.device)  # Put the model on the appropriate device
-
+        self.model.to(self.device)      # put the model on the appropriate device
+        
     
     def _custom_tokenizer(self, text):
         """
@@ -1031,20 +1075,30 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
     def _tokenize(self, texts):
         """
-        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
+        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
         """
-        
-        tokenized_inputs = self.tokenizer(
-                texts,
-                return_tensors='pt',
-                padding=True,
-                #truncation=True,
-                #max_length=self.tokenizer.model_max_length,  # Use the tokenizer's maximum length (typically 512 for BERT)
-                return_attention_mask=True
-        )
+        input_ids = []
+        attention_masks = []
 
-        return tokenized_inputs['input_ids'], tokenized_inputs['attention_mask']
-    
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention mask
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,  # Add special tokens like [CLS] and [SEP]
+                max_length=self.max_length,  # Truncate sequences to this length
+                padding='max_length',  # Pad sequences to the max_length
+                return_attention_mask=True,  # Generate attention mask
+                return_tensors='pt',  # Return PyTorch tensors
+                truncation=True  # Ensure truncation to max_length
+            )
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
 
 
     def build_embedding_vocab_matrix(self):
@@ -1076,6 +1130,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
             # Get token embeddings from XLNet
             with torch.no_grad():
                 outputs = self.model(input_ids=input_ids)
+
             return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
         # Tokenize the vocabulary and build embedding matrix
@@ -1114,23 +1169,9 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
-        Generates both the mean and [CLS] token embeddings for a list of text sentences using XLNet.
-
-        The [CLS] token is used as the sentence representation for classification tasks, similar to BERT.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of documents to encode.
-
-        Returns:
-        -------
-        mean_embeddings : np.ndarray
-            Array of mean sentence embeddings (mean of all tokens).
-        cls_embeddings : np.ndarray
-            Array of sentence embeddings using the [CLS] token.
+        Encode documents using XLNet and extract token embeddings.
         """
-        print("Encoding docs using XLNet and extracting [CLS] token embeddings...")
+        print("Encoding docs using XLNet...")
 
         self.model.eval()
         mean_embeddings = []
@@ -1139,25 +1180,32 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         with torch.no_grad():
             for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
                 input_ids, attention_mask = self._tokenize(batch)
+
+                # Move inputs to the appropriate device (MPS, CUDA, or CPU)
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
 
+                # Forward pass through the model
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from XLNet
 
-                # XLNet's [CLS] token is at the end of the sequence, not the beginning like BERT
-                batch_cls_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
-                cls_embeddings.append(batch_cls_embeddings)
+                # Extract the [CLS] token embeddings (last token in XLNet)
+                token_vectors = outputs[0]  # Shape: [batch_size, sequence_length, hidden_size]
+                cls_embeddings_batch = token_vectors[:, -1, :].cpu().detach().numpy()  # Last token embedding
+                cls_embeddings.append(cls_embeddings_batch)
 
                 # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                mean_embeddings.append(batch_mean_embeddings)
+                mean_embeddings_batch = token_vectors.mean(dim=1).cpu().detach().numpy()
+                mean_embeddings.append(mean_embeddings_batch)
 
-        # Concatenate all batch results
+        # Concatenate results
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         cls_embeddings = np.concatenate(cls_embeddings, axis=0)
 
         return mean_embeddings, cls_embeddings
+    
+
+
+
     
 
 
