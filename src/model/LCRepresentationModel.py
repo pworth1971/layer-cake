@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 
 from simpletransformers.language_representation import RepresentationModel
 from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel
-from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizerFast
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer
 
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -961,7 +961,207 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
+
+
+
+class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    XLNet representation model implementing sentence encoding using XLNet.
+    """
+
+    def __init__(self, model_name='xlnet-base-cased', model_dir=VECTOR_CACHE+'/XLNet', vtype='tfidf'):
+        print("Initializing XLNet representation model...")
+
+        super().__init__(model_name, model_dir)  # parent constructor
+
+        # Load the XLNet model and tokenizer
+        self.model = XLNetModel.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=model_dir)
+
+        # Ensure padding token is available
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
+
+        """
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+        """
+
+        # Use the custom tokenizer for both TF-IDF and CountVectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
+
     
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        #tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        tokens = self.tokenizer.tokenize(text)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
+        """
+        
+        tokenized_inputs = self.tokenizer(
+                texts,
+                return_tensors='pt',
+                padding=True,
+                #truncation=True,
+                #max_length=self.tokenizer.model_max_length,  # Use the tokenizer's maximum length (typically 512 for BERT)
+                return_attention_mask=True
+        )
+
+        return tokenized_inputs['input_ids'], tokenized_inputs['attention_mask']
+    
+
+
+    def build_embedding_vocab_matrix(self):
+        """
+        Builds the embedding vocabulary matrix using XLNet embeddings and tracks OOV tokens.
+        """
+        print("Building XLNet embedding vocab matrix...")
+
+        self.model.eval()
+        self.embedding_dim = self.model.config.hidden_size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+
+        print(f"Embedding dimension: {self.embedding_dim}")
+        print(f"Vocab size: {self.vocab_size}")
+
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+        mean_vector = np.zeros(self.embedding_dim)
+
+        oov_tokens = 0
+        oov_list = []
+        batch_words = []
+        word_indices = []
+
+        def process_batch(batch_words):
+            #inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True)
+            input_ids = inputs['input_ids'].to(self.device)
+
+            # Get token embeddings from XLNet
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids)
+            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+        # Tokenize the vocabulary and build embedding matrix
+        with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing XLNet embedding vocab matrix") as pbar:
+            for word, idx in self.vectorizer.vocabulary_.items():
+                if word in self.tokenizer.get_vocab():
+                    batch_words.append(word)
+                    word_indices.append(idx)
+                else:
+                    # Track OOV tokens
+                    oov_tokens += 1
+                    oov_list.append(word)
+                    self.embedding_vocab_matrix[idx] = mean_vector
+
+                if len(batch_words) == self.batch_size:
+                    embeddings = process_batch(batch_words)
+                    for i, embedding in zip(word_indices, embeddings):
+                        self.embedding_vocab_matrix[i] = embedding
+                    batch_words = []
+                    word_indices = []
+                    pbar.update(self.batch_size)
+
+            if batch_words:
+                embeddings = process_batch(batch_words)
+                for i, embedding in zip(word_indices, embeddings):
+                    self.embedding_vocab_matrix[i] = embedding
+                pbar.update(len(batch_words))
+
+        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
+        print(f"OOV tokens: {oov_tokens}")
+        print(f"List of OOV tokens: {oov_list}")
+    
+        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+    
+
+
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
+        """
+        Generates both the mean and [CLS] token embeddings for a list of text sentences using XLNet.
+
+        The [CLS] token is used as the sentence representation for classification tasks, similar to BERT.
+
+        Parameters:
+        ----------
+        text_list : list of str
+            List of documents to encode.
+
+        Returns:
+        -------
+        mean_embeddings : np.ndarray
+            Array of mean sentence embeddings (mean of all tokens).
+        cls_embeddings : np.ndarray
+            Array of sentence embeddings using the [CLS] token.
+        """
+        print("Encoding docs using XLNet and extracting [CLS] token embeddings...")
+
+        self.model.eval()
+        mean_embeddings = []
+        cls_embeddings = []
+
+        with torch.no_grad():
+            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
+                input_ids, attention_mask = self._tokenize(batch)
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
+
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Token-level embeddings from XLNet
+
+                # XLNet's [CLS] token is at the end of the sequence, not the beginning like BERT
+                batch_cls_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
+                cls_embeddings.append(batch_cls_embeddings)
+
+                # Compute the mean of all token embeddings
+                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
+                mean_embeddings.append(batch_mean_embeddings)
+
+        # Concatenate all batch results
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+        cls_embeddings = np.concatenate(cls_embeddings, axis=0)
+
+        return mean_embeddings, cls_embeddings
+    
+
+
+
 
 
 class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
@@ -1123,156 +1323,7 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
 
 
 
-class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
-    """
-    XLNet representation model implementing sentence encoding using XLNet.
-    """
 
-    def __init__(self, model_name='xlnet-base-cased', model_dir=VECTOR_CACHE+'/XLNet', vtype='tfidf'):
-        print("Initializing XLNet representation model...")
-
-        super().__init__(model_name, model_dir)  # parent constructor
-
-        # Load the XLNet model and tokenizer
-        self.model = XLNetModel.from_pretrained(model_name, cache_dir=model_dir)
-        self.tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=model_dir)
-
-        # Ensure padding token is available
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-
-        self.max_length = self.tokenizer.model_max_length
-        print("self.max_length:", self.max_length)
-
-        # Use the custom tokenizer for both TF-IDF and CountVectorizer
-        if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(
-                sublinear_tf=True, 
-                lowercase=False, 
-                tokenizer=self._custom_tokenizer
-            )
-        elif vtype == 'count':
-            self.vectorizer = CountVectorizer(
-                lowercase=False, 
-                tokenizer=self._custom_tokenizer
-            )
-        else:
-            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
-
-        self.model.to(self.device)  # Put the model on the appropriate device
-
-    
-
-    def build_embedding_vocab_matrix(self):
-        """
-        Builds the embedding vocabulary matrix using XLNet embeddings and tracks OOV tokens.
-        """
-        print("Building XLNet embedding vocab matrix...")
-
-        self.model.eval()
-        self.embedding_dim = self.model.config.hidden_size
-        self.vocab_size = len(self.vectorizer.vocabulary_)
-
-        print(f"Embedding dimension: {self.embedding_dim}")
-        print(f"Vocab size: {self.vocab_size}")
-
-        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-        mean_vector = np.zeros(self.embedding_dim)
-
-        oov_tokens = 0
-        oov_list = []
-        batch_words = []
-        word_indices = []
-
-        def process_batch(batch_words):
-            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
-            input_ids = inputs['input_ids'].to(self.device)
-
-            # Get token embeddings from XLNet
-            with torch.no_grad():
-                outputs = self.model(input_ids=input_ids)
-            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
-
-        # Tokenize the vocabulary and build embedding matrix
-        with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing XLNet embedding vocab matrix") as pbar:
-            for word, idx in self.vectorizer.vocabulary_.items():
-                if word in self.tokenizer.get_vocab():
-                    batch_words.append(word)
-                    word_indices.append(idx)
-                else:
-                    # Track OOV tokens
-                    oov_tokens += 1
-                    oov_list.append(word)
-                    self.embedding_vocab_matrix[idx] = mean_vector
-
-                if len(batch_words) == self.batch_size:
-                    embeddings = process_batch(batch_words)
-                    for i, embedding in zip(word_indices, embeddings):
-                        self.embedding_vocab_matrix[i] = embedding
-                    batch_words = []
-                    word_indices = []
-                    pbar.update(self.batch_size)
-
-            if batch_words:
-                embeddings = process_batch(batch_words)
-                for i, embedding in zip(word_indices, embeddings):
-                    self.embedding_vocab_matrix[i] = embedding
-                pbar.update(len(batch_words))
-
-        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
-        print(f"OOV tokens: {oov_tokens}")
-        print(f"List of OOV tokens: {oov_list}")
-    
-        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
-    
-
-
-    def encode_docs(self, text_list, embedding_vocab_matrix=None):
-        """
-        Generates both the mean and [CLS] token embeddings for a list of text sentences using XLNet.
-
-        The [CLS] token is used as the sentence representation for classification tasks, similar to BERT.
-
-        Parameters:
-        ----------
-        text_list : list of str
-            List of documents to encode.
-
-        Returns:
-        -------
-        mean_embeddings : np.ndarray
-            Array of mean sentence embeddings (mean of all tokens).
-        cls_embeddings : np.ndarray
-            Array of sentence embeddings using the [CLS] token.
-        """
-        print("Encoding docs using XLNet and extracting [CLS] token embeddings...")
-
-        self.model.eval()
-        mean_embeddings = []
-        cls_embeddings = []
-
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Token-level embeddings from XLNet
-
-                # XLNet's [CLS] token is at the end of the sequence, not the beginning like BERT
-                batch_cls_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
-                cls_embeddings.append(batch_cls_embeddings)
-
-                # Compute the mean of all token embeddings
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                mean_embeddings.append(batch_mean_embeddings)
-
-        # Concatenate all batch results
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        cls_embeddings = np.concatenate(cls_embeddings, axis=0)
-
-        return mean_embeddings, cls_embeddings
 
 
 
