@@ -23,38 +23,12 @@ from model.classification import run_model
 from util.csv_log import CSVLog
 
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
-from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, LLAMA_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
 
 
 import warnings
 warnings.filterwarnings('ignore')
 
-
-def embedding_matrix(dataset, pretrained=False, supervised=False):
-    assert pretrained or supervised, 'useless call without requiring pretrained and/or supervised embeddings'
-    vocabulary = dataset.vocabulary
-    vocabulary = np.asarray(list(zip(*sorted(vocabulary.items(), key=lambda x: x[1])))[0])
-
-    print('[embedding matrix]')
-    pretrained_embeddings = []
-    if pretrained:
-        print('\t[pretrained-matrix: GloVe]')
-        pretrained = GloVe()
-        P = pretrained.extract(vocabulary).numpy()
-        pretrained_embeddings.append(P)
-        del pretrained
-
-    if supervised:
-        print('\t[supervised-matrix]')
-        Xtr, _ = dataset.vectorize()
-        Ytr = dataset.devel_labelmatrix
-        S = get_supervised_embeddings(Xtr, Ytr)
-        pretrained_embeddings.append(S)
-
-    pretrained_embeddings = np.hstack(pretrained_embeddings)
-    print(f'[embedding matrix done] of shape={pretrained_embeddings.shape}')
-
-    return vocabulary, pretrained_embeddings
 
 
 # -------------------------------------------------------------------------------------------------------------------
@@ -393,7 +367,7 @@ def get_model_computation_method(args, embedding_type='word'):
     print("calculating model computation method...")
     print("embedding_type:", embedding_type)
 
-    if (args.pretrained in ['bert', 'roberta', 'llama']):
+    if (args.pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
         pt_type = 'attention:tokenized'
     elif (args.pretrained in ['glove', 'word2vec']):
         pt_type = 'co-occurrence:word'
@@ -448,13 +422,15 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         model_name = BERT_MODEL
     elif (pretrained == 'roberta'):
         model_name = ROBERTA_MODEL
-    elif (pretrained == 'llama'):
-        model_name = LLAMA_MODEL
+    elif (pretrained == 'gpt2'):
+        model_name = GPT2_MODEL
+    elif (pretrained == 'xlnet'):
+        model_name = XLNET_MODEL
     else:
-        model_name = None
-
+        model = None
+        raise ValueError(f"Unsupported pretrained model '{pretrained}'")
+        
     print("model_name:", model_name)
-
     
     pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
     
@@ -688,9 +664,13 @@ def get_embeddings_path(pretrained, args):
         return args.fasttext_path
     elif pretrained == 'llama':
         return args.llama_path
+    elif pretrained == 'xlnet':
+        return args.xlnet_path
+    elif pretrained == 'gpt2':
+        return args.gpt2_path
     else:
-        return None
-
+        raise ValueError(f"Unsupported pretrained model '{pretrained}'")
+        
 
 
 def get_embeddings(args):
@@ -827,9 +807,13 @@ if __name__ == '__main__':
                         metavar='PATH',
                         help=f'directory to RoBERTa pretrained vectors (NB used only with --pretrained roberta)')
     
-    parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE,
+    parser.add_argument('--gpt2-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'directory to LLaMA pretrained vectors (NB used only with --pretrained llama)')
+                        help=f'directory to GPT2 pretrained vectors (NB used only with --pretrained gpt2)')
+    
+    parser.add_argument('--xlnet-path', type=str, default=VECTOR_CACHE,
+                        metavar='PATH',
+                        help=f'directory to XLNet pretrained vectors (NB used only with --pretrained xlnet)')
     
     args = parser.parse_args()
 
@@ -871,6 +855,6 @@ if __name__ == '__main__':
         optimized=optimized,
         logfile=logfile, 
         args=args
-        )
+    )
     
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------

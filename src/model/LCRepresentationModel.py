@@ -7,14 +7,8 @@ import requests
 from abc import ABC, abstractmethod
 
 from simpletransformers.language_representation import RepresentationModel
-from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
-from transformers import BertModel, LlamaModel, RobertaModel
-
-import torch.nn as nn
-from transformers import LlamaModel, LlamaTokenizerFast
-from torch.distributed.pipeline.sync import Pipe
-# Import FairScale's Pipe for pipeline parallelism
-#from fairscale.nn import Pipe
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizerFast
 
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -52,22 +46,27 @@ else:
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
 #GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
-#BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
+#BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
-#ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
-ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
+ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
+#ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
 
-LLAMA_MODEL = 'meta-llama/Llama-2-7b-hf'                    # dimension = 4096, case sensitive
-#LLAMA_MODEL = 'meta-llama/Llama-2-13b-hf'
+GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
+#GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
+#GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
+
+XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
+#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
+
 # -------------------------------------------------------------------------------------------------------
 
 MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
@@ -658,30 +657,15 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
 
 
-class BERTRootLCRepresentationModel(LCRepresentationModel):
+class TransformerLCRepresentationModel(LCRepresentationModel):
     """
-    Shared class for BERT and RoBERTa models to implement common functionality, such as tokenization.
+    Base class for Transformer based architcteure langugae models such as BERT, RoBERTa, XLNet and GPT2
     """
     
     def __init__(self, model_name, model_dir, vtype='tfidf'):
+
         super().__init__(model_name, model_dir)
         
-        # Use the custom tokenizer for both TF-IDF and CountVectorizer
-        if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT, 
-                sublinear_tf=True, 
-                lowercase=False, 
-                tokenizer=self._custom_tokenizer
-            )
-        elif vtype == 'count':
-            self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT, 
-                lowercase=False, 
-                tokenizer=self._custom_tokenizer
-            )
-        else:
-            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
     
     
     def _custom_tokenizer(self, text):
@@ -710,9 +694,8 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
     def _tokenize(self, texts):
         """
         Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
-        This method is parallelized for faster processing.
         """
-        # Tokenize texts in parallel
+        
         tokenized_inputs = self.tokenizer(
                 texts,
                 return_tensors='pt',
@@ -895,7 +878,7 @@ class BERTRootLCRepresentationModel(LCRepresentationModel):
 
 
 
-class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
+class BERTLCRepresentationModel(TransformerLCRepresentationModel):
     """
     BERTRepresentation subclass implementing sentence encoding using BERT
     """
@@ -940,11 +923,8 @@ class BERTLCRepresentationModel(BERTRootLCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
     
 
-    
 
-
-
-class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
+class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
     """
     RoBERTaRepresentationModel subclass implementing sentence encoding using RoBERTa
     """
@@ -983,295 +963,316 @@ class RoBERTaLCRepresentationModel(BERTRootLCRepresentationModel):
         self.model.to(self.device)      # put the model on the appropriate device
     
 
-    
 
-
-
-class LlaMaLCRepresentationModel(LCRepresentationModel):
+class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
     """
-    LLAMARepresentation subclass implementing sentence encoding using LLAMA
+    GPT-2 representation model implementing sentence encoding using GPT-2.
     """
-    
-    def __init__(self, model_name=LLAMA_MODEL, model_dir=VECTOR_CACHE+'/LlaMa', vtype='tfidf'):
-        
-        print("initializing LLAMA representation model...")
 
-        super().__init__(model_name, model_dir)                             # parent constructor
-    
-        self.model = LlamaModel.from_pretrained(model_name, cache_dir=model_dir)
-        
-        self.tokenizer = LlamaTokenizerFast.from_pretrained(
-            model_name, 
-            cache_dir=model_dir
-        )
+    def __init__(self, model_name='gpt2', model_dir=VECTOR_CACHE+'/GPT2', vtype='tfidf'):
+        print("Initializing GPT-2 representation model...")
+
+        super().__init__(model_name, model_dir)  # parent constructor
+
+        # Load the GPT-2 model and tokenizer
+        self.model = GPT2Model.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = GPT2TokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
 
         # Ensure padding token is available
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
-            
+
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT, 
-                lowercase=False, 
                 sublinear_tf=True, 
+                lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         elif vtype == 'count':
             self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         else:
-            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")          
+            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
-        #
-        # With CUDA support, we distribute the model across all available GPUs using Pipeline Parallelism
-        #
-        if (self.device.type == 'cuda'):
-
-            # List of devices (GPUs)
-            devices = [torch.device(f'cuda:{i}') for i in range(torch.cuda.device_count())]
-            print(f"Devices: {devices}")
-            print(f"Number of devices: {len(devices)}")
-
-            # Get the number of layers in the model
-            layers = list(self.model.children())
-            num_layers = len(layers)
-            print(f"Number of layers: {num_layers}")
-
-            # Check if there are more devices than layers
-            if num_layers < len(devices):
-                print("Number of layers is less than the number of devices.")
-                layers_per_device = 1  # At least one layer per device
-            else:
-                layers_per_device = num_layers // len(devices)
-
-            print(f"Layers per device: {layers_per_device}")
-
-            # Assign layers to devices
-            current_device = 0
-            for i, layer in enumerate(layers):
-                # Move layer to the current device
-                layer.to(devices[current_device])
-                
-                # If this device has enough layers, move to the next device
-                if (i + 1) % layers_per_device == 0 and current_device < len(devices) - 1:
-                    current_device += 1
-
-            # Now wrap the model in a pipeline parallelism Pipe
-            self.pipeline_model = Pipe(self.model, chunks=8, checkpoint='never')
-
-        else:
-            # put the whole model on GPU / MPS chip
-            self.model.to(self.device)              
-
+        self.model.to(self.device)  # Put the model on the appropriate device
+        
 
     def _custom_tokenizer(self, text):
         """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        
-        Parameters:
-        - text: The input text to be tokenized.
-        
-        Returns:
-        - tokens: A list of tokens with special tokens removed based on the model in use.
+        Tokenize the text using the GPT-2 tokenizer, ensuring truncation and padding are applied.
+        This method returns tokenized strings (subwords) for use with TF-IDF/CountVectorizer.
         """
 
-        #tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        # Tokenize the text with GPT-2, applying truncation to limit sequence length
+        tokenized_output = self.tokenizer(
+            text,
+            max_length=self.max_length,  # Limit to model's max length (usually 1024)
+            truncation=True,  # Ensure sequences longer than max_length are truncated
+            padding='max_length',  # Optional: can pad to max length (if needed)
+            return_tensors=None,  # Return token strings, not tensor IDs
+            add_special_tokens=False  # Do not add special tokens like <|endoftext|> for TF-IDF use
+        )
 
-        tokens = self.tokenizer.tokenize(text, truncation=True)         # should pick up the max_length based upon model
+        # The tokenizer will return a dictionary, so we extract the tokenized sequence
+        tokens = tokenized_output['input_ids']
 
-        # Retrieve special tokens from the tokenizer object
-        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
-        
-        # Optionally, remove special tokens
-        tokens = [token for token in tokens if token not in special_tokens]
+        # Convert token IDs back to token strings for use with TF-IDF/CountVectorizer
+        tokens = self.tokenizer.convert_ids_to_tokens(tokens)
 
         return tokens
-    
-
-
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using the LLaMa tokenizer, returning token IDs and attention masks.
-
-        Parameters:
-        ----------
-        texts : list of str
-            List of sentences to tokenize.
-
-        Returns:
-        -------
-        input_ids : torch.Tensor
-            Tensor of token IDs for each sentence.
-        attention_mask : torch.Tensor
-            Tensor of attention masks (1 for real tokens, 0 for padding tokens).
-        """
-
-        # Tokenize the input texts, padding/truncating them to the max length and returning tensors
-        inputs = self.tokenizer(
-            texts,
-            return_tensors='pt',                            # Return PyTorch tensors
-            padding=True,                                   # Pad the sequences to the longest sequence in the batch
-            truncation=True,                                # Truncate sequences that exceed the max length
-            return_attention_mask=True
-            #max_length=self.max_length                     # Define a max length (usually 512 for LLaMa)
-        )
-        
-        # Return input IDs and attention mask as tensors
-        return inputs['input_ids'], inputs['attention_mask']
-
 
 
 
     def build_embedding_vocab_matrix(self):
-    
-        print("building [LlaMa based] embedding representation (matrix) of dataset vocabulary...")
+        """
+        Builds the embedding vocabulary matrix using GPT-2 embeddings and tracks OOV tokens.
+        """
+        print("Building GPT-2 embedding vocab matrix...")
 
-        if (self.device.type == 'cuda'):
-            self.pipeline_model.eval()              # Set the pipeline model to evaluation mode (for inference)
-            
-            # **Model stays on GPUs** — we do not move the model to CPU at any point.
-            print("Model is distributed across the following devices: ", self.pipeline_model.devices)
-        
-        else:
-            self.model.eval()  # Set model to evaluation mode            
-    
-        print(f"Using device: {self.device}")  # To confirm which device is being used
-        print("model:", type(self.model))
-        
-        #
-        # NB we use different embedding vocab matrices here depending upon the pretrained model
-        #
-        self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
+        self.model.eval()
+        self.embedding_dim = self.model.config.hidden_size
         self.vocab_size = len(self.vectorizer.vocabulary_)
 
-        print("embedding_dim:", self.embedding_dim)
-        print("dataset vocab size:", self.vocab_size)   
+        print(f"Embedding dimension: {self.embedding_dim}")
+        print(f"Vocab size: {self.vocab_size}")
 
-        # Dictionary to store the index-token mapping
-        self.token_to_index_mapping = {}
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+        mean_vector = np.zeros(self.embedding_dim)
 
-        # Collect all tokens from the vectorizer's vocabulary
-        tokens = list(self.vectorizer.vocabulary_.keys())
-        num_tokens = len(tokens)
-        print("Number of tokens to encode:", num_tokens)
+        oov_tokens = 0
+        oov_list = []
+        batch_words = []
+        word_indices = []
 
-        # Batch size for processing
-        batch_size = BATCH_SIZE
+        def process_batch(batch_words):
+            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+            input_ids = inputs['input_ids'].to(self.device)
 
-        # Initialize an empty NumPy array to store the embeddings
-        self.embedding_matrix = np.zeros((self.vocab_size, self.embedding_dim), dtype=np.float32)
-
-        # Process tokens in batches to avoid memory overload
-        for batch_start in tqdm(range(0, num_tokens, batch_size), desc="Encoding dataset dictionary with LLaMa embeddings..."):
-            batch_tokens = tokens[batch_start: batch_start + batch_size]
-
-            # Tokenize the batch of tokens
-            inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, return_attention_mask=True)
-
-            # **Move input_ids to the first GPU where the model's first layer resides**
-            input_ids = inputs.input_ids.to(self.pipeline_model.devices[0])
-
+            # Get token embeddings from GPT-2
             with torch.no_grad():
-                # Forward pass through the pipeline model (which spans across multiple GPUs)
-                outputs = self.pipeline_model(input_ids)
+                outputs = self.model(input_ids=input_ids)
+            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
-            # Mean pooling to get sentence-level embeddings for each token
-            batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+        # Tokenize the vocabulary and build embedding matrix
+        with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing GPT-2 embedding vocab matrix") as pbar:
+            for word, idx in self.vectorizer.vocabulary_.items():
+                if word in self.tokenizer.get_vocab():
+                    batch_words.append(word)
+                    word_indices.append(idx)
+                else:
+                    # Track OOV tokens
+                    oov_tokens += 1
+                    oov_list.append(word)
+                    self.embedding_vocab_matrix[idx] = mean_vector
 
-            # Store each token's embedding in the embedding matrix and update the token-to-index mapping
-            for i, token in enumerate(batch_tokens):
-                token_index = self.vectorizer.vocabulary_[token]
-                self.embedding_matrix[token_index] = batch_embeddings[i]
-                self.token_to_index_mapping[token_index] = token  # Store the token at its index
+                if len(batch_words) == self.batch_size:
+                    embeddings = process_batch(batch_words)
+                    for i, embedding in zip(word_indices, embeddings):
+                        self.embedding_vocab_matrix[i] = embedding
+                    batch_words = []
+                    word_indices = []
+                    pbar.update(self.batch_size)
 
-        print("embedding_matrix:", type(self.embedding_matrix), self.embedding_matrix.shape)
-        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+            if batch_words:
+                embeddings = process_batch(batch_words)
+                for i, embedding in zip(word_indices, embeddings):
+                    self.embedding_vocab_matrix[i] = embedding
+                pbar.update(len(batch_words))
 
+        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
+        print(f"OOV tokens: {oov_tokens}")
+        print(f"List of OOV tokens: {oov_list}")
 
-        return self.embedding_matrix, self.token_to_index_mapping     
-
+        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
 
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
-        Generates both the mean and last token embeddings for a list of text sentences using LLaMa.
-        
-        LLaMa does not use [CLS] tokens. Instead, it can return:
-        - The mean of all token embeddings.
-        - The last token embedding, which is a (representation of the) summary of the sentence.
-        
+        Encode documents using GPT-2 embeddings.
+        """
+
+        print("Encoding docs using GPT-2...")
+        self.model.eval()
+
+        mean_embeddings = []
+
+        with torch.no_grad():
+            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
+                input_ids, attention_mask = self._tokenize(batch)  # Use token IDs for GPT-2
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
+
+                # Get the token-level embeddings from GPT-2
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Shape: [batch_size, sequence_length, hidden_size]
+
+                # Compute the mean of all token embeddings for each document
+                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
+                mean_embeddings.append(batch_mean_embeddings)
+
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+
+        return mean_embeddings
+
+
+
+
+class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    XLNet representation model implementing sentence encoding using XLNet.
+    """
+
+    def __init__(self, model_name='xlnet-base-cased', model_dir=VECTOR_CACHE+'/XLNet', vtype='tfidf'):
+        print("Initializing XLNet representation model...")
+
+        super().__init__(model_name, model_dir)  # parent constructor
+
+        # Load the XLNet model and tokenizer
+        self.model = XLNetModel.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=model_dir)
+
+        # Ensure padding token is available
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
+
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
+        # Use the custom tokenizer for both TF-IDF and CountVectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
+
+    
+
+    def build_embedding_vocab_matrix(self):
+        """
+        Builds the embedding vocabulary matrix using XLNet embeddings and tracks OOV tokens.
+        """
+        print("Building XLNet embedding vocab matrix...")
+
+        self.model.eval()
+        self.embedding_dim = self.model.config.hidden_size
+        self.vocab_size = len(self.vectorizer.vocabulary_)
+
+        print(f"Embedding dimension: {self.embedding_dim}")
+        print(f"Vocab size: {self.vocab_size}")
+
+        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
+        mean_vector = np.zeros(self.embedding_dim)
+
+        oov_tokens = 0
+        oov_list = []
+        batch_words = []
+        word_indices = []
+
+        def process_batch(batch_words):
+            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+            input_ids = inputs['input_ids'].to(self.device)
+
+            # Get token embeddings from XLNet
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids)
+            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+        # Tokenize the vocabulary and build embedding matrix
+        with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing XLNet embedding vocab matrix") as pbar:
+            for word, idx in self.vectorizer.vocabulary_.items():
+                if word in self.tokenizer.get_vocab():
+                    batch_words.append(word)
+                    word_indices.append(idx)
+                else:
+                    # Track OOV tokens
+                    oov_tokens += 1
+                    oov_list.append(word)
+                    self.embedding_vocab_matrix[idx] = mean_vector
+
+                if len(batch_words) == self.batch_size:
+                    embeddings = process_batch(batch_words)
+                    for i, embedding in zip(word_indices, embeddings):
+                        self.embedding_vocab_matrix[i] = embedding
+                    batch_words = []
+                    word_indices = []
+                    pbar.update(self.batch_size)
+
+            if batch_words:
+                embeddings = process_batch(batch_words)
+                for i, embedding in zip(word_indices, embeddings):
+                    self.embedding_vocab_matrix[i] = embedding
+                pbar.update(len(batch_words))
+
+        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
+        print(f"OOV tokens: {oov_tokens}")
+        print(f"List of OOV tokens: {oov_list}")
+    
+        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+    
+
+
+    def encode_docs(self, text_list, embedding_vocab_matrix=None):
+        """
+        Generates both the mean and [CLS] token embeddings for a list of text sentences using XLNet.
+
+        The [CLS] token is used as the sentence representation for classification tasks, similar to BERT.
+
         Parameters:
         ----------
         text_list : list of str
-            List of sentences to encode.
+            List of documents to encode.
 
         Returns:
         -------
         mean_embeddings : np.ndarray
             Array of mean sentence embeddings (mean of all tokens).
-        last_embeddings : np.ndarray
-            Array of sentence embeddings using the last token.
+        cls_embeddings : np.ndarray
+            Array of sentence embeddings using the [CLS] token.
         """
-        
-        print("encoding docs using LLaMa...")
+        print("Encoding docs using XLNet and extracting [CLS] token embeddings...")
 
-        if (self.device.type == 'cuda'):
-            # Set the pipeline model to evaluation mode (for inference)
-            self.pipeline_model.eval()
+        self.model.eval()
+        mean_embeddings = []
+        cls_embeddings = []
 
-            # **Model stays on GPUs** — we do not move the model to CPU at any point.
-            print("Model is distributed across the following devices: ", self.pipeline_model.devices)
-        
-        else:
-            self.model.eval()  # Set model to evaluation mode            
-    
-        print(f"Using device: {self.device}")  # To confirm which device is being used
-        print("model:", type(self.model))
-
-        mean_embeddings, last_embeddings = []
-        
         with torch.no_grad():
-            # Process text in batches
             for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
                 input_ids, attention_mask = self._tokenize(batch)
-                
-                # **Move input_ids to the first GPU where the model's first layer resides**
-                input_ids = input_ids.to(self.pipeline_model.devices[0])
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
 
-                # Forward pass through the pipeline model
-                outputs = self.pipeline_model(input_ids)
-                token_vectors = outputs.last_hidden_state
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                token_vectors = outputs[0]  # Token-level embeddings from XLNet
+
+                # XLNet's [CLS] token is at the end of the sequence, not the beginning like BERT
+                batch_cls_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
+                cls_embeddings.append(batch_cls_embeddings)
 
                 # Compute the mean of all token embeddings
                 batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
                 mean_embeddings.append(batch_mean_embeddings)
 
-                # Compute the last token embedding
-                batch_last_embeddings = token_vectors[:, -1, :].cpu().detach().numpy()
-                last_embeddings.append(batch_last_embeddings)
-
         # Concatenate all batch results
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        last_embeddings = np.concatenate(last_embeddings, axis=0)
+        cls_embeddings = np.concatenate(cls_embeddings, axis=0)
 
-        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
-        print("last_embeddings:", type(last_embeddings), last_embeddings.shape)
-
-        return mean_embeddings, last_embeddings
-    
-
-
-
-
-
-
-
-
+        return mean_embeddings, cls_embeddings
 
 
 

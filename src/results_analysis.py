@@ -428,8 +428,6 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 
 
-import csv
-
 def generate_grouped_tables(df, output_dir):
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
     df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)

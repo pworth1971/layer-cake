@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_word_subword.test"
+LOG="--logfile ../log/ml_mps_gpt2_xlnet.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -25,14 +25,13 @@ DATASET_EMB_COMP="--dataset-emb-comp"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("reuters21578" "20newsgroups" "ohsumed")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles")
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
+declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-#declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
-declare -a mixes=("solo" "cat")
-declare -a embeddings=("glove" "word2vec" "fasttext")
-declare -a emb_comp_options=("avg" "weighted")
+declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
+declare -a embeddings=("gtp2" "xlnet")
+declare -a emb_comp_options=("avg" "weighted" "summary")
 
 # Embedding config params
 
@@ -53,6 +52,14 @@ ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
 
 LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
 #LLAMA_SUP="--pretrained llama --llama-path ../.vector_cache/LlaMa --supervised"
+
+GPT2="--pretrained gpt2 --gpt2-path ../.vector_cache/GPT2"
+#GPT2_SUP="--pretrained gpt2 --gpt2-path ../.vector_cache/GPT2 --supervised"
+
+XLNET="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
+#XLNET_SUP="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet --supervised"
+
+
 
 # Function to run commands
 function run_command() {
@@ -103,12 +110,14 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp"
                 done
             done
         done

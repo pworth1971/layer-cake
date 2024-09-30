@@ -33,10 +33,6 @@ from gensim.scripts.glove2word2vec import glove2word2vec
 
 import torch
 
-#from torch.utils.data import DataLoader, Dataset
-#from transformers import BertTokenizerFast, LlamaTokenizerFast, RobertaTokenizerFast
-#from transformers import BertModel, LlamaModel, RobertaModel
-
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
@@ -45,10 +41,11 @@ from model.LCRepresentationModel import *
 
 from util.common import VECTOR_CACHE, DATASET_DIR
 
-import fasttext
-import fasttext.util
 
 from scipy.special._precompute.expn_asy import generate_A
+
+
+
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
@@ -195,10 +192,18 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
-        elif (pretrained == 'llama'):
-            print("Using LLaMA pretrained embeddings...")
-            self.lcr_model = LlaMaLCRepresentationModel(
-                model_name=LLAMA_MODEL, 
+        elif (pretrained == 'gpt2'):
+            print("Using GPT2 pretrained embeddings...")
+            self.lcr_model = GPT2LCRepresentationModel(
+                model_name=GPT2_MODEL, 
+                model_dir=embedding_path,  
+                vtype=vectorization_type
+            )
+
+        elif (pretrained == 'xlnet'):
+            print("Using XLNet pretrained embeddings...")
+            self.lcr_model = XLNetLCRepresentationModel(
+                model_name=XLNET_MODEL, 
                 model_dir=embedding_path,  
                 vtype=vectorization_type
             )
@@ -358,7 +363,7 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'llama', 'roberta']):    
+        if (self.pretrained in ['bert', 'roberta', 'xlnet']):    
 
             print("generating transformer / token based dataset representations...")
 
@@ -384,6 +389,31 @@ class LCDataset:
                 self.Xte.tolist(), 
                 self.embedding_vocab_matrix
             )
+
+            # CLS token summary embeddings not supported in pretrained 
+            # word embedding models like word2vec, GloVe or fasTtext
+            self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
+            self.Xte_summary_embeddings = self.Xte_avg_embeddings
+
+        elif (self.pretrained in ['gpt2']):                        # GPT2, does not include a summary embedding token option
+
+            print("generating GPT2 based dataset repressentations...")
+
+            self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
+                self.Xtr.tolist(), 
+                self.embedding_vocab_matrix
+            )
+            
+            self.Xte_avg_embeddings = self.lcr_model.encode_docs(
+                self.Xte.tolist(), 
+                self.embedding_vocab_matrix
+            )
+
+            # not supported weighted average comp method for transformer based models due to
+            # complexity of vectorization and tokenization mapping across models 
+            # word embedding models like word2vec, GloVe or fasTtext
+            self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
+            self.Xte_weighted_embeddings = self.Xte_avg_embeddings
 
             # CLS token summary embeddings not supported in pretrained 
             # word embedding models like word2vec, GloVe or fasTtext
