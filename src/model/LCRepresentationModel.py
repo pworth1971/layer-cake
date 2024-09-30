@@ -1001,6 +1001,8 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
 
 
 
+
+
 class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
     """
     XLNet representation model implementing sentence encoding using XLNet.
@@ -1123,18 +1125,21 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         word_indices = []
 
         def process_batch(batch_words):
-            #inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
-            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True)
+            # Tokenize the batch of words into subwords
+            inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
             input_ids = inputs['input_ids'].to(self.device)
 
             # Get token embeddings from XLNet
             with torch.no_grad():
                 outputs = self.model(input_ids=input_ids)
 
-            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            # Average the embeddings of all tokens (subwords)
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
 
         # Tokenize the vocabulary and build embedding matrix
         with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing XLNet embedding vocab matrix") as pbar:
+                    
             for word, idx in self.vectorizer.vocabulary_.items():
                 if word in self.tokenizer.get_vocab():
                     batch_words.append(word)
@@ -1250,6 +1255,35 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
 
         self.model.to(self.device)  # Put the model on the appropriate device
         
+    
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
+        """
+        input_ids = []
+        attention_masks = []
+
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention masks
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,                                    # Add special tokens, like <|endoftext|> for GPT-2
+                max_length=self.max_length,                                 # Truncate to the model's max length
+                padding='max_length',                                       # Pad to max_length (if required)
+                return_attention_mask=True,                                 # Return attention mask
+                return_tensors='pt',                                        # Return PyTorch tensors
+                truncation=True                                             # Truncate sequences longer than max_length
+            )
+            
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
+
 
     def _custom_tokenizer(self, text):
         """
@@ -1305,16 +1339,21 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
             # Get token embeddings from GPT-2
             with torch.no_grad():
                 outputs = self.model(input_ids=input_ids)
-            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+            # Average embeddings across all tokens (instead of just the first)
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()  # Mean pooling across tokens
 
         # Tokenize the vocabulary and build embedding matrix
         with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing GPT-2 embedding vocab matrix") as pbar:
             for word, idx in self.vectorizer.vocabulary_.items():
-                if word in self.tokenizer.get_vocab():
+                # Tokenize the word into subwords (this will handle cases where words are split into subword units)
+                subwords = self.tokenizer.tokenize(word)
+
+                if len(subwords) > 0:  # If tokenization was successful (no empty subwords)
                     batch_words.append(word)
                     word_indices.append(idx)
                 else:
-                    # Track OOV tokens
+                    # If completely unknown (unlikely with GPT-2 tokenizer), mark as OOV
                     oov_tokens += 1
                     oov_list.append(word)
                     self.embedding_vocab_matrix[idx] = mean_vector
@@ -1338,6 +1377,7 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         print(f"List of OOV tokens: {oov_list}")
 
         return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+
 
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
