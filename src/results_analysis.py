@@ -53,7 +53,9 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
     
     # Filter for the specific measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
-    print("df shape after filtering for measures:", df_measures.shape)
+    if (debug):
+        print("df shape after filtering for measures:", df_measures.shape)
+    
     if df_measures.empty:
         print("Error: No data available for the specified measures")
         return
@@ -133,117 +135,7 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
 
 
 
-def generate_charts_plotly(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
-
-    # Define the measures of interest
-    measures_of_interest = ['final-te-macro-F1', 'final-te-micro-F1']
-
-    # Filter the dataframe for the measures of interest right away
-    df = df[df['measure'].isin(measures_of_interest)]
-    
-    if df.empty:
-        print("No data available for the specified measures")
-        return
-
-    print("generating plotly charts to output directory:", output_path)
-
-    # Create output directory if it doesn't exist
-    if output_path and not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    # Generate a separate chart for each measure within each dataset
-    for dataset in df['dataset'].unique():
-
-        print("processing dataset:", dataset)
-
-        for measure in measures_of_interest:
-
-            print(f"Generating plots for dataset {dataset} with measure {measure}...")
-
-            # Filter the dataframe for the current dataset and measure
-            subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
-            print("subset_df1:\n", subset_df1)
-
-            # Group by representation, model, and dimensions to find maximum values
-            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings']).agg({'value': 'max'}).reset_index()
-
-            if subset_df2.empty:
-                print(f"No data available for dataset {dataset} with measure {measure}")
-                continue
-
-            # Create a new column that appends the dimensions to the representation label
-            #subset_df['representation_with_dim'] = subset_df['representation'] + '{' + subset_df['dimensions'].astype(str) + '}'
-
-            # Sorting by representation
-            subset_df2.sort_values(by=['representation'], inplace=True)
-            print("subset_df2:\n", subset_df2)
-
-            # Define the sorted order for the x-axis
-            model_rep_order = subset_df2['representation'].tolist()
-
-            # Create the plot, coloring by model and spreading bars on the x-axis
-            fig = px.bar(subset_df2, 
-                         x='representation',  # Use representation for x-axis
-                         y='value', 
-                         color='model',  # Color by model
-                         title=f'{measure} Performance Comparison on {dataset}',
-                         labels={"value": "Performance Metric", "representation": "Representation"},
-                         hover_data=['representation', 'value'],                # Include representation and value in hover
-                         category_orders={"representation": model_rep_order})  # Explicit sorting order
-
-            # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
-            fig.update_layout(
-                title={
-                    'text': f'{measure} Performance Across Models and Representations on {dataset}',
-                    'y': 0.95,
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'yanchor': 'top',
-                    'font': dict(
-                        family="Arial",
-                        size=16,
-                        color='black',
-                        weight='bold'
-                    )
-                },
-                legend_title_text='Model',
-                legend=dict(
-                    orientation="v",
-                    y=1,
-                    x=1,
-                    xanchor='right',
-                    yanchor='top'
-                ),
-                bargap=0.2,  # Increase spacing between bars
-            )
-
-            # Ensure the x-axis is treated as categorical and sorted
-            fig.update_xaxes(
-                title_text='Model - Representation (Dimensions)',
-                type='category'  # Treat x-axis as categorical to prevent reordering
-            )
-
-            fig.update_yaxes(
-                title_text='Performance Metric', 
-                range=[y_axis_threshold, 1]
-            )
-
-            # Save the plot in the specified output directory
-            plot_file_name = f"{dataset}_{measure}_performance_comparison.html"
-            plot_file = os.path.join(output_path, plot_file_name)
-            fig.write_html(plot_file)
-
-            print(f"Saved plot for {measure} on dataset {dataset} at {plot_file}")
-
-            if show_charts:
-                fig.show()
-
-    print("plotly charts generation completed.")
-
-    return df
-
-
-
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
 
@@ -348,27 +240,155 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
     return df_timelapse
 
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def gen_csvs(df, output_dir):
+def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
+
+    # Filter the dataframe for the measures of interest right away
+    df = df[df['measure'].isin(MEASURES)]
+    
+    if df.empty:
+        print("No data available for the specified measures")
+        return
+
+    print("generating plotly charts to output directory:", output_path)
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Generate a separate chart for each measure within each dataset
+    for dataset in df['dataset'].unique():
+
+        print("processing dataset:", dataset)
+
+        for measure in MEASURES:
+
+            print(f"Generating plots for dataset {dataset} with measure {measure}...")
+
+            # Filter the dataframe for the current dataset and measure
+            subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
+            if (debug):
+                print("subset_df1:\n", subset_df1)
+
+            # Group by representation, model, and dimensions to find maximum values
+            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings']).agg({'value': 'max'}).reset_index()
+
+            if subset_df2.empty:
+                print(f"No data available for dataset {dataset} with measure {measure}")
+                continue
+
+            # Update the representation column to include the dimensions in curly brackets, italicized
+            subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} <i>{{{row['dimensions']}}}</i>", axis=1)
+
+            # Sorting by representation
+            subset_df2.sort_values(by=['representation'], inplace=True)
+            if (debug):
+                print("subset_df2:\n", subset_df2)
+
+            # Define the sorted order for the x-axis
+            model_rep_order = subset_df2['representation'].tolist()
+
+            # Create the plot, coloring by model and spreading bars on the x-axis
+            fig = px.bar(subset_df2, 
+                         x='representation',                                                                # Use representation for x-axis
+                         y='value', 
+                         color='model',                                                                     # Color by model
+                         title=f'{measure} Performance Comparison on {dataset}',
+                         labels={"value": "Performance Metric", "representation": "Representation"},
+                         hover_data=['representation', 'value'],                                            # Include representation and value in hover
+                         category_orders={"representation": model_rep_order})                               # Explicit sorting order
+
+            # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
+            fig.update_layout(
+                title={
+                    'text': f'{measure} Model & Representations Performance on {dataset}',
+                    'y': 0.95,
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': dict(
+                        family="Arial",
+                        size=16,
+                        color='black',
+                        weight='bold'
+                    )
+                },
+                legend_title_text='Model',
+                legend=dict(
+                    orientation="v",
+                    y=1,
+                    x=1,
+                    xanchor='right',
+                    yanchor='top'
+                ),
+                bargap=0.2,  # Increase spacing between bars
+            )
+
+            # Ensure the x-axis is treated as categorical and sorted
+            fig.update_xaxes(
+                title_text='Model - Representation',
+                type='category'                                             # Treat x-axis as categorical to prevent reordering
+            )
+
+            fig.update_yaxes(
+                title_text='Performance Metric', 
+                range=[y_axis_threshold, 1]
+            )
+
+             # Get the current date in YYYY-MM-DD format
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Save the plot in the specified output directory
+            plot_file_name = f"{dataset}_{measure}_performance_comparison.{current_date}.html"
+            plot_file = os.path.join(output_path, plot_file_name)
+            fig.write_html(plot_file)
+
+            print(f"Saved plot for {measure} on dataset {dataset} at {plot_file}")
+
+            if show_charts:
+                fig.show()
+
+    print("plotly charts generation completed.")
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def gen_csvs(df, output_dir, debug=False):
+
+    print("generating csvs...")
+
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
     df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)
 
     # Filter the dataframe for the required measures
-    measures = ['final-te-macro-F1', 'final-te-micro-F1']
-    filtered_df = df[df['measure'].isin(measures)]
-    print(filtered_df)
+    filtered_df = df[df['measure'].isin(MEASURES)]
+    
+    if (debug):
+        print("filtered_df:\n", filtered_df)
+
+    # Get the current date in YYYY-MM-DD format
+    current_date = datetime.now().strftime("%Y-%m-%d")
 
     # Iterate through each dataset and model to generate tables
     for (dataset, model), group_df in filtered_df.groupby(['Dataset', 'Model']):
-        output_html = f"{output_dir}/{dataset}_{model}_results.html"
-        output_csv = f"{output_dir}/{dataset}_{model}_results.csv"
-        render_grouped_table_with_pandas(group_df, dataset, model, output_html, output_csv)
+        output_html = f"{output_dir}/{dataset}_{model}_results.{current_date}.html"
+        output_csv = f"{output_dir}/{dataset}_{model}_results.{current_date}.csv"
+        render_data(group_df, dataset, model, output_html, output_csv)
 
 
-def render_grouped_table_with_pandas(dataframe, dataset, model, output_html, output_csv):
+def render_data(dataframe, dataset, model, output_html, output_csv):
+
+    print("rendering data...")
+
     # Group the data by embeddings and mix (formerly Mode) within each embedding
     grouped = dataframe.groupby(['embeddings', 'Mix', 'class_type'], as_index=False)
 
@@ -481,7 +501,7 @@ def read_data_file(file_path=None, debug=False):
 
 # ----------------------------------------------------------------------------------------------------------------------------
 
-def gen_summary(df, output_path='../out', gen_file=True, stdout=False):
+def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=False):
     """
     generate_summary()
     
@@ -518,7 +538,8 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False):
     final_result = unique_result[columns_order].copy()
     final_result.sort_values(by=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'], inplace=True)
 
-    print("final result:\n", final_result)
+    if (debug):
+        print("final result:\n", final_result)
 
     # Format the table
     formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
@@ -574,7 +595,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False):
 if __name__ == "__main__":
 
 
-    print("----- Results Analysis -----")
+    print("\n\t----- Results Analysis -----")
     
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
@@ -612,17 +633,18 @@ if __name__ == "__main__":
 
         if args.summary:
             
-            gen_summary(df, out_dir)
+            gen_summary(df, out_dir, debug=debug)
 
-            gen_csvs(df, out_dir)
+            gen_csvs(df, out_dir, debug=debug)
 
         if args.charts:
             
-            generate_charts_plotly(
+            model_performance_comparison(
                 df, 
                 out_dir, 
                 show_charts=args.show, 
-                y_axis_threshold=args.ystart
+                y_axis_threshold=args.ystart,
+                debug=debug
             )
             
             #

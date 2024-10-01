@@ -1,1 +1,1 @@
-python ../src/results_analysis.py ../log/ml_mps_vector.test -c -s -r -y 0.2 -show
+python ../src/results_analysis.py ../log/ml_mps_gpt2_xlnet.test  -s -c -d

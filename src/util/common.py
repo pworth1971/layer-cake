@@ -1,14 +1,6 @@
 import numpy as np
 from tqdm import tqdm
 import torch
-from scipy.sparse import issparse, csr_matrix
-from joblib import Parallel, delayed
-import multiprocessing
-import itertools
-from util.csv_log import CSVLog
-import matplotlib.pyplot as plt
-
-from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 # system and metrics reporting
 import platform
@@ -17,7 +9,20 @@ import platform
 import psutil
 import GPUtil
 
+import matplotlib.pyplot as plt
+
 import argparse
+
+from scipy.sparse import issparse, csr_matrix
+from joblib import Parallel, delayed
+
+import multiprocessing
+import itertools
+
+from util.csv_log import CSVLog
+
+from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
+
 
 
 NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn', 'nn-transformer']
