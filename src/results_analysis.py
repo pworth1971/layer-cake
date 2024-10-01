@@ -1,105 +1,29 @@
 import pandas as pd
-from tabulate import tabulate
 import os
-import plotly.express as px
 import argparse
-import seaborn as sns
-from datetime import datetime
-import matplotlib.pyplot as plt
-
 import numpy as np
+from datetime import datetime
 
-
-import os
 import plotly.express as px
+import seaborn as sns
+import plotly.express as px
+from tabulate import tabulate
+import matplotlib.pyplot as plt
+import csv
 
-import imgkit
+from util.common import OUT_DIR
+
+
+#import imgkit
 
 
 # measures filter: report on these specific measures
-measures = ['final-te-macro-F1', 'final-te-micro-F1']
+MEASURES = ['final-te-macro-F1', 'final-te-micro-F1']
 
 
 
 Y_AXIS_THRESHOLD = 0.3               # when to start the Y axis to show differentiation in the plot
 
-# ----------------------------------------------------------------------------------------------------------------------------
-# results_analysis()
-#
-# analyze the model performance results, print summary either to sdout or file
-# ----------------------------------------------------------------------------------------------------------------------------
-def results_analysis(df, output_path='../out'):
-
-    print("analyzing results...")
-
-    # Create output directory if it doesn't exist
-    if output_path and not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    # Filter for Macro and Micro F1 scores only
-    df_filtered = df[df['measure'].isin(['final-te-macro-F1', 'final-te-micro-F1'])]
-
-    # Group data by 'dataset', 'model', 'embeddings', 'representation', 'measure'
-    result = df_filtered.groupby(['dataset', 'model', 'embeddings', 'representation', 'measure'])['value'].max().reset_index()
-
-    # Merge the original data to fetch all corresponding column values
-    merged_result = pd.merge(df_filtered, result, how='inner', on=['dataset', 'model', 'embeddings', 'representation', 'measure', 'value'])
-    unique_result = merged_result.drop_duplicates(subset=['dataset', 'model', 'embeddings', 'representation', 'measure', 'value'])
-
-    # Specify the column order
-    columns_order = ['class_type', 'comp_method', 'model', 'dataset', 'embeddings', 'representation', 'dimensions', 'measure', 'value', 'optimized', 'timelapse', 'run', 'epoch', 'os', 'cpus', 'gpus', 'mem']		
-
-    # Ensure all specified columns exist in the DataFrame
-    missing_columns = [col for col in columns_order if col not in unique_result.columns]
-    if missing_columns:
-        print(f"Missing columns in DataFrame: {missing_columns}")
-        return  
-
-    # Sort the DataFrame
-    final_result = unique_result[columns_order].copy()
-    final_result.sort_values(by=['dataset', 'model', 'embeddings', 'representation', 'measure'], inplace=True)
-
-    print("final result:\n", final_result)
-
-    # Format the table
-    formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
-    
-    # Split formatted table into lines
-    lines = formatted_table.split('\n')
-
-    # Determine the length of the header line to set the separator's length
-    header_line_length = len(lines[1])
-
-    # Add separators between groups based on changes in key columns (excluding 'measure')
-    grouped_lines = [lines[0], lines[1], '-' * header_line_length]  # Start with header, underline, and extra separator
-    last_values = None
-    
-    for i, row in enumerate(final_result.itertuples(index=False)):
-        # Access using index instead of attribute names to avoid potential attribute errors
-        current_values = (row[0], row[1], row[2], row[3], row[4])  # dataset, model, embeddings, representation, measure
-        if last_values and current_values != last_values:
-            grouped_lines.append('-' * header_line_length)  # Use a separator as wide as the header
-        last_values = current_values
-        line_index = i + 3  # Offset to align with the actual content in lines, adjusted by the extra line separator
-        grouped_lines.append(lines[line_index])
-
-    # Add a final border line
-    grouped_lines.append('-' * header_line_length)
-
-    final_formatted_table = '\n'.join(grouped_lines)
-
-    # Generate output
-    if output_path:
-
-        file_name = "results_analysis.out"
-        output_file = os.path.join(output_path, file_name)
-        
-        with open(output_file, 'w') as f:
-            f.write(final_formatted_table)
-        
-        print(f"Output saved to {output_file}")
-    else:
-        print(final_formatted_table)
 
 
 
@@ -125,10 +49,10 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
 
     print("Generating separate charts per model and dataset...")
 
-    print("Filtering for measures:", measures)
+    print("Filtering for measures:", MEASURES)
     
     # Filter for the specific measures of interest
-    df_measures = df[df['measure'].isin(measures)]
+    df_measures = df[df['measure'].isin(MEASURES)]
     print("df shape after filtering for measures:", df_measures.shape)
     if df_measures.empty:
         print("Error: No data available for the specified measures")
@@ -144,7 +68,7 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
     # Get today's date
     today = datetime.today().strftime('%Y-%m-%d')
 
-    for measure in measures:
+    for measure in MEASURES:
         for dataset in df['dataset'].unique():
             for model in df['model'].unique():
                 # Increase the figure size for better visibility
@@ -426,9 +350,9 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 
 
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
-def generate_grouped_tables(df, output_dir):
+def gen_csvs(df, output_dir):
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
     df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)
 
@@ -524,7 +448,7 @@ def render_grouped_table_with_pandas(dataframe, dataset, model, output_html, out
     print(f"CSV saved as {output_csv}.")
 
 
-
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -556,19 +480,105 @@ def read_data_file(file_path=None, debug=False):
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
-# main()
-#
-# Read arguments and call results_analysis or generate_charts_plotly accordingly 
+
+def gen_summary(df, output_path='../out', gen_file=True, stdout=False):
+    """
+    generate_summary()
+    
+    analyze the model performance results, print summary either to sdout or file
+    """
+
+
+    print("generating summary...")
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Filter for Macro and Micro F1 scores only
+    df_filtered = df[df['measure'].isin(MEASURES)]
+
+    # Group data by 'dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'
+    result = df_filtered.groupby(['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'])['value'].max().reset_index()
+
+    # Merge the original data to fetch all corresponding column values
+    merged_result = pd.merge(df_filtered, result, how='inner', on=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure', 'value'])
+    unique_result = merged_result.drop_duplicates(subset=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure', 'value'])
+
+    # Specify the column order
+    columns_order = ['class_type', 'comp_method', 'model', 'dataset', 'embeddings', 'mode', 'representation', 'dimensions', 'measure', 'value', 'optimized', 'timelapse', 'run', 'epoch', 'os', 'cpus', 'gpus', 'mem']		
+
+    # Ensure all specified columns exist in the DataFrame
+    missing_columns = [col for col in columns_order if col not in unique_result.columns]
+    if missing_columns:
+        print(f"Missing columns in DataFrame: {missing_columns}")
+        return  
+
+    # Sort the DataFrame
+    final_result = unique_result[columns_order].copy()
+    final_result.sort_values(by=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'], inplace=True)
+
+    print("final result:\n", final_result)
+
+    # Format the table
+    formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
+    
+    # Split formatted table into lines
+    lines = formatted_table.split('\n')
+
+    # Determine the length of the header line to set the separator's length
+    header_line_length = len(lines[1])
+
+    # Add separators between groups based on changes in key columns (excluding 'measure')
+    grouped_lines = [lines[0], lines[1], '-' * header_line_length]  # Start with header, underline, and extra separator
+    last_values = None
+    
+    for i, row in enumerate(final_result.itertuples(index=False)):
+        # Access using index instead of attribute names to avoid potential attribute errors
+        current_values = (row[0], row[1], row[2], row[3], row[4])  # dataset, model, embeddings, representation, measure
+        if last_values and current_values != last_values:
+            grouped_lines.append('-' * header_line_length)  # Use a separator as wide as the header
+        last_values = current_values
+        line_index = i + 3  # Offset to align with the actual content in lines, adjusted by the extra line separator
+        grouped_lines.append(lines[line_index])
+
+    # Add a final border line
+    grouped_lines.append('-' * header_line_length)
+
+    final_formatted_table = '\n'.join(grouped_lines)
+
+    # Generate output
+    if (output_path and gen_file):
+        print("generating file to output directory:", output_path)
+
+        # Get the current date in YYYY-MM-DD format
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Add the date to the file name
+        file_name = f"layercake_summary.{current_date}.out"
+        output_file = os.path.join(output_path, file_name)
+        
+        # Write the output to the file
+        with open(output_file, 'w') as f:
+            f.write(final_formatted_table)
+        
+        print(f"Output saved to {output_file}")
+    
+    if (output_path and stdout):
+        print(final_formatted_table)
+
 # ----------------------------------------------------------------------------------------------------------------------------
 
-def main():
+
+
+if __name__ == "__main__":
+
 
     print("----- Results Analysis -----")
     
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
-    parser.add_argument('-o', '--output_dir', type=str, default='../out', help='output directory for files, defaults to ../out. Used with -s (--summary) option')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
@@ -591,28 +601,26 @@ def main():
 
     df = read_data_file(args.file_path, debug=debug)
 
+    out_dir = OUT_DIR
+    if (debug):
+        print("output directory:", out_dir)
+
     if df is not None:
 
         if (debug):
             print("Data file read successfully, df:", df.shape)
 
-
         if args.summary:
-
-            if (args.output_dir is None):
-                print("Error: Output file name required with -s (--summary) option")
-                return
             
-            #results_analysis(df, args.output_dir)
+            gen_summary(df, out_dir)
 
-            generate_grouped_tables(df, args.output_dir)
-
+            gen_csvs(df, out_dir)
 
         if args.charts:
             
             generate_charts_plotly(
                 df, 
-                args.output_dir, 
+                out_dir, 
                 show_charts=args.show, 
                 y_axis_threshold=args.ystart
             )
@@ -623,25 +631,19 @@ def main():
             #
             generate_charts_matplotlib(
                 df, 
-                args.output_dir,
+                out_dir,
                 show_charts=args.show,
                 y_axis_threshold=args.ystart,
                 debug=debug
-                
             )
             
         if (args.runtimes):
             gen_timelapse_plots(
                 df, 
-                args.output_dir, 
+                out_dir, 
                 show_charts=args.show,
                 debug=debug
             )
         
     else:
         print("Error: Data file not found or empty")
-
-
-
-if __name__ == "__main__":
-    main()
