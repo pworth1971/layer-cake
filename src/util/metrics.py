@@ -244,12 +244,19 @@ def singlelabel_eval(y, y_, debug=False):
     Returns:
     - macro_f1 (float): Macro F1 score.
     - micro_f1 (float): Micro F1 score.
-    - accuracy (float): Overall accuracy of the model.
+    - acc (float): Overall accuracy of the model.
+    - h_loss (float): Hamming loss
+    - precision (float): Precision
+    - recall (float): Recall
+    - j_index (float): Jacard Index
     """
     
     print("-- util.metrics.singlelabel_eval() --")
 
-    if issparse(y_): y_ = y_.toarray().flatten()
+    print("y:", type(y), y.shape)
+    print("y_:", type(y_), y_.shape)
+
+    #if issparse(y_): y_ = y_.toarray().flatten()
 
     macrof1 = f1_score(y, y_, average='macro')
     microf1 = f1_score(y, y_, average='micro')

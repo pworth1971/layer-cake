@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 NUM_JOBS = -1                   # important to manage CUDA memory allocation
 #NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
 
-NUM_SAMPLED_PARAMS = 20         # Number of parameter settings that are sampled by RandomizedSearchCV
+NUM_SAMPLED_PARAMS = 30         # Number of parameter settings that are sampled by RandomizedSearchCV
 
 #
 # Neural Models
@@ -238,24 +238,60 @@ def init__projection(net_type):
 # ML Models
 #
 
+from scipy.sparse import issparse
+
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-# run_model()
+# ml_classification()
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+def ml_classification(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
     
-    print("\n\tRunning model...")
+    print("\n\tML classification...")
 
     print('X_train:', type(X_train), X_train.shape)
     print('X_test:', type(X_test), X_test.shape)
 
     print('y_train:', type(y_train), y_train.shape)
     print('y_test:', type(y_test), y_test.shape)
-    
+
+    if issparse(X_train):
+
+        print("Converting sparse X matrices to dense arrays...")
+        X_train = X_train.toarray()
+        X_test = X_test.toarray()
+
+        print('X_train:', type(X_train), X_train.shape)
+        print('X_test:', type(X_test), X_test.shape)
+
+    if (issparse(y_train)):
+        print("Converting sparse y matrices to dense arrays...")
+        y_train = y_train.toarray()
+        y_test = y_test.toarray()
+
+        print('y_train:', type(y_train), y_train.shape)
+        print('y_test:', type(y_test), y_test.shape)
+        
     #print("y_train:", y_train)
     #print("y_test:", y_test)
         
     print("target_names:", target_names)
     print("class_type:", class_type)
+
+    #
+    # if y matrices are one-hot encoded, convert them to class labels (one dimension with class value)
+    #
+    if (class_type in ['singlelabel', 'single-label']):
+        
+        # If y_train is one-hot encoded, convert it to class labels first
+        if len(y_train.shape) > 1 and y_train.shape[1] > 1:
+            y_train = convert_labels(y_train)
+
+        #print("y_train:", y_train)
+
+        # If y_train is one-hot encoded, convert it to class labels first
+        if len(y_test.shape) > 1 and y_test.shape[1] > 1:
+            y_test = convert_labels(y_test)
+
+        #print("y_test:", y_test)
 
     tinit = time()
 
@@ -310,6 +346,23 @@ def run_model(X_train, X_test, y_train, y_test, args, target_names, class_type='
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index, tend
 
 
+
+from sklearn.preprocessing import LabelEncoder
+
+def convert_labels(y):
+
+    # convert one hot encoded labels to single label
+    # Initialize the label encoder
+    label_encoder = LabelEncoder()
+
+    y = np.argmax(y, axis=1)
+    
+    # Fit the encoder on y and transform it
+    y_encoded = label_encoder.fit_transform(y)
+
+    return y_encoded
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
@@ -327,7 +380,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
         )
     else:
         print("Single-label classification detected. Using regular SVM...")
-        
+
         classifier = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
 
     if not args.optimc:

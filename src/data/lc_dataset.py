@@ -151,20 +151,18 @@ class LCDataset:
         if (pretrained == 'word2vec'):
             print("Using Word2Vec pretrained embeddings...")
             
-            self.lcr_model = WordLCRepresentationModel(
+            self.lcr_model = Word2VecLCRepresentationModel(
                 model_name=WORD2VEC_MODEL, 
                 model_dir=embedding_path, 
-                vtype=vectorization_type,
-                model_type='word2vec'
+                vtype=vectorization_type
             )
         elif (pretrained == 'glove'):
             print("Using GloVe pretrained embeddings...")
             
-            self.lcr_model = WordLCRepresentationModel(
+            self.lcr_model = GloVeLCRepresentationModel(
                 model_name=GLOVE_MODEL, 
                 model_dir=embedding_path, 
-                vtype=vectorization_type,
-                model_type='glove'
+                vtype=vectorization_type
             )
 
         elif (pretrained == 'fasttext'):
@@ -272,13 +270,19 @@ class LCDataset:
             print("self.vectorization_type:", self.vectorization_type)
             print("self.embedding_type:", self.embedding_type)
         
-        print("fitting training data...")
-        print("Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("Xte:", type(self.Xte), self.Xte.shape)
+        print("fitting training and test data with vectorizer...")
+
+        #print("Xtr:", type(self.Xtr), self.Xtr.shape)
+        #print("Xte:", type(self.Xte), self.Xte.shape)
 
         # Fit and transform the text data
+        #self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
         self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
         self.Xte_vectorized = self.vectorizer.transform(self.Xte)
+
+        self.Xtr_vectorized.sort_indices()
+        self.Xte_vectorized.sort_indices()
+
         print("Xtr_vectorized:", type(self.Xtr_vectorized), self.Xtr_vectorized.shape)
         print("Xte_vectorized:", type(self.Xte_vectorized), self.Xte_vectorized.shape)
         
@@ -321,12 +325,16 @@ class LCDataset:
     
         print("\n\tconstructing (pretrained) embeddings dataset vocabulary matrix...")    
 
-        self.embedding_vocab_matrix, self.token_to_index_mapping = self.lcr_model.build_embedding_vocab_matrix()
+        if (self.pretrained == 'glove'):
+            self.embedding_vocab_matrix = self.lcr_model.build_embedding_vocab_matrix()
+            self.token_to_index_mapping = None
+        else:
+            self.embedding_vocab_matrix, self.token_to_index_mapping = self.lcr_model.build_embedding_vocab_matrix()
         
         print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         #print(self.embedding_vocab_matrix)
 
-        print("self.token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
+        #print("self.token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
         #print(self.token_to_index_mapping)
 
         # generate pretrained embedding representation of dataset
@@ -378,15 +386,17 @@ class LCDataset:
             
         elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddings
             
-            print("generating word / subword based dataset repressentations...")
+            print("generating word / subword based dataset representations...")
 
             self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
-                self.Xtr.tolist(), 
+                #self.Xtr.tolist(),
+                self.Xtr, 
                 self.embedding_vocab_matrix
             )
             
             self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(
-                self.Xte.tolist(), 
+                #self.Xte.tolist(),
+                self.Xte, 
                 self.embedding_vocab_matrix
             )
 
@@ -538,6 +548,7 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        """
         print("encoding labels...")
 
         # Encode the labels
@@ -550,6 +561,11 @@ class LCDataset:
         # Convert y matrices to sparse matrices
         self.y_train_sparse = csr_matrix(self.y_train).T                                        # Transpose to match the expected shape
         self.y_test_sparse = csr_matrix(self.y_test).T                                          # Transpose to match the expected shape
+        """
+        
+        self.y_train_sparse = self.devel_labelmatrix
+        self.y_test_sparse = self.test_labelmatrix
+
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
 
@@ -577,8 +593,9 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        #print("preprocessing raw text...")
+        print("preprocessing raw text...")
 
+        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
@@ -591,7 +608,10 @@ class LCDataset:
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
+        """
 
+        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        
         #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
         self.devel_target, self.test_target = self.devel.target, self.test.target        
         print("devel_target:", type(self.devel_target), len(self.devel_target))
@@ -606,7 +626,7 @@ class LCDataset:
         print("self.label_names:\n", self.label_names) 
 
         self.target_names = self.label_names
-        print("target_names:", type(self.target_names), len(self.target_names))
+        print("self.target_names:", self.target_names)
 
         self.num_labels = len(self.labels)
         self.num_label_names = len(self.label_names)
@@ -615,6 +635,7 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        """
         print("encoding labels...")
 
         # Encode the labels
@@ -627,6 +648,11 @@ class LCDataset:
         # Convert y matrices to sparse matrices
         self.y_train_sparse = csr_matrix(self.y_train).T                                                    # Transpose to match the expected shape
         self.y_test_sparse = csr_matrix(self.y_test).T                                                      # Transpose to match the expected shape
+        """
+        
+        self.y_train_sparse = self.devel_labelmatrix
+        self.y_test_sparse = self.test_labelmatrix
+
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
 

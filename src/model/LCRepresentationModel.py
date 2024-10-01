@@ -1,5 +1,7 @@
 import numpy as np
-import torch
+
+import torch, torchtext
+
 from tqdm import tqdm
 import os
 import requests
@@ -46,9 +48,9 @@ else:
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
 #GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
@@ -70,6 +72,7 @@ XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, c
 # -------------------------------------------------------------------------------------------------------
 
 MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
+MIN_DF_COUNT = 5                                            # min document frequency for TF-IDF vectorization
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -78,42 +81,6 @@ from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
-
-
-
-def estimate_tensor_size(batch_size, sequence_length, hidden_size, dtype=torch.float32):
-    """
-    Estimate the size of a tensor based on its dimensions and data type.
-    
-    Parameters:
-    - batch_size (int): Number of samples in the batch.
-    - sequence_length (int): Number of tokens in each sequence.
-    - hidden_size (int): Dimensionality of the model's hidden layers.
-    - dtype (torch.dtype): Data type of the tensor (e.g., torch.float32, torch.float16).
-    
-    Returns:
-    - estimated_size_in_bytes (int): Estimated size of the tensor in bytes.
-    """
-    bytes_per_element = torch.finfo(dtype).bits // 8  # 4 bytes for float32, 2 bytes for float16
-    num_elements = batch_size * sequence_length * hidden_size
-    estimated_size_in_bytes = num_elements * bytes_per_element
-
-    return estimated_size_in_bytes
-
-
-def can_fit_on_mps(estimated_size_in_bytes, mps_limit=4 * 1024 ** 3):
-    """
-    Check if the estimated tensor size can fit within the MPS memory limit (4GB).
-    
-    Parameters:
-    - estimated_size_in_bytes (int): Estimated size of the tensor in bytes.
-    - mps_limit (int): Maximum allowable memory size for MPS (default 4GB).
-    
-    Returns:
-    - bool: True if the tensor can fit, False otherwise.
-    """
-    return estimated_size_in_bytes <= mps_limit
-
 
 
 
@@ -210,6 +177,29 @@ class LCRepresentationModel(RepresentationModel, ABC):
         return self.tokenizer
     
     
+    @classmethod
+    def reindex(cls, words, word2index):
+        
+        print("reindexing...")
+              
+        source_idx, target_idx = [], []
+        oov = 0
+        
+        for i, word in enumerate(words):
+            if word not in word2index: 
+                oov += 1
+                continue
+            j = word2index[word]
+            source_idx.append(i)
+            target_idx.append(j)
+        
+        source_idx = np.asarray(source_idx)
+        target_idx = np.asarray(target_idx)
+        
+        print("oov:", oov)
+
+        return source_idx, target_idx, oov
+
 
     @abstractmethod
     def encode_docs(self, text_list, embedding_vocab_matrix):
@@ -221,13 +211,213 @@ class LCRepresentationModel(RepresentationModel, ABC):
 
 
 
-class WordLCRepresentationModel(LCRepresentationModel):
+class GloVeLCRepresentationModel(LCRepresentationModel):
     """
-    WordBasedRepresentationModel handles word-based embeddings (e.g., Word2Vec, GloVe).
+    GloVeLCRepresentationModel handles GloVe, word-based, embeddings.
+    
     It computes sentence embeddings by averaging, summing, or computing TF-IDF weighted embeddings.
     """
 
-    def __init__(self, model_name, model_dir, vtype='tfidf', model_type='word2vec'):
+    def __init__(self, model_name, model_dir, vtype='tfidf'):
+        """
+        Initialize the GloVe, word-based, representation model 
+
+        Parameters:
+        ----------
+        model_name : str
+            Name of the pre-trained word embedding model (e.g., 'word2vec', 'glove').
+        embedding_path : str
+            Path to the pre-trained embedding file (e.g., 'GoogleNews-vectors-negative300.bin').
+        """
+        
+        print("Initializing GloveLCRepresentationModel...")
+
+        super().__init__(model_name, model_dir=model_dir)  # parent constructor
+
+        # Automatically download embeddings if not present
+        if not os.path.exists(self.path_to_embeddings):
+            print(f"Embedding file {self.path_to_embeddings} not found. Downloading...")
+            self._download_embeddings(model_name, model_dir)
+
+        if (model_name == 'glove.6B.300d.txt'):
+            self.model = torchtext.vocab.GloVe(name='6B', cache=model_dir)
+        elif (model_name == 'glove.42B.300d.txt'):
+            self.model = torchtext.vocab.GloVe(name='42B', cache=model_dir)
+        elif (model_name == 'glove.840B.300d.txt'):
+            self.model = torchtext.vocab.GloVe(name='840B', cache=model_dir)
+        else:
+            raise ValueError(f"Unsupported GloVe model {model_name}.")
+        
+        print("self.model:", self.model)
+        
+        self.vtype = vtype
+        print(f"Vectorization type: {vtype}")
+
+        # Get embedding size (dimensionality)
+
+        self.embedding_dim = self.model.dim
+        print(f"self.embedding_dim: {self.embedding_dim}")
+        
+        #
+        # vectorize the text, note that the Word2Vec and GloVe models we use are case sensitive
+        #
+        if vtype == 'tfidf':
+            print("using TF-IDF vectorization...")
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                sublinear_tf=True,                              # use sublinear TF scaling
+                lowercase=False                                 # dont lowercase the tokens
+            )              
+        elif vtype == 'count':
+            print("using Count vectorization...")
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                lowercase=False                                 # dont lowercase the tokens
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+
+
+    def _download_embeddings(self, model_name, model_dir):
+        """
+        Download pre-trained GloVe embeddings from a URL and save them to the specified path.
+        """
+
+        print(f'downloading embeddings... model:{model_name}, path:{model_dir}')
+
+        # GloVe embeddings (Stanford)
+        if (GLOVE_MODEL == 'glove.6B.300d.txt'):
+            url = f"https://nlp.stanford.edu/data/glove.6B.zip"
+            zipfile = 'glove.6B.zip'
+        elif (GLOVE_MODEL == 'glove.42B.300d.txt'):    
+            url = f"https://nlp.stanford.edu/data/glove.42B.300d.zip"
+            zipfile = 'glove.42B.zip'
+        elif (GLOVE_MODEL == 'glove.840B.300d.txt'):
+            url = f"https://nlp.stanford.edu/data/glove.840B.300d.zip"
+            zipfile = 'glove.840B.zip'
+        else:
+            raise ValueError(f"Unsupported model_type {model_type} for download.")
+
+        dest_zip_file = model_dir + '/' + zipfile
+        print(f"Downloading embeddings from {url} to {dest_zip_file}...")
+        self._download_file(url, dest_zip_file)
+
+        # Unzip GloVe embeddings
+        self._unzip_embeddings(dest_zip_file)
+
+
+    def extract(self, words):
+
+        print("extracting words from model...")
+        print("words:", type(words), len(words))
+
+        source_idx, target_idx, oov = LCRepresentationModel.reindex(words, self.model.stoi)
+        print("oov:", oov)
+        
+        extraction = torch.zeros((len(words), self.model.dim))
+        extraction[source_idx] = self.model.vectors[target_idx]
+        
+        return extraction
+    
+
+    def build_embedding_vocab_matrix(self):
+
+        print('building embedding vocab matrix...')
+
+
+        vocabulary = np.asarray(list(zip(*sorted(self.vectorizer.vocabulary_.items(), key=lambda x: x[1])))[0])
+
+        return self.extract(vocabulary).numpy()
+
+
+    def encode_docs(self, texts, embedding_vocab_matrix):
+        """
+        Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
+        
+        Args:
+        - texts: List of input documents (as raw text).
+        - embedding_vocab_matrix: Matrix of pre-trained word embeddings (e.g., Word2Vec, GloVe).
+
+        Returns:
+        - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
+        - avg_document_embeddings: Numpy array of average document embeddings for each document.
+        """
+        
+        print(f"encoding docs...")
+
+        print("texts:", type(texts), len(texts))
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+
+        weighted_document_embeddings = []
+        avg_document_embeddings = []
+
+        # Calculate the mean embedding for OOV tokens
+        self.mean_embedding = torch.mean(self.model.vectors, dim=0).numpy()
+        #print(f"Mean embedding vector for OOV tokens:\n: {self.mean_embedding}")
+
+        oov_tokens = 0
+
+        for doc in texts:
+            # Tokenize the document using the vectorizer (ensures consistency in tokenization)
+            tokens = self.vectorizer.build_analyzer()(doc)
+
+            # Calculate TF-IDF weights for the tokens
+            tfidf_vector = self.vectorizer.transform([doc]).toarray()[0]
+
+            weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
+            total_weight = 0.0
+            valid_embeddings = []    
+
+            for token in tokens:
+                # Get the embedding from GloVe
+                if token in self.model.stoi:
+                    embedding = self.model.vectors[self.model.stoi[token]].numpy()
+                elif token.lower() in self.model.stoi:
+                    # Check lowercase version if not found
+                    embedding = self.model.vectors[self.model.stoi[token.lower()]].numpy()
+                else:
+                    # Handle OOV tokens by using the mean embedding
+                    embedding = self.mean_embedding
+                    oov_tokens += 1
+
+                # Get the token's TF-IDF weight
+                token_id = self.vectorizer.vocabulary_.get(token, None)
+                weight = tfidf_vector[token_id] if token_id is not None else 1.0  # Default weight to 1.0 if not found
+
+                # Accumulate the weighted embedding
+                weighted_sum += embedding * weight
+                total_weight += weight
+                valid_embeddings.append(embedding)
+
+            # Compute the weighted embedding for the document
+            if total_weight > 0:
+                weighted_doc_embedding = weighted_sum / total_weight
+            else:
+                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+
+            # Compute the average embedding for the document
+            avg_doc_embedding = np.mean(valid_embeddings, axis=0) if valid_embeddings else np.zeros(embedding_vocab_matrix.shape[1])
+
+            weighted_document_embeddings.append(weighted_doc_embedding)
+            avg_document_embeddings.append(avg_doc_embedding)
+
+        print(f"Weighted document embeddings: {len(weighted_document_embeddings)}")
+        print(f"Average document embeddings: {len(avg_document_embeddings)}")
+        print(f"OOV tokens encountered: {oov_tokens}")
+
+        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+
+
+
+
+
+class Word2VecLCRepresentationModel(LCRepresentationModel):
+    """
+    Word2VecLCRepresentationModel handles word-based embeddings.
+    It computes sentence embeddings by averaging, summing, or computing TF-IDF weighted embeddings.
+    """
+
+    def __init__(self, model_name, model_dir, vtype='tfidf'):
         """
         Initialize the word-based representation model (e.g., Word2Vec, GloVe).
         
@@ -237,106 +427,93 @@ class WordLCRepresentationModel(LCRepresentationModel):
             Name of the pre-trained word embedding model (e.g., 'word2vec', 'glove').
         embedding_path : str
             Path to the pre-trained embedding file (e.g., 'GoogleNews-vectors-negative300.bin').
-        device : str, optional
-            Device to use for encoding ('cpu' for word embeddings since it's lightweight).
         """
-        print("Initializing WordBasedRepresentationModel...")
+        print("Initializing Word2VecLCRepresentationModel...")
 
         super().__init__(model_name, model_dir=model_dir)  # parent constructor
 
         # Automatically download embeddings if not present
         if not os.path.exists(self.path_to_embeddings):
             print(f"Embedding file {self.path_to_embeddings} not found. Downloading...")
-            self._download_embeddings(model_name, model_dir, model_type)
+            self._download_embeddings(model_name, model_dir)
 
-        # Load the approproate model type
-        if (model_type == 'word2vec'):
-            print("Using Word2Vec pretrained embeddings...")
-            self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=True)
-        elif (model_type == 'glove'):
-            print("Using GloVe pretrained embeddings...")
-            from gensim.scripts.glove2word2vec import glove2word2vec
-            glove_input_file = self.path_to_embeddings
-            word2vec_output_file = glove_input_file + '.word2vec'
-            glove2word2vec(glove_input_file, word2vec_output_file)
-            self.model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
-        else:
-            raise ValueError("Invalid model type. Use 'word2vec' or 'glove'.")
+        self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=True)    
         
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
         # Get embedding size (dimensionality)
         self.embedding_dim = self.model.vector_size
-        print(f"Embedding dimension: {self.embedding_dim}")
+        print(f"self.embedding_dim: {self.embedding_dim}")
         
         #
         # vectorize the text, note that the Word2Vec and GloVe models we use are case sensitive
         #
         if vtype == 'tfidf':
             print("using TF-IDF vectorization...")
-            
             self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 sublinear_tf=True,                              # use sublinear TF scaling
                 lowercase=False                                 # dont lowercase the tokens
             )              
         elif vtype == 'count':
             print("using Count vectorization...")
-
             self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 lowercase=False                                 # dont lowercase the tokens
             )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
 
-    def _download_embeddings(self, model_name, model_dir, model_type):
+    def _download_embeddings(self, model_name, model_dir):
         """
         Download pre-trained embeddings (Word2Vec or GloVe) from a URL and save them to the specified path.
         """
 
-        print(f'downloading embeddings... model:{model_name}, model_type:{model_type}, path:{model_dir}')
+        print(f'downloading embeddings... model:{model_name}, path:{model_dir}')
 
         #
         # TODO: This URL is not correct, pls dowwnload these embeddings offline 
         # from kaggle here: https://www.kaggle.com/datasets/leadbest/googlenewsvectorsnegative300
         #
-        if model_type == 'word2vec':
-            # Word2Vec Google News embeddings (Commonly hosted on Google Drive)
-            url = "https://drive.usercontent.google.com/download?id=0B7XkCwpI5KDYNlNUTTlSS21pQmM&export=download&authuser=1"
-        elif model_type == 'glove':
-            # GloVe embeddings (Stanford)
-            if (GLOVE_MODEL == 'glove.6B.300d.txt'):
-                url = f"https://nlp.stanford.edu/data/glove.6B.zip"
-                zipfile = 'glove.6B.zip'
-            elif (GLOVE_MODEL == 'glove.42B.300d.txt'):    
-                url = f"https://nlp.stanford.edu/data/glove.42B.300d.zip"
-                zipfile = 'glove.42B.zip'
-            elif (GLOVE_MODEL == 'glove.840B.300d.txt'):
-                url = f"https://nlp.stanford.edu/data/glove.840B.300d.zip"
-                zipfile = 'glove.840B.zip'
-        else:
-            raise ValueError(f"Unsupported model_type {model_type} for download.")
-
+        
+        # Word2Vec Google News embeddings (Commonly hosted on Google Drive)
+        url = "https://drive.usercontent.google.com/download?id=0B7XkCwpI5KDYNlNUTTlSS21pQmM&export=download&authuser=1"
+    
         # Download the file
-        if model_type == 'glove':
-            dest_zip_file = model_dir + '/' + zipfile
-            print(f"Downloading embeddings from {url} to {dest_zip_file}...")
-            self._download_file(url, dest_zip_file)
+        print(f"Downloading embeddings from {url} to {self.path_to_embeddings}...")
+    
+        self._download_file(url, self.path_to_embeddings)
 
-            # Unzip GloVe embeddings
-            self._unzip_embeddings(dest_zip_file)
 
-        elif model_type == 'word2vec':
-            print(f"Downloading embeddings from {url} to {self.path_to_embeddings}...")
-            self._download_file(url, self.path_to_embeddings)
+    def vocabulary(self):
+        return set(self.word2index.keys())
 
+    def dim(self):
+        return self.model.vector_size
+
+    def extract(self, words):
+        source_idx, target_idx = LCRepresentationModel.reindex(words, self.word2index)
+        extraction = np.zeros((len(words), self.dim()))
+        extraction[source_idx] = self.model.vectors[target_idx]
+        extraction = torch.from_numpy(extraction).float()
+        return extraction
+    
 
     def build_embedding_vocab_matrix(self):
+
+        print('building embedding vocab matrix...')
+
+        vocabulary = np.asarray(list(zip(*sorted(self.vectorizer.vocabulary_.items(), key=lambda x: x[1])))[0])
+
+        return self.extract(vocabulary).numpy()
+    
+
+
+    def build_embedding_vocab_matrix_old(self):
         
-        print("building [word based] embedding representation (matrix) of dataset vocabulary...")
+        print("building Word2Vec [word based] embedding representation (matrix) of dataset vocabulary...")
 
         print("model:", type(self.model))
         print("model.vector_size:", self.model.vector_size)
@@ -468,6 +645,10 @@ class WordLCRepresentationModel(LCRepresentationModel):
     
 
 
+    
+
+
+
 
 
 class SubWordLCRepresentationModel(LCRepresentationModel):
@@ -516,7 +697,7 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             print("using TF-IDF vectorization...")
             
             self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 sublinear_tf=True,                              # use sublinear TF scaling
                 lowercase=False                                 # dont lowercase the tokens
             )              
@@ -524,7 +705,7 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             print("using Count vectorization...")
 
             self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
+                min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 lowercase=False                                 # dont lowercase the tokens
             )
         else:
@@ -943,14 +1124,14 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT, 
+                min_df=MIN_DF_COUNT, 
                 sublinear_tf=True, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         elif vtype == 'count':
             self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT, 
+                min_df=MIN_DF_COUNT, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
@@ -983,14 +1164,14 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
-                #min_df=MIN_DF_COUNT, 
+                min_df=MIN_DF_COUNT, 
                 sublinear_tf=True, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         elif vtype == 'count':
             self.vectorizer = CountVectorizer(
-                #min_df=MIN_DF_COUNT, 
+                min_df=MIN_DF_COUNT, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
@@ -1021,11 +1202,6 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
 
-        """
-        self.max_length = self.tokenizer.model_max_length
-        print("self.max_length:", self.max_length)
-        """
-
         if (XLNET_MODEL == 'xlnet-base-cased'):
             self.max_length = 512                  
         elif (XLNET_MODEL == 'xlnet-large-cased'):
@@ -1036,12 +1212,14 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
                 sublinear_tf=True, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         elif vtype == 'count':
             self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
@@ -1241,12 +1419,14 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
                 sublinear_tf=True, 
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
         elif vtype == 'count':
             self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
                 lowercase=False, 
                 tokenizer=self._custom_tokenizer
             )
