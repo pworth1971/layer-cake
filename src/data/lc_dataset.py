@@ -541,21 +541,10 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
-        """
-        print("encoding labels...")
+        #
+        # NB label encoding is done prior to feeding data into the model
+        #
 
-        # Encode the labels
-        label_encoder = LabelEncoder()
-        self.y_train = label_encoder.fit_transform(self.devel_target)
-        self.y_test = label_encoder.transform(self.test_target)
-        print("self.y_train:", type(self.y_train), self.y_train.shape)
-        print("self.y_test:", type(self.y_test), self.y_test.shape)
-
-        # Convert y matrices to sparse matrices
-        self.y_train_sparse = csr_matrix(self.y_train).T                                        # Transpose to match the expected shape
-        self.y_test_sparse = csr_matrix(self.y_test).T                                          # Transpose to match the expected shape
-        """
-        
         self.y_train_sparse = self.devel_labelmatrix
         self.y_test_sparse = self.test_labelmatrix
 
@@ -586,9 +575,8 @@ class LCDataset:
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        print("preprocessing raw text...")
+        #print("preprocessing raw text...")
 
-        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
@@ -601,9 +589,8 @@ class LCDataset:
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        
+        #self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
         
         #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
         self.devel_target, self.test_target = self.devel.target, self.test.target        
@@ -628,21 +615,9 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
-        """
-        print("encoding labels...")
-
-        # Encode the labels
-        label_encoder = LabelEncoder()
-        self.y_train = label_encoder.fit_transform(self.devel_target)
-        self.y_test = label_encoder.transform(self.test_target)
-        print("self.y_train:", type(self.y_train), self.y_train.shape)
-        print("self.y_test:", type(self.y_test), self.y_test.shape)
-
-        # Convert y matrices to sparse matrices
-        self.y_train_sparse = csr_matrix(self.y_train).T                                                    # Transpose to match the expected shape
-        self.y_test_sparse = csr_matrix(self.y_test).T                                                      # Transpose to match the expected shape
-        """
-        
+        #
+        # NB label encoding is done just before data is fed into the model
+        # 
         self.y_train_sparse = self.devel_labelmatrix
         self.y_test_sparse = self.test_labelmatrix
 
@@ -996,6 +971,53 @@ class LCDataset:
 
 
     def _preprocess(self, text_series: pd.Series):
+        """
+        Preprocess a pandas Series of texts by removing punctuation, stopwords, and masking numbers.
+        We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
+
+        Parameters:
+        - text_series: A pandas Series containing text data (strings).
+
+        Returns:
+        - processed_texts: A NumPy array containing processed text strings.
+        """
+
+        print("Preprocessing text without tokenization...")
+        print("text_series:", type(text_series), text_series.shape)
+
+        # Load stop words once outside the loop
+        stop_words = set(stopwords.words('english'))
+        punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+        # Function to mask numbers in the text
+        def _mask_numbers(text, number_mask='numbermask'):
+            mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+            return mask.sub(number_mask, text)
+
+        # Function to process each text (masking numbers, removing punctuation, and stopwords)
+        def process_text(text):
+            # Mask numbers
+            text = _mask_numbers(text)
+
+            # Remove punctuation
+            text = text.translate(punctuation_table)
+
+            # Remove stopwords without tokenizing or lowercasing
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+            # Ensure extra spaces are removed after stopwords are deleted
+            return ' '.join(text.split())
+
+        # Use Parallel processing with multiple cores
+        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+        # Return as NumPy array
+        return np.array(processed_texts)
+
+
+
+    def _preprocess_old(self, text_series: pd.Series):
         """
         Preprocess a pandas Series of texts by removing punctuation and stopwords. NB we do NOT lowercase
         the text so we allow the tokenizers and language models to work with case-sensitive data.

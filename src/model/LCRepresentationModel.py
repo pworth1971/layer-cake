@@ -342,7 +342,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
         
-        print(f"encoding docs...")
+        print(f"encoding docs using GloVe embeddings...")
 
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
@@ -572,7 +572,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
         
-        print(f"encoding docs...")
+        print(f"encoding docs using Word2Vec embeddings...")
         
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
@@ -802,7 +802,7 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
         
-        print(f"encoding docs..")
+        print(f"encoding docs using fastText (subword) embeddings..")
         
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
@@ -877,6 +877,8 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
 
 
+
+
 class TransformerLCRepresentationModel(LCRepresentationModel):
     """
     Base class for Transformer based architcteure langugae models such as BERT, RoBERTa, XLNet and GPT2
@@ -911,6 +913,34 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
     
 
     def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
+        """
+        input_ids = []
+        attention_masks = []
+
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention mask
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,  # Add special tokens like [CLS] and [SEP]
+                max_length=self.max_length,  # Truncate sequences to this length
+                padding='max_length',  # Pad sequences to the max_length
+                return_attention_mask=True,  # Generate attention mask
+                return_tensors='pt',  # Return PyTorch tensors
+                truncation=True  # Ensure truncation to max_length
+            )
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
+    
+
+    def _tokenizeOld(self, texts):
         """
         Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
         """
@@ -1066,7 +1096,7 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
             Array of sentence embeddings using the first token.
         """
 
-        print("encoding docs using BERT/RoBERTa...")
+        print("encoding docs using BERT/RoBERTa embeddings...")
 
         self.model.eval()
         mean_embeddings = []
@@ -1344,9 +1374,9 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
                     self.embedding_vocab_matrix[i] = embedding
                 pbar.update(len(batch_words))
 
-        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
+        print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         print(f"OOV tokens: {oov_tokens}")
-        print(f"List of OOV tokens: {oov_list}")
+        #print(f"List of OOV tokens: {oov_list}")
     
         #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
         return self.embedding_vocab_matrix
@@ -1357,7 +1387,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         """
         Encode documents using XLNet and extract token embeddings.
         """
-        print("Encoding docs using XLNet...")
+        print("encoding docs using XLNet embeddings...")
 
         self.model.eval()
         mean_embeddings = []
@@ -1389,13 +1419,6 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
         return mean_embeddings, cls_embeddings
     
-
-
-
-    
-
-
-
 
 
 class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
@@ -1555,9 +1578,9 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
                     self.embedding_vocab_matrix[i] = embedding
                 pbar.update(len(batch_words))
 
-        print(f"Embedding vocab matrix built with shape {self.embedding_vocab_matrix.shape}")
+        print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         print(f"OOV tokens: {oov_tokens}")
-        print(f"List of OOV tokens: {oov_list}")
+        #print(f"List of OOV tokens: {oov_list}")
 
         #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
         return self.embedding_vocab_matrix
@@ -1569,7 +1592,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         Encode documents using GPT-2 embeddings.
         """
 
-        print("Encoding docs using GPT-2...")
+        print("encoding docs with GPT-2 embeddings...")
+
         self.model.eval()
 
         mean_embeddings = []
