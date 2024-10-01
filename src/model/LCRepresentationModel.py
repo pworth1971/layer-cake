@@ -48,9 +48,9 @@ else:
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
 #GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+#GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
@@ -324,7 +324,6 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
 
         print('building embedding vocab matrix...')
 
-
         vocabulary = np.asarray(list(zip(*sorted(self.vectorizer.vocabulary_.items(), key=lambda x: x[1])))[0])
 
         return self.extract(vocabulary).numpy()
@@ -352,8 +351,12 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         avg_document_embeddings = []
 
         # Calculate the mean embedding for OOV tokens
-        self.mean_embedding = torch.mean(self.model.vectors, dim=0).numpy()
-        #print(f"Mean embedding vector for OOV tokens:\n: {self.mean_embedding}")
+        #self.mean_embedding = torch.mean(self.model.vectors, dim=0).numpy()
+        
+        # Compute the mean embedding for OOV tokens across the entire embedding matrix
+        # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
+        self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
+        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
 
         oov_tokens = 0
 
@@ -409,8 +412,6 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
 
 
 
-
-
 class Word2VecLCRepresentationModel(LCRepresentationModel):
     """
     Word2VecLCRepresentationModel handles word-based embeddings.
@@ -439,6 +440,8 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
 
         self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=True)    
         
+        self.word2index = {w: i for i,w in enumerate(self.model.index_to_key)}
+
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
@@ -494,7 +497,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         return self.model.vector_size
 
     def extract(self, words):
-        source_idx, target_idx = LCRepresentationModel.reindex(words, self.word2index)
+        source_idx, target_idx, oov = LCRepresentationModel.reindex(words, self.word2index)
         extraction = np.zeros((len(words), self.dim()))
         extraction[source_idx] = self.model.vectors[target_idx]
         extraction = torch.from_numpy(extraction).float()
@@ -582,8 +585,8 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         
         # Compute the mean embedding for OOV tokens across the entire embedding matrix
         # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
-        self.mean_embedding = np.mean(self.embedding_vocab_matrix, axis=0)
-        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+        self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
+        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
 
         oov_tokens = 0
 
@@ -643,12 +646,6 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
 
         return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
     
-
-
-    
-
-
-
 
 
 class SubWordLCRepresentationModel(LCRepresentationModel):
@@ -788,7 +785,8 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
         print("oov_tokens:", oov_tokens)
 
-        return self.embedding_vocab_matrix, self.token_to_index_mapping
+        #return self.embedding_vocab_matrix, self.token_to_index_mapping
+        return self.embedding_vocab_matrix
 
 
     def encode_docs(self, texts, embedding_vocab_matrix):
@@ -810,9 +808,13 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
 
         # Compute the mean embedding for FastText (for handling OOV tokens)
-        self.mean_embedding = np.mean(self.model.wv.vectors, axis=0)
-        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+        #self.mean_embedding = np.mean(self.model.wv.vectors, axis=0)
+        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
 
+        # Compute the mean embedding for OOV tokens across the entire embedding matrix
+        # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
+        self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
+        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
         
         weighted_document_embeddings = []
         avg_document_embeddings = []
@@ -884,7 +886,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
 
         super().__init__(model_name, model_dir)
         
-    
     
     def _custom_tokenizer(self, text):
         """
@@ -1039,7 +1040,8 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
             print("List of OOV tokens:", oov_list)
         """    
         
-        return self.embedding_vocab_matrix, self.token_to_index_mapping
+        #return self.embedding_vocab_matrix, self.token_to_index_mapping
+        return self.embedding_vocab_matrix
 
 
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
@@ -1346,7 +1348,8 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         print(f"OOV tokens: {oov_tokens}")
         print(f"List of OOV tokens: {oov_list}")
     
-        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+        #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+        return self.embedding_vocab_matrix
     
 
 
@@ -1556,7 +1559,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         print(f"OOV tokens: {oov_tokens}")
         print(f"List of OOV tokens: {oov_list}")
 
-        return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+        #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
+        return self.embedding_vocab_matrix
 
 
 

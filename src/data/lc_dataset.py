@@ -324,26 +324,19 @@ class LCDataset:
         # build the embedding vocabulary matrix to align with the dataset vocabulary and embedding type
     
         print("\n\tconstructing (pretrained) embeddings dataset vocabulary matrix...")    
-
-        if (self.pretrained == 'glove'):
-            self.embedding_vocab_matrix = self.lcr_model.build_embedding_vocab_matrix()
-            self.token_to_index_mapping = None
-        else:
-            self.embedding_vocab_matrix, self.token_to_index_mapping = self.lcr_model.build_embedding_vocab_matrix()
         
+        self.embedding_vocab_matrix = self.lcr_model.build_embedding_vocab_matrix()
+           
         print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
         #print(self.embedding_vocab_matrix)
-
-        #print("self.token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
-        #print(self.token_to_index_mapping)
 
         # generate pretrained embedding representation of dataset
         self.generate_dataset_embeddings()
 
         self.initialized = True
 
-        return self.embedding_vocab_matrix, self.token_to_index_mapping
-
+        #return self.embedding_vocab_matrix, self.token_to_index_mapping
+        return self.embedding_vocab_matrix
     
 
     # -------------------------------------------------------------------------------------------------------------
@@ -375,8 +368,8 @@ class LCDataset:
 
             print("generating transformer / token based dataset representations...")
 
-            self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_docs(self.Xtr.tolist())                                  
-            self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_docs(self.Xte.tolist())
+            self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_docs(self.Xtr)                                  
+            self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_docs(self.Xte)
 
             # not supported weighted average comp method for transformer based models due to
             # complexity of vectorization and tokenization mapping across models 
@@ -410,12 +403,12 @@ class LCDataset:
             print("generating GPT2 based dataset repressentations...")
 
             self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
-                self.Xtr.tolist(), 
+                self.Xtr, 
                 self.embedding_vocab_matrix
             )
             
             self.Xte_avg_embeddings = self.lcr_model.encode_docs(
-                self.Xte.tolist(), 
+                self.Xte, 
                 self.embedding_vocab_matrix
             )
 
