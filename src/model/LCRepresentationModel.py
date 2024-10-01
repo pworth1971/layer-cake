@@ -878,6 +878,8 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
 
 
+# -----------------------------------------------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------------------------
 
 class TransformerLCRepresentationModel(LCRepresentationModel):
     """
@@ -938,23 +940,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         attention_masks = torch.cat(attention_masks, dim=0)
 
         return input_ids, attention_masks
-    
-
-    def _tokenizeOld(self, texts):
-        """
-        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
-        """
-        
-        tokenized_inputs = self.tokenizer(
-                texts,
-                return_tensors='pt',
-                padding=True,
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,  # Use the tokenizer's maximum length (typically 512 for BERT)
-                return_attention_mask=True
-        )
-
-        return tokenized_inputs['input_ids'], tokenized_inputs['attention_mask']
          
     
     def build_embedding_vocab_matrix(self):
@@ -1283,34 +1268,6 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         tokens = [token for token in tokens if token not in special_tokens]
 
         return tokens
-    
-
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
-        """
-        input_ids = []
-        attention_masks = []
-
-        for text in texts:
-            # Use encode_plus to handle truncation, padding, and return attention mask
-            encoded = self.tokenizer.encode_plus(
-                text,
-                add_special_tokens=True,  # Add special tokens like [CLS] and [SEP]
-                max_length=self.max_length,  # Truncate sequences to this length
-                padding='max_length',  # Pad sequences to the max_length
-                return_attention_mask=True,  # Generate attention mask
-                return_tensors='pt',  # Return PyTorch tensors
-                truncation=True  # Ensure truncation to max_length
-            )
-            input_ids.append(encoded['input_ids'])
-            attention_masks.append(encoded['attention_mask'])
-
-        # Convert lists of tensors to a single tensor
-        input_ids = torch.cat(input_ids, dim=0)
-        attention_masks = torch.cat(attention_masks, dim=0)
-
-        return input_ids, attention_masks
 
 
     def build_embedding_vocab_matrix(self):
@@ -1460,35 +1417,6 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
         self.model.to(self.device)  # Put the model on the appropriate device
-        
-    
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using the tokenizer, returning token IDs and attention masks.
-        """
-        input_ids = []
-        attention_masks = []
-
-        for text in texts:
-            # Use encode_plus to handle truncation, padding, and return attention masks
-            encoded = self.tokenizer.encode_plus(
-                text,
-                add_special_tokens=True,                                    # Add special tokens, like <|endoftext|> for GPT-2
-                max_length=self.max_length,                                 # Truncate to the model's max length
-                padding='max_length',                                       # Pad to max_length (if required)
-                return_attention_mask=True,                                 # Return attention mask
-                return_tensors='pt',                                        # Return PyTorch tensors
-                truncation=True                                             # Truncate sequences longer than max_length
-            )
-            
-            input_ids.append(encoded['input_ids'])
-            attention_masks.append(encoded['attention_mask'])
-
-        # Convert lists of tensors to a single tensor
-        input_ids = torch.cat(input_ids, dim=0)
-        attention_masks = torch.cat(attention_masks, dim=0)
-
-        return input_ids, attention_masks
 
 
     def _custom_tokenizer(self, text):
@@ -1514,7 +1442,6 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         tokens = self.tokenizer.convert_ids_to_tokens(tokens)
 
         return tokens
-
 
 
     def build_embedding_vocab_matrix(self):
