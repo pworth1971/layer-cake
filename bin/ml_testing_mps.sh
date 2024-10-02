@@ -26,15 +26,14 @@ WCE="--wce"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("20newsgroups" "reuters21578"  "bbc-news" "ohsumed")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+declare -a datasets=("ohsumed" "rcv1" "20newsgroups" "reuters21578"  "bbc-news")
+declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
 #declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
 declare -a mixes=("vmode" "dot")
 declare -a embeddings=("glove")
 declare -a emb_comp_options=("avg")
-
 
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
@@ -45,7 +44,6 @@ ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
 LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
 GPT2="--pretrained gpt2 --gpt2-path ../.vector_cache/GPT2"
 XLNET="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
-
 
 # Function to run commands
 function run_command() {

@@ -346,9 +346,10 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
 
+        # Initialize as lists, not numpy arrays
         weighted_document_embeddings = []
         avg_document_embeddings = []
-
+        
         # Calculate the mean embedding for OOV tokens
         #self.mean_embedding = torch.mean(self.model.vectors, dim=0).numpy()
         
@@ -395,13 +396,21 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
             if total_weight > 0:
                 weighted_doc_embedding = weighted_sum / total_weight
             else:
-                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                #weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                weighted_doc_embedding = self.mean_embedding  # Handle empty or OOV cases
 
             # Compute the average embedding for the document
-            avg_doc_embedding = np.mean(valid_embeddings, axis=0) if valid_embeddings else np.zeros(embedding_vocab_matrix.shape[1])
+            #avg_doc_embedding = np.mean(valid_embeddings, axis=0) if valid_embeddings else np.zeros(embedding_vocab_matrix.shape[1])
 
+            # Compute the average embedding for the document
+            if valid_embeddings:
+                avg_document_embedding = np.mean(valid_embeddings, axis=0)
+            else:
+                #avg_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                avg_document_embedding = self.mean_embedding  # Handle empty or OOV cases
+            
             weighted_document_embeddings.append(weighted_doc_embedding)
-            avg_document_embeddings.append(avg_doc_embedding)
+            avg_document_embeddings.append(avg_document_embedding)
 
         weighted_document_embeddings = np.array(weighted_document_embeddings)
         avg_document_embeddings = np.array(avg_document_embeddings)
@@ -517,51 +526,6 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
     
 
 
-    def build_embedding_vocab_matrix_old(self):
-        
-        print("building Word2Vec [word based] embedding representation (matrix) of dataset vocabulary...")
-
-        print("model:", type(self.model))
-        print("model.vector_size:", self.model.vector_size)
-
-        self.embedding_dim = self.model.vector_size
-        self.vocab_size = len(self.vectorizer.vocabulary_)
-        print("embedding_dim:", self.embedding_dim)
-        print("vocab_size:", self.vocab_size)
-
-        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-
-        # Dictionary to store the index-token mapping
-        self.token_to_index_mapping = {}
-
-        # Calculate the mean of all embeddings in the model as a fallback for OOV tokens
-        mean_vector = np.mean(self.model.vectors, axis=0)
-    
-        oov_tokens = 0
-
-        # Loop through the dataset vocabulary and fill the embedding matrix
-        for word, idx in self.vectorizer.vocabulary_.items():
-            self.token_to_index_mapping[idx] = word  # Store the token at its index
-
-            # Check for the word in the original case first
-            if word in self.model.key_to_index:
-                self.embedding_vocab_matrix[idx] = self.model[word]
-            # If not found, check the lowercase version of the word
-            elif word.lower() in self.model.key_to_index:
-                self.embedding_vocab_matrix[idx] = self.model[word.lower()]
-            # If neither is found, handle it as an OOV token
-            else:
-                #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
-                self.embedding_vocab_matrix[idx] = mean_vector  # Use the mean of all vectors as a substitute
-                oov_tokens += 1
-
-        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
-        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
-        print("oov_tokens:", oov_tokens)
-
-        return self.embedding_vocab_matrix, self.token_to_index_mapping
-
-
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
         Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
@@ -629,21 +593,23 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
                     
             # Compute the weighted embedding for the document
             if total_weight > 0:
-                weighted_doc_embedding = weighted_sum / total_weight
+                weighted_document_embedding = weighted_sum / total_weight
             else:
-                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                #weighted_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                weighted_document_embedding = self.mean_embedding  # Handle empty or OOV cases
 
             # Compute the average embedding for the document
             if valid_embeddings:
-                avg_doc_embedding = np.mean(valid_embeddings, axis=0)
+                avg_document_embedding = np.mean(valid_embeddings, axis=0)
             else:
-                avg_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                #avg_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                avg_document_embedding = self.mean_embedding  # Handle empty or OOV cases
 
-            weighted_document_embeddings.append(weighted_doc_embedding)
-            avg_document_embeddings.append(avg_doc_embedding)
+            weighted_document_embeddings.append(weighted_document_embedding)
+            avg_document_embeddings.append(avg_document_embedding)
 
-        weighted_doc_embeddings = np.array(weighted_document_embeddings)
-        avg_doc_embeddings = np.array(avg_document_embeddings)
+        weighted_document_embeddings = np.array(weighted_document_embeddings)
+        avg_document_embeddings = np.array(avg_document_embeddings)
 
         print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
         print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
@@ -859,22 +825,24 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
             # Compute the weighted embedding for the document
             if total_weight > 0:
-                weighted_doc_embedding = weighted_sum / total_weight
+                weighted_document_embedding = weighted_sum / total_weight
             else:
-                weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])
+                #weighted_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])
+                weighted_document_embedding = self.mean_embedding  # Handle empty or OOV cases
 
             # Compute the average embedding for the document
             if valid_embeddings:
-                avg_doc_embedding = np.mean(valid_embeddings, axis=0)
+                avg_document_embedding = np.mean(valid_embeddings, axis=0)
             else:
-                avg_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                #avg_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
+                avg_document_embedding = self.mean_embedding  # Handle empty or OOV cases
 
             # Append the document embeddings to the list
-            weighted_document_embeddings.append(weighted_doc_embedding)
-            avg_document_embeddings.append(avg_doc_embedding)
+            weighted_document_embeddings.append(weighted_document_embedding)
+            avg_document_embeddings.append(avg_document_embedding)
 
-        weighted_doc_embeddings = np.array(weighted_document_embeddings)
-        avg_doc_embeddings = np.array(avg_document_embeddings) 
+        weighted_document_embeddings = np.array(weighted_document_embeddings)
+        avg_document_embeddings = np.array(avg_document_embeddings) 
 
         print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
         print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
