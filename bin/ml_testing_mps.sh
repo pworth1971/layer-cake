@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_stable.test"
+LOG="--logfile ../log/ml_mps_mask_large.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -31,8 +31,8 @@ declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
 #declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
-declare -a mixes=("vmode" "dot" "solo")
-declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
+declare -a mixes=("vmode" "dot")
+declare -a embeddings=("glove")
 declare -a emb_comp_options=("avg")
 
 

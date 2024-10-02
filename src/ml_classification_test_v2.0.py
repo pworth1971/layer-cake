@@ -800,7 +800,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--dataset', required=True, type=str, default='20newsgroups', metavar='N', help=f'dataset, one in {available_datasets}')
     
-    parser.add_argument('--pickle-dir', type=str, default='../pickles', metavar='str', help=f'path where to load the pickled dataset from')
+    parser.add_argument('--pickle-dir', type=str, default=PICKLE_DIR, metavar='str', help=f'path where to load the pickled dataset from')
     
     parser.add_argument('--logfile', type=str, default='../log/ml_classify.test', metavar='N', help='path to the application log file')
     
@@ -819,25 +819,25 @@ if __name__ == '__main__':
     parser.add_argument('--force', action='store_true', default=False,
                     help='force the execution of the experiment even if a log already exists')
     
-    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|roberta|llama',
-                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", "roberta", or "llama" (default None)')
+    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|roberta|gpt2|xlnet|llama',
+                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", "roberta", "xlnet", "gpt2" or "llama" (default None)')
 
     parser.add_argument('--dataset-emb-comp', type=str, default='avg', metavar='weighted|avg|summary',
-                        help='how to compute dataset embedding representation form, one of "weighted", "avg", or "summary (cls)" (default weighted)')
+                        help='how to compute dataset embedding representation form, one of "weighted", "avg", or "summary (cls)" (default avg)')
     
-    parser.add_argument('--embedding-dir', type=str, default='../.vector_cache', metavar='str',
-                        help=f'path where to load and save BERT document embeddings')
+    parser.add_argument('--embedding-dir', type=str, default=VECTOR_CACHE, metavar='str',
+                        help=f'path where to load and save embeddings')
     
-    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/GoogleNews-vectors-negative300.bin',
+    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
                         help=f'path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only '
                              f'with --pretrained word2vec')
     
     parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
-                        help=f'directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove')
+                        help=f'directory to pretrained glove embeddings (e.g. glove.840B.300d.txt.pt file), used only with --pretrained glove')
     
-    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/crawl-300d-2M.vec',
+    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE,
                         metavar='PATH',
                         help=f'path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only '
                             f'with --pretrained fasttext')

@@ -21,7 +21,6 @@ from joblib import Parallel, delayed
 from util.common import VECTOR_CACHE
 
 
-
 NUM_JOBS = -1           # number of jobs for parallel processing
 
 # batch sizes for pytorch encoding routines
@@ -48,26 +47,26 @@ else:
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
 #GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
-BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-#BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+#BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
+BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
-ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
-#ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
+#ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
+ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
 
-GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
+#GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
 #GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
-#GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
+GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
 
-XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
-#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
+#XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
+XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
 # -------------------------------------------------------------------------------------------------------
 
@@ -196,7 +195,7 @@ class LCRepresentationModel(RepresentationModel, ABC):
         source_idx = np.asarray(source_idx)
         target_idx = np.asarray(target_idx)
         
-        print("oov:", oov)
+        #print("oov:", oov)
 
         return source_idx, target_idx, oov
 
@@ -312,7 +311,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         print("words:", type(words), len(words))
 
         source_idx, target_idx, oov = LCRepresentationModel.reindex(words, self.model.stoi)
-        print("oov:", oov)
+        print("OOV:", oov)
         
         extraction = torch.zeros((len(words), self.model.dim))
         extraction[source_idx] = self.model.vectors[target_idx]
@@ -404,11 +403,15 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
             weighted_document_embeddings.append(weighted_doc_embedding)
             avg_document_embeddings.append(avg_doc_embedding)
 
-        print(f"Weighted document embeddings: {len(weighted_document_embeddings)}")
-        print(f"Average document embeddings: {len(avg_document_embeddings)}")
-        print(f"OOV tokens encountered: {oov_tokens}")
+        weighted_document_embeddings = np.array(weighted_document_embeddings)
+        avg_document_embeddings = np.array(avg_document_embeddings)
 
-        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+        print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
+        print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
+
+        print("oov_tokens:", oov_tokens)
+
+        return weighted_document_embeddings, avg_document_embeddings
 
 
 
@@ -639,12 +642,15 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
             weighted_document_embeddings.append(weighted_doc_embedding)
             avg_document_embeddings.append(avg_doc_embedding)
 
-        print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
-        print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
+        weighted_doc_embeddings = np.array(weighted_document_embeddings)
+        avg_doc_embeddings = np.array(avg_document_embeddings)
+
+        print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
+        print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
 
         print("oov_tokens:", oov_tokens)
 
-        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+        return weighted_document_embeddings, avg_document_embeddings
     
 
 
@@ -867,12 +873,15 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             weighted_document_embeddings.append(weighted_doc_embedding)
             avg_document_embeddings.append(avg_doc_embedding)
 
-        print("weighted_document_embeddings:", type(weighted_document_embeddings), len(weighted_document_embeddings))
-        print("avg_document_embeddings:", type(avg_document_embeddings), len(avg_document_embeddings))
+        weighted_doc_embeddings = np.array(weighted_document_embeddings)
+        avg_doc_embeddings = np.array(avg_document_embeddings) 
+
+        print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
+        print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
 
         print("oov_tokens:", oov_tokens)
 
-        return np.array(weighted_document_embeddings), np.array(avg_document_embeddings)
+        return weighted_document_embeddings, avg_document_embeddings
 
 
 
@@ -1049,7 +1058,7 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
 
         # Final OOV tracking output
-        print(f"Total OOV tokens: {oov_tokens}")
+        print(f"oov_tokens: {oov_tokens}")
         """
         if oov_tokens > 0:
             print("List of OOV tokens:", oov_list)
@@ -1108,6 +1117,8 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         first_token_embeddings = np.concatenate(first_token_embeddings, axis=0)
 
+        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
+        print("first_token_embeddings:", type(first_token_embeddings), first_token_embeddings.shape)
 
         return mean_embeddings, first_token_embeddings
 
@@ -1332,7 +1343,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
                 pbar.update(len(batch_words))
 
         print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
-        print(f"OOV tokens: {oov_tokens}")
+        print(f"oov_tokens: {oov_tokens}")
         #print(f"List of OOV tokens: {oov_list}")
     
         #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
@@ -1373,6 +1384,9 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         # Concatenate results
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         cls_embeddings = np.concatenate(cls_embeddings, axis=0)
+
+        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
+        print("cls_embeddings:", type(cls_embeddings), cls_embeddings.shape)
 
         return mean_embeddings, cls_embeddings
     
@@ -1506,7 +1520,7 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
                 pbar.update(len(batch_words))
 
         print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
-        print(f"OOV tokens: {oov_tokens}")
+        print(f"oov_tokens: {oov_tokens}")
         #print(f"List of OOV tokens: {oov_list}")
 
         #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
@@ -1540,6 +1554,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
                 mean_embeddings.append(batch_mean_embeddings)
 
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+
+        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
 
         return mean_embeddings
 

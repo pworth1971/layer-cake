@@ -506,18 +506,23 @@ class LCDataset:
 
         #print("preprocessing raw text...")
 
-        # preprocess the text (stopword removal, mask numbers, etc)
+        """
         self.Xtr = self._preprocess(self.X_train_raw)
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
         print("self.Xtr[0]:\n", self.Xtr[0])
 
         self.Xte = self._preprocess(self.X_test_raw)
         print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])       
+        print("self.Xte[0]:\n", self.Xte[0])
+        """
+
+        self.Xtr, self.Xte = _mask_numbers(self.X_train_raw), _mask_numbers(self.X_test_raw)
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xte:", type(self.Xte), len(self.Xte))
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
-
+        
         self.devel_target = self.y_train
         self.test_target = self.y_test
 
@@ -577,22 +582,25 @@ class LCDataset:
 
         #print("preprocessing raw text...")
 
+        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
         print("self.Xtr[0]:\n", self.Xtr[0])
-
+        
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
         print("self.Xte:", type(self.Xte), self.Xte.shape)
         print("self.Xte[0]:\n", self.Xte[0])
+        """
+
+        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xte:", type(self.Xte), len(self.Xte))
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
-        
-        #self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
-        
-        #self.devel_raw, self.test_raw = mask_numbers(self.devel.data), mask_numbers(self.test.data)
+                
         self.devel_target, self.test_target = self.devel.target, self.test.target        
         print("devel_target:", type(self.devel_target), len(self.devel_target))
         print("test_target:", type(self.test_target), len(self.test_target))
@@ -653,19 +661,25 @@ class LCDataset:
 
         #print("preprocessing raw text...")
         
+        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
         print("self.Xtr[0]:\n", self.Xtr[0])
-
+        
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
         print("self.Xte:", type(self.Xte), self.Xte.shape)
         print("self.Xte[0]:\n", self.Xte[0])
+        """
 
+        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xte:", type(self.Xte), len(self.Xte))
+        
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
-
+        
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
@@ -739,15 +753,21 @@ class LCDataset:
 
         #print("preprocessing raw text...")
 
+        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
         print("self.Xtr[0]:\n", self.Xtr[0])
-
+        
         # test data
         self.Xte = self._preprocess(pd.Series(self.test.data))
         print("self.Xte:", type(self.Xte), self.Xte.shape)
         print("self.Xte[0]:\n", self.Xte[0])
+        """
+
+        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xte:", type(self.Xte), len(self.Xte))
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -845,6 +865,7 @@ class LCDataset:
 
         #print("preprocessing raw text...")
 
+        """
         # training data
         self.Xtr = self._preprocess(pd.Series(self.devel.data))
         print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
@@ -854,6 +875,11 @@ class LCDataset:
         self.Xte = self._preprocess(pd.Series(self.test.data))
         print("self.Xte:", type(self.Xte), self.Xte.shape)
         print("self.Xte[0]:\n", self.Xte[0])
+        """
+
+        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xte:", type(self.Xte), len(self.Xte))
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -866,7 +892,6 @@ class LCDataset:
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         print("devel_target:", type(self.devel_target), self.devel_target.shape)
         print("test_target:", type(self.test_target), self.test_target.shape)
-
 
         # Convert sparse targets to dense arrays
         print("Converting devel_target from sparse matrix to dense array...")
