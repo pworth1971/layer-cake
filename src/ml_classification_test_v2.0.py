@@ -659,7 +659,11 @@ def initialize_ml_testing(args):
     system = SystemResources()
     print("system:\n", system)
 
-    run_mode = args.dataset + ':' + args.learner + ':' + args.mix + ':' + args.dataset_emb_comp
+    if (args.wce):
+        print("using WCEs...")
+        run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + '+wce' + ':' + args.mix + ':' + args.dataset_emb_comp
+    else:
+        run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
 
     # set defauklt system params
     ml_logger.set_default('os', system.get_os())
@@ -740,9 +744,6 @@ def get_representation(args):
 
     print("calculating representation...")
 
-
-    optimized = False
-
     # set model and dataset
     method_name = f'[{args.learner}:{args.dataset}]:->'
 
@@ -753,21 +754,30 @@ def get_representation(args):
     # as to how that space is computed: 1) weighted, 2) avg, 3) summary
     if (args.mix == 'solo'):
         method_name += f'{args.pretrained}:{args.dataset_emb_comp}'
+    
     # cat is when we concatenate the doc representation in the
     # underlying pretrained embedding space with the tfidf vectors - 
     # we have the same three options for the dataset embedding representation
     elif (args.mix == 'cat'):
         method_name += f'{args.vtype}+{args.pretrained}:{args.dataset_emb_comp}'
+    
     # dot is when we project the tfidf vectors into the underlying
     # pretrained embedding space using matrix multiplication, i.e. dot product
     # we have the same three options for the dataset embedding representation computation
     elif (args.mix == 'dot'):
-        method_name += f'{args.vtype}->{args.pretrained}:{args.dataset_emb_comp}'
+
+        # --wce option only valid with dot mix mode
+        if (args.wce):
+            method_name += f'{args.vtype}->{args.pretrained}+wce:{args.dataset_emb_comp}'
+        else:
+            method_name += f'{args.vtype}->{args.pretrained}:{args.dataset_emb_comp}'
+
     # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
     # as the dataset representation into the model
     elif (args.mix == 'vmode'):
         #method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}.({args.pretrained}'
         method_name += f'{args.vtype}[{args.pretrained}]'
+    
     # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):
@@ -778,12 +788,12 @@ def get_representation(args):
     # and we are tuning (fine-tuning) it or if its an ML
     # model and we are optimizing the prameters ofr best results
     #
-
     if (args.learner in NEURAL_MODELS and args.tunable) or (args.learner in ML_MODELS and args.optimc):
-        method_name += ':(opt)'
+        method_name += ':[opt]'
         optimized = True
     else:
-        method_name += ':(def)'
+        method_name += ':[def]'
+        optimized = False
     
     print("method_name:", method_name)
 
@@ -814,7 +824,7 @@ if __name__ == '__main__':
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the model using relevant models params')
 
-    parser.add_argument('--wce', action='store_true', default=False, help='Use Word Class Embeddings (i.e. supervised)')
+    parser.add_argument('--wce', action='store_true', default=False, help='Use Word Class Embeddings (i.e. supervised). NB this option is only valid with --mix == dot.')
 
     parser.add_argument('--force', action='store_true', default=False,
                     help='force the execution of the experiment even if a log already exists')
@@ -873,6 +883,11 @@ if __name__ == '__main__':
     # check valid NB arguments
     if (args.learner in ['nb', 'NB'] and args.mix != 'vmode'):
         print(f'Warning: abandoning run. Naive Bayes model (nb) can only be run with no --pretrained parameter and with --mix vmode (due to lack of support for negative embeddings). Exiting...')
+        exit(0)
+
+    # Assertion for WCE and mix being 'dot'
+    if args.wce and args.mix != 'dot':
+        print(f'Assertion Warning: --wce can only be used when --mix is set to "dot". Current value: {args.mix}')
         exit(0)
                 
     # initialize log file and run params

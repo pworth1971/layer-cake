@@ -25,11 +25,14 @@ from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 
 
-NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn', 'nn-transformer']
-ML_MODELS = ['svm', 'lr', 'nb', 'dt']
+NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn']
+ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta' 'llama']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'llama']
+#SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'llama', 'xlnet', 'gpt2']
+#SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']
+
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'gpt2']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'gpt2']
 
 
 VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory

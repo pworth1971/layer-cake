@@ -757,12 +757,44 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
 
         vocabulary = np.asarray(list(self.vectorizer.vocabulary_.keys()))
 
+        # Extract embeddings for the vocabulary (with updated extract method)
         self.embedding_vocab_matrix = self.extract(vocabulary)
 
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
 
         return self.embedding_vocab_matrix
-    
+
+
+    def extract(self, words):
+        """
+        Extract embeddings for a list of words, using FastText subword embeddings for OOV tokens
+        """
+        print("Extracting words from FastText model...")
+        oov_tokens = 0
+        embeddings = []
+
+        for word in words:
+            embedding = None
+            try:
+                # First, try to get the embedding for the word (in original case)
+                embedding = self.model.wv[word]
+            except KeyError:
+                # If not found, try lowercase version of the word (case consistency with the vectorizer)
+                if word.lower() in self.model.wv.key_to_index:
+                    embedding = self.model.wv[word.lower()]
+                else:
+                    # As a last resort, use subword embeddings for OOV
+                    embedding = self.model.wv.get_vector(word)
+                    oov_tokens += 1
+                    print(f"OOV Token: {word}")
+
+            embeddings.append(embedding)
+
+        print(f"OOV tokens encountered: {oov_tokens}")
+        
+        return np.vstack(embeddings)
+
+
 
     def build_embedding_vocab_matrix_old(self):
 
@@ -1007,7 +1039,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         return mean_embedding
 
 
-
     def build_embedding_vocab_matrix(self):
         """
         Build the embedding vocabulary matrix for BERT/RoBERTa.
@@ -1034,14 +1065,17 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
             input_ids = inputs['input_ids'].to(self.device)
             attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
 
+            # Get token embeddings from model
             with torch.no_grad():
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
-            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()  # Mean of token embeddings
+
+            # Average embeddings across all tokens (instead of just the first)
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()          # Mean of token embeddings, ie mean pooling
 
         batch_size = self.batch_size
 
         # Add a progress bar to track the processing of the vocabulary
-        with tqdm(total=len(vocabulary), desc="Building embedding vocab matrix", unit="word") as pbar:
+        with tqdm(total=len(vocabulary), desc="computing Transformer (BERT / RoBERTa embedding vocab matrix", unit="word") as pbar:
             for i in range(0, len(vocabulary), batch_size):
                 batch_words = vocabulary[i:i+batch_size]
                 embeddings = process_batch(batch_words)
@@ -1064,132 +1098,11 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix
 
 
-
-
-
-    
-    def build_embedding_vocab_matrix_old(self):
-        """
-        Build the embedding vocabulary matrix for BERT and RoBERTa models.
-        """
-        print("building [BERT/RoBERTa based] embedding representation (matrix) of dataset vocabulary...")
-
-        self.model.eval()  # Set model to evaluation mode            
-        self.model = self.model.to(self.device)
-        print(f"Using device: {self.device}")  # To confirm which device is being used
-        print("model:", type(self.model))
-        
-        #
-        # NB we use different embedding vocab matrices here depending upon the pretrained model
-        #
-        self.embedding_dim = self.model.config.hidden_size  # Get the embedding dimension size
-        self.vocab_size = len(self.vectorizer.vocabulary_)
-
-        print("embedding_dim:", self.embedding_dim)
-        print("dataset vocab size:", self.vocab_size)   
-
-        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-
-        # Dictionary to store the index-token mapping
-        self.token_to_index_mapping = {}
-
-        # Initialize OOV token tracking
-        oov_tokens = 0
-        oov_list = []  # Keep a list of OOV words
-        
-        # Mean vector for OOV tokens
-        mean_vector = np.zeros(self.embedding_dim)
-        
-        # -------------------------------------------------------------------------------------------------------------
-        def _bert_embedding_vocab_matrix(vocab, batch_size=DEFAULT_CPU_BATCH_SIZE, max_len=512):
-            """
-            Construct the embedding vocabulary matrix for BERT and RoBERTa models.
-            """
-
-            print("_bert_embedding_vocab_matrix...")
-            print("batch_size:", batch_size)
-            print("max_len:", max_len)
-
-            embedding_vocab_matrix = np.zeros((len(vocab), self.model.config.hidden_size))
-            batch_words = []
-            word_indices = []
-
-            def process_batch(batch_words, max_len):
-                inputs = self.tokenizer(batch_words, return_tensors='pt', padding=True, truncation=True, max_length=max_len)
-                input_ids = inputs['input_ids'].to(self.device)
-                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure all inputs are on the same device
-
-                # Perform inference, ensuring that the model is on the same device as the inputs
-                self.model.to(self.device)
-                with torch.no_grad():
-                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-
-                # Return the embeddings and ensure they are on the CPU for further processing
-                return outputs.last_hidden_state[:, 0, :].cpu().numpy()
-
-            with tqdm(total=len(vocab), desc="processing BERT/RoBERTa embedding vocab matrix construction batches") as pbar:
-                for word, idx in vocab.items():
-                    batch_words.append(word)
-                    word_indices.append(idx)
-
-                    if len(batch_words) == batch_size:
-                        embeddings = process_batch(batch_words, max_len)
-                        for i, embedding in zip(word_indices, embeddings):
-                            if i < len(embedding_vocab_matrix):
-                                embedding_vocab_matrix[i] = embedding
-                            else:
-                                print(f"IndexError: Skipping index {i} as it's out of bounds for embedding_vocab_matrix.")
-                                oov_tokens += 1
-                                oov_list.append(word)  # Track OOV words
-                                embedding_vocab_matrix[i] = mean_vector  # Assign mean vector for OOV
-                        batch_words = []
-                        word_indices = []
-                        pbar.update(batch_size)
-
-                if batch_words:
-                    embeddings = process_batch(batch_words, max_len)
-                    for i, embedding in zip(word_indices, embeddings):
-                        if i < len(embedding_vocab_matrix):
-                            embedding_vocab_matrix[i] = embedding
-                        else:
-                            print(f"IndexError: Skipping index {i} as it's out of bounds for the embedding_vocab_matrix.")
-                            oov_tokens += 1
-                            oov_list.append(batch_words[i])  # Track OOV words
-                            embedding_vocab_matrix[i] = mean_vector  # Assign mean vector for OOV
-                    pbar.update(len(batch_words))
-
-            return embedding_vocab_matrix
-        # -------------------------------------------------------------------------------------------------------------
-        
-        #tokenize and prepare inputs
-        max_length = self.tokenizer.model_max_length
-        #print("max_length:", max_length)
-
-        self.embedding_vocab_matrix = _bert_embedding_vocab_matrix(self.vectorizer.vocabulary_, batch_size=BATCH_SIZE, max_len=max_length)
-        
-        # Add to token-to-index mapping for BERT and RoBERTa
-        for word, idx in self.vectorizer.vocabulary_.items():
-            self.token_to_index_mapping[idx] = word  # Store the token at its index
-            
-        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
-        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
-
-        # Final OOV tracking output
-        print(f"oov_tokens: {oov_tokens}")
-        """
-        if oov_tokens > 0:
-            print("List of OOV tokens:", oov_list)
-        """    
-        
-        #return self.embedding_vocab_matrix, self.token_to_index_mapping
-        return self.embedding_vocab_matrix
-
-
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
-        Generates both the mean and first token embeddings for a list of text sentences using RoBERTa.
+        Generates both the mean and first token embeddings for a list of text sentences using BERT / RoBERTa embeddings.
+        NB RoBERTa does not use a [CLS] token, but the first token often serves a similar purpose.
         
-        RoBERTa does not use a [CLS] token, but the first token often serves a similar purpose.
         This function computes:
         - The mean of all token embeddings.
         - The first token embedding (position 0).
@@ -1582,6 +1495,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         print("Building GPT-2 embedding vocab matrix...")
 
         self.model.eval()
+        self.model = self.model.to(self.device)
+
         self.embedding_dim = self.model.config.hidden_size
         self.vocab_size = len(self.vectorizer.vocabulary_)
 
@@ -1605,10 +1520,10 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
                 outputs = self.model(input_ids=input_ids)
 
             # Average embeddings across all tokens (instead of just the first)
-            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()  # Mean pooling across tokens
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()          # Mean pooling across tokens
 
         # Tokenize the vocabulary and build embedding matrix
-        with tqdm(total=len(self.vectorizer.vocabulary_), desc="Processing GPT-2 embedding vocab matrix") as pbar:
+        with tqdm(total=len(self.vectorizer.vocabulary_), desc="computing GPT-2 embedding vocab matrix") as pbar:
             for word, idx in self.vectorizer.vocabulary_.items():
                 # Tokenize the word into subwords (this will handle cases where words are split into subword units)
                 subwords = self.tokenizer.tokenize(word)
@@ -1642,40 +1557,6 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
 
         #return self.embedding_vocab_matrix, self.vectorizer.vocabulary_
         return self.embedding_vocab_matrix
-
-
-
-    def encode_docs(self, text_list, embedding_vocab_matrix=None):
-        """
-        Encode documents using GPT-2 embeddings.
-        """
-
-        print("encoding docs with GPT-2 embeddings...")
-
-        self.model.eval()
-
-        mean_embeddings = []
-
-        with torch.no_grad():
-            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
-                input_ids, attention_mask = self._tokenize(batch)  # Use token IDs for GPT-2
-                input_ids = input_ids.to(self.device)
-                attention_mask = attention_mask.to(self.device)
-
-                # Get the token-level embeddings from GPT-2
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                token_vectors = outputs[0]  # Shape: [batch_size, sequence_length, hidden_size]
-
-                # Compute the mean of all token embeddings for each document
-                batch_mean_embeddings = token_vectors.mean(dim=1).cpu().detach().numpy()
-                mean_embeddings.append(batch_mean_embeddings)
-
-        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-
-        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
-
-        return mean_embeddings
-
 
 
 
