@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_mask_large.test"
+LOG="--logfile ../log/ml_mps_large_oov.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -26,14 +26,13 @@ WCE="--wce"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("ohsumed" "rcv1" "20newsgroups" "reuters21578"  "bbc-news")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles" "../pickles")
+declare -a datasets=("ohsumed" "20newsgroups" "reuters21578" "bbc-news")
+declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-#declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
-declare -a mixes=("vmode" "dot")
-declare -a embeddings=("glove")
-declare -a emb_comp_options=("avg")
+declare -a mixes=("solo" "vmode" "cat" "dot" "lsa")
+declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
+declare -a emb_comp_options=("avg" "summary")
 
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
