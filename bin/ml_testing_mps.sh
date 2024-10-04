@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_dot_solo.test"
+LOG="--logfile ../log/ml_mps_glove_opt.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -30,7 +30,7 @@ declare -a datasets=("20newsgroups" "reuters21578" "ohsumed" "rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-declare -a mixes=("solo" "dot")
+declare -a mixes=("vmode" "dot" "solo")
 declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
 declare -a emb_comp_options=("avg" "summary")
 
@@ -70,16 +70,16 @@ function run_command() {
     echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
     echo "#########################################################################################################################################################################################################################################################################"
     echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running WCE command: $cmd_wce"
-    eval $cmd_wce
+    echo "Running Optimized command: $cmd_opt"
+    eval $cmd_opt
     echo
     echo
     echo
     echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
     echo "#########################################################################################################################################################################################################################################################################"
     echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running default command: $cmd"
-    eval $cmd
+    echo "Running Optimized WCE command: $cmd_opt_wce"
+    eval $cmd_opt_wce
     #echo
     #echo
     #echo
@@ -100,13 +100,13 @@ for i in "${!datasets[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp"
-                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp"
+                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp"
                 done
             done
         done

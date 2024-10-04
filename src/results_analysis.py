@@ -366,8 +366,14 @@ def gen_csvs(df, output_dir, debug=False):
 
     print("generating csvs...")
 
+    print("df:\n", df)
+
+    
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
-    df[['Dataset', 'Model', 'Mix', 'comp_method']] = df['mode'].str.split(':', expand=True)
+    #
+    # example mode value == 'reuters21578:svm:bert:vmode:avg'
+    #
+    df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Mix', 'M-Comp_Method']] = df['mode'].str.split(':', expand=True)
 
     # Filter the dataframe for the required measures
     filtered_df = df[df['measure'].isin(MEASURES)]
@@ -379,7 +385,7 @@ def gen_csvs(df, output_dir, debug=False):
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     # Iterate through each dataset and model to generate tables
-    for (dataset, model), group_df in filtered_df.groupby(['Dataset', 'Model']):
+    for (dataset, model), group_df in filtered_df.groupby(['M-Dataset', 'M-Model']):
         output_html = f"{output_dir}/{dataset}_{model}_results.{current_date}.html"
         output_csv = f"{output_dir}/{dataset}_{model}_results.{current_date}.csv"
         render_data(group_df, dataset, model, output_html, output_csv)
@@ -389,11 +395,13 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
 
     print("rendering data...")
 
+    print("dataframe:\n", dataframe)
+
     # Group the data by embeddings and mix (formerly Mode) within each embedding
-    grouped = dataframe.groupby(['embeddings', 'Mix', 'class_type'], as_index=False)
+    grouped = dataframe.groupby(['embeddings', 'M-Mix', 'class_type'], as_index=False)
 
     # Select only the required columns, including the new 'dimensions' column
-    selected_columns = ['embeddings', 'Mix', 'comp_method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
+    selected_columns = ['embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
 
     # Create an HTML table manually, ensuring that embeddings and mix only display once per group
     rows = []
@@ -401,7 +409,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     previous_mix = None
 
     # Prepare CSV data
-    csv_rows = [['embeddings', 'mix', 'comp_method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+    csv_rows = [['embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
 
     for (embeddings, mix, class_type), group in grouped:
         # Determine if we need a bold line for the first embeddings group
@@ -416,7 +424,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
             # Prepare the HTML row
             if first_row:
                 # Display embeddings in bold and mix in italics, apply the bold border for new embeddings group
-                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['embeddings']}</b></td><td><i>{row['Mix']}</i></td>"
+                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['embeddings']}</b></td><td><i>{row['M-Mix']}</i></td>"
                 first_row = False
             else:
                 # Leave the embeddings and mix columns empty for subsequent rows, apply dotted line between Mix combinations
@@ -428,7 +436,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
             rows.append(row_html)
 
             # Prepare the CSV row
-            csv_row = [row['embeddings'], row['Mix'], row['comp_method'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
+            csv_row = [row['embeddings'], row['M-Mix'], row['M-Comp_Method'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
             csv_rows.append(csv_row)
 
         # Update previous_embeddings and previous_mix to track the current group
