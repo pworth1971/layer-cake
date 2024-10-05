@@ -113,13 +113,13 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
     print("avg_embeddings_test:", type(avg_embeddings_test), avg_embeddings_test.shape)
     print("summary_embeddings_train:", type(summary_embeddings_train), summary_embeddings_train.shape)
     print("summary_embeddings_test:", type(summary_embeddings_test), summary_embeddings_test.shape)
-    
-
+        
+        
     # here we are just using the embedding data representation of
     # the doc dataset data by itself, i.e. without the tfidf vectors    
     if mix == 'solo':
         
-        print("Using just the embedding dataset represntation alone (solo)...")
+        print("Using just the embedding dataset representation alone (solo)...")
         
         #
         # Here we directly return the dataset embedding representation 
@@ -141,11 +141,71 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None   
+
+    # here we are just using the embedding data representation of
+    # the doc dataset data by itself, i.e. without the tfidf vectors    
+    elif mix == 'solo-wce':
+        
+        print("using the embedding dataset represntation with WCEs (solo-wce)...")
+
+        #
+        # Here we initialize the training and test data sets with the
+        # appropriate dataset embedding representation 
+        #
+        if (dataset_embedding_type == 'weighted'):
+            X_train = weighted_embeddings_train
+            X_test = weighted_embeddings_test                
+        elif (dataset_embedding_type == 'avg'):
+            X_train = avg_embeddings_train
+            X_test = avg_embeddings_test
+        elif (dataset_embedding_type == 'summary'):
+
+            # NB that summary type embeddings (i.e. CLS token) only supported with BERT embeddings
+            # but we expect them in the pickle file so we swapped them for avg_embeddings when 
+            # we compute them in LCDataset class 
+            X_train = summary_embeddings_train
+            X_test = summary_embeddings_test
+        else:
+            print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
+            return None   
+
+        #
+        # Next webuild the WCE representation by projecting 
+        # the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product. 
+        #
+        Xtr_wces = get_supervised_embeddings(Xtr_vectorized, y_train)
+        print("Xtr_wces:", type(Xtr_wces), Xtr_wces.shape)
+        Xte_wces = get_supervised_embeddings(Xte_vectorized, y_test)
+        print("Xte_wces:", type(Xte_wces), Xte_wces.shape)
+        
+        print("stacking embedding_vocab_matrix with WCEs...")
+        pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, Xtr_wces])
+
+        print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
     
+        X_train_wce = Xtr_vectorized @ pretrained_vectors_dictionary
+        X_test_wce = Xte_vectorized @ pretrained_vectors_dictionary
+        
+        print("after dot product...")
+        print("X_train_wce:", type(X_train_wce), X_train_wce.shape)
+        print("X_test_wce:", type(X_test_wce), X_test_wce.shape)
+
+        # Now we stack the WCEs (from the vectorized representation) with the 
+        # dataset embedding representation from the LCRepresentationModel.encode_docs() 
+        # method, ie the embedidng representation of the document dataset
+        X_train = np.hstack([X_train, X_train_wce])
+        X_test = np.hstack([X_test, X_test_wce])
+
+        print("after stacking WCEs with embedding dataset representation...")
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+
     # here we are concatenating the vectorized representation of the dataset 
-    # along with the embedding representation
-    elif mix == 'cat':        
-        print("Concatenating embeddings with vectorized text representation...")
+    # along with the embedding representation of the dataset
+    elif mix == 'cat-doc':
+
+        print("Concatenating the vectorized text representation with embedding doc representation (cat-doc)...")
                 
         # 
         # Here we concatenate the tfidf vectors and the specified form 
@@ -166,32 +226,111 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None
+    
+    # here we are concatenating the vectorized representation of the dataset
+    # along with the WCEs only
+    elif mix == 'cat-wce':
+        
+        print("Concatenting WCEs with vectorized dataset representation (cat-wce)...")
+        
+        #
+        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product. NB we maintain the sparse 
+        # representations here for faster compute performance
+        #
+        Xtr_wces = get_supervised_embeddings(Xtr_vectorized, y_train)
+        print("Xtr_wces:", type(Xtr_wces), Xtr_wces.shape)
+        Xte_wces = get_supervised_embeddings(Xte_vectorized, y_test)
+        print("Xte_wces:", type(Xte_wces), Xte_wces.shape)
+        
+        print("stacking embedding_vocab_matrix with WCEs...")
+        pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, Xtr_wces])
+
+        print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+    
+        X_train_wce = Xtr_vectorized @ pretrained_vectors_dictionary
+        X_test_wce = Xte_vectorized @ pretrained_vectors_dictionary
+        
+        print("after dot product...")
+        print("X_train_wce:", type(X_train_wce), X_train_wce.shape)
+        print("X_test_wce:", type(X_test_wce), X_test_wce.shape)
+        
+        # After applying the WCEs, we concatenate the resulting matrix with the 
+        # original feature matrix to augment the vectorized feature set with the 
+        # embedding space for said vectorized feature space
+        X_train = np.hstack([Xtr_vectorized.toarray(), X_train_wce])              
+        X_test = np.hstack([Xte_vectorized.toarray(), X_test_wce])
+
+    # here we are concatenating the vectorized representation of the dataset 
+    # with the embedding representation of the dataset AND the WCEs
+    elif mix == 'cat-doc-wce':
+
+        print("Concatenating the vectorized text representation with embedding doc representation and the WCEs (cat-doc-wce)...")
+                
+        # 
+        # Here we concatenate the tfidf vectors and the specified form 
+        # of dataset embedding representation to form the final input.
+        # NB: we maintain the sparse representations here for faster compute performance
+        #
+        from scipy.sparse import hstack
+
+        if (dataset_embedding_type == 'weighted'):
+            X_train = hstack([Xtr_vectorized, csr_matrix(weighted_embeddings_train)])
+            X_test = hstack([Xte_vectorized, csr_matrix(weighted_embeddings_test)])
+        elif (dataset_embedding_type == 'avg'):
+            X_train = hstack([Xtr_vectorized, csr_matrix(avg_embeddings_train)])
+            X_test = hstack([Xte_vectorized, csr_matrix(avg_embeddings_test)])
+        elif (dataset_embedding_type == 'summary'):
+            X_train = hstack([Xtr_vectorized, csr_matrix(summary_embeddings_train)])
+            X_test = hstack([Xte_vectorized, csr_matrix(summary_embeddings_test)])
+        else:
+            print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
+            return None
+        
+        print("after stacking vectorized represnetation and embedding representations of dataset...")
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+
+        #
+        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product. NB we maintain the sparse 
+        # representations here for faster compute performance
+        #
+        Xtr_wces = get_supervised_embeddings(Xtr_vectorized, y_train)
+        Xte_wces = get_supervised_embeddings(Xte_vectorized, y_test)
+        print("Xtr_wces:", type(Xtr_wces), Xtr_wces.shape)
+        print("Xte_wces:", type(Xte_wces), Xte_wces.shape)
+
+        print("stacking embedding_vocab_matrix with WCEs...")
+        pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, Xtr_wces])
+
+        print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+    
+        X_train_wce = Xtr_vectorized @ pretrained_vectors_dictionary
+        X_test_wce = Xte_vectorized @ pretrained_vectors_dictionary
+
+        print("after dot product...")
+        print("X_train_wce:", type(X_train_wce), X_train_wce.shape)
+        print("X_test_wce:", type(X_test_wce), X_test_wce.shape)
+        
+        # After computing the WCEs and the related vectorizxed + embedding+WCE representation, 
+        # we concatenate the resulting matrix with the stacked vectorized + embedding dataset 
+        # representation to further augment the already augmented vectorized feature set with 
+        # the additional WCE information
+        X_train = np.hstack([X_train.toarray(), X_train_wce])              
+        X_test = np.hstack([X_test.toarray(), X_test_wce])
+
+        print("after stacking WCEs with vectorized represnetation and embedding representations of dataset...")
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+        
 
     # here we are projecting the vectorized representation of the dataset (either tfidf or count)
     # into the pretrained embedding (vocabulary) space using the dot product (matrix multiplication)
     elif mix == 'dot':
         
-        print("projecting vectorized representation into embedding space (dot product / matrix multiplication)...")
-        
-        #
-        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
-        # using matrix multiplication, i.e. dot product.
-        # 
-        # NB we maintain the sparse representations here for faster compute performance
-        #
-        if (supervised):
-
-            print("supervised is true, augmenting embeddings with WCEs...")
-
-            print("embedding dataset vocab representation before WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
-
-            wces = get_supervised_embeddings(Xtr_vectorized, y_train)
-            print("wces:", type(wces), wces.shape)
-
-            pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, wces])
-
-            print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
-        
+        print("projecting vectorized representation into embedding space (dot)...")
+                
         X_train = Xtr_vectorized @ pretrained_vectors_dictionary
         X_test = Xte_vectorized @ pretrained_vectors_dictionary
         
@@ -201,10 +340,41 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
         print("X_test:", type(X_test), X_test.shape)
         #print("X_test[0]:\n", X_test[0])
     
+    # here we are projecting the vectorized representation of the dataset (either tfidf or count)
+    # into the pretrained embedding (vocabulary) space using the dot product (matrix multiplication)
+    elif mix == 'dot-wce':
+        
+        print("projecting vectorized representation into embedding space with WCEs (dot-wce)...")
+        
+        #
+        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product.
+        # 
+        # NB we maintain the sparse representations here for faster compute performance
+        #
+        wces = get_supervised_embeddings(Xtr_vectorized, y_train)
+        print("WCEs:", type(wces), wces.shape)
+        
+        print("stacking embedding_vocab_matrix with WCEs...")
+        pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, wces])
+
+        print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+    
+        X_train = Xtr_vectorized @ pretrained_vectors_dictionary
+        X_test = Xte_vectorized @ pretrained_vectors_dictionary
+        
+        print("after dot product...")
+        print("X_train:", type(X_train), X_train.shape)
+        #print("X_train[0]:\n", X_train[0])
+        print("X_test:", type(X_test), X_test.shape)
+        #print("X_test[0]:\n", X_test[0])
+
     # here we are using LSA (Latent Semantic Analysis) to reduce the number of features, using the 
     # embedding dimension size as the input to the TruncatedSVD sklearn call
     elif mix == 'lsa':
         
+        print("using SVD (LSA) to reduce feature set (lsa)...")
+
         n_dimensions = pretrained_vectors_dictionary.shape[1]
         print("n_dimensions:", n_dimensions)
         
@@ -214,6 +384,51 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
         # using the svd model
         X_train = svd.fit_transform(Xtr_vectorized)
         X_test = svd.transform(Xte_vectorized)
+
+    # here we use LSA (Latent Semantic Analysis) to reduce the number of features, using the 
+    # embedding dimension size as the input to the TruncatedSVD sklearn call, and then we augment
+    # the reduced feature set with the WCEs
+    elif mix == 'lsa-wce':
+        
+        print("using SVD (LSA) with WCEs (lsa-wce)...")
+
+        n_dimensions = pretrained_vectors_dictionary.shape[1]
+        print("n_dimensions:", n_dimensions)
+        
+        svd = TruncatedSVD(n_components=n_dimensions)           # Adjust dimensions to match pretrained embeddings
+        
+        # reset X_train and X_test to the original tfidf vectors
+        # using the svd model
+        X_train = svd.fit_transform(Xtr_vectorized)
+        X_test = svd.transform(Xte_vectorized)
+
+         #
+        # here we project the tfidf vectors into the pretrained embedding (vocabulary) space
+        # using matrix multiplication, i.e. dot product. NB we maintain the sparse 
+        # representations here for faster compute performance
+        #
+        Xtr_wces = get_supervised_embeddings(Xtr_vectorized, y_train)
+        print("Xtr_wces:", type(Xtr_wces), Xtr_wces.shape)
+        Xte_wces = get_supervised_embeddings(Xte_vectorized, y_test)
+        print("Xte_wces:", type(Xte_wces), Xte_wces.shape)
+        
+        print("stacking embedding_vocab_matrix with WCEs...")
+        pretrained_vectors_dictionary = np.hstack([pretrained_vectors_dictionary, Xtr_wces])
+
+        print("embedding dataset vocab representation after WCES:", type(pretrained_vectors_dictionary), pretrained_vectors_dictionary.shape)
+    
+        X_train_wce = Xtr_vectorized @ pretrained_vectors_dictionary
+        X_test_wce = Xte_vectorized @ pretrained_vectors_dictionary
+        
+        print("after dot product...")
+        print("X_train_wce:", type(X_train_wce), X_train_wce.shape)
+        print("X_test_wce:", type(X_test_wce), X_test_wce.shape)
+        
+        # After applying the WCEs, we concatenate the resulting matrix with the 
+        # LSA feature reduced vectiorized representation of the dataset to augment 
+        # the LSA features with the WCEs
+        X_train = np.hstack([X_train, X_train_wce])              
+        X_test = np.hstack([X_test, X_test_wce])
 
     # here we are using the vectorized representation of the dataset (either tfidf or count) as the
     # input to the model directly
@@ -238,7 +453,7 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # run_model(): Core processing function
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, representation=None, supervised=False, optimized=False, logfile=None, args=None):
+def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, representation=None, optimized=False, logfile=None, args=None):
     """
     Core function for classifying text data using various configurations like embeddings, methods, and models.
 
@@ -248,7 +463,6 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
     - embeddings (str or None): Specifies the type of pretrained embeddings to use (e.g., 'bert', 'llama'). If None, no embeddings are used.
     - embedding_path (str): Path to the pretrained embeddings file or directory.
     - representation (str or None): Specifies the classification method (optional).
-    - supervised (bool): Whether the model is supervised, i.e. use WCEs, or not.
     - optimized (bool): Whether the model is optimized for performance. 
     - logfile: Logfile object to store results and performance metrics.
     - args: Argument parser object, containing various flags for optimization and configuration (e.g., --optimc).
@@ -275,8 +489,6 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
 
     print("representation:", representation)
     print("optimize:", optimized)
-    print("supervised:", supervised)
-
 
     if (args.pretrained is not None and args.pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
         embedding_type = 'token'
@@ -371,8 +583,7 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
             summary_embeddings_train=Xtr_summary_embeddings,
             summary_embeddings_test=Xte_summary_embeddings,
             dataset_embedding_type=args.dataset_emb_comp,
-            mix=args.mix,
-            supervised=supervised
+            mix=args.mix
             )
 
         sup_tend = time() - tinit
@@ -659,11 +870,8 @@ def initialize_ml_testing(args):
     system = SystemResources()
     print("system:\n", system)
 
-    if (args.wce):
-        print("using WCEs...")
-        run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + '+wce' + ':' + args.mix + ':' + args.dataset_emb_comp
-    else:
-        run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
+    run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
+    print("run_mode:", {run_mode})
 
     # set defauklt system params
     ml_logger.set_default('os', system.get_os())
@@ -725,18 +933,12 @@ def get_embeddings_path(pretrained, args):
 
 def get_embeddings(args):
 
-    emb = ''                # initialize to empty string
+    print("get_embeddings...")
 
-    if (args.pretrained and args.wce is False):
-        emb += args.pretrained
-    elif (args.wce and args.pretrained is None):
-        emb += 'wce'
-    elif (args.wce and args.pretrained):
-        emb += args.pretrained+'+wce'
-
-    print("emb:", emb)
-
-    return emb
+    if (args.pretrained):
+        return args.pretrained + ':' + args.mix
+    else:
+        return args.mix
 
 
 
@@ -754,23 +956,30 @@ def get_representation(args):
     # as to how that space is computed: 1) weighted, 2) avg, 3) summary
     if (args.mix == 'solo'):
         method_name += f'{args.pretrained}:{args.dataset_emb_comp}'
+
+    if (args.mix == 'solo-wce'):
+        method_name += f'{args.pretrained}:{args.dataset_emb_comp}+wce'
     
     # cat is when we concatenate the doc representation in the
     # underlying pretrained embedding space with the tfidf vectors - 
     # we have the same three options for the dataset embedding representation
-    elif (args.mix == 'cat'):
+    elif (args.mix == 'cat-doc'):
         method_name += f'{args.vtype}+{args.pretrained}:{args.dataset_emb_comp}'
     
+    elif (args.mix == 'cat-wce'):
+        method_name += f'{args.vtype}+wce'
+
+    elif (args.mix == 'cat-doc-wce'):
+        method_name += f'{args.vtype}+{args.pretrained}:{args.dataset_emb_comp}+wce'
+
     # dot is when we project the tfidf vectors into the underlying
     # pretrained embedding space using matrix multiplication, i.e. dot product
     # we have the same three options for the dataset embedding representation computation
     elif (args.mix == 'dot'):
+        method_name += f'{args.vtype}->{args.pretrained}:{args.dataset_emb_comp}'
 
-        # --wce option only valid with dot mix mode
-        if (args.wce):
-            method_name += f'{args.vtype}->{args.pretrained}+wce:{args.dataset_emb_comp}'
-        else:
-            method_name += f'{args.vtype}->{args.pretrained}:{args.dataset_emb_comp}'
+    elif (args.mix == 'dot-wce'):
+        method_name += f'{args.vtype}->{args.pretrained}+wce:{args.dataset_emb_comp}'
 
     # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
     # as the dataset representation into the model
@@ -782,6 +991,9 @@ def get_representation(args):
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):
         method_name += f'{args.vtype}->LSA/SVD.({args.pretrained})'
+
+    elif (args.mix == 'lsa-wce'):
+        method_name += f'{args.vtype}->LSA/SVD.({args.pretrained})+wce'
 
     #
     # set optimized field to true if its a neural model 
@@ -818,13 +1030,11 @@ if __name__ == '__main__':
     
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', help=f'dataset base vectorization strategy, in [tfidf, count]')
                         
-    parser.add_argument('--mix', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [vmode, solo, cat, dot, lsa]. NB presumes --pretrained is set')
+    parser.add_argument('--mix', type=str, default='solo', metavar='N', help=f'way to prepare the embeddings, in [vmode, cat, cat-wce, dot, dot-wce, solo, solo-wce, lsa, lsa-wce]. NB presumes --pretrained is set')
 
     parser.add_argument('--cm', action='store_true', default=False, help=f'create confusion matrix for underlying model')
                              
     parser.add_argument('--optimc', action='store_true', default=False, help='optimize the model using relevant models params')
-
-    parser.add_argument('--wce', action='store_true', default=False, help='Use Word Class Embeddings (i.e. supervised). NB this option is only valid with --mix == dot.')
 
     parser.add_argument('--force', action='store_true', default=False,
                     help='force the execution of the experiment even if a log already exists')
@@ -884,11 +1094,6 @@ if __name__ == '__main__':
     if (args.learner in ['nb', 'NB'] and args.mix != 'vmode'):
         print(f'Warning: abandoning run. Naive Bayes model (nb) can only be run with no --pretrained parameter and with --mix vmode (due to lack of support for negative embeddings). Exiting...')
         exit(0)
-
-    # Assertion for WCE and mix being 'dot'
-    if args.wce and args.mix != 'dot':
-        print(f'Assertion Warning: --wce can only be used when --mix is set to "dot". Current value: {args.mix}')
-        exit(0)
                 
     # initialize log file and run params
     already_modelled, vtype, learner, pretrained, embeddings, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args)
@@ -908,7 +1113,6 @@ if __name__ == '__main__':
         embeddings=embeddings,
         embedding_path=emb_path,
         representation=representation,
-        supervised=args.wce,
         optimized=optimized,
         logfile=logfile, 
         args=args

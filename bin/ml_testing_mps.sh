@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_glove_opt.test"
+LOG="--logfile ../log/ml_mps_wce.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -26,12 +26,13 @@ WCE="--wce"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("20newsgroups" "reuters21578" "ohsumed" "rcv1")
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-declare -a mixes=("vmode" "dot" "solo")
-declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
+declare -a mixes=("lsa" "lsa-wce" "cat-doc" "cat-wce" "cat-doc-wce" "dot" "dot-wce" "solo" "solo-wce" "vmode")
+#declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
+declare -a embeddings=("glove" "word2vec" "fasttext")
 declare -a emb_comp_options=("avg" "summary")
 
 # Embedding config params
@@ -58,10 +59,8 @@ function run_command() {
     local pickle_flag="--pickle-dir ${pickle_path}"
     
     local cmd="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp"
-    local cmd_wce="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $WCE"
     local cmd_opt="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $OPTIMC"
-    local cmd_opt_wce="$PY $LOG $dataset_flag $pickle_flag --learner $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $OPTIMC $WCE"
-
+    
     # Execute the base command
     echo
     echo
@@ -70,16 +69,11 @@ function run_command() {
     echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
     echo "#########################################################################################################################################################################################################################################################################"
     echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running Optimized command: $cmd_opt"
-    eval $cmd_opt
+    echo "Running Default command: $cmd"
+    eval $cmd
     echo
     echo
     echo
-    echo "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________"
-    echo "#########################################################################################################################################################################################################################################################################"
-    echo "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
-    echo "Running Optimized WCE command: $cmd_opt_wce"
-    eval $cmd_opt_wce
     #echo
     #echo
     #echo
@@ -100,7 +94,7 @@ for i in "${!datasets[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"

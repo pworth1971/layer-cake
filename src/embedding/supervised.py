@@ -49,7 +49,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, y, word_prob)
 
-    print("F:", {F.shape})
+    #print("F:", {F.shape})
 
     if dozscore:
         #F = zscores(F, axis=0)
@@ -130,7 +130,7 @@ def supervised_embeddings_tsr(X,Y, tsr_function=information_gain, max_documents=
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-def normalize_zscores(data):
+def normalize_zscores(data, debug=False):
     """
     Function to compute z-scores for each feature across all samples. Replacement for 
     zscores() below, which is not working with the new numpy libraries.
@@ -142,8 +142,9 @@ def normalize_zscores(data):
         numpy.ndarray: Z-score normalized data array.
     """    
     
-    print("--- normalize_zscores() ---")
-    print("data:", type(data), {data.shape})
+    if (debug):
+        print("--- normalize_zscores() ---")
+        print("data:", type(data), {data.shape})
 
     if isinstance(data, np.matrix):
         arrData = np.asarray(data)
@@ -152,7 +153,8 @@ def normalize_zscores(data):
     else:
         arrData = data.toarray()
     
-    print("arrData:", type(arrData), {arrData.shape})
+    if (debug):
+        print("arrData:", type(arrData), {arrData.shape})
 
     """
     means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)

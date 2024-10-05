@@ -425,6 +425,9 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
             'hamming_loss': make_scorer(hamming_loss),
         }
 
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+
         # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
         randomized_search = RandomizedSearchCV(
             estimator=classifier,
@@ -522,6 +525,9 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
             'hamming_loss': make_scorer(hamming_loss),
         }
 
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+
         # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
         randomized_search = RandomizedSearchCV(
             estimator=classifier,
@@ -606,6 +612,9 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
             'hamming_loss': make_scorer(hamming_loss),
         }
 
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+        
         # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
         randomized_search = RandomizedSearchCV(
             estimator=classifier,
