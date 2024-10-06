@@ -15,6 +15,8 @@ from embedding.supervised import get_supervised_embeddings
 from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
 from util.common import SUPPORTED_LMS, SUPPORTED_TRANSFORMER_LMS
 from util.common import VECTOR_CACHE, PICKLE_DIR, DATASET_DIR
+from util.common import WORD_BASED_MODELS, TOKEN_BASED_MODELS
+
 
 from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
 
@@ -448,12 +450,10 @@ def gen_xdata(Xtr_raw, Xtr_vectorized, y_train, Xte_raw, Xte_vectorized, y_test,
     return X_train, X_test
 
 
-
-
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # run_model(): Core processing function
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding_path=None, representation=None, optimized=False, logfile=None, args=None):
+def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_path=None, representation=None, lang_model_type=None, optimized=False, logfile=None, args=None):
     """
     Core function for classifying text data using various configurations like embeddings, methods, and models.
 
@@ -463,6 +463,7 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
     - embeddings (str or None): Specifies the type of pretrained embeddings to use (e.g., 'bert', 'llama'). If None, no embeddings are used.
     - embedding_path (str): Path to the pretrained embeddings file or directory.
     - representation (str or None): Specifies the classification method (optional).
+    - lang_model_type (str or None): Specifies the type of language model being used (tied to embeddings).
     - optimized (bool): Whether the model is optimized for performance. 
     - logfile: Logfile object to store results and performance metrics.
     - args: Argument parser object, containing various flags for optimization and configuration (e.g., --optimc).
@@ -499,6 +500,8 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
     print("embedding_path:", embedding_path)
     print("embedding_type:", embedding_type)
     
+    print("lang_model_type:", lang_model_type)
+
     #
     # Load the dataset and the associated (pretrained) embedding structures
     # to be fed into the model
@@ -606,13 +609,13 @@ def run_model(dataset='20newsgrouops', vtype='tfidf', embeddings=None, embedding
     comp_method = get_model_computation_method(args, embedding_type)
     print("comp_method:", comp_method)
 
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-F1', value=mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     return acc, Mf1, mf1, h_loss, precision, recall, j_index, tend
 
@@ -803,12 +806,6 @@ def initialize_ml_testing(args):
 
     print("learner:", learner)
     print("learner_name: ", {learner_name})
-    
-    """
-    # disable warnings
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    """
 
     # default to tfidf vectorization type unless 'count' specified explicitly
     if args.vtype == 'count':
@@ -822,14 +819,14 @@ def initialize_ml_testing(args):
     embeddings ='none'
     emb_path = VECTOR_CACHE
 
-    if (args.pretrained != None) and (args.pretrained in NEURAL_MODELS or args.pretrained in ML_MODELS):
+    if (args.pretrained):
         pretrained = True
 
     # get the path to the embeddings
     emb_path = get_embeddings_path(args.pretrained, args)
     print("emb_path: ", {emb_path})
 
-    model_type = f'{learner_name}-{args.vtype}-{args.mix}-{args.dataset_emb_comp}'
+    model_type = f'{learner_name}:{args.vtype}-{args.mix}'
     print("model_type:", {model_type})
     
     print("initializing baseline layered log file...")
@@ -845,6 +842,7 @@ def initialize_ml_testing(args):
             'class_type',
             'model', 
             'embeddings',
+            'lm_type',
             'mode',
             'comp_method',
             'representation',
@@ -894,6 +892,9 @@ def initialize_ml_testing(args):
     embeddings = get_embeddings(args)
     print("embeddings:", {embeddings})
 
+    lm_type = get_language_model_type(args.pretrained)
+    print("lm_type:", {lm_type})
+
     # check to see if the model has been run before
     already_computed = ml_logger.already_calculated(
         dataset=args.dataset,
@@ -904,7 +905,7 @@ def initialize_ml_testing(args):
 
     print("already_computed:", already_computed)
 
-    return already_computed, vtype, learner, pretrained, embeddings, emb_path, args.mix, representation, ml_logger, optimized
+    return already_computed, vtype, learner, pretrained, embeddings, lm_type, emb_path, args.mix, representation, ml_logger, optimized
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -941,6 +942,23 @@ def get_embeddings(args):
         return args.mix
 
 
+def get_language_model_type(embeddings):
+
+    if (embeddings in ['glove']):
+        return 'static:word:co-occurrence:global'
+    elif (embeddings in ['word2vec']):
+        return 'static:word:co-occurrence:local'
+    elif (embeddings in ['fasttext']):
+        return 'static:subword:co-occurrence:local'
+    elif (embeddings in ['llama', 'gpt2']):
+        return 'transformer:token:autoregressive:unidirectional:causal'
+    elif (embeddings in ['bert', 'roberta']):
+        return 'transformer:token:autoregressive:bidirectional:masked'
+    elif (embeddings in ['xlnet']):
+        return 'transformer:token:autoregressive:bidirectional:permutated'
+    else:
+        return 'unknown'
+    
 
 def get_representation(args):
 
@@ -951,49 +969,51 @@ def get_representation(args):
 
     #set representation form
 
+    if (args.mix == 'vmode'):
+        method_name += f'{args.vtype}[{args.pretrained}]'
+
     # solo is when we project the doc, we represent it, in the 
     # underlying pretrained embedding space - with three options 
     # as to how that space is computed: 1) weighted, 2) avg, 3) summary
-    if (args.mix == 'solo'):
-        method_name += f'{args.pretrained}:{args.dataset_emb_comp}'
+    elif (args.mix == 'solo'):
+        method_name += f'{args.pretrained}({args.dataset_emb_comp})'
 
-    if (args.mix == 'solo-wce'):
-        method_name += f'{args.pretrained}:{args.dataset_emb_comp}+wce'
-    
+    elif (args.mix == 'solo-wce'):
+        method_name += f'{args.pretrained}({args.dataset_emb_comp})+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+
     # cat is when we concatenate the doc representation in the
     # underlying pretrained embedding space with the tfidf vectors - 
     # we have the same three options for the dataset embedding representation
     elif (args.mix == 'cat-doc'):
-        method_name += f'{args.vtype}+{args.pretrained}:{args.dataset_emb_comp}'
-    
+        method_name += f'{args.vtype}+{args.pretrained}({args.dataset_emb_comp})'
+
     elif (args.mix == 'cat-wce'):
-        method_name += f'{args.vtype}+wce'
-
+        method_name += f'{args.vtype}+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+    
     elif (args.mix == 'cat-doc-wce'):
-        method_name += f'{args.vtype}+{args.pretrained}:{args.dataset_emb_comp}+wce'
-
+        method_name += f'{args.vtype}+{args.vtype}.({args.pretrained}+wce({args.vtype}))+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+        
     # dot is when we project the tfidf vectors into the underlying
     # pretrained embedding space using matrix multiplication, i.e. dot product
     # we have the same three options for the dataset embedding representation computation
     elif (args.mix == 'dot'):
-        method_name += f'{args.vtype}->{args.pretrained}:{args.dataset_emb_comp}'
+        method_name += f'{args.vtype}.{args.pretrained}'
 
     elif (args.mix == 'dot-wce'):
-        method_name += f'{args.vtype}->{args.pretrained}+wce:{args.dataset_emb_comp}'
-
+        method_name += f'{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+        
     # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
     # as the dataset representation into the model
     elif (args.mix == 'vmode'):
-        #method_name += f'{args.vtype}:{MAX_VOCAB_SIZE}.({args.pretrained}'
         method_name += f'{args.vtype}[{args.pretrained}]'
     
     # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):
-        method_name += f'{args.vtype}->LSA/SVD.({args.pretrained})'
+        method_name += f'{args.vtype}->LSA[{args.pretrained}].({args.pretrained})'
 
     elif (args.mix == 'lsa-wce'):
-        method_name += f'{args.vtype}->LSA/SVD.({args.pretrained})+wce'
+        method_name += f'{args.vtype}->LSA[{args.pretrained}]+({args.vtype}.{args.pretrained})+wce'
 
     #
     # set optimized field to true if its a neural model 
@@ -1096,7 +1116,7 @@ if __name__ == '__main__':
         exit(0)
                 
     # initialize log file and run params
-    already_modelled, vtype, learner, pretrained, embeddings, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args)
+    already_modelled, vtype, learner, pretrained, embeddings, lm_type, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args)
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
@@ -1113,6 +1133,7 @@ if __name__ == '__main__':
         embeddings=embeddings,
         embedding_path=emb_path,
         representation=representation,
+        lang_model_type=lm_type,
         optimized=optimized,
         logfile=logfile, 
         args=args

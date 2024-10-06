@@ -795,53 +795,6 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
         return np.vstack(embeddings)
 
 
-
-    def build_embedding_vocab_matrix_old(self):
-
-        print("building [subword based] embedding representation (matrix) of dataset vocabulary...")
-
-        print("model:", type(self.model))
-        print("model.vector_size:", self.model.vector_size)
-
-        self.embedding_dim = self.model.vector_size
-        self.vocab_size = len(self.vectorizer.vocabulary_)
-        print("embedding_dim:", self.embedding_dim)
-        print("vocab_size:", self.vocab_size)
-        
-        self.embedding_vocab_matrix = np.zeros((self.vocab_size, self.embedding_dim))
-
-        # Dictionary to store the index-token mapping
-        self.token_to_index_mapping = {}
-        
-        # Calculate the mean of all embeddings in the FastText model as a fallback for OOV tokens
-        mean_vector = np.mean(self.model.wv.vectors, axis=0)
-
-        oov_tokens = 0
-        
-        # Loop through the dataset vocabulary
-        for word, idx in self.vectorizer.vocabulary_.items():
-            self.token_to_index_mapping[idx] = word  # Store the token at its index
-
-            # Check for the word in the original case first
-            if word in self.model.wv.key_to_index:
-                self.embedding_vocab_matrix[idx] = self.model.wv[word]
-            # If not found, check the lowercase version of the word
-            elif word.lower() in self.model.wv.key_to_index:
-                self.embedding_vocab_matrix[idx] = self.model.wv[word.lower()]
-            # If neither is found, handle it as an OOV token (FastText can generate subword embeddings)
-            else:
-                #print(f"Warning: OOV word when building embedding vocab matrix. Word: '{word}'")
-                self.embedding_vocab_matrix[idx] = mean_vector  # Use the mean of all vectors as a substitute
-                oov_tokens += 1
-                
-        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
-        print("token_to_index_mapping:", type(self.token_to_index_mapping), len(self.token_to_index_mapping))
-        print("oov_tokens:", oov_tokens)
-
-        #return self.embedding_vocab_matrix, self.token_to_index_mapping
-        return self.embedding_vocab_matrix
-
-
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
         Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
@@ -886,12 +839,12 @@ class SubWordLCRepresentationModel(LCRepresentationModel):
             valid_embeddings = []
 
             for token in tokens:
+                
                 # Get the embedding from FastText
                 try:
-                    embedding = self.model.wv.get_vector(token)  # FastText handles subword embeddings here
+                    embedding = self.model.wv.get_vector(token)  # FastText subword embedding for OOV tokens
                 except KeyError:
-                    # If the token is OOV, use the mean embedding instead of a zero vector
-                    embedding = self.mean_embedding
+                    embedding = self.model.wv.get_vector(token)  # Use FastText's subword representation for OOV tokens
                     oov_tokens += 1
 
                 # Get the TF-IDF weight if available, else assign a default weight of 1 (or 0 if not in vocabulary)

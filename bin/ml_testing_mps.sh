@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_wce.test"
+LOG="--logfile ../log/ml_mps_final.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -32,8 +32,8 @@ declare -a learners=("svm")
 declare -a vtypes=("tfidf")
 declare -a mixes=("lsa" "lsa-wce" "cat-doc" "cat-wce" "cat-doc-wce" "dot" "dot-wce" "solo" "solo-wce" "vmode")
 #declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
-declare -a embeddings=("fastext" "bert" "roberta" "gpt2" "xlnet")
-declare -a emb_comp_options=("avg" "summary")
+declare -a embeddings=("glove" "word2vec" "fastext" "bert" "roberta" "gpt2" "xlnet")
+declare -a emb_comp_options=("avg")
 
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
@@ -93,8 +93,8 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    #run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
+                    run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
                     run_command "$dataset" "$pickle_path" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"

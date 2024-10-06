@@ -11,7 +11,7 @@ from tabulate import tabulate
 import matplotlib.pyplot as plt
 import csv
 
-from util.common import OUT_DIR
+from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
 #import imgkit
@@ -21,10 +21,6 @@ from util.common import OUT_DIR
 MEASURES = ['final-te-macro-F1', 'final-te-micro-F1']
 
 Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
-
-
-WORD_BASED = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED = ['bert', 'roberta', 'gpt2', 'xlnet']
 
 
 
@@ -84,8 +80,8 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                 df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
 
                 # Split into word-based and token-based embeddings
-                word_based_df = df_subset[df_subset['embedding_type'].isin(WORD_BASED)]
-                token_based_df = df_subset[df_subset['embedding_type'].isin(TOKEN_BASED)]
+                word_based_df = df_subset[df_subset['embedding_type'].isin(WORD_BASED_MODELS)]
+                token_based_df = df_subset[df_subset['embedding_type'].isin(TOKEN_BASED_MODELS)]
 
                 # Function to plot the data
                 def plot_data(subset_df, embedding_category):
@@ -94,8 +90,8 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                         return
 
                     # Combine embedding type, representation, and dimensions into a single label for the x-axis
-                    subset_df['embedding_rep_dim'] = subset_df.apply(
-                        lambda row: f"{row['embedding_type']}-{row['representation']}:{row['dimensions']}", axis=1
+                    subset_df['rep_dim'] = subset_df.apply(
+                        lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
                     )
 
                     # Sort by dimensions in descending order (highest dimension first)
@@ -109,11 +105,11 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                     plt.figure(figsize=(20, 12))  # Larger figure size
                     sns.barplot(
                         data=subset_df,
-                        x='embedding_rep_dim',                          # Use the combined field with embeddings, representation, and dimensions
+                        x='rep_dim',                          # Use the combined field with embeddings, representation, and dimensions
                         y='value',
-                        hue='embedding_type',                           # Color based on the embedding type (first part before the colon)
+                        hue='embedding_type',                 # Color based on the embedding type (first part before the colon)
                         palette=color_palette,
-                        order=subset_df['embedding_rep_dim']            # Explicitly set the order based on sorted dimensions
+                        order=subset_df['rep_dim']            # Explicitly set the order based on sorted dimensions
                     )
 
                     # Customize plot
@@ -142,10 +138,10 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                         plt.show()
 
                 # Plot for word-based embeddings
-                plot_data(word_based_df, 'WORD_BASED')
+                plot_data(word_based_df, 'Word and Subword Based Models')
 
                 # Plot for token-based embeddings
-                plot_data(token_based_df, 'TOKEN_BASED')
+                plot_data(token_based_df, 'Token (Transformer) Based Models')
 
 
 

@@ -41,6 +41,9 @@ PICKLE_DIR = '../pickles/'                          # pickled data directory
 OUT_DIR = '../out/'                                 # output directory
 
 
+WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'gpt2', 'xlnet']
+
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # load_pretrained_embeddings()
