@@ -640,19 +640,19 @@ def get_model_computation_method(args, embedding_type='word'):
 
     if (args.learner in ML_MODELS): 
 
-        if args.mix == 'solo':
+        if args.mix in ['solo', 'solo-wce']:
             return pt_type
             
         elif args.mix == 'vmode':
             return f'frequency:{args.vtype}'
 
-        elif args.mix == 'cat':
+        elif args.mix in ['cat-doc', 'cat-wce', 'cat-doc-wce']:
             return f'frequency:{args.vtype}+{pt_type}'
 
-        elif args.mix == 'dot':
+        elif args.mix in ['dot', 'dot-wce']:
             return f'frequency:{args.vtype}.{pt_type}'
 
-        elif args.mix == 'lsa':
+        elif args.mix in ['lsa', 'lsa-wce']:
             return f'frequency:{args.vtype}->SVD'
        
     elif (args.learner in NEURAL_MODELS):
@@ -822,7 +822,7 @@ def initialize_ml_testing(args):
     embeddings ='none'
     emb_path = VECTOR_CACHE
 
-    if (args.pretrained is None) and (args.pretrained in NEURAL_MODELS or args.pretrained in ML_MODELS):
+    if (args.pretrained != None) and (args.pretrained in NEURAL_MODELS or args.pretrained in ML_MODELS):
         pretrained = True
 
     # get the path to the embeddings
@@ -899,7 +899,7 @@ def initialize_ml_testing(args):
         dataset=args.dataset,
         model=args.learner,
         representation=representation,
-        embeddings=embeddings
+        #embeddings=embeddings
         )
 
     print("already_computed:", already_computed)

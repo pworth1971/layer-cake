@@ -20,21 +20,21 @@ from util.common import OUT_DIR
 # measures filter: report on these specific measures
 MEASURES = ['final-te-macro-F1', 'final-te-micro-F1']
 
+Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
 
 
-Y_AXIS_THRESHOLD = 0.3               # when to start the Y axis to show differentiation in the plot
-
-
-
-
+WORD_BASED = ['glove', 'word2vec', 'fasttext']
+TOKEN_BASED = ['bert', 'roberta', 'gpt2', 'xlnet']
 
 
 
 def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
     """
-    The generate_charts_matplotlib function generates bar charts for each combination of model, dataset, and measure from a 
-    given DataFrame. It uses Matplotlib and Seaborn to create plots that are colorblind-friendly, showing the performance of 
-    models based on a specific measure for a given dataset.
+    The generate_charts_matplotlib function generates bar charts for each combination of model, dataset, measure, and embedding type 
+    from a given DataFrame. It uses Matplotlib and Seaborn to create plots that are colorblind-friendly, showing the performance of 
+    models based on a specific measure for a given dataset and embedding type.
+
+    It generates separate plots for word-based and token-based embeddings.
 
     Arguments:
     - df: Pandas DataFrame that contains the data to be plotted.
@@ -44,10 +44,10 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
     - debug (default: False): Boolean flag to print additional debug information during execution.
 
     Returns:
-    - None: The function saves the generated plots as PNG files in the specified output
+    - None: The function saves the generated plots as PNG files in the specified output directory.
     """
 
-    print("Generating separate charts per model and dataset...")
+    print("Generating separate charts per model, dataset, and embedding type...")
 
     print("Filtering for measures:", MEASURES)
     
@@ -73,64 +73,79 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
             for model in df['model'].unique():
-                # Increase the figure size for better visibility
-                plt.figure(figsize=(20, 12))  # Larger figure size
-
                 # Filter the dataframe for the current dataset, model, and measure
-                subset_df = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
 
-                if subset_df.empty:
+                if df_subset.empty:
                     print(f"No data available for {measure}, {model}, in dataset {dataset}")
                     continue
 
-                # Combine embeddings, representation, and dimensions into a single label for the x-axis
-                subset_df['embedding_rep_dim'] = subset_df.apply(
-                    lambda row: f"{row['embeddings']}-{row['representation']}:{row['dimensions']}", axis=1
-                )
+                # Extract the base embeddings (everything before the colon)
+                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
 
-                # Sort by dimensions in descending order (highest dimension first)
-                subset_df = subset_df.sort_values(by='dimensions', ascending=False)
+                # Split into word-based and token-based embeddings
+                word_based_df = df_subset[df_subset['embedding_type'].isin(WORD_BASED)]
+                token_based_df = df_subset[df_subset['embedding_type'].isin(TOKEN_BASED)]
 
-                # Dynamically adjust the palette to match the number of unique embeddings
-                unique_embeddings = subset_df['embeddings'].nunique()
-                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+                # Function to plot the data
+                def plot_data(subset_df, embedding_category):
+                    if subset_df.empty:
+                        print(f"No data available for {embedding_category} embeddings in {measure}, {model}, dataset {dataset}")
+                        return
 
-                # Create a bar plot
-                sns.barplot(
-                    data=subset_df,
-                    x='embedding_rep_dim',  # Use the combined field with embeddings, representation, and dimensions
-                    y='value',
-                    hue='embeddings',
-                    palette=color_palette,
-                    order=subset_df['embedding_rep_dim']  # Explicitly set the order based on sorted dimensions
-                )
+                    # Combine embedding type, representation, and dimensions into a single label for the x-axis
+                    subset_df['embedding_rep_dim'] = subset_df.apply(
+                        lambda row: f"{row['embedding_type']}-{row['representation']}:{row['dimensions']}", axis=1
+                    )
 
-                # Customize plot
-                plt.title(f"{dataset}-{model}:{measure}", fontsize=20, weight='bold')  # Increased title size
-                plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)  # Larger x-axis label
-                plt.ylabel(measure, fontsize=14)  # Larger y-axis label
-                plt.ylim(y_axis_threshold, 1)  # Set y-axis range
+                    # Sort by dimensions in descending order (highest dimension first)
+                    subset_df = subset_df.sort_values(by='dimensions', ascending=False)
 
-                # Adjust y-axis ticks for more granularity (twice as many ticks, e.g., every 0.05)
-                plt.yticks(np.arange(y_axis_threshold, 1.01, 0.05), fontsize=10, fontweight='bold')  # Smaller, bold y-axis labels
+                    # Dynamically adjust the palette to match the number of unique embedding types
+                    unique_embeddings = subset_df['embedding_type'].nunique()
+                    color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
 
-                # Change x-axis label font style (smaller, bold)
-                plt.xticks(rotation=45, ha='right', fontsize=10, fontweight='bold')  # Smaller, bold font for x-axis labels
-                
-                # Customize the legend
-                plt.legend(title="Embeddings", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=14)  # Larger legend
-                plt.tight_layout()
+                    # Create a bar plot using the embedding_type for hue (color coding based on embedding type)
+                    plt.figure(figsize=(20, 12))  # Larger figure size
+                    sns.barplot(
+                        data=subset_df,
+                        x='embedding_rep_dim',                          # Use the combined field with embeddings, representation, and dimensions
+                        y='value',
+                        hue='embedding_type',                           # Color based on the embedding type (first part before the colon)
+                        palette=color_palette,
+                        order=subset_df['embedding_rep_dim']            # Explicitly set the order based on sorted dimensions
+                    )
 
-                # Save the plot with today's date and 'matplotlib' in the filename
-                plot_file_name = f"{dataset}_{measure}_{model}_{today}_matplotlib.png"
-                plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)  # Increased DPI for better resolution
-                print(f"Saved plot to {output_path}/{plot_file_name}")
+                    # Customize plot
+                    plt.title(f"DATASET:{dataset}, MODEL: {model}, MEASURE: {measure} [{embedding_category} Embeddings]", fontsize=20, weight='bold')           # Increased title size
+                    plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)                                                     # Larger x-axis label
+                    plt.ylabel(measure, fontsize=14)                                                                                    # Larger y-axis label
+                    plt.ylim(y_axis_threshold, 1)                                                                                       # Set y-axis range
 
-                # Optionally display the plot
-                if show_charts:
-                    plt.show()
+                    # Adjust y-axis ticks for more granularity (twice as many ticks, e.g., every 0.05)
+                    plt.yticks(np.arange(y_axis_threshold, 1.01, 0.05), fontsize=9, fontweight='bold')              # Smaller, bold y-axis labels
 
+                    # Change x-axis label font style to "Arial Narrow", smaller font size, and bold weight
+                    plt.xticks(rotation=45, ha='right', fontsize=9, fontweight='bold')                              # Tighter and smaller x-axis labels
+                    
+                    # Customize the legend (based on the embedding_type field)
+                    plt.legend(title="Embedding Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=14)  # Larger legend
+                    plt.tight_layout()
 
+                    # Save the plot with today's date and 'matplotlib' in the filename
+                    plot_file_name = f"{dataset}_{measure}_{model}_{embedding_category}_{today}_matplotlib.png"
+                    plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)                                     # Increased DPI for better resolution
+                    print(f"Saved plot to {output_path}/{plot_file_name}")
+
+                    # Optionally display the plot
+                    if show_charts:
+                        plt.show()
+
+                # Plot for word-based embeddings
+                plot_data(word_based_df, 'WORD_BASED')
+
+                # Plot for token-based embeddings
+                plot_data(token_based_df, 'TOKEN_BASED')
 
 
 
@@ -329,10 +344,12 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
                 bargap=0.2,  # Increase spacing between bars
             )
 
-            # Ensure the x-axis is treated as categorical and sorted
+            # Ensure the x-axis is treated as categorical and sorted, and rotate the labels
             fig.update_xaxes(
                 title_text='Model - Representation',
-                type='category'                                             # Treat x-axis as categorical to prevent reordering
+                type='category',                                                # Treat x-axis as categorical to prevent reordering
+                tickangle=-45,                                                  # Rotate the x-axis labels
+                tickfont=dict(size=9)                                           # Make the x-axis labels slightly smaller
             )
 
             fig.update_yaxes(
@@ -366,8 +383,7 @@ def gen_csvs(df, output_dir, debug=False):
 
     print("generating csvs...")
 
-    print("df:\n", df)
-
+    #print("df:\n", df)
     
     # Split the 'mode' column into separate columns for dataset, model, mode, and mix
     #
@@ -395,7 +411,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
 
     print("rendering data...")
 
-    print("dataframe:\n", dataframe)
+    #print("dataframe:\n", dataframe)
 
     # Group the data by embeddings and mix (formerly Mode) within each embedding
     grouped = dataframe.groupby(['embeddings', 'M-Mix', 'class_type'], as_index=False)
