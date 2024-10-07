@@ -257,8 +257,11 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
+import os
+import plotly.express as px
+from datetime import datetime
 
+def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
     # Filter the dataframe for the measures of interest right away
     df = df[df['measure'].isin(MEASURES)]
     
@@ -272,6 +275,9 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
+    # Extract the first term in the colon-delimited 'embeddings' field
+    df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+
     # Generate a separate chart for each measure within each dataset
     for dataset in df['dataset'].unique():
 
@@ -283,11 +289,11 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
 
             # Filter the dataframe for the current dataset and measure
             subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
-            if (debug):
+            if debug:
                 print("subset_df1:\n", subset_df1)
 
-            # Group by representation, model, and dimensions to find maximum values
-            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings']).agg({'value': 'max'}).reset_index()
+            # Group by representation, model, dimensions, and embeddings to find maximum values
+            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings', 'embedding_type']).agg({'value': 'max'}).reset_index()
 
             if subset_df2.empty:
                 print(f"No data available for dataset {dataset} with measure {measure}")
@@ -296,23 +302,23 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
             # Update the representation column to include the dimensions in curly brackets, italicized
             subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} <i>{{{row['dimensions']}}}</i>", axis=1)
 
-            # Sorting by representation
-            subset_df2.sort_values(by=['representation'], inplace=True)
-            if (debug):
+            # Sorting by dimensions (in descending order) and representation
+            subset_df2.sort_values(by=['dimensions', 'representation'], ascending=[False, True], inplace=True)
+            if debug:
                 print("subset_df2:\n", subset_df2)
 
             # Define the sorted order for the x-axis
             model_rep_order = subset_df2['representation'].tolist()
 
-            # Create the plot, coloring by model and spreading bars on the x-axis
+            # Create the plot, coloring by the embedding type (extracted earlier)
             fig = px.bar(subset_df2, 
-                         x='representation',                                                                # Use representation for x-axis
+                         x='representation', 
                          y='value', 
-                         color='model',                                                                     # Color by model
+                         color='embedding_type',                                                     # Color by embedding type
                          title=f'{measure} Performance Comparison on {dataset}',
                          labels={"value": "Performance Metric", "representation": "Representation"},
-                         hover_data=['representation', 'value'],                                            # Include representation and value in hover
-                         category_orders={"representation": model_rep_order})                               # Explicit sorting order
+                         hover_data=['representation', 'value', 'embedding_type'],                    # Include representation, value, and embedding type in hover
+                         category_orders={"representation": model_rep_order})                        # Explicit sorting order
 
             # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
             fig.update_layout(
@@ -329,7 +335,7 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
                         weight='bold'
                     )
                 },
-                legend_title_text='Model',
+                legend_title_text='Embedding Type',                                                  # Updated legend title to reflect embedding type
                 legend=dict(
                     orientation="v",
                     y=1,
@@ -353,7 +359,7 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
                 range=[y_axis_threshold, 1]
             )
 
-             # Get the current date in YYYY-MM-DD format
+            # Get the current date in YYYY-MM-DD format
             current_date = datetime.now().strftime("%Y-%m-%d")
             
             # Save the plot in the specified output directory
@@ -366,9 +372,9 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
             if show_charts:
                 fig.show()
 
-    print("plotly charts generation completed.")
-
     return df
+
+
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -614,18 +620,18 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
 
 if __name__ == "__main__":
 
-
     print("\n\t----- Results Analysis -----")
     
-    parser = argparse.ArgumentParser(description="Analyze model results and generate charts or summaries")
+    parser = argparse.ArgumentParser(description="Analyze model results and generate charts and/or summaries")
 
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
-    parser.add_argument('-d', action='store_true', default=False, help='debug mode')
+    parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
+    parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
     parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
-    parser.add_argument('-show', action='store_true', help='Display charts interactively (requires -c)')
+    parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
 
@@ -635,57 +641,81 @@ if __name__ == "__main__":
     if not (args.charts or args.summary):
         parser.error("No action requested, add -c for charts or -s for summary")
 
-    debug = args.d
+    debug = args.debug
     print("debug mode:", debug)
 
     print("y_start:", args.ystart)
 
     df = read_data_file(args.file_path, debug=debug)
+    if (df is None):
+        print("Error: Data file not found or empty")
+        exit()
 
     out_dir = OUT_DIR
     if (debug):
         print("output directory:", out_dir)
 
-    if df is not None:
+    if (debug):
+        print("Data file read successfully, df:", df.shape)
 
-        if (debug):
-            print("Data file read successfully, df:", df.shape)
+    # Create an output directory with today's date (format: YYYYMMDD)
+    today_date = datetime.today().strftime('%Y%m%d')
+    
+    # Print just the filename without directories
+    input_file = os.path.basename(args.file_path)
+    print(f"Input file name: {input_file}")
 
-        if args.summary:
-            
-            gen_summary(df, out_dir, debug=debug)
+    out_dir = os.path.join('../out/', today_date)
+    out_dir = out_dir + '.' + input_file
 
-            gen_csvs(df, out_dir, debug=debug)
+    print("output directory:", out_dir)
 
-        if args.charts:
-            
-            model_performance_comparison(
-                df, 
-                out_dir, 
-                show_charts=args.show, 
-                y_axis_threshold=args.ystart,
-                debug=debug
-            )
-            
-            #
-            # matplotlib option is less interactive but handles more test cases - its split by dataset 
-            # and model as opposed to just dataset as the plotly graphs are designed for 
-            #
-            generate_charts_matplotlib(
-                df, 
-                out_dir,
-                show_charts=args.show,
-                y_axis_threshold=args.ystart,
-                debug=debug
-            )
-            
-        if (args.runtimes):
-            gen_timelapse_plots(
-                df, 
-                out_dir, 
-                show_charts=args.show,
-                debug=debug
-            )
+    # Check if output directory exists
+    if not os.path.exists(out_dir):
+
+        print("\n\n")
+
+        create_dir = input(f"Output directory {out_dir} does not exist. Do you want to create it? (y/n): ").strip().lower()
+        if create_dir == 'y':
+            os.makedirs(out_dir)
+            print(f"Directory {out_dir} created.")
+        else:
+            print(f"Directory {out_dir} was not created. Exiting.")
+            exit()
+
+    if args.summary:
         
-    else:
-        print("Error: Data file not found or empty")
+        gen_summary(df, out_dir, debug=debug)
+
+        gen_csvs(df, out_dir, debug=debug)
+
+    if args.charts:
+        
+        model_performance_comparison(
+            df, 
+            out_dir, 
+            show_charts=args.show, 
+            y_axis_threshold=args.ystart,
+            debug=debug
+        )
+        
+        #
+        # matplotlib option is less interactive but handles more test cases - its split by dataset 
+        # and model as opposed to just dataset as the plotly graphs are designed for 
+        #
+        generate_charts_matplotlib(
+            df, 
+            out_dir,
+            show_charts=args.show,
+            y_axis_threshold=args.ystart,
+            debug=debug
+        )
+        
+    if (args.runtimes):
+        gen_timelapse_plots(
+            df, 
+            out_dir, 
+            show_charts=args.show,
+            debug=debug
+        )
+    

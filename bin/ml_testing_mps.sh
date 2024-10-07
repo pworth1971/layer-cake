@@ -26,8 +26,9 @@ WCE="--wce"
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"              # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                       # RCV1-v2 (multi-label, 101 classes)
 
-declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+#declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
+declare -a datasets=("rcv1")
+declare -a pickle_paths=("../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
 declare -a mixes=("lsa" "lsa-wce" "cat-doc" "cat-wce" "cat-doc-wce" "dot" "dot-wce" "solo" "solo-wce" "vmode")

@@ -168,7 +168,8 @@ class LCDataset:
         elif (pretrained == 'fasttext'):
             print("Using FastText pretrained embeddings with subwords...")
             
-            self.lcr_model = SubWordLCRepresentationModel(
+            #self.lcr_model = SubWordLCRepresentationModel(
+            self.lcr_model = FastTextLCRepresentationModel(
                 model_name=FASTTEXT_MODEL, 
                 model_dir=embedding_path, 
                 vtype=vectorization_type
