@@ -365,9 +365,9 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'roberta', 'xlnet']):    
+        if (self.pretrained in ['bert', 'roberta', 'xlnet', 'fasttext', 'llama']):      
 
-            print("generating transformer / token based dataset representations...")
+            print("generating token / subword based dataset representations...")
 
             self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_docs(self.Xtr)                                  
             self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_docs(self.Xte)
@@ -378,9 +378,9 @@ class LCDataset:
             self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
             self.Xte_weighted_embeddings = self.Xte_avg_embeddings
             
-        elif (self.pretrained in ['word2vec', 'glove', 'fasttext']):                        # word (and subword) based embeddings
+        elif (self.pretrained in ['word2vec', 'glove']):                        # word based embeddings
             
-            print("generating word / subword based dataset representations...")
+            print("generating word based dataset representations...")
 
             self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
                 #self.Xtr.tolist(),
