@@ -167,9 +167,8 @@ class LCDataset:
 
         elif (pretrained == 'fasttext'):
             print("Using FastText pretrained embeddings with subwords...")
-            
-            #self.lcr_model = SubWordLCRepresentationModel(
-            self.lcr_model = FastTextLCRepresentationModel(
+
+            self.lcr_model = FastTextGensimLCRepresentationModel(
                 model_name=FASTTEXT_MODEL, 
                 model_dir=embedding_path, 
                 vtype=vectorization_type
@@ -177,6 +176,7 @@ class LCDataset:
 
         elif (pretrained == 'bert'):
             print("Using BERT pretrained embeddings...")
+
             self.lcr_model = BERTLCRepresentationModel(
                 model_name=BERT_MODEL, 
                 model_dir=embedding_path,
@@ -185,6 +185,7 @@ class LCDataset:
         
         elif (pretrained == 'roberta'):
             print("Using RoBERTa pretrained embeddings...")
+
             self.lcr_model = RoBERTaLCRepresentationModel(
                 model_name=ROBERTA_MODEL, 
                 model_dir=embedding_path, 
@@ -193,6 +194,7 @@ class LCDataset:
 
         elif (pretrained == 'gpt2'):
             print("Using GPT2 pretrained embeddings...")
+
             self.lcr_model = GPT2LCRepresentationModel(
                 model_name=GPT2_MODEL, 
                 model_dir=embedding_path,  
@@ -201,6 +203,7 @@ class LCDataset:
 
         elif (pretrained == 'xlnet'):
             print("Using XLNet pretrained embeddings...")
+
             self.lcr_model = XLNetLCRepresentationModel(
                 model_name=XLNET_MODEL, 
                 model_dir=embedding_path,  

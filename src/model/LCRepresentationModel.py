@@ -15,8 +15,17 @@ from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerF
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from gensim.models.fasttext import load_facebook_model
+from gensim.models import FastText
+from gensim.models.fasttext import load_facebook_vectors
+
+import logging
+
+# Set the logging level for gensim's FastText model to suppress specific warnings
+logging.getLogger('gensim.models.fasttext').setLevel(logging.ERROR)
+
 
 from joblib import Parallel, delayed
+import re
 
 from util.common import VECTOR_CACHE
 
@@ -53,8 +62,8 @@ GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, c
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
-#FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
-FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
+#FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
+FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
 #BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
 BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
@@ -652,9 +661,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
     
 
 
-
-
-class FastTextLCRepresentationModel(LCRepresentationModel):
+class FastTextGensimLCRepresentationModel(LCRepresentationModel):
     """
     FastTextLCRepresentationModel handles fastText (subword) based embeddings.
     It computes sentence embeddings by averaging, summing, or computing TF-IDF weighted embeddings.
@@ -674,7 +681,7 @@ class FastTextLCRepresentationModel(LCRepresentationModel):
             vectorization type, either 'tfidf' or 'count'.
         """
 
-        print("Initializing FastTextLCRepresentationModel...")
+        print("Initializing FastTextGensimLCRepresentationModel...")
 
         super().__init__(model_name, model_dir=model_dir)  # parent constructor
 
@@ -686,17 +693,16 @@ class FastTextLCRepresentationModel(LCRepresentationModel):
             print("Extract the zip file and ensure the .bin file is located at the specified path.")
             raise FileNotFoundError(f"Embedding file {self.path_to_embeddings} not found.")
         
-        # Load the FastText model using the fasttext library for subword support
-        self.model = fasttext.load_model(self.path_to_embeddings)
+        # Load the FastText model using Gensim's load_facebook_vectors
+        self.model = load_facebook_model(self.path_to_embeddings)
 
-        # Compute the average embedding of all words in the FastText vocabulary
-        self.avg_embedding = np.mean([self.model.get_word_vector(word) for word in self.model.get_words()], axis=0)
+        self.mean_embedding = np.mean(self.model.wv.vectors, axis=0)  # Compute the mean vector
 
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
         # Get embedding size (dimensionality) using get_dimension()
-        self.embedding_dim = self.model.get_dimension()
+        self.embedding_dim = self.model.vector_size
         print(f"Embedding dimension: {self.embedding_dim}")
         
         #
@@ -720,108 +726,79 @@ class FastTextLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-    
-    def build_embedding_vocab_matrix(self):
 
-        print("building embedding vocab matrix for fastText model...")
+    def build_embedding_vocab_matrix(self):
+        print("building embedding vocab matrix for Gensim FastText model...")
 
         vocabulary = np.asarray(list(self.vectorizer.vocabulary_.keys()))
         print("vocabulary:", type(vocabulary), vocabulary.shape)
 
-        # Compute the average embedding of all words in the FastText vocabulary (if not already computed)
-        if not hasattr(self, 'avg_embedding'):
-            self.avg_embedding = np.mean([self.model.get_word_vector(word) for word in self.model.get_words()], axis=0)
+        # Preallocate embedding matrix with zeros for efficiency
+        embedding_matrix = np.zeros((len(vocabulary), self.embedding_dim))
 
-        # Function to get embedding for a word or use subwords if OOV
-        def get_word_embedding(word):
-            if word in self.model.get_words():
-                return self.model.get_word_vector(word)
+        oov = 0
+
+        for idx, word in enumerate(tqdm(vocabulary, desc="building embedding vocab matrix using Gensim fastText...")):
+            if word in self.model.wv:  # Access vectors through self.model.wv
+                embedding = self.model.wv[word]
             else:
-                # Get subwords' embeddings and average them if the word is OOV
-                subwords, indices = self.model.get_subwords(word)
-                if len(indices) > 0:
-                    subword_vectors = [self.model.get_word_vector(subword) for subword in subwords]
-                    return np.mean(subword_vectors, axis=0)
-                else:
-                    return self.avg_embedding
+                oov += 1
+                # Word is OOV, use subword information
+                embedding = self.model.get_vector(word, norm=True)
 
-        # Use ThreadPoolExecutor for parallel processing of embeddings
-        with ThreadPoolExecutor(max_workers=MAX_WORKER_THREADS) as executor:
-            # Using a list comprehension to gather embeddings in parallel
-            embedding_matrix = list(tqdm(executor.map(get_word_embedding, vocabulary), 
-                                        total=len(vocabulary), 
-                                        desc="building fastText embedding vocab matrix..."))
+            embedding_matrix[idx] = embedding
 
-        # Convert list of embeddings to a numpy matrix
-        self.embedding_vocab_matrix = np.array(embedding_matrix)
+        self.embedding_vocab_matrix = embedding_matrix
         print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print(f"OOV words: {oov} ({(oov / len(vocabulary)) * 100:.2f}%)")
 
         return self.embedding_vocab_matrix
-    
+
+
 
     def encode_docs(self, texts):
         """
-        Compute document embeddings using FastText's get_sentence_vector for efficiency.
+        Compute document embeddings using Gensim FastText API by averaging word and subword vectors.
         
         Args:
         - texts: List of input documents (as raw text).
 
         Returns:
-        - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
         
-        print(f"encoding docs using fastText (subword) embeddings..")
+        print("encoding docs using Gensim FastText embeddings...")
 
-        weighted_document_embeddings = []
         avg_document_embeddings = []
 
-        # Batch transform the documents using the vectorizer to get the TF-IDF matrix
-        tfidf_matrix = self.vectorizer.transform(texts).toarray()
-        
+        oov = 0
         # Use tqdm to show progress while encoding documents
-        for i, doc in enumerate(tqdm(texts, desc="Encoding documents")):
-            # Get the fastText sentence vector directly for the document
-            sentence_vector = self.model.get_sentence_vector(doc)
-
-            # Calculate TF-IDF weighted sum
-            tfidf_vector = tfidf_matrix[i]
+        for doc in tqdm(texts, desc="encoding docs with Gensim fastText..."):
             tokens = self.vectorizer.build_analyzer()(doc)
-            total_weight = 0.0
-            weighted_sum = np.zeros_like(sentence_vector)
-            valid_embeddings = []
+            token_vectors = []
 
-            for j, token in enumerate(tokens):
-                # If token exists in the vocabulary
-                if token in self.model:
-                    word_vector = self.model.get_word_vector(token)
-                    weight = tfidf_vector[self.vectorizer.vocabulary_.get(token, 0)]
-                    weighted_sum += weight * word_vector
-                    total_weight += weight
-                    valid_embeddings.append(word_vector)
+            for token in tokens:
+                if token in self.model.wv:  # Access word vectors through self.model.wv
+                    # Use the word vector directly if available
+                    token_vectors.append(self.model.wv[token])
+                else:
+                    # Otherwise, use the subword vector
+                    token_vectors.append(self.model.get_vector(token, norm=True))
+                    oov += 1
 
-            # Compute the weighted embedding for the document
-            if total_weight > 0:
-                weighted_document_embedding = weighted_sum / total_weight
+            if token_vectors:
+                avg_document_embedding = np.mean(token_vectors, axis=0)
             else:
-                weighted_document_embedding = sentence_vector  # Fallback to sentence vector if no weights
+                avg_document_embedding = self.mean_embedding
 
-            # Compute the average embedding for the document
-            if valid_embeddings:
-                avg_document_embedding = np.mean(valid_embeddings, axis=0)
-            else:
-                avg_document_embedding = sentence_vector
-
-            weighted_document_embeddings.append(weighted_document_embedding)
             avg_document_embeddings.append(avg_document_embedding)
 
-        weighted_document_embeddings = np.array(weighted_document_embeddings)
         avg_document_embeddings = np.array(avg_document_embeddings)
-
-        print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
         print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
+        print("OOV words:", oov)
 
-        return weighted_document_embeddings, avg_document_embeddings
+        return avg_document_embeddings, avg_document_embedding
+
 
 
 

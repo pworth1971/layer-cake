@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v2.0.py"
-LOG="--logfile ../log/ml_mps_final.test"
+LOG="--logfile ../log/ml_mps_fasttext.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -30,11 +30,11 @@ declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "ohsumed")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm")
 declare -a vtypes=("tfidf")
-declare -a mixes=("lsa" "lsa-wce" "cat-doc" "cat-wce" "cat-doc-wce" "dot" "dot-wce" "solo" "solo-wce" "vmode")
+declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
 #declare -a embeddings=("glove" "word2vec" "fasttext" "bert" "roberta" "gpt2" "xlnet")
 #declare -a embeddings=("glove" "word2vec" "fastext" "bert" "roberta" "gpt2" "xlnet")
 declare -a embeddings=("fastext")
-declare -a emb_comp_options=("avg" "weighted")
+declare -a emb_comp_options=("avg")
 
 # Embedding config params
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
