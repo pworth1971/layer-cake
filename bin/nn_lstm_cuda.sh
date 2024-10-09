@@ -20,11 +20,15 @@ ATTN="--net attn"
 EP="200"                # number of epochs
 
 # embedding config
-GLOVE="--pretrained glove --glove-path ../.vector_cache" 
-WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/GoogleNews-vectors-negative300.bin"
-FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/crawl-300d-2M.vec"
-BERT="--pretrained bert --bert-path ../.vector_cache"
-LLAMA="--pretrained llama --llama-path ../.vector_cache"
+GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
+WORD2VEC="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
+FASTTEXT="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
+BERT="--pretrained bert --bert-path ../.vector_cache/BERT"
+ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
+#LLAMA="--pretrained llama --llama-path ../.vector_cache/LLaMa"
+XLNET="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
+GPT2="--pretrained gpt2 --gp2-path ../.vector_cache/GPT2"
+
 
 PY="python ../src/layer_cake.py"                                # source file
 LOG="--log-file ../log/nn_lstm_rcv1.test"                       # output log file for metrics

@@ -8,22 +8,44 @@ from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
 
 # custom classes 
-from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
 from embedding.pretrained import *
+from embedding.supervised import *
+
+from util.metrics import *
+from data.tsr_function__ import *
+
+from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle, loadpt_data
+
+from model.classification import ml_classification
+
+from util.csv_log import CSVLog
+
+from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
+
+
+
+from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
+
+
+from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
+
 
 from model.classification import NeuralClassifier
-
 from util.early_stop import EarlyStopping
-from util.common import *
 from util.file import create_if_not_exist
-from util.metrics import *
 
-from data.lc_dataset import *
 
 import argparse
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+import torchtext
+torchtext.disable_torchtext_deprecation_warning()
+
 
 
 #
@@ -216,16 +238,14 @@ def init_loss(classification_type):
     return L.cuda()
 
 
-# -------------------------------------------------------------------------------------------------------------------
-# layer_cake() method. 
-# 
-# main driver method for all logic, called from the __main__ method after args are parsed
-# input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
-# from a config batch file with all the arguments if being run in batch mode
-# -------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2index, out_of_vocabulary, pad_index, devel_index, test_index):
-    
+    """
+    #main driver method for all logic, called from the __main__ method after args are parsed
+    input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
+    from a config batch file with all the arguments if being run in batch mode
+    """
     print("\t-- layer_cake() -- ")
 
     #print("Command line:", ' '.join(sys.argv))                  # Print the full command line
@@ -255,8 +275,12 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
 
     if (pretrained_embeddings == None):
         print('\t[pretrained_embeddings]\n\t', None)
+        embedding_dims = -1
     else:
         print('\t[pretrained_embeddings]\n\t', pretrained_embeddings.shape)
+        # Log the dimensions of the embeddings if available
+        embedding_dims = pretrained_embeddings.shape[1]
+        print(f"Number of dimensions (embedding size): {embedding_dims}")
 
     loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
@@ -266,7 +290,7 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
     criterion = init_loss(dataset.classification_type)
 
     # train-validate
-    tinit = time()
+    tinit = time.time()
     create_if_not_exist(opt.checkpoint_dir)
     early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
 
@@ -294,11 +318,8 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
 
-    logfile.add_layered_row(
-        epoch=stopepoch, 
-        measure=f'early-stop', 
-        value=early_stop.best_score, 
-        timelapse=stoptime)
+    #logfile.add_layered_row(epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+    logfile.insert(dimensions=embedding_dims, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
 
     if not opt.plotmode:
         print()
@@ -322,13 +343,11 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
             'test_loss': loss_history['test_loss']
         }, method_name, '../output')
 
-# end main() ----------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------
-# train()
-#
-# --------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
     
@@ -356,7 +375,15 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
     model.train()
 
+    # Initialize a variable to store the number of dimensions
+    dims = None
+
     for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
+
+        if dims is None:
+            dims = batch.shape[1]  # Get the number of features (columns) from the batch
+            print("# dimensions:", dims)
+
         optim.zero_grad()
         loss = criterion(model(batch), target)
         loss.backward()
@@ -374,19 +401,17 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     
     loss_history['train_loss'].append(mean_loss)
 
-    logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time() - tinit)
+    #logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
+    logfile.insert(dimnsions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return mean_loss
 
-# end train() --------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------
-# 
-# test()
-#
-# --------------------------------------------------------------------------------------------------------------------------------------
-#  
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+
 def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history):
     
     print("..testing...")
@@ -398,6 +423,15 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     total_batches = 0
 
     target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
+
+    dims = -1
+
+    # Retrieve the number of dimensions from the first example in test_index
+    if isinstance(test_index, list) and len(test_index) > 0:
+        dims = len(test_index[0])  # Assuming each item in test_index is a list/vector of features
+        print(f"Number of dimensions in test data: {dims}")
+    else:
+        print("Unable to determine the number of dimensions from test_index")
     
     for batch, target in tqdm(
             batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long),
@@ -416,11 +450,11 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     print("evaluating test run...")
     
     #Mf1, mf1, acc = evaluation(yte, yte_, classification_type)
-    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation(yte, yte_, classification_type)
+    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
     
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     
-    tend = time() - tinit
+    tend = time.time() - tinit
 
     """
     if classification_type == 'multilabel':
@@ -429,6 +463,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         print(f'[{measure_prefix}] Macro-F1={Mf1_orig:.3f} Micro-F1={mf1_orig:.3f} Accuracy={acc_orig:.3f}')
     """
 
+    """
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
@@ -438,15 +473,27 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     logfile.add_layered_row(epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
     logfile.add_layered_row(epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    """
 
+    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
+
+    logfile.insert(dimensions=dims, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dimensions=dims, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    
     mean_loss = test_loss / total_batches
     loss_history['test_loss'].append(mean_loss)
 
-    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time() - tinit)
+    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return Mf1, mean_loss                          # Return value for use in early stopping and loss plotting
 
-# end test() ---------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 def set_method_name(opt):
@@ -472,11 +519,12 @@ def set_method_name(opt):
     return method_name
 
 
-def initialize_neural_logger(opt):
 
-    print("initializing log file...")
+def initialize_testing(args):
 
-    print("opt:", opt)
+    print("initializing...")
+
+    print("args:", args)
 
     # get system info to be used for logging below
     num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
@@ -489,43 +537,158 @@ def initialize_neural_logger(opt):
     else:
         gpus = 'None'
 
-    method_name = set_method_name(opt)
+    method_name = set_method_name(args)
     print("method_name:", method_name)
 
-    if opt.pretrained:
+    logger = CSVLog(
+        file=args.log_file, 
+        columns=[
+            'os',
+            'cpus',
+            'mem',
+            'gpus',
+            'dataset', 
+            'class_type',
+            'model', 
+            'embeddings',
+            'lm_type',
+            'mode',
+            'comp_method',
+            'representation',
+            'optimized',
+            'dimensions',
+            'measure', 
+            'value',
+            'timelapse',
+            'epoch',
+            'run',
+            ], 
+        verbose=True, 
+        overwrite=False)
+
+    run_mode = method_name
+    print("run_mode:", {run_mode})
+
+    if args.pretrained:
         pretrained = True
-        embeddings_log_val = opt.pretrained
     else:
         pretrained = False
-        embeddings_log_val ='none'
-    
-    # initialize layered log file with core settings
-    logfile = init_layered_logfile(
-        method_name, 
-        pretrained, 
-        embeddings_log_val, 
-        opt, 
-        cpus, 
-        mem, 
-        gpus)    
+
+    embeddings = args.pretrained
+    print("embeddings:", {embeddings})
+
+    lm_type = get_language_model_type(args.pretrained)
+    print("lm_type:", {lm_type})
+
+    if (args.supervised):
+        supervised = True
+        mode = 'supervised'
+    else:
+        supervised = False
+        mode = 'unsupervised'
+
+    # get the path to the embeddings
+    emb_path = get_embeddings_path(args.pretrained, args)
+    print("emb_path: ", {emb_path})
+
+    system = SystemResources()
+    print("system:\n", system)
+
+    # set default system params
+    logger.set_default('os', system.get_os())
+    logger.set_default('cpus', system.get_cpu_details())
+    logger.set_default('mem', system.get_total_mem())
+    logger.set_default('mode', run_mode)
+
+    gpus = system.get_gpu_summary()
+    if gpus is None:
+        gpus = -1   
+    logger.set_default('gpus', gpus)
+
+    logger.set_default('dataset', args.dataset)
+    logger.set_default('model', args.net)
+    logger.set_default('mode', mode)
+    logger.set_default('pretrained', pretrained)
+    logger.set_default('embeddings', embeddings)
+    logger.set_default('run', args.seed)
+    logger.set_default('tunable', args.tunable)
+    logger.set_default('representation', method_name)
+    logger.set_default('class_type', lm_type)
+
+    embedding_type = get_embedding_type(args.pretrained)
+    print("embedding_type:", embedding_type)
+
+    comp_method = get_model_computation_method(pretrained=args.pretrained, embedding_type=embedding_type, learner=args.net, mix=None)
+    print("comp_method:", comp_method)
+
+    logger.set_default('comp_method', comp_method)
 
     # check to see if the model has been run before
-    already_modelled = logfile.already_calculated(
-        dataset=opt.dataset,
-        embeddings=embeddings_log_val,
-        model=opt.net, 
-        params=method_name,
+    already_modelled = logger.already_calculated(
+        dataset=args.dataset,
+        embeddings=embeddings,
+        model=args.net, 
+        representation=method_name,
         pretrained=pretrained, 
-        tunable=opt.tunable,
-        wc_supervised=opt.supervised,
-        run=opt.seed
+        tunable=args.tunable,
+        wc_supervised=args.supervised,
+        run=args.seed
         )
 
     print("already_modelled:", already_modelled)
 
-    return already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val
+    return already_modelled, logger, method_name, pretrained, embeddings, emb_path, lm_type, mode, system
 
+    """
+    @classmethod
+    def load_nn(cls, dataset_name, vectorization_type='tfidf', embedding_type='word', base_pickle_path=None):
 
+        print("Dataset::load():", dataset_name, base_pickle_path)
+
+        print("vectorization_type:", vectorization_type)
+        print("embedding_type:", embedding_type)
+
+        # Create a pickle path that includes the vectorization type
+        # NB we assume the /pickles directory exists already
+        if base_pickle_path:
+            full_pickle_path = f"{base_pickle_path}{'/'}{dataset_name}_{vectorization_type}.pkl"
+            pickle_file_name = f"{dataset_name}_{vectorization_type}.pkl"
+        else:
+            full_pickle_path = None
+            pickle_file_name = None
+
+        print("pickle_file_name:", pickle_file_name)
+
+        # not None so we are going to create the pickle file, 
+        # by dataset and vectorization type
+        if full_pickle_path:
+            print("full_pickle_path: ", {full_pickle_path})
+
+            if os.path.exists(full_pickle_path):                                        # pickle file exists, load it
+                print(f'loading pickled dataset from {full_pickle_path}')
+                dataset = pickle.load(open(full_pickle_path, 'rb'))
+            else:                                                                       # pickle file does not exist, create it, load it, and dump it
+                print(f'fetching dataset and dumping it into {full_pickle_path}')
+                dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type, embedding_type=embedding_type)
+
+                print('dumping')
+                #pickle.dump(dataset, open(pickle_path, 'wb', pickle.HIGHEST_PROTOCOL))
+                # Open the file for writing and write the pickle data
+                try:
+                    with open(full_pickle_path, 'wb', pickle.HIGHEST_PROTOCOL) as file:
+                        pickle.dump(dataset, file)
+                    print("data successfully pickled at:", full_pickle_path)
+                except Exception as e:
+                    print(f'\n\t------*** ERROR: Exception raised, failed to pickle data: {e} ***------')
+
+        else:
+            print(f'loading dataset {dataset_name}')
+            dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type, embedding_type=embedding_type)
+
+        return dataset
+
+    """
+    
 
 # --------------------------------------------------------------------------------------------------------------------------------------
 #
@@ -536,6 +699,9 @@ if __name__ == '__main__':
 
     available_datasets = LCDataset.dataset_available
     available_dropouts = {'sup','none','full','learn'}
+
+    
+    print("\n\t------------------------------------- LAYER CAKE: Neural text classification with Word-Class Embeddings -------------------------------------\n")
 
     # Training settings
     parser = argparse.ArgumentParser(description='Neural text classification with Word-Class Embeddings')
@@ -591,8 +757,8 @@ if __name__ == '__main__':
     parser.add_argument('--log-interval', type=int, default=10, metavar='int',
                         help='how many batches to wait before printing training status')
     
-    parser.add_argument('--log-file', type=str, default='../log/log.csv', metavar='str',
-                        help='path to the log csv file')
+    parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', metavar='str',
+                        help='path to the log logger output file')
     
     parser.add_argument('--pickle-dir', type=str, default='../pickles', metavar='str',
                         help=f'if set, specifies the path where to save/load the dataset pickled (set to None if you '
@@ -607,8 +773,8 @@ if __name__ == '__main__':
     parser.add_argument('--net', type=str, default='lstm', metavar='str',
                         help=f'net, one in {NeuralClassifier.ALLOWED_NETS}')
     
-    parser.add_argument('--pretrained', type=str, default=None, metavar='glove|word2vec|fasttext|bert|llama',
-                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", or "llama" (default None)')
+    parser.add_argument('--pretrained', type=str, default=None, metavar='embeddings',
+                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", "roberts", "xlnet", "gpt2", or "llama" (default None)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
@@ -621,35 +787,38 @@ if __name__ == '__main__':
                         help='dimension of the learnable embeddings (default 0)')
     
     parser.add_argument('--val-epochs', type=int, default=1, metavar='int',
-                        help='number of training epochs to perform on the validation set once training is '
-                             'over (default 1)')
+                        help='number of training epochs to perform on the validation set once training is over (default 1)')
     
-    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/GoogleNews-vectors-negative300.bin',
-                        metavar='PATH',
-                        help=f'path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only '
-                             f'with --pretrained word2vec')
-    
-    parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE,
-                        metavar='PATH',
-                        help=f'directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove') 
-    
-    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/crawl-300d-2M.vec',
-                        metavar='PATH',
-                        help=f'path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only '
-                            f'with --pretrained fasttext')
-    
-    parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
-                        metavar='PATH',
-                        help=f'directory to BERT pretrained vectors, used only with --pretrained bert')
+    parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE+'/GloVe', metavar='PATH',
+                        help=f'Drectory to pretrained GloVe embeddings, defaults to {VECTOR_CACHE}/GloVe. Used only with --pretrained glove, '
+                            f'defaults to {VECTOR_CACHE}.') 
 
-    parser.add_argument('--roberta-path', type=str, default=VECTOR_CACHE,
+    parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/Word2Vec', metavar='PATH',
+                        help=f'Directory to Word2Vec pretrained vectors (e.g. GoogleNews-vectors-negative300.bin), used only '
+                             f'with --pretrained word2vec. Defaults to {VECTOR_CACHE}/Word2Vec.')
+    
+    parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/fastText', metavar='PATH',
+                        help=f'Directory to fastText pretrained vectors, defaults to {VECTOR_CACHE}/fastText, used only with --pretrained fasttext')
+    
+    parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE+'/BERT',
                         metavar='PATH',
-                        help=f'directory to RoBERTa pretrained vectors, used only with --pretrained roberta')
+                        help=f'Directory to BERT pretrained vectors, defaults to {VECTOR_CACHE}/BERT. Used only with --pretrained bert')
 
-
-    parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE,
+    parser.add_argument('--roberta-path', type=str, default=VECTOR_CACHE+'/RoBERTa',
                         metavar='PATH',
-                        help=f'directory to LLaMA pretrained vectors, used only with --pretrained llama')
+                        help=f'Directory to RoBERTa pretrained vectors, defaults to {VECTOR_CACHE}/RoBERTA. Used only with --pretrained roberta')
+    
+    parser.add_argument('--xlnet-path', type=str, default=VECTOR_CACHE+'/XLNet',
+                        metavar='PATH',
+                        help=f'Directory to XLNet pretrained vectors, defaults to {VECTOR_CACHE}/XLNet. Used only with --pretrained xlnet.')
+
+    parser.add_argument('--gpt2-path', type=str, default=VECTOR_CACHE+'/GPT2',
+                        metavar='PATH',
+                        help=f'Directory to GPT2 pretrained vectors, defaults to {VECTOR_CACHE}/GPT2. Used only with --pretrained gpt2')
+
+    parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE+'/LLaMA',
+                        metavar='PATH',
+                        help=f'Directory to LLaMA pretrained vectors, defaults to {VECTOR_CACHE}/LlaMa. Used only with --pretrained llama')
 
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
@@ -673,24 +842,17 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     print("opt:", type(opt), opt)
 
-    # set device and seed
-    #opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    
-    #assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
     # Setup device prioritizing CUDA, then MPS, then CPU
     if torch.cuda.is_available():
-        device = torch.device("cuda")
-        batch_size = DEFAULT_GPU_BATCH_SIZE
+        opt.device = torch.device("cuda")
     elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-        batch_size = MPS_BATCH_SIZE
+        opt.device = torch.device("mps")
     else:
-        device = torch.device("cpu")
-        batch_size = DEFAULT_CPU_BATCH_SIZE
+        opt.device = torch.device("cpu")
         
-    torch.manual_seed(opt.seed)
+    print(f'running on {opt.device}')
 
-    print(f'RUNNING ON DEVICE == {device}')
+    torch.manual_seed(opt.seed)
 
     # single run case
     if (opt.batch_file is None):                        # running single command 
@@ -722,26 +884,20 @@ if __name__ == '__main__':
             print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
             logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
         
-        """
-        if opt.pickle_dir:
-            opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
-        """
-
-        # initialize log file
-        already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(opt)
+        # initialize logging and other system run variables
+        already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(opt)
 
         # check to see if model params have been computed already
         if (already_modelled and not opt.force):
-            print(f'--- model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+            print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
             exit(0)
     
-        pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
+        #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
 
-        if (pretrained in ['bert', 'roberta', 'llama']):
-            embedding_type = 'token'
-        else:
-            embedding_type = 'word'
+        embedding_type = get_embedding_type(opt)
+        print("embedding_type:", embedding_type)
 
+        """
         print(f"initializing dataset: {opt.dataset}")
         lcd = LCDataset.load_nn(
             dataset_name=opt.dataset,                       # dataset name
@@ -749,10 +905,87 @@ if __name__ == '__main__':
             embedding_type=embedding_type,                  # embedding type ('word or 'token')
             base_pickle_path=opt.pickle_dir                 # base pickle path
         ).show()
-        
-        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+        """
+    
+        print("embeddings:", embeddings)    
+        print("embedding_path:", emb_path)
+        print("embedding_type:", embedding_type)
 
-        # run layer_cake
+        #
+        # Load the dataset and the associated (pretrained) embedding structures
+        # to be fed into the model
+        #                                                          
+        """
+        Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
+            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, \
+                Xte_summary_embeddings = loadpt_data(
+                                                dataset=opt.dataset,                            # Dataset name
+                                                vtype=opt.vtype,                                # Vectorization type
+                                                pretrained=opt.pretrained,                      # pretrained embeddings type
+                                                embedding_path=emb_path,                        # path to pretrained embeddings
+                                                emb_type=embedding_type                         # embedding type (word or token)
+                                                )                                                
+    
+        #print("Xtr_raw:", type(Xtr_raw), Xtr_raw.shape)
+        #print("Xte_raw:", type(Xte_raw), Xte_raw.shape)
+
+        print("Xtr_vectorized:", type(Xtr_vectorized), Xtr_vectorized.shape)
+        print("Xte_vectorized:", type(Xte_vectorized), Xte_vectorized.shape)
+
+        print("y_train_sparse:", type(y_train_sparse), y_train_sparse.shape)
+        print("y_test_sparse:", type(y_test_sparse), y_test_sparse.shape)
+        
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+
+        print("Xtr_weighted_embeddings:", type(Xtr_weighted_embeddings), Xtr_weighted_embeddings.shape)
+        print("Xte_weighted_embeddings:", type(Xte_weighted_embeddings), Xte_weighted_embeddings.shape)
+        
+        print("Xtr_avg_embeddings:", type(Xtr_avg_embeddings), Xtr_avg_embeddings.shape)
+        print("Xte_avg_embeddings:", type(Xte_avg_embeddings), Xte_avg_embeddings.shape)
+        
+        print("Xtr_summary_embeddings:", type(Xtr_summary_embeddings), Xtr_summary_embeddings.shape)
+        print("Xte_summary_embeddings:", type(Xte_summary_embeddings), Xte_summary_embeddings.shape)
+
+        if class_type in ['multilabel', 'multi-label']:
+
+            print("multi-label case, expanding (todense) y...")
+
+            if isinstance(y_train_sparse, (csr_matrix, csc_matrix)):
+                y_train = y_train_sparse.toarray()                      # Convert sparse matrix to dense array for multi-label tasks
+            if isinstance(y_test_sparse, (csr_matrix, csc_matrix)):
+                y_test = y_test_sparse.toarray()                        # Convert sparse matrix to dense array for multi-label tasks
+            
+            print("y_train after transformation:", type(y_train), y_train.shape)
+            print("y_test after transformation:", type(y_test), y_test.shape)
+        else:
+            y_train = y_train_sparse
+            y_test = y_test_sparse
+        """
+
+        lcd = loadpt_data(
+            dataset=opt.dataset,                            # Dataset name
+            vtype=opt.vtype,                                # Vectorization type
+            pretrained=opt.pretrained,                      # pretrained embeddings type
+            embedding_path=emb_path,                        # path to pretrained embeddings
+            emb_type=embedding_type                         # embedding type (word or token)
+            )                                                
+
+        print("loaded LCDataset object:", type(lcd))
+        print("lcd:", lcd.show())
+
+        lc_rep = lcd.lcr_model
+        lc_rep.show()
+
+        pretrained_vectors = lcd.lcr_model.vocabulary()
+        print("pretrained_vectors:", type(pretrained_vectors), len(pretrained_vectors))
+
+        """
+        #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
+        #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+        """
+
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, lc_rep)
+
         layer_cake(
             opt, 
             logfile,
@@ -764,6 +997,8 @@ if __name__ == '__main__':
             pad_index, 
             devel_index, 
             test_index)
+        
+        
 
     else: 
 

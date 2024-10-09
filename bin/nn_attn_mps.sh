@@ -4,8 +4,6 @@
 # CONFIG INFO
 # NB: must be run from /bin directory
 
-# Set the CUDA device for all processes
-export CUDA_VISIBLE_DEVICES=0                   # Change to your specific GPU ID as needed
 
 # supported networks, drop probability included
 #CNN="--net cnn --dropprob .2"
@@ -16,7 +14,7 @@ CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
 
-EP="200"                # number of epochs
+EP="50"                # number of epochs
 
 # embedding config
 GLOVE="--pretrained glove --glove-path ../.vector_cache/GloVe" 
@@ -28,9 +26,8 @@ ROBERTA="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
 XLNET="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
 GPT2="--pretrained gpt2 --gp2-path ../.vector_cache/GPT2"
 
-
 PY="python ../src/layer_cake.py"                                    # source file
-LOG="--log-file ../log/nn_attn_bbc-news.test"                       # output log file for metrics
+LOG="--log-file ../log/nn_attn_mps.test"                       # output log file for metrics
 
 # dataset config
 #ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
@@ -82,6 +79,20 @@ $PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --tunable --seed $run   --nepoc
 $PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$ROBERTA --tunable --seed $run --droptype learn    --nepochs $EP
 $PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --supervised --seed $run    --nepochs $EP
 $PY $LOG $dataset	$ATTN	--channels 128	$ROBERTA  --supervised	--tunable --seed $run   --nepochs $EP
+
+## XLNET
+$PY $LOG $dataset	$ATTN	--channels 128	$XLNET  --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$XLNET  --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$XLNET --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$XLNET  --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$XLNET  --supervised	--tunable --seed $run   --nepochs $EP
+
+## GPT2
+$PY $LOG $dataset	$ATTN	--channels 128	$GPT2  --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$GPT2  --tunable --seed $run   --nepochs $EP
+$PY $LOG $dataset	$ATTN	--learnable 20	--channels 128	$GPT2 --tunable --seed $run --droptype learn    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$GPT2  --supervised --seed $run    --nepochs $EP
+$PY $LOG $dataset	$ATTN	--channels 128	$GPT2  --supervised	--tunable --seed $run   --nepochs $EP
 
 ## LLAMA
 #$PY $LOG $dataset	$ATTN	--channels 128	$LLAMA  --seed $run   --nepochs $EP

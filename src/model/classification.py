@@ -12,7 +12,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.multiclass import OneVsRestClassifier
 
-from util.metrics import evaluation
+from util.metrics import evaluation_ml
 from util.common import OUT_DIR
 
 import logging
@@ -454,7 +454,7 @@ def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names,
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
@@ -553,7 +553,7 @@ def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 
@@ -641,7 +641,7 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(y_test, y_preds, classification_type=class_type, debug=False)
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
 

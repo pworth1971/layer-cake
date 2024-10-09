@@ -1,6 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 import torch
+import pandas as pd
 
 # system and metrics reporting
 import platform
@@ -25,6 +26,7 @@ from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 
 
+
 NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn']
 ML_MODELS = ['svm', 'lr', 'nb']
 
@@ -35,14 +37,26 @@ SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'g
 SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'gpt2']
 
 
-VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
-DATASET_DIR = '../datasets/'                        # dataset directory
-PICKLE_DIR = '../pickles/'                          # pickled data directory
+
 OUT_DIR = '../out/'                                 # output directory
 
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
 TOKEN_BASED_MODELS = ['bert', 'roberta', 'gpt2', 'xlnet']
+
+
+
+def get_pretrained_embeddings(model, dataset):
+    """
+    returns Boolean and then data structure with embeddings, None if emb_model is not one if the acceptable values
+    """
+
+    print("loading pretrained embeddings for model type:", {model})
+
+    return True, dataset.lcr_model, dataset.lcr_model.vocabulary
+    
+# ---------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -159,14 +173,49 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
     return word_list
 
 
+from sklearn.preprocessing import LabelEncoder
+
+# Assuming this is defined globally or passed to the function
+label_encoder = LabelEncoder()
+
+
+def encode_labels(labels):
+    # Fit and transform labels using the encoder if it's not already fitted
+    return label_encoder.transform(labels)
+
 def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
+    
+    print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
+    
     nsamples = len(index_list)
     nbatches = nsamples // batchsize + 1*(nsamples%batchsize>0)
+    
+    print(f'nsamples: {nsamples}, nbatches: {nbatches}')
+
+    # Fit the LabelEncoder once on the entire labels if not already fitted
+    if not hasattr(label_encoder, 'classes_'):
+        label_encoder.fit(labels)
+        print("Label classes:", label_encoder.classes_)
+    
     for b in range(nbatches):
         batch = index_list[b*batchsize:(b+1)*batchsize]
         batch_labels = labels[b*batchsize:(b+1)*batchsize]
-        if issparse(batch_labels):
+
+        #print("batch_labels:", type(batch_labels), batch_labels.shape)
+
+        # Check batch_labels object type and convert as necessary
+        if isinstance(batch_labels, pd.Series):
+            batch_labels = batch_labels.to_numpy()  
+        elif issparse(batch_labels):
             batch_labels = batch_labels.toarray()
+        
+        #print("batch_labels:", type(batch_labels), batch_labels.shape)
+        #print("batch_labels:", batch_labels)
+
+        # Encode the labels to numerical values
+        batch_labels = encode_labels(batch_labels)
+        #print("batch_labels (after encoding):", batch_labels)
+
         batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
         batch = torch.LongTensor(batch)
         totype = torch.LongTensor if target_long else torch.FloatTensor
@@ -307,13 +356,53 @@ def get_sysinfo(debug=False):
     return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
 
 
+def get_model_computation_method(pretrained, embedding_type, learner, mix):
+
+    print("calculating model computation method...")
+    print("embedding_type:", embedding_type)
+
+    if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
+        pt_type = 'attention:tokenized'
+    elif (pretrained in ['glove', 'word2vec']):
+        pt_type = 'co-occurrence:word'
+    elif (pretrained in ['fasttext']):
+        pt_type = 'co-occurrence:subword'
+    else:
+        pt_type = 'None'
+        
+    if pretrained == 'fasttext':
+        embedding_type = 'subword'
+        
+    pt_type = f'{embedding_type}:{pt_type}'
+
+    if (learner in ML_MODELS): 
+
+        if mix in ['solo', 'solo-wce']:
+            return pt_type
+            
+        elif mix == 'vmode':
+            return f'frequency:{args.vtype}'
+
+        elif mix in ['cat-doc', 'cat-wce', 'cat-doc-wce']:
+            return f'frequency:{args.vtype}+{pt_type}'
+
+        elif mix in ['dot', 'dot-wce']:
+            return f'frequency:{args.vtype}.{pt_type}'
+
+        elif mix in ['lsa', 'lsa-wce']:
+            return f'frequency:{args.vtype}->SVD'
+       
+    elif (learner in NEURAL_MODELS):
+        pass
+
+
 # ---------------------------------------------------------------------------------------------------------------------------
 
 def index_dataset(dataset, pretrained=None):
 
     print(f"indexing dataset...")
     
-    # build the vocabulary
+    # retreive the vocabulary
     word2index = dict(dataset.vocabulary)
     known_words = set(word2index.keys())
     if pretrained is not None:
@@ -330,104 +419,69 @@ def index_dataset(dataset, pretrained=None):
     devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
     test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
 
-    #print('[indexing complete]')
+    print('[indexing complete]')
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
 
 
+# ---------------------------------------------------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------------------------------------------------------------------
-# init_layered_logile()
-# 
-# Enhanced log info to include explictly the model type, whether or not its 'supervised', ie added WC Embeddings, 
-# as well as tuning parametr and whether or not pretraiend embeddings are used and if so what type
-# 
-def init_layered_logfile(method_name, pretrained, embeddings, opt, cpus, mem, gpus):
-
-    logfile = CSVLog(
-        file=opt.log_file, 
-        columns=[
-            'dataset', 
-            'model', 
-            'pretrained', 
-            'embeddings', 
-            'params', 
-            'epoch', 
-            'tunable',
-            'measure', 
-            'value', 
-            'run', 
-            'timelapse',
-            'system_type',
-            'cpus',
-            'mem',
-            'gpus'], 
-        verbose=True, 
-        overwrite=False)
-
-    logfile.set_default('dataset', opt.dataset)
-    logfile.set_default('model', opt.net)
-    logfile.set_default('pretrained', pretrained)
-    logfile.set_default('embeddings', embeddings)
-    logfile.set_default('params', method_name)
-    logfile.set_default('run', opt.seed)
-    logfile.set_default('tunable', opt.tunable)
-
-    # add system info
-    logfile.set_default('system_type', os)
-    logfile.set_default('cpus', cpus)
-    logfile.set_default('mem', mem)
-    logfile.set_default('gpus', gpus)
-
-    return logfile
-
-
-# ------------------------------------------------------------------------------------------------------------------------------------------
-# init_layered_logile_svm()
-# 
-# Enhanced log info for ML baseline (layer cake) program suport
-#
-def init_layered_baseline_logfile(logfile, method_name, dataset, model, pretrained, embeddings):
-
-    print("initializing baseline layered log file...")
-
-    logfile = CSVLog(
-        file=logfile, 
-        columns=[
-            'dataset', 
-            'model', 
-            'pretrained', 
-            'embeddings', 
-            'params',
-            'epoch',
-            'tunable',
-            'measure', 
-            'run',
-            'value',
-            'timelapse',
-            'system_type',
-            'cpus',
-            'mem',
-            'gpus'], 
-        verbose=True, 
-        overwrite=False)
-
-    print("setting defaults...")
-    print("embeddings:", embeddings)
+def get_embeddings_path(pretrained, args):
     
-    logfile.set_default('dataset', dataset)
-    logfile.set_default('pretrained', pretrained)
-    logfile.set_default('model', model)                 # method in the log file
-    logfile.set_default('embeddings', embeddings)
-    logfile.set_default('params', method_name)
+    if (pretrained == 'bert'):
+        return args.bert_path
+    elif pretrained == 'roberta':
+        return args.roberta_path
+    elif pretrained == 'glove':
+        return args.glove_path
+    elif pretrained == 'word2vec':
+        return args.word2vec_path
+    elif pretrained == 'fasttext':
+        return args.fasttext_path
+    elif pretrained == 'llama':
+        return args.llama_path
+    elif pretrained == 'xlnet':
+        return args.xlnet_path
+    elif pretrained == 'gpt2':
+        return args.gpt2_path
+    else:
+        return args.glove_path          # default to GloVe embeddings
+        
 
-    # normalize data fields
-    logfile.set_default('tunable', "NA")
-    logfile.set_default('epoch', -1)
-    logfile.set_default('run', -1)
 
-    return logfile
+def get_language_model_type(embeddings):
+
+    if (embeddings in ['glove']):
+        return 'static:word:co-occurrence:global'
+    elif (embeddings in ['word2vec']):
+        return 'static:word:co-occurrence:local'
+    elif (embeddings in ['fasttext']):
+        return 'static:subword:co-occurrence:local'
+    elif (embeddings in ['llama', 'gpt2']):
+        return 'transformer:token:autoregressive:unidirectional:causal'
+    elif (embeddings in ['bert', 'roberta']):
+        return 'transformer:token:autoregressive:bidirectional:masked'
+    elif (embeddings in ['xlnet']):
+        return 'transformer:token:autoregressive:bidirectional:permutated'
+    else:
+        return 'static:word:co-occurrence:global'           # default to word embeddings
+    
+# ---------------------------------------------------------------------------------------------------------------------------
+
+
+def get_embedding_type(pretrained):
+
+    if (pretrained is not None and pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
+        embedding_type = 'token'
+    elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
+        embedding_type = 'word'
+    elif (pretrained is not None and pretrained in ['fasttext']):
+        embedding_type = 'subword'
+    else:
+        embedding_type = 'word'             # default to word embeddings
+
+    return embedding_type
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------

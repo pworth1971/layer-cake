@@ -12,11 +12,7 @@ from sklearn.naive_bayes import MultinomialNB
 
 from embedding.supervised import get_supervised_embeddings
 
-from util.common import SystemResources, NEURAL_MODELS, ML_MODELS
-from util.common import SUPPORTED_LMS, SUPPORTED_TRANSFORMER_LMS
-from util.common import VECTOR_CACHE, PICKLE_DIR, DATASET_DIR
-from util.common import WORD_BASED_MODELS, TOKEN_BASED_MODELS
-
+from util.common import *
 
 from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
 
@@ -26,6 +22,8 @@ from util.csv_log import CSVLog
 
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
+from model.LCRepresentationModel import PICKLE_DIR, VECTOR_CACHE
+
 
 
 import warnings
@@ -491,11 +489,8 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     print("representation:", representation)
     print("optimize:", optimized)
 
-    if (args.pretrained is not None and args.pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
-        embedding_type = 'token'
-    else:
-        embedding_type = 'word'
-    
+    embedding_type = get_embedding_type(args.pretrained)
+
     print("embeddings:", embeddings)    
     print("embedding_path:", embedding_path)
     print("embedding_type:", embedding_type)
@@ -553,16 +548,6 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
         y_train = y_train_sparse
         y_test = y_test_sparse
 
-    """
-    # Ensure y is in the correct format for classification type
-    if class_type in ['singlelabel', 'single-label']:
-        y_train = y_train.ravel()                       # Flatten y for single-label classification
-        y_test = y_test.ravel()                         # Flatten y for single-label classification
-    
-    print("y_train after transformation:", type(y_train), y_train.shape)
-    print("y_test after transformation:", type(y_test), y_test.shape)
-    """
-
     if args.pretrained is None:        # no embeddings in this case
         sup_tend = 0
     else:                              # embeddings are present
@@ -606,7 +591,7 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     dims = X_train.shape[1]
     print("# dimensions:", dims)
 
-    comp_method = get_model_computation_method(args, embedding_type)
+    comp_method = get_model_computation_method(pretrained=args.pretrained, embedding_type=embedding_type, learner=args.learner, mix=args.mix)
     print("comp_method:", comp_method)
 
     logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)
@@ -622,315 +607,6 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def get_model_computation_method(args, embedding_type='word'):
-
-    print("calculating model computation method...")
-    print("embedding_type:", embedding_type)
-
-    if (args.pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
-        pt_type = 'attention:tokenized'
-    elif (args.pretrained in ['glove', 'word2vec']):
-        pt_type = 'co-occurrence:word'
-    elif (args.pretrained in ['fasttext']):
-        pt_type = 'co-occurrence:subword'
-    else:
-        pt_type = 'unkwnown'
-        
-    if args.pretrained == 'fasttext':
-        embedding_type = 'subword'
-        
-    pt_type = f'{embedding_type}:{pt_type}'
-
-    if (args.learner in ML_MODELS): 
-
-        if args.mix in ['solo', 'solo-wce']:
-            return pt_type
-            
-        elif args.mix == 'vmode':
-            return f'frequency:{args.vtype}'
-
-        elif args.mix in ['cat-doc', 'cat-wce', 'cat-doc-wce']:
-            return f'frequency:{args.vtype}+{pt_type}'
-
-        elif args.mix in ['dot', 'dot-wce']:
-            return f'frequency:{args.vtype}.{pt_type}'
-
-        elif args.mix in ['lsa', 'lsa-wce']:
-            return f'frequency:{args.vtype}->SVD'
-       
-    elif (args.learner in NEURAL_MODELS):
-        pass
-
-
-
-def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg'):
-
-    print("loadpt_data():", dataset, PICKLE_DIR)
-
-    print("pretrained:", pretrained)
-    
-    #
-    # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
-    #
-    if (pretrained == 'glove'):
-        model_name = GLOVE_MODEL
-    elif(pretrained == 'word2vec'):
-        model_name = WORD2VEC_MODEL
-    elif(pretrained == 'fasttext'):
-        model_name = FASTTEXT_MODEL
-    elif(pretrained == 'bert'):
-        model_name = BERT_MODEL
-    elif (pretrained == 'roberta'):
-        model_name = ROBERTA_MODEL
-    elif (pretrained == 'gpt2'):
-        model_name = GPT2_MODEL
-    elif (pretrained == 'xlnet'):
-        model_name = XLNET_MODEL
-    else:
-        model = None
-        raise ValueError(f"Unsupported pretrained model '{pretrained}'")
-        
-    print("model_name:", model_name)
-    
-    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
-    
-    # remove '/' from the file name
-    pickle_file_name = pickle_file_name.replace("/", "_")               # Replace forward slash with an underscore
-
-    pickle_file = PICKLE_DIR + pickle_file_name                                     
-    print("pickle_file:", pickle_file)
-
-    #
-    # we pick up the vectorized dataset along with the associated pretrained 
-    # embedding matrices when e load the data - either from data files directly
-    # if the first time parsing the dataset or from the pickled file if it exists
-    # and the data has been cached for faster loading
-    #
-    if os.path.exists(pickle_file):                                                 # if the pickle file exists
-        
-        print(f"Loading tokenized data from '{pickle_file}'...")
-        
-        Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
-            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = load_from_pickle(pickle_file)
-
-        return Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
-            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings
-
-    else:
-        print(f"'{pickle_file}' not found, loading {dataset}...")
-        
-        lcd = LCDataset(
-            name=dataset,                               # dataset name 
-            vectorization_type=vtype,                   # vectorization type (one of 'tfidf', 'count')
-            embedding_type=emb_type,                    # embedding type (one of 'word', 'token')
-            pretrained=pretrained,                      # pretrained embeddings (model type or None)
-            embedding_path=embedding_path,              # path to embeddings
-            embedding_comp_type=embedding_comp_type     # embedding computation type (one of 'avg', 'weighted', 'summary')
-        )    
-
-        lcd.vectorize()                             # vectorize the dataset
-
-        lcd.init_embedding_matrices()               # initialize the embedding matrices
-
-        # Save the tokenized matrices to a pickle file
-        save_to_pickle(
-            lcd.Xtr,                                    # raw training data (not vectorized)
-            lcd.Xte,                                    # raw test data (not vectorized)
-            lcd.Xtr_vectorized,                         # vectorized training data
-            lcd.Xte_vectorized,                         # vectorized test data
-            lcd.y_train_sparse,                         # training data labels
-            lcd.y_test_sparse,                          # test data labels
-            lcd.target_names,                           # target names
-            lcd.class_type,                             # class type (single-label or multi-label):
-            lcd.embedding_vocab_matrix,                 # vector representation of the dataset vocabulary
-            lcd.Xtr_weighted_embeddings,                # weighted avg embedding representation of dataset training data
-            lcd.Xte_weighted_embeddings,                # weighted avg embedding representation of dataset test data
-            lcd.Xtr_avg_embeddings,                     # avg embedding representation of dataset training data
-            lcd.Xte_avg_embeddings,                     # avg embedding representation of dataset test data
-            lcd.Xtr_summary_embeddings,                 # summary embedding representation of dataset training data
-            lcd.Xte_summary_embeddings,                 # summary embedding representation of dataset test data
-            pickle_file)         
-
-        return lcd.Xtr, lcd.Xte, lcd.Xtr_vectorized, lcd.Xte_vectorized, lcd.y_train_sparse, lcd.y_test_sparse, lcd.target_names, lcd.class_type, lcd.embedding_vocab_matrix, \
-            lcd.Xtr_weighted_embeddings, lcd.Xte_weighted_embeddings, lcd.Xtr_avg_embeddings, lcd.Xte_avg_embeddings, lcd.Xtr_summary_embeddings, lcd.Xte_summary_embeddings
-
-
-# -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize_ml_testing(args):
-
-    """
-    Initializes machine learning testing based on the provided arguments.
-
-    Args:
-    - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
-      Expected fields:
-        - learner (str): Type of learner to use ('svm', 'lr', or 'nb').
-        - vtype (str): Vectorization type, either 'count' or 'tfidf'.
-        - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
-        - dataset (str): Name of the dataset.
-        - logfile (str): Path to the log file where results will be stored.
-        - mix (str): Dataset and embedding comparison method.
-        - dataset_emb_comp (str): Dataset embedding comparison method.
-    
-    Returns:
-    - already_computed (bool): Whether the current configuration has already been computed.
-    - vtype (str): Vectorization type ('count' or 'tfidf').
-    - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
-    - pretrained (bool): Whether to use a pretrained model or embeddings.
-    - embeddings (str): Type of embeddings to use.
-    - emb_path (str): Path to the embeddings or pretrained model files.
-    - mix (str): The dataset and embedding comparison method.
-    - representation (str): Type of data representation used for training.
-    - ml_logger (CSVLog): Logger object to store model run details.
-    - optimized (bool): Whether the model is optimized for performance.
-    """
-
-    print("\n\tinitializing ML testing...")
-    
-    print("args:", args)
-
-    # set up model type
-    if args.learner == 'svm':
-        learner = LinearSVC
-        learner_name = 'SVM' 
-    elif args.learner == 'lr':
-        learner = LogisticRegression
-        learner_name = 'LR'
-    elif args.learner == 'nb':
-        learner = MultinomialNB
-        #learner = GaussianNB
-        learner_name = 'NB'
-    else:
-        print("** Unknown learner, possible values are svm, lr or nb **")
-        return
-
-    print("learner:", learner)
-    print("learner_name: ", {learner_name})
-
-    # default to tfidf vectorization type unless 'count' specified explicitly
-    if args.vtype == 'count':
-        vtype = 'count'
-    else:
-        vtype = 'tfidf'             
-        
-    print("vtype:", {vtype})
-
-    pretrained = False
-    embeddings ='none'
-    emb_path = VECTOR_CACHE
-
-    if (args.pretrained):
-        pretrained = True
-
-    # get the path to the embeddings
-    emb_path = get_embeddings_path(args.pretrained, args)
-    print("emb_path: ", {emb_path})
-
-    model_type = f'{learner_name}:{args.vtype}-{args.mix}'
-    print("model_type:", {model_type})
-    
-    print("initializing baseline layered log file...")
-
-    ml_logger = CSVLog(
-        file=args.logfile, 
-        columns=[
-            'os',
-            'cpus',
-            'mem',
-            'gpus',
-            'dataset', 
-            'class_type',
-            'model', 
-            'embeddings',
-            'lm_type',
-            'mode',
-            'comp_method',
-            'representation',
-            'optimized',
-            'dimensions',
-            'measure', 
-            'value',
-            'timelapse',
-            'epoch',
-            'run',
-            ], 
-        verbose=True, 
-        overwrite=False)
-
-    print("setting defaults...")
-    print("embeddings:", embeddings)
-
-    print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
-    
-    #ml_logger.set_default('dataset', args.dataset)
-    #ml_logger.set_default('model', learner_name)                 # method in the log file
-
-    system = SystemResources()
-    print("system:\n", system)
-
-    run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
-    print("run_mode:", {run_mode})
-
-    # set defauklt system params
-    ml_logger.set_default('os', system.get_os())
-    ml_logger.set_default('cpus', system.get_cpu_details())
-    ml_logger.set_default('mem', system.get_total_mem())
-    ml_logger.set_default('mode', run_mode)
-
-    gpus = system.get_gpu_summary()
-    if gpus is None:
-        gpus = -1   
-    ml_logger.set_default('gpus', gpus)
-
-    # epoch and run fields are deprecated
-    ml_logger.set_default('epoch', -1)
-    ml_logger.set_default('run', -1)
-
-    representation, optimized = get_representation(args)
-    print("representation:", {representation})
-
-    embeddings = get_embeddings(args)
-    print("embeddings:", {embeddings})
-
-    lm_type = get_language_model_type(args.pretrained)
-    print("lm_type:", {lm_type})
-
-    # check to see if the model has been run before
-    already_computed = ml_logger.already_calculated(
-        dataset=args.dataset,
-        model=args.learner,
-        representation=representation,
-        #embeddings=embeddings
-        )
-
-    print("already_computed:", already_computed)
-
-    return already_computed, vtype, learner, pretrained, embeddings, lm_type, emb_path, args.mix, representation, ml_logger, optimized
-
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-def get_embeddings_path(pretrained, args):
-    
-    if (pretrained == 'bert'):
-        return args.bert_path
-    elif pretrained == 'roberta':
-        return args.roberta_path
-    elif pretrained == 'glove':
-        return args.glove_path
-    elif pretrained == 'word2vec':
-        return args.word2vec_path
-    elif pretrained == 'fasttext':
-        return args.fasttext_path
-    elif pretrained == 'llama':
-        return args.llama_path
-    elif pretrained == 'xlnet':
-        return args.xlnet_path
-    elif pretrained == 'gpt2':
-        return args.gpt2_path
-    else:
-        raise ValueError(f"Unsupported pretrained model '{pretrained}'")
-        
-
 
 def get_embeddings(args):
 
@@ -940,24 +616,6 @@ def get_embeddings(args):
         return args.pretrained + ':' + args.mix
     else:
         return args.mix
-
-
-def get_language_model_type(embeddings):
-
-    if (embeddings in ['glove']):
-        return 'static:word:co-occurrence:global'
-    elif (embeddings in ['word2vec']):
-        return 'static:word:co-occurrence:local'
-    elif (embeddings in ['fasttext']):
-        return 'static:subword:co-occurrence:local'
-    elif (embeddings in ['llama', 'gpt2']):
-        return 'transformer:token:autoregressive:unidirectional:causal'
-    elif (embeddings in ['bert', 'roberta']):
-        return 'transformer:token:autoregressive:bidirectional:masked'
-    elif (embeddings in ['xlnet']):
-        return 'transformer:token:autoregressive:bidirectional:permutated'
-    else:
-        return 'unknown'
     
 
 def get_representation(args):
@@ -1032,6 +690,163 @@ def get_representation(args):
     return method_name, optimized
 
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def initialize_testing(args):
+
+    """
+    Initializes machine learning testing based on the provided arguments.
+
+    Args:
+    - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
+      Expected fields:
+        - learner (str): Type of learner to use ('svm', 'lr', or 'nb').
+        - vtype (str): Vectorization type, either 'count' or 'tfidf'.
+        - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
+        - dataset (str): Name of the dataset.
+        - logfile (str): Path to the log file where results will be stored.
+        - mix (str): Dataset and embedding comparison method.
+        - dataset_emb_comp (str): Dataset embedding comparison method.
+    
+    Returns:
+    - already_computed (bool): Whether the current configuration has already been computed.
+    - vtype (str): Vectorization type ('count' or 'tfidf').
+    - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
+    - pretrained (bool): Whether to use a pretrained model or embeddings.
+    - embeddings (str): Type of embeddings to use.
+    - emb_path (str): Path to the embeddings or pretrained model files.
+    - mix (str): The dataset and embedding comparison method.
+    - representation (str): Type of data representation used for training.
+    - ml_logger (CSVLog): Logger object to store model run details.
+    - optimized (bool): Whether the model is optimized for performance.
+    """
+
+    print("\n\tinitializing ML testing...")
+    
+    print("args:", args)
+
+    # set up model type
+    if args.learner == 'svm':
+        learner = LinearSVC
+        learner_name = 'SVM' 
+    elif args.learner == 'lr':
+        learner = LogisticRegression
+        learner_name = 'LR'
+    elif args.learner == 'nb':
+        learner = MultinomialNB
+        #learner = GaussianNB
+        learner_name = 'NB'
+    else:
+        print("** Unknown learner, possible values are svm, lr or nb **")
+        return
+
+    print("learner:", learner)
+    print("learner_name: ", {learner_name})
+
+    # default to tfidf vectorization type unless 'count' specified explicitly
+    if args.vtype == 'count':
+        vtype = 'count'
+    else:
+        vtype = 'tfidf'             
+        
+    print("vtype:", {vtype})
+
+    pretrained = False
+    embeddings ='none'
+    emb_path = VECTOR_CACHE
+
+    if (args.pretrained):
+        pretrained = True
+
+    # get the path to the embeddings
+    emb_path = get_embeddings_path(args.pretrained, args)
+    print("emb_path: ", {emb_path})
+
+    model_type = f'{learner_name}:{args.vtype}-{args.mix}'
+    print("model_type:", {model_type})
+    
+    print("initializing baseline layered log file...")
+
+    logger = CSVLog(
+        file=args.logfile, 
+        columns=[
+            'os',
+            'cpus',
+            'mem',
+            'gpus',
+            'dataset', 
+            'class_type',
+            'model', 
+            'embeddings',
+            'lm_type',
+            'mode',
+            'comp_method',
+            'representation',
+            'optimized',
+            'dimensions',
+            'measure', 
+            'value',
+            'timelapse',
+            'epoch',
+            'run',
+            ], 
+        verbose=True, 
+        overwrite=False)
+
+    print("setting defaults...")
+    print("embeddings:", embeddings)
+
+    print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
+    
+    #ml_logger.set_default('dataset', args.dataset)
+    #ml_logger.set_default('model', learner_name)                 # method in the log file
+
+    system = SystemResources()
+    print("system:\n", system)
+
+    run_mode = args.dataset + ':' + args.learner + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
+    print("run_mode:", {run_mode})
+
+    representation, optimized = get_representation(args)
+    print("representation:", {representation})
+
+    # set default run time params
+    logger.set_default('os', system.get_os())
+    logger.set_default('cpus', system.get_cpu_details())
+    logger.set_default('mem', system.get_total_mem())
+    logger.set_default('mode', run_mode)
+    logger.set_default('representation', representation)
+
+    gpus = system.get_gpu_summary()
+    if gpus is None:
+        gpus = -1   
+    logger.set_default('gpus', gpus)
+
+    # epoch and run fields are deprecated
+    logger.set_default('epoch', -1)
+    logger.set_default('run', -1)
+
+    embeddings = get_embeddings(args)
+    print("embeddings:", {embeddings})
+
+    lm_type = get_language_model_type(args.pretrained)
+    print("lm_type:", {lm_type})
+
+    # check to see if the model has been run before
+    already_computed = logger.already_calculated(
+        dataset=args.dataset,
+        model=args.learner,
+        representation=representation,
+        #embeddings=embeddings
+        )
+
+    print("already_computed:", already_computed)
+
+    return already_computed, vtype, learner, pretrained, embeddings, lm_type, emb_path, args.mix, representation, logger, optimized
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
 
@@ -1116,7 +931,7 @@ if __name__ == '__main__':
         exit(0)
                 
     # initialize log file and run params
-    already_modelled, vtype, learner, pretrained, embeddings, lm_type, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args)
+    already_modelled, vtype, learner, pretrained, embeddings, lm_type, emb_path, mix, representation, logfile, optimized = initialize_testing(args)
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):

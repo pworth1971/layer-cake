@@ -76,7 +76,7 @@ class CSVLog:
     
     def insert(self, **kwargs):
 
-        #print("CSVLog::insert()")
+        print("CSVLog::insert()")
         #print('--defaults--\n\t', {self.defaults.keys})
         
         # set defaults
@@ -88,10 +88,12 @@ class CSVLog:
         local_columns = sorted(list(kwargs.keys()))
         values = [kwargs[col_i] for col_i in local_columns]
 
-        #print(self.columns)
-        #print(local_columns)
-        #print(values)
-
+        """
+        print(self.columns)
+        print(local_columns)
+        print(values)
+        """
+        
         s = pd.Series(values, index=self.columns)
         self.df = self.df._append(s, ignore_index=True)     
         if self.autoflush: self.flush()

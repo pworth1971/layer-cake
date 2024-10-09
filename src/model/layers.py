@@ -240,6 +240,15 @@ class LSTMprojection(nn.Module):
         return self.hidden_size
 
 
+
+# Setup device prioritizing CUDA, then MPS, then CPU
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+    
 class ATTNprojection(torch.nn.Module):
 
     def __init__(self, embedding_dim, hidden_size):
@@ -257,8 +266,13 @@ class ATTNprojection(torch.nn.Module):
     def forward(self, input):  # input.size() = (batch_size, num_seq, embedding_dim)
         batch_size = input.shape[0]
         input = input.permute(1, 0, 2)
+        """
         h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
         c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
+        """
+        h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).to(device))
+        c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).to(device))
+        
         output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0))
         output = output.permute(1, 0, 2)  # output.size() = (batch_size, num_seq, hidden_size)
         attn_output = self.attention_net(output, final_hidden_state)

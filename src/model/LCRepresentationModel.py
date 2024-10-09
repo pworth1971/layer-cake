@@ -13,21 +13,20 @@ from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel
 from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer
 
 from gensim.models import KeyedVectors
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from gensim.models.fasttext import load_facebook_model
 from gensim.models import FastText
 from gensim.models.fasttext import load_facebook_vectors
+
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
 
 import logging
 
 # Set the logging level for gensim's FastText model to suppress specific warnings
 logging.getLogger('gensim.models.fasttext').setLevel(logging.ERROR)
 
-
 from joblib import Parallel, delayed
 import re
-
-from util.common import VECTOR_CACHE
 
 
 NUM_JOBS = -1           # number of jobs for parallel processing
@@ -38,17 +37,8 @@ DEFAULT_GPU_BATCH_SIZE = 8
 DEFAULT_MPS_BATCH_SIZE = 8
 
 
-# Setup device prioritizing CUDA, then MPS, then CPU
-if torch.cuda.is_available():
-    DEVICE = torch.device("cuda")
-    BATCH_SIZE = DEFAULT_GPU_BATCH_SIZE
-elif torch.backends.mps.is_available():
-    DEVICE = torch.device("mps")
-    BATCH_SIZE = DEFAULT_MPS_BATCH_SIZE
-else:
-    DEVICE = torch.device("cpu")
-    BATCH_SIZE = DEFAULT_CPU_BATCH_SIZE
-
+VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
+PICKLE_DIR = '../pickles/'                          # pickled data directory
 
 
 # -------------------------------------------------------------------------------------------------------
@@ -78,10 +68,24 @@ GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280,
 #XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
 XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
-# -------------------------------------------------------------------------------------------------------
 
+
+# -------------------------------------------------------------------------------------------------------
 MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
 MIN_DF_COUNT = 5                                            # min document frequency for TF-IDF vectorization
+# -------------------------------------------------------------------------------------------------------
+
+# Setup device prioritizing CUDA, then MPS, then CPU
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+    BATCH_SIZE = DEFAULT_GPU_BATCH_SIZE
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device("mps")
+    BATCH_SIZE = DEFAULT_MPS_BATCH_SIZE
+else:
+    DEVICE = torch.device("cpu")
+    BATCH_SIZE = DEFAULT_CPU_BATCH_SIZE
+
 
 #
 # tokens for LLAMA model access, must be requested from huggingface
@@ -199,7 +203,48 @@ class LCRepresentationModel(RepresentationModel, ABC):
     def get_tokenizer(self):
         return self.tokenizer
     
-    
+
+    def show(self):
+        """
+        Display information about the LCRepresentationModel instance, including class type,
+        model details, and vectorizer information.
+        """
+        print("--- LCRepresentationModel Information ---")
+        print(f"Class type: {self.__class__.__name__}")
+        
+        # Display model details
+        if self.model:
+            if hasattr(self.model, 'name'):
+                print(f"Model Name: {self.model.name}")
+            if hasattr(self.model, 'config'):
+                print(f"Model Configuration: {self.model.config}")
+            if hasattr(self.model, 'dim'):
+                print(f"Model Dimension: {self.model.dim}")
+            else:
+                print("Model Information: A model is loaded.")
+        else:
+            print("Model Information: No model loaded.")
+
+        # Display vectorizer details
+        if self.vectorizer:
+            print(f"Vectorizer Type: {self.vectorizer.__class__.__name__}")
+            if hasattr(self.vectorizer, 'min_df'):
+                print(f"Minimum Document Frequency (min_df): {self.vectorizer.min_df}")
+            if hasattr(self.vectorizer, 'sublinear_tf'):
+                print(f"Sublinear TF Scaling: {self.vectorizer.sublinear_tf}")
+            if hasattr(self.vectorizer, 'lowercase'):
+                print(f"Lowercase: {self.vectorizer.lowercase}")
+            if hasattr(self.vectorizer, 'vocabulary_'):
+                print(f"Vocabulary Size: {len(self.vectorizer.vocabulary_)}")
+        else:
+            print("No vectorizer configured.")
+        
+        # Additional information
+        print(f"Device: {self.device}")
+        print(f"Batch Size: {self.batch_size}")
+        print("---------------------------------------")
+
+
     @classmethod
     def reindex(cls, words, word2index):
         
@@ -329,10 +374,19 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         self._unzip_embeddings(dest_zip_file)
 
 
+    def vocabulary(self):
+        # Accessing the vocabulary from the torchtext GloVe model
+        return set(self.model.stoi.keys())
+
+
+    def dim(self):
+        # getting the dimension of the embeddings
+        return self.model.dim
+
+
     def extract(self, words):
 
         print("extracting words from GloVe model...")
-
         print("words:", type(words), len(words))
 
         source_idx, target_idx, oov = LCRepresentationModel.reindex(words, self.model.stoi)
@@ -726,6 +780,27 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
+
+    def vocabulary(self):
+        return set(self.model.wv.key_to_index.keys())
+
+    def dim(self):
+        return self.model.vector_size
+
+    def extract(self, words):
+        print("Extracting words from FastText model...")
+        extraction = np.zeros((len(words), self.dim()))
+
+        for idx, word in enumerate(words):
+            if word in self.model.wv:
+                extraction[idx] = self.model.wv[word]
+            else:
+                # Use subword information for OOV words
+                extraction[idx] = self.model.get_vector(word, norm=True)
+
+        extraction = torch.from_numpy(extraction).float()
+        return extraction
+    
 
     def build_embedding_vocab_matrix(self):
         print("building embedding vocab matrix for Gensim FastText model...")

@@ -7,9 +7,12 @@ from sklearn.metrics import hamming_loss, precision_score, recall_score, jaccard
 
 import numpy as np
 
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from scipy.sparse import issparse
 
 
-def evaluation(y_true, y_pred, classification_type='single-label', debug=False):
+def evaluation_nn(y_true, y_pred, classification_type='single-label', debug=True):
     """
     Evaluates the classification performance based on the true and predicted labels.
     It distinguishes between multilabel and singlelabel classification tasks and computes
@@ -46,7 +49,52 @@ def evaluation(y_true, y_pred, classification_type='single-label', debug=False):
     if classification_type in ['multilabel', 'multi-label']:
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = multilabel_eval(y_true, y_pred, debug=debug)    
     elif classification_type in ['singlelabel', 'single-label']:
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = singlelabel_eval(y_true, y_pred, debug=debug)         
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = singlelabel_eval_nn(y_true, y_pred, debug=debug)         
+    else:
+        print(f'Warning: unknown classification type {classification_type}')
+
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+def evaluation_ml(y_true, y_pred, classification_type='single-label', debug=True):
+    """
+    Evaluates the classification performance based on the true and predicted labels.
+    It distinguishes between multilabel and singlelabel classification tasks and computes
+    appropriate metrics. While scikit-learn provides a full set of evaluation metrics, they 
+    treat special cases differently - i.e., when the number of true positives, false positives, 
+    and false negatives ammount to 0, all affected metrics (precision, recall, and thus f1) output 
+    0 in scikit-learn. Here we adhere to the common practice of outputting 1 in this case since 
+    the classifier has correctly classified all examples as negatives.
+
+    Parameters:
+    - y_true (array-like): True labels.
+    - y_pred (array-like): Predicted labels.
+    - classification_type (str): Specifies 'multilabel' or 'singlelabel'.
+
+    Returns:
+    - Mf1 (float): Macro F1 score.
+    - mf1 (float): Micro F1 score.
+    - accuracy (float): Accuracy score
+    - h_loss (float): Hamming loss
+    - precision (float): Precision
+    - recall (float): Recall
+    - j_index (float): Jacard Index
+    """
+
+    """
+    print("-- util.metrics.evaluation() --")
+    print("y_true:", type(y_true), y_true.shape)
+    print("y_pred:", type(y_pred), y_pred.shape)
+    """
+
+    print("\n\tevaluating...")
+    print("classification_type:", classification_type)
+
+    if classification_type in ['multilabel', 'multi-label']:
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = multilabel_eval(y_true, y_pred, debug=debug)    
+    elif classification_type in ['singlelabel', 'single-label']:
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = singlelabel_eval_ml(y_true, y_pred, debug=debug)         
     else:
         print(f'Warning: unknown classification type {classification_type}')
 
@@ -232,7 +280,65 @@ def multilabel_eval(y, y_, debug=False):
 
 
 
-def singlelabel_eval(y, y_, debug=False):
+
+def singlelabel_eval_nn(y, y_, debug=True):
+    """
+    Evaluates single label classification performance by computing the macro and micro
+    F1 scores and accuracy.
+
+    Parameters:
+    - y (array-like): True single label array.
+    - y_ (array-like): Predicted single label array.
+
+    Returns:
+    - macro_f1 (float): Macro F1 score.
+    - micro_f1 (float): Micro F1 score.
+    - acc (float): Overall accuracy of the model.
+    - h_loss (float): Hamming loss
+    - precision (float): Precision
+    - recall (float): Recall
+    - j_index (float): Jacard Index
+    """
+    
+    print("-- util.metrics.singlelabel_eval() --")
+
+    if (debug):
+        print("y:", type(y), y.shape)
+        print("y:\n", y)
+        print("y_:", type(y_), y_.shape)
+        print("y_:\n", y_)
+
+    # Convert y and y_ to dense format if they are sparse
+    if isinstance(y, pd.Series):
+        y = y.to_numpy()
+    if issparse(y_):
+        y_ = y_.toarray().flatten()
+
+    # Initialize the LabelEncoder and fit it on the ground truth labels
+    label_encoder = LabelEncoder()
+    y = label_encoder.fit_transform(y)
+
+    if (debug):
+        print("y:", type(y), y.shape)
+        print("y:\n", y)
+        print("y_:", type(y_), y_.shape)
+        print("y_:\n", y_)
+
+    macrof1 = f1_score(y, y_, average='macro')
+    microf1 = f1_score(y, y_, average='micro')
+    
+    acc = accuracy_score(y, y_)
+
+    h_loss = hamming_loss(y, y_)
+    precision = precision_score(y, y_, average='macro')
+    recall = recall_score(y, y_, average='macro')
+    j_index = jaccard_score(y, y_, average='macro')
+    
+    return macrof1, microf1, acc, h_loss, precision, recall, j_index
+
+
+
+def singlelabel_eval_ml(y, y_, debug=False):
     """
     Evaluates single label classification performance by computing the macro and micro
     F1 scores and accuracy.
