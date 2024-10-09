@@ -402,7 +402,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     loss_history['train_loss'].append(mean_loss)
 
     #logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
-    logfile.insert(dimnsions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
+    logfile.insert(dimensions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return mean_loss
 
@@ -594,6 +594,11 @@ def initialize_testing(args):
     system = SystemResources()
     print("system:\n", system)
 
+    if (args.dataset in ['bbc-news', '20newsgroups']):
+        logger.set_default('class_type', 'single-label')
+    else:
+        logger.set_default('class_type', 'multi-label')
+        
     # set default system params
     logger.set_default('os', system.get_os())
     logger.set_default('cpus', system.get_cpu_details())
@@ -608,12 +613,11 @@ def initialize_testing(args):
     logger.set_default('dataset', args.dataset)
     logger.set_default('model', args.net)
     logger.set_default('mode', mode)
-    logger.set_default('pretrained', pretrained)
     logger.set_default('embeddings', embeddings)
     logger.set_default('run', args.seed)
-    logger.set_default('tunable', args.tunable)
     logger.set_default('representation', method_name)
-    logger.set_default('class_type', lm_type)
+    logger.set_default('lm_type', lm_type)
+    logger.set_default('optimized', args.tunable)
 
     embedding_type = get_embedding_type(embeddings)
     print("embedding_type:", embedding_type)
@@ -634,7 +638,6 @@ def initialize_testing(args):
         embeddings=embeddings,
         model=args.net, 
         representation=method_name,
-        pretrained=pretrained, 
         tunable=args.tunable,
         wc_supervised=args.supervised,
         run=args.seed
@@ -643,56 +646,6 @@ def initialize_testing(args):
     print("already_modelled:", already_modelled)
 
     return already_modelled, logger, method_name, pretrained, embeddings, emb_path, lm_type, mode, system
-
-    """
-    @classmethod
-    def load_nn(cls, dataset_name, vectorization_type='tfidf', embedding_type='word', base_pickle_path=None):
-
-        print("Dataset::load():", dataset_name, base_pickle_path)
-
-        print("vectorization_type:", vectorization_type)
-        print("embedding_type:", embedding_type)
-
-        # Create a pickle path that includes the vectorization type
-        # NB we assume the /pickles directory exists already
-        if base_pickle_path:
-            full_pickle_path = f"{base_pickle_path}{'/'}{dataset_name}_{vectorization_type}.pkl"
-            pickle_file_name = f"{dataset_name}_{vectorization_type}.pkl"
-        else:
-            full_pickle_path = None
-            pickle_file_name = None
-
-        print("pickle_file_name:", pickle_file_name)
-
-        # not None so we are going to create the pickle file, 
-        # by dataset and vectorization type
-        if full_pickle_path:
-            print("full_pickle_path: ", {full_pickle_path})
-
-            if os.path.exists(full_pickle_path):                                        # pickle file exists, load it
-                print(f'loading pickled dataset from {full_pickle_path}')
-                dataset = pickle.load(open(full_pickle_path, 'rb'))
-            else:                                                                       # pickle file does not exist, create it, load it, and dump it
-                print(f'fetching dataset and dumping it into {full_pickle_path}')
-                dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type, embedding_type=embedding_type)
-
-                print('dumping')
-                #pickle.dump(dataset, open(pickle_path, 'wb', pickle.HIGHEST_PROTOCOL))
-                # Open the file for writing and write the pickle data
-                try:
-                    with open(full_pickle_path, 'wb', pickle.HIGHEST_PROTOCOL) as file:
-                        pickle.dump(dataset, file)
-                    print("data successfully pickled at:", full_pickle_path)
-                except Exception as e:
-                    print(f'\n\t------*** ERROR: Exception raised, failed to pickle data: {e} ***------')
-
-        else:
-            print(f'loading dataset {dataset_name}')
-            dataset = LCDataset(name=dataset_name, vectorization_type=vectorization_type, embedding_type=embedding_type)
-
-        return dataset
-
-    """
     
 
 # --------------------------------------------------------------------------------------------------------------------------------------
@@ -920,53 +873,6 @@ if __name__ == '__main__':
         # Load the dataset and the associated (pretrained) embedding structures
         # to be fed into the model
         #                                                          
-        """
-        Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
-            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, \
-                Xte_summary_embeddings = loadpt_data(
-                                                dataset=opt.dataset,                            # Dataset name
-                                                vtype=opt.vtype,                                # Vectorization type
-                                                pretrained=opt.pretrained,                      # pretrained embeddings type
-                                                embedding_path=emb_path,                        # path to pretrained embeddings
-                                                emb_type=embedding_type                         # embedding type (word or token)
-                                                )                                                
-    
-        #print("Xtr_raw:", type(Xtr_raw), Xtr_raw.shape)
-        #print("Xte_raw:", type(Xte_raw), Xte_raw.shape)
-
-        print("Xtr_vectorized:", type(Xtr_vectorized), Xtr_vectorized.shape)
-        print("Xte_vectorized:", type(Xte_vectorized), Xte_vectorized.shape)
-
-        print("y_train_sparse:", type(y_train_sparse), y_train_sparse.shape)
-        print("y_test_sparse:", type(y_test_sparse), y_test_sparse.shape)
-        
-        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
-
-        print("Xtr_weighted_embeddings:", type(Xtr_weighted_embeddings), Xtr_weighted_embeddings.shape)
-        print("Xte_weighted_embeddings:", type(Xte_weighted_embeddings), Xte_weighted_embeddings.shape)
-        
-        print("Xtr_avg_embeddings:", type(Xtr_avg_embeddings), Xtr_avg_embeddings.shape)
-        print("Xte_avg_embeddings:", type(Xte_avg_embeddings), Xte_avg_embeddings.shape)
-        
-        print("Xtr_summary_embeddings:", type(Xtr_summary_embeddings), Xtr_summary_embeddings.shape)
-        print("Xte_summary_embeddings:", type(Xte_summary_embeddings), Xte_summary_embeddings.shape)
-
-        if class_type in ['multilabel', 'multi-label']:
-
-            print("multi-label case, expanding (todense) y...")
-
-            if isinstance(y_train_sparse, (csr_matrix, csc_matrix)):
-                y_train = y_train_sparse.toarray()                      # Convert sparse matrix to dense array for multi-label tasks
-            if isinstance(y_test_sparse, (csr_matrix, csc_matrix)):
-                y_test = y_test_sparse.toarray()                        # Convert sparse matrix to dense array for multi-label tasks
-            
-            print("y_train after transformation:", type(y_train), y_train.shape)
-            print("y_test after transformation:", type(y_test), y_test.shape)
-        else:
-            y_train = y_train_sparse
-            y_test = y_test_sparse
-        """
-
         lcd = loadpt_data(
             dataset=opt.dataset,                            # Dataset name
             vtype=opt.vtype,                                # Vectorization type

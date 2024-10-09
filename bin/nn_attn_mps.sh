@@ -30,11 +30,12 @@ PY="python ../src/layer_cake.py"                                    # source fil
 LOG="--log-file ../log/nn_attn_mps.test"                       # output log file for metrics
 
 # dataset config
-#ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20_newsgroups (single label, 20 classes)
+#ng_dataset="--dataset 20newsgroups --pickle-dir ../pickles"                     # 20newsgroups (single label, 20 classes)
 #ohm_dataset="--dataset ohsumed --pickle-dir ../pickles"                         # ohsumed (multi-label, 23 classes)
 #reut_dataset="--dataset reuters21578 --pickle-dir ../pickles"                   # reuters21578 (multi-label, 115 classes)
 #rcv_dataset="--dataset rcv1 --pickle-dir ../pickles"                            # RCV1-v2 (multi-label, 101 classes)
- 
+#bbc_news_dataset="--dataset bbc-news --pickle-dir ../pickles"                   # bbc-news (single label, 5 classes)
+
 dataset="--dataset bbc-news --pickle-dir ../pickles"                        
 # -----------------------------------------------------------------------------------------------------------------------------------------
 

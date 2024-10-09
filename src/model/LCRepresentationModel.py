@@ -534,7 +534,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
             print(f"Embedding file {self.path_to_embeddings} not found. Downloading...")
             self._download_embeddings(model_name, model_dir)
 
-        self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=False)    
+        self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=True)    
         
         self.word2index = {w: i for i,w in enumerate(self.model.index_to_key)}
 
