@@ -522,7 +522,7 @@ def set_method_name(opt):
 
 def initialize_testing(args):
 
-    print("initializing...")
+    print("\n\tinitializing...")
 
     print("args:", args)
 
@@ -577,7 +577,7 @@ def initialize_testing(args):
     embeddings = args.pretrained
     print("embeddings:", {embeddings})
 
-    lm_type = get_language_model_type(args.pretrained)
+    lm_type = get_language_model_type(embeddings)
     print("lm_type:", {lm_type})
 
     if (args.supervised):
@@ -588,7 +588,7 @@ def initialize_testing(args):
         mode = 'unsupervised'
 
     # get the path to the embeddings
-    emb_path = get_embeddings_path(args.pretrained, args)
+    emb_path = get_embeddings_path(embeddings, args)
     print("emb_path: ", {emb_path})
 
     system = SystemResources()
@@ -615,12 +615,17 @@ def initialize_testing(args):
     logger.set_default('representation', method_name)
     logger.set_default('class_type', lm_type)
 
-    embedding_type = get_embedding_type(args.pretrained)
+    embedding_type = get_embedding_type(embeddings)
     print("embedding_type:", embedding_type)
 
-    comp_method = get_model_computation_method(pretrained=args.pretrained, embedding_type=embedding_type, learner=args.net, mix=None)
+    comp_method = get_model_computation_method(
+        vtype=args.vtype,
+        pretrained=embeddings, 
+        embedding_type=embedding_type, 
+        learner=args.net, 
+        mix=None
+        )
     print("comp_method:", comp_method)
-
     logger.set_default('comp_method', comp_method)
 
     # check to see if the model has been run before
@@ -973,18 +978,15 @@ if __name__ == '__main__':
         print("loaded LCDataset object:", type(lcd))
         print("lcd:", lcd.show())
 
-        lc_rep = lcd.lcr_model
-        lc_rep.show()
-
-        pretrained_vectors = lcd.lcr_model.vocabulary()
-        print("pretrained_vectors:", type(pretrained_vectors), len(pretrained_vectors))
+        pretrained_vectors = lcd.lcr_model
+        pretrained_vectors.show()
 
         """
         #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
         #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
         """
 
-        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, lc_rep)
+        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
         layer_cake(
             opt, 
@@ -997,8 +999,6 @@ if __name__ == '__main__':
             pad_index, 
             devel_index, 
             test_index)
-        
-        
 
     else: 
 

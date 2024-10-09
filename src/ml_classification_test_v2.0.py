@@ -591,7 +591,13 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     dims = X_train.shape[1]
     print("# dimensions:", dims)
 
-    comp_method = get_model_computation_method(pretrained=args.pretrained, embedding_type=embedding_type, learner=args.learner, mix=args.mix)
+    comp_method = get_model_computation_method(
+        vtype=vtype,
+        pretrained=args.pretrained, 
+        embedding_type=embedding_type, 
+        learner=args.learner, 
+        mix=args.mix
+    )
     print("comp_method:", comp_method)
 
     logfile.insert(dataset=args.dataset, class_type=class_type, model=args.learner, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-F1', value=Mf1, timelapse=tend)

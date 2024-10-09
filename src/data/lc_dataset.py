@@ -222,6 +222,9 @@ class LCDataset:
         self.nC = self.num_labels
         print("nC:", self.nC)
 
+        self.type = self.lcr_model.type
+        print("type:", self.type)
+        
         self.loaded = True
         self.initialized = True
 
@@ -968,6 +971,7 @@ class LCDataset:
             'classification_type': self.classification_type,
             'vectorization_type': self.vectorization_type,
             'nC': self.nC,
+            'type': self.type,
             'pretrained': self.pretrained,
             'embedding_type': self.embedding_type,
             'embedding_path': self.embedding_path,
@@ -1028,6 +1032,7 @@ class LCDataset:
             lcd.classification_type = data_loaded['classification_type']
             lcd.vectorization_type = data_loaded['vectorization_type']
             lcd.nC = data_loaded['nC']
+            lcd.type = data_loaded['type']
             lcd.pretrained = data_loaded['pretrained']
             lcd.embedding_type = data_loaded['embedding_type']
             lcd.embedding_path = data_loaded['embedding_path']
@@ -1265,8 +1270,7 @@ class LCDataset:
 
 def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg'):
 
-    print("loadpt_data_v2():", dataset, PICKLE_DIR)
-    print("pretrained:", pretrained)
+    print(f'\n\tloading dataset:{dataset} with embedding:{pretrained} data...')
     
     # Determine the model name based on the pretrained option
     model_name = {
@@ -1314,104 +1318,6 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         lcd.save(pickle_file)
 
         return lcd
-
-
-
-
-
-def loadpt_data_deprecated(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg'):
-
-    print("loadpt_data():", dataset, PICKLE_DIR)
-
-    print("pretrained:", pretrained)
-    
-    #
-    # load the dataset using appropriate tokenization method as dictated by pretrained embeddings
-    #
-    if (pretrained == 'glove'):
-        model_name = GLOVE_MODEL
-    elif(pretrained == 'word2vec'):
-        model_name = WORD2VEC_MODEL
-    elif(pretrained == 'fasttext'):
-        model_name = FASTTEXT_MODEL
-    elif(pretrained == 'bert'):
-        model_name = BERT_MODEL
-    elif (pretrained == 'roberta'):
-        model_name = ROBERTA_MODEL
-    elif (pretrained == 'gpt2'):
-        model_name = GPT2_MODEL
-    elif (pretrained == 'xlnet'):
-        model_name = XLNET_MODEL
-    else:
-        print("Warning: pretrained model not recognized, defaulting to glove")
-        model_name = 'glove'                # default to glove
-        
-    print("model_name:", model_name)
-    
-    pickle_file_name=f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'
-    
-    # remove '/' from the file name
-    pickle_file_name = pickle_file_name.replace("/", "_")               # Replace forward slash with an underscore
-
-    pickle_file = PICKLE_DIR + pickle_file_name                                     
-    print("pickle_file:", pickle_file)
-
-    #
-    # we pick up the vectorized dataset along with the associated pretrained 
-    # embedding matrices when e load the data - either from data files directly
-    # if the first time parsing the dataset or from the pickled file if it exists
-    # and the data has been cached for faster loading
-    #
-    if os.path.exists(pickle_file):                                                 # if the pickle file exists
-        
-        print(f"Loading tokenized data from '{pickle_file}'...")
-        
-        Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
-            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings = load_from_pickle(pickle_file)
-
-        return Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train_sparse, y_test_sparse, target_names, class_type, embedding_vocab_matrix, Xtr_weighted_embeddings, \
-            Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings
-
-    else:
-        print(f"'{pickle_file}' not found, loading {dataset}...")
-        
-        lcd = LCDataset(
-            name=dataset,                               # dataset name 
-            vectorization_type=vtype,                   # vectorization type (one of 'tfidf', 'count')
-            embedding_type=emb_type,                    # embedding type (one of 'word', 'token')
-            pretrained=pretrained,                      # pretrained embeddings (model type or None)
-            embedding_path=embedding_path,              # path to embeddings
-            embedding_comp_type=embedding_comp_type     # embedding computation type (one of 'avg', 'weighted', 'summary')
-        )    
-
-        lcd.vectorize()                             # vectorize the dataset
-
-        lcd.init_embedding_matrices()               # initialize the embedding matrices
-
-        # Save the tokenized matrices to a pickle file
-        save_to_pickle(
-            lcd.Xtr,                                    # raw training data (not vectorized)
-            lcd.Xte,                                    # raw test data (not vectorized)
-            lcd.Xtr_vectorized,                         # vectorized training data
-            lcd.Xte_vectorized,                         # vectorized test data
-            lcd.y_train_sparse,                         # training data labels
-            lcd.y_test_sparse,                          # test data labels
-            lcd.target_names,                           # target names
-            lcd.class_type,                             # class type (single-label or multi-label):
-            lcd.embedding_vocab_matrix,                 # vector representation of the dataset vocabulary
-            lcd.Xtr_weighted_embeddings,                # weighted avg embedding representation of dataset training data
-            lcd.Xte_weighted_embeddings,                # weighted avg embedding representation of dataset test data
-            lcd.Xtr_avg_embeddings,                     # avg embedding representation of dataset training data
-            lcd.Xte_avg_embeddings,                     # avg embedding representation of dataset test data
-            lcd.Xtr_summary_embeddings,                 # summary embedding representation of dataset training data
-            lcd.Xte_summary_embeddings,                 # summary embedding representation of dataset test data
-            pickle_file)         
-
-        return lcd.Xtr, lcd.Xte, lcd.Xtr_vectorized, lcd.Xte_vectorized, lcd.y_train_sparse, lcd.y_test_sparse, lcd.target_names, lcd.class_type, lcd.embedding_vocab_matrix, \
-            lcd.Xtr_weighted_embeddings, lcd.Xte_weighted_embeddings, lcd.Xtr_avg_embeddings, lcd.Xte_avg_embeddings, lcd.Xtr_summary_embeddings, lcd.Xte_summary_embeddings
-
-
-
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------------

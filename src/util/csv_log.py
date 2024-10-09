@@ -76,7 +76,7 @@ class CSVLog:
     
     def insert(self, **kwargs):
 
-        print("CSVLog::insert()")
+        #print("CSVLog::insert()")
         #print('--defaults--\n\t', {self.defaults.keys})
         
         # set defaults

@@ -12,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.sparse import issparse
 
 
-def evaluation_nn(y_true, y_pred, classification_type='single-label', debug=True):
+def evaluation_nn(y_true, y_pred, classification_type='single-label', debug=False):
     """
     Evaluates the classification performance based on the true and predicted labels.
     It distinguishes between multilabel and singlelabel classification tasks and computes

@@ -202,7 +202,6 @@ class LCRepresentationModel(RepresentationModel, ABC):
     
     def get_tokenizer(self):
         return self.tokenizer
-    
 
     def show(self):
         """
@@ -321,8 +320,9 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
-        # Get embedding size (dimensionality)
+        self.type = 'glove'
 
+        # Get embedding size (dimensionality)
         self.embedding_dim = self.model.dim
         print(f"self.embedding_dim: {self.embedding_dim}")
         
@@ -345,7 +345,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-
+    
     def _download_embeddings(self, model_name, model_dir):
         """
         Download pre-trained GloVe embeddings from a URL and save them to the specified path.
@@ -541,6 +541,8 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
+        self.type = 'word2vec'
+
         # Get embedding size (dimensionality)
         self.embedding_dim = self.model.vector_size
         print(f"self.embedding_dim: {self.embedding_dim}")
@@ -564,7 +566,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-
+    
     def _download_embeddings(self, model_name, model_dir):
         """
         Download pre-trained embeddings (Word2Vec or GloVe) from a URL and save them to the specified path.
@@ -755,6 +757,8 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
 
+        self.type = 'fasttext'
+
         # Get embedding size (dimensionality) using get_dimension()
         self.embedding_dim = self.model.vector_size
         print(f"Embedding dimension: {self.embedding_dim}")
@@ -780,7 +784,7 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-
+    
     def vocabulary(self):
         return set(self.model.wv.key_to_index.keys())
 
@@ -1121,6 +1125,8 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
 
         # NB BertTokenizerFast has a pad_token
             
+        self.type = 'bert'
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
@@ -1140,7 +1146,6 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
         
         self.model.to(self.device)      # put the model on the appropriate device
     
-
 
 class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
     """
@@ -1161,6 +1166,8 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
 
         # NB RoBERTaTokenizerFast has a pad_token
 
+        self.type = 'roberta'
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
@@ -1179,7 +1186,6 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
-
 
 
 
@@ -1209,6 +1215,8 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         else:
             raise ValueError("Invalid XLNet model. Must be in [xlnet-base-cased, xlnet-large-cased].")
             
+        self.type = 'xlnet'
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
@@ -1322,7 +1330,6 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         return self.embedding_vocab_matrix
     
 
-
     def encode_docs(self, text_list, embedding_vocab_matrix=None):
         """
         Encode documents using XLNet and extract token embeddings.
@@ -1385,6 +1392,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         self.max_length = self.tokenizer.model_max_length
         print("self.max_length:", self.max_length)
 
+        self.type = 'gpt2'
+
         # Use the custom tokenizer for both TF-IDF and CountVectorizer
         if vtype == 'tfidf':
             self.vectorizer = TfidfVectorizer(
@@ -1428,7 +1437,7 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         tokens = self.tokenizer.convert_ids_to_tokens(tokens)
 
         return tokens
-
+        
 
     def build_embedding_vocab_matrix(self):
         """

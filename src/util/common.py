@@ -27,22 +27,20 @@ from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 
 
-NEURAL_MODELS = ['nn-cnn', 'nn-lstm', 'nn-attn']
+NEURAL_MODELS = ['cnn', 'lstm', 'attn']
 ML_MODELS = ['svm', 'lr', 'nb']
 
 #SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'llama', 'xlnet', 'gpt2']
 #SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'gpt2']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'gpt2']
-
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'gpt2', 'llama']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'llama', 'gpt2']
 
 
 OUT_DIR = '../out/'                                 # output directory
 
-
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'gpt2', 'xlnet']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'gpt2', 'xlnet', 'llama']
 
 
 
@@ -356,44 +354,49 @@ def get_sysinfo(debug=False):
     return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
 
 
-def get_model_computation_method(pretrained, embedding_type, learner, mix):
+def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type='word', learner='???', mix=None):
 
     print("calculating model computation method...")
-    print("embedding_type:", embedding_type)
+
+    print(f'vtype: {vtype}, pretrained: {pretrained}, embedding_type: {embedding_type}, learner: {learner}, mix: {mix}')
+
+    pt_type = 'pretrained:'
 
     if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
-        pt_type = 'attention:tokenized'
+        pt_type += 'attention:tokenized'
+
     elif (pretrained in ['glove', 'word2vec']):
-        pt_type = 'co-occurrence:word'
+        pt_type += 'co-occurrence:word'
+    
     elif (pretrained in ['fasttext']):
-        pt_type = 'co-occurrence:subword'
+        pt_type += 'co-occurrence:subword'
     else:
         pt_type = 'None'
-        
-    if pretrained == 'fasttext':
-        embedding_type = 'subword'
-        
-    pt_type = f'{embedding_type}:{pt_type}'
-
+                
     if (learner in ML_MODELS): 
 
         if mix in ['solo', 'solo-wce']:
-            return pt_type
+            type_type = f'{pt_type}[{mix}]'
             
         elif mix == 'vmode':
-            return f'frequency:{args.vtype}'
+            type_type = f'frequency:{vtype}'
 
         elif mix in ['cat-doc', 'cat-wce', 'cat-doc-wce']:
-            return f'frequency:{args.vtype}+{pt_type}'
+            type_type = f'frequency:{vtype}+{pt_type}'
 
         elif mix in ['dot', 'dot-wce']:
-            return f'frequency:{args.vtype}.{pt_type}'
+            type_type = f'frequency:{vtype}.{pt_type}'
 
         elif mix in ['lsa', 'lsa-wce']:
-            return f'frequency:{args.vtype}->SVD'
+            type_type = f'frequency:{vtype}->SVD'
+
+        else:
+            raise ValueError(f'Unknown mix type: {mix} for learner: {learner}')
        
+        return type_type
+    
     elif (learner in NEURAL_MODELS):
-        pass
+        return pt_type
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
