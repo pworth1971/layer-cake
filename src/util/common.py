@@ -30,8 +30,6 @@ from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 NEURAL_MODELS = ['cnn', 'lstm', 'attn']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-#SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'llama', 'xlnet', 'gpt2']
-#SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']
 
 SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'gpt2', 'llama']
 SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'llama', 'gpt2']
@@ -171,48 +169,34 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
     return word_list
 
 
-from sklearn.preprocessing import LabelEncoder
-
-# Assuming this is defined globally or passed to the function
-label_encoder = LabelEncoder()
-
-
-def encode_labels(labels):
-    # Fit and transform labels using the encoder if it's not already fitted
-    return label_encoder.transform(labels)
 
 def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
     
     print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
     
+    #print("labels:", type(labels), labels.shape)
+
     nsamples = len(index_list)
     nbatches = nsamples // batchsize + 1*(nsamples%batchsize>0)
     
-    print(f'nsamples: {nsamples}, nbatches: {nbatches}')
-
-    # Fit the LabelEncoder once on the entire labels if not already fitted
-    if not hasattr(label_encoder, 'classes_'):
-        label_encoder.fit(labels)
-        print("Label classes:", label_encoder.classes_)
+    #print(f'nsamples: {nsamples}, nbatches: {nbatches}')
     
     for b in range(nbatches):
+        #print(f'processing batch {b}...')
+
         batch = index_list[b*batchsize:(b+1)*batchsize]
         batch_labels = labels[b*batchsize:(b+1)*batchsize]
 
-        #print("batch_labels:", type(batch_labels), batch_labels.shape)
+        #print("batch_labels pre conversion:", type(batch_labels), batch_labels.shape)
 
         # Check batch_labels object type and convert as necessary
         if isinstance(batch_labels, pd.Series):
-            batch_labels = batch_labels.to_numpy()  
+            batch_labels = batch_labels.astype(float)
         elif issparse(batch_labels):
-            batch_labels = batch_labels.toarray()
+            batch_labels = batch_labels.astype(float)
         
-        #print("batch_labels:", type(batch_labels), batch_labels.shape)
+        #print("batch_labels post conversion:", type(batch_labels), batch_labels.shape)
         #print("batch_labels:", batch_labels)
-
-        # Encode the labels to numerical values
-        batch_labels = encode_labels(batch_labels)
-        #print("batch_labels (after encoding):", batch_labels)
 
         batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
         batch = torch.LongTensor(batch)

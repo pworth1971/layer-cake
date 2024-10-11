@@ -23,6 +23,7 @@ from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -224,7 +225,7 @@ class LCDataset:
 
         self.type = self.lcr_model.type
         print("type:", self.type)
-        
+
         self.loaded = True
         self.initialized = True
 
@@ -525,27 +526,30 @@ class LCDataset:
         #
         # inspect the raw text
         #
+        print("\t--- unprocessed text ---")
         print("self.X_train_raw:", type(self.X_train_raw), self.X_train_raw.shape)
         print("self.X_train_raw[0]:\n", self.X_train_raw[0])
 
         print("self.X_test_raw:", type(self.X_test_raw), self.X_test_raw.shape)
         print("self.X_test_raw[0]:\n", self.X_test_raw[0])
 
-        #print("preprocessing raw text...")
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = self._preprocess(pd.Series(self.X_train_raw), remove_punctuation=True)
+            self.Xte = self._preprocess(pd.Series(self.X_test_raw), remove_punctuation=True)
+        else:
+            self.Xtr = self._preprocess(pd.Series(self.X_train_raw), remove_punctuation=False)
+            self.Xte = self._preprocess(pd.Series(self.X_test_raw), remove_punctuation=False)
 
-        """
-        self.Xtr = self._preprocess(self.X_train_raw)
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
-
-        self.Xte = self._preprocess(self.X_test_raw)
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.X_train_raw), _mask_numbers(self.X_test_raw)
+        print("\t--- preprocessed text ---")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xtr[0]:\n", self.Xtr[0])
+        
         print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -563,8 +567,14 @@ class LCDataset:
             self.devel_target_formatted, self.test_target_formatted
         )
 
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("self.labels:\n", self.labels)
+
         self.target_names = train_set['Category'].unique()       
-        self.label_names = self.target_names           # set self.labels to the class label names        
+        self.label_names = self.target_names           # set self.labels to the class label names   
+        print("self.label_names:\n", self.label_names)
+
         self.labels = self.label_names
         self.num_label_names = len(self.label_names)
         self.num_labels = self.num_label_names
@@ -573,15 +583,29 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
-        #
-        # NB label encoding is done prior to feeding data into the model
-        #
-
         self.y_train_sparse = self.devel_labelmatrix
         self.y_test_sparse = self.test_labelmatrix
-
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+
+        # encode the one-hot encoded label array into a 1d array with label
+        # Assuming self.y_train_sparse is a sparse matrix with one-hot encoding
+        y_train_dense = self.y_train_sparse.toarray()
+        y_test_dense = self.y_test_sparse.toarray()
+
+        # Convert the one-hot encoded rows to class indices (assuming single-label per row)
+        y_train_flat = np.argmax(y_train_dense, axis=1)
+        y_test_flat = np.argmax(y_test_dense, axis=1)
+
+        # Apply LabelEncoder to the flattened 1D array
+        label_encoder = LabelEncoder()
+        self.ytr_encoded = label_encoder.fit_transform(y_train_flat)
+        self.yte_encoded = label_encoder.transform(y_test_flat)
+
+        #print("label_encoder.classes_:", label_encoder.classes_)
+
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
 
         return self.target_names
 
@@ -601,29 +625,30 @@ class LCDataset:
         #
         # inspect the raw text
         #
+        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        #print("preprocessing raw text...")
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
+        else:
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
 
-        """
-        # training data
-        self.Xtr = self._preprocess(pd.Series(self.devel.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("\t--- preprocessed text ---")
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
         
-        # test data
-        self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
-        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -650,17 +675,32 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
-        #
-        # NB label encoding is done just before data is fed into the model
-        # 
         self.y_train_sparse = self.devel_labelmatrix
         self.y_test_sparse = self.test_labelmatrix
 
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
 
-        return self.target_names
+        # encode the one-hot encoded label array into a 1d array with label
+        # Assuming self.y_train_sparse is a sparse matrix with one-hot encoding
+        y_train_dense = self.y_train_sparse.toarray()
+        y_test_dense = self.y_test_sparse.toarray()
 
+        # Convert the one-hot encoded rows to class indices (assuming single-label per row)
+        y_train_flat = np.argmax(y_train_dense, axis=1)
+        y_test_flat = np.argmax(y_test_dense, axis=1)
+
+        # Apply LabelEncoder to the flattened 1D array
+        label_encoder = LabelEncoder()
+        self.ytr_encoded = label_encoder.fit_transform(y_train_flat)
+        self.yte_encoded = label_encoder.transform(y_test_flat)
+
+        #print("label_encoder.classes_:", label_encoder.classes_)
+
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
+
+        return self.target_names
 
 
     def _load_reuters(self):
@@ -680,29 +720,30 @@ class LCDataset:
         #
         # inspect the raw text
         #
+        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        #print("preprocessing raw text...")
-        
-        """
-        # training data
-        self.Xtr = self._preprocess(pd.Series(self.devel.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
+        else:
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
+
+        print("\t--- preprocessed text ---")
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
         
-        # test data
-        self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
-        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
         
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -772,29 +813,30 @@ class LCDataset:
         #
         # inspect the raw text
         #
+        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        #print("preprocessing raw text...")
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
+        else:
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
 
-        """
-        # training data
-        self.Xtr = self._preprocess(pd.Series(self.devel.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
+        print("\t--- preprocessed text ---")
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
         
-        # test data
-        self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
-        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -882,29 +924,30 @@ class LCDataset:
         #
         # inspect the raw text
         #
+        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
         print("self.devel.data[0]:\n", self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
         print("self.test.data[0]:\n", self.test.data[0])
 
-        #print("preprocessing raw text...")
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
+        else:
+            self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
+            self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
 
-        """
-        # training data
-        self.Xtr = self._preprocess(pd.Series(self.devel.data))
-        print("self.Xtr:", type(self.Xtr), self.Xtr.shape)
-        print("self.Xtr[0]:\n", self.Xtr[0])
-
-        # test data
-        self.Xte = self._preprocess(pd.Series(self.test.data))
-        print("self.Xte:", type(self.Xte), self.Xte.shape)
-        print("self.Xte[0]:\n", self.Xte[0])
-        """
-
-        self.Xtr, self.Xte = _mask_numbers(self.devel.data), _mask_numbers(self.test.data)
+        print("\t--- preprocessed text ---")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xtr[0]:\n", self.Xtr[0])
+        
         print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
@@ -989,6 +1032,8 @@ class LCDataset:
             'Xte_vectorized': self.Xte_vectorized,
             'y_train_sparse': self.y_train_sparse,
             'y_test_sparse': self.y_test_sparse,
+            'ytr_encoded': self.ytr_encoded,
+            'yte_encoded': self.yte_encoded,
             'target_names': self.target_names,
             'class_type': self.class_type,
             'vocabulary': self.vocabulary,
@@ -1050,6 +1095,8 @@ class LCDataset:
             lcd.Xte_vectorized = data_loaded['Xte_vectorized']
             lcd.y_train_sparse = data_loaded['y_train_sparse']
             lcd.y_test_sparse = data_loaded['y_test_sparse']
+            lcd.ytr_encoded = data_loaded['ytr_encoded']
+            lcd.yte_encoded = data_loaded['yte_encoded']
             lcd.target_names = data_loaded['target_names']
             lcd.class_type = data_loaded['class_type']
             lcd.vocabulary = data_loaded['vocabulary']
@@ -1137,7 +1184,47 @@ class LCDataset:
         return texts
 
 
-    def _preprocess(self, text_series: pd.Series):
+    def _preprocess(self, text_series: pd.Series, remove_punctuation=True):
+        """
+        Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
+        We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
+
+        Parameters:
+        - text_series: A pandas Series containing text data (strings).
+
+        Returns:
+        - processed_texts: A NumPy array containing processed text strings.
+        """
+
+        print("_preprocessing...")
+        print("text_series:", type(text_series), text_series.shape)
+
+        # Load stop words once outside the loop
+        stop_words = set(stopwords.words('english'))
+        punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+        # Function to process each text (masking numbers, removing punctuation, and stopwords)
+        def process_text(text):
+
+            # Remove punctuation
+            if (remove_punctuation):
+                text = text.translate(punctuation_table)
+
+            # Remove stopwords without tokenizing or lowercasing
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+            # Ensure extra spaces are removed after stopwords are deleted
+            return ' '.join(text.split())
+
+        # Use Parallel processing with multiple cores
+        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+        # Return as NumPy array
+        return np.array(processed_texts)
+    
+
+    def _preprocess_deprecated(self, text_series: pd.Series):
         """
         Preprocess a pandas Series of texts by removing punctuation, stopwords, and masking numbers.
         We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.

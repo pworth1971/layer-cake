@@ -534,8 +534,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
     analyze the model performance results, print summary either to sdout or file
     """
 
-
-    print("generating summary...")
+    print(f'generating summary to {output_path}...")
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):

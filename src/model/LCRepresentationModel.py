@@ -415,7 +415,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
         Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
-        
+
         Args:
         - texts: List of input documents (as raw text).
         - embedding_vocab_matrix: Matrix of pre-trained word embeddings (e.g., Word2Vec, GloVe).
@@ -434,13 +434,9 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         weighted_document_embeddings = []
         avg_document_embeddings = []
         
-        # Calculate the mean embedding for OOV tokens
-        #self.mean_embedding = torch.mean(self.model.vectors, dim=0).numpy()
-        
-        # Compute the mean embedding for OOV tokens across the entire embedding matrix
-        # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
-        self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
-        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+        # Calculate the mean embedding from the embedding vocab matrix
+        mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
+        print(f"Mean embedding vector calculated: {mean_embedding.shape}")
 
         oov_tokens = 0
 
@@ -463,8 +459,8 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
                     # Check lowercase version if not found
                     embedding = self.model.vectors[self.model.stoi[token.lower()]].numpy()
                 else:
-                    # Handle OOV tokens by using the mean embedding
-                    embedding = self.mean_embedding
+                    # Handle OOV tokens by using the mean embedding from embedding_vocab_matrix
+                    embedding = mean_embedding
                     oov_tokens += 1
 
                 # Get the token's TF-IDF weight
@@ -480,18 +476,13 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
             if total_weight > 0:
                 weighted_doc_embedding = weighted_sum / total_weight
             else:
-                #weighted_doc_embedding = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-                weighted_doc_embedding = self.mean_embedding  # Handle empty or OOV cases
-
-            # Compute the average embedding for the document
-            #avg_doc_embedding = np.mean(valid_embeddings, axis=0) if valid_embeddings else np.zeros(embedding_vocab_matrix.shape[1])
+                weighted_doc_embedding = mean_embedding  # Use mean embedding for empty or OOV cases
 
             # Compute the average embedding for the document
             if valid_embeddings:
                 avg_document_embedding = np.mean(valid_embeddings, axis=0)
             else:
-                #avg_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-                avg_document_embedding = self.mean_embedding  # Handle empty or OOV cases
+                avg_document_embedding = mean_embedding  # Use mean embedding for empty or OOV cases
             
             weighted_document_embeddings.append(weighted_doc_embedding)
             avg_document_embeddings.append(avg_document_embedding)
@@ -505,6 +496,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
         print("oov_tokens:", oov_tokens)
 
         return weighted_document_embeddings, avg_document_embeddings
+
 
 
 
@@ -622,11 +614,10 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix
     
 
-
     def encode_docs(self, texts, embedding_vocab_matrix):
         """
         Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
-        
+
         Args:
         - texts: List of input documents (as raw text).
         - embedding_vocab_matrix: Matrix of pre-trained word embeddings (e.g., Word2Vec, GloVe).
@@ -635,22 +626,18 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
         - avg_document_embeddings: Numpy array of average document embeddings for each document.
         """
-        
-        print(f"encoding docs using Word2Vec embeddings...")
-        
+
+        print(f"encoding docs using embeddings...")
+
         print("texts:", type(texts), len(texts))
         print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
 
         weighted_document_embeddings = []
         avg_document_embeddings = []
 
-        unk_token_id = self.vectorizer.vocabulary_.get('<unk>', None)  # Check for the existence of an UNK token
-        print("unk_token_id:", unk_token_id)
-        
-        # Compute the mean embedding for OOV tokens across the entire embedding matrix
-        # NB self.embedding_vocab_matrix is computed in build_embedding_vocab_matrix
+        # Compute the mean embedding for the entire embedding matrix as a fallback for OOV tokens
         self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
-        #print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
 
         oov_tokens = 0
 
@@ -666,41 +653,42 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
             valid_embeddings = []    
 
             for token in tokens:
-                # Get the token's index in the vocabulary
+                # Get the token's index in the vocabulary (case-sensitive lookup first)
                 token_id = self.vectorizer.vocabulary_.get(token, None)
+
+                # If the token is not found, try the lowercase version
+                if token_id is None:
+                    token_id = self.vectorizer.vocabulary_.get(token.lower(), None)
 
                 if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
                     # Get the embedding for the token from the embedding matrix
                     embedding = embedding_vocab_matrix[token_id]
                     # Get the TF-IDF weight for the token
                     weight = tfidf_vector[token_id]
-                    
+
                     # Accumulate the weighted embedding
                     weighted_sum += embedding * weight
                     total_weight += weight
-                elif unk_token_id is not None:
-                    # Fallback to <unk> embedding if available
-                    embedding = embedding_vocab_matrix[unk_token_id]
+                    valid_embeddings.append(embedding)
                 else:
                     # Use the mean embedding for OOV tokens
                     embedding = self.mean_embedding
                     oov_tokens += 1
+                    valid_embeddings.append(embedding)
 
-                valid_embeddings.append(embedding)
-                    
             # Compute the weighted embedding for the document
             if total_weight > 0:
                 weighted_document_embedding = weighted_sum / total_weight
             else:
-                #weighted_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-                weighted_document_embedding = self.mean_embedding  # Handle empty or OOV cases
+                # Handle empty or OOV cases
+                weighted_document_embedding = self.mean_embedding
 
             # Compute the average embedding for the document
             if valid_embeddings:
                 avg_document_embedding = np.mean(valid_embeddings, axis=0)
             else:
-                #avg_document_embeddings = np.zeros(embedding_vocab_matrix.shape[1])  # Handle empty or OOV cases
-                avg_document_embedding = self.mean_embedding  # Handle empty or OOV cases
+                # Handle empty or OOV cases
+                avg_document_embedding = self.mean_embedding
 
             weighted_document_embeddings.append(weighted_document_embedding)
             avg_document_embeddings.append(avg_document_embedding)
@@ -710,10 +698,10 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
 
         print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
         print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
-
         print("oov_tokens:", oov_tokens)
 
         return weighted_document_embeddings, avg_document_embeddings
+
     
 
 
@@ -792,7 +780,11 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         return self.model.vector_size
 
     def extract(self, words):
-        print("Extracting words from FastText model...")
+        
+        print("extracting words from fastText model...")
+
+        oov = 0
+
         extraction = np.zeros((len(words), self.dim()))
 
         for idx, word in enumerate(words):
@@ -801,12 +793,17 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
             else:
                 # Use subword information for OOV words
                 extraction[idx] = self.model.get_vector(word, norm=True)
+                oov += 1
 
+        print("OOV:", oov)
+        
         extraction = torch.from_numpy(extraction).float()
+        
         return extraction
     
 
     def build_embedding_vocab_matrix(self):
+
         print("building embedding vocab matrix for Gensim FastText model...")
 
         vocabulary = np.asarray(list(self.vectorizer.vocabulary_.keys()))

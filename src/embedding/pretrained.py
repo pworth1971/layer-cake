@@ -16,7 +16,7 @@ from transformers import  logging as transformers_logging
 
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'llama']
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'llama', 'xlnet', 'gpt2']
 
 VECTOR_CACHE = '../.vector_cache'
 

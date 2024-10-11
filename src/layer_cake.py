@@ -23,19 +23,14 @@ from util.csv_log import CSVLog
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
 
-
-
 from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
-
 
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
 
-
 from model.classification import NeuralClassifier
 from util.early_stop import EarlyStopping
 from util.file import create_if_not_exist
-
 
 import argparse
 
@@ -58,33 +53,117 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
 """
 layer_cake.py:
 --------------------------------------------------------------------------------------------------------------------------------
-Driver code to test out pretrained embeddings (GloVe, Word2Vec, FastText, or BERT) and word-class embeddings as defined in 
-the relevant paper (see README) into different neural network classifiers. 
+Driver code to test out pretrained embeddings (GloVe, Word2Vec, FastText, BERT, RoBERTa, XLNet, GPT2, or LlaMa) and word-class embeddings 
+as defined in the relevant paper (see README) into different neural network classifiers. 
 
-Steps for Augmenting Data with Pretrained Embeddings
 
-Loading Pretrained Embeddings:
-The script loads pretrained embeddings based on the specified type (GloVe, Word2Vec, FastText, BERT) through the 
-load_pretrained_embeddings function. This function takes the embedding type specified by the opt object. 
+1. Model Structure and Embedding Types
+The python code first loads pretrained embeddings based on the specified type (GloVe, Word2Vec, FastText, BERT, RoBERTA, XLNet, GPT2, 
+LlaMa et al) through the load_pretrained_embeddings function. This function takes the embedding type specified by the opt object. Each 
+of these embeddings is loaded based on the type specified in the command-line arguments (opt.pretrained).
 
-Combining Pretrained and Supervised Embeddings:
-In the embedding_matrix function, the script combines pretrained embeddings and supervised embeddings if both are specified 
-in the configuration (opt.pretrained and opt.supervised).
+Supervised Embeddings: Word-Class Embeddings (WCE) that integrate label-based semantic information directly into the model’s embeddings. 
+These embeddings are task-specific and are combined with pretrained embeddings for enhanced performance. [See 2019 paper for detail]
 
 Constructing the Embedding Matrix:
 The function embedding_matrix prepares the combined embedding matrix. This matrix is built by extracting the embeddings for the 
 vocabulary of the dataset and integrating supervised embeddings if required. The script ensures that each word in the dataset's 
 vocabulary has a corresponding embedding, and if not, it assigns a zero vector or a default vector for out-of-vocabulary terms.
 
-Initializing the Neural Network:
+Combining Pretrained and Supervised Embeddings:
+In the embedding_matrix function, the script combines pretrained embeddings and supervised embeddings if both are specified 
+in the configuration (opt.pretrained and opt.supervised).
+
+
+2. Data Population and Handling
+Loading Pretrained Embeddings:
+The function load_pretrained_embeddings retrieves embeddings based on the type specified by the user. It checks the vocabulary and 
+extracts corresponding vectors.
+
+Combining Pretrained and Supervised Embeddings:
+The embedding_matrix function constructs the embedding matrix using both pretrained and supervised embeddings if both are specified.
+If a word in the dataset's vocabulary is not covered by pretrained embeddings, the code handles these out-of-vocabulary terms by 
+assigning a zero vector or a default fallback vector.
+
+Dataset 
+from sklearn.preprocessing import LabelEncoder
+
+# Assuming this is defined globally or passed to the function
+label_encoder = LabelEncoder()
+
+
+def encode_labels(labels):
+    # Fit and transform labels using the encoder if it's not already fitted
+    return label_encoder.transform(labels)
+
+# Fit the LabelEncoder once on the entire labels if not already fitted
+    if not hasattr(label_encoder, 'classes_'):
+        label_encoder.fit(labels)
+        print("Label classes:", label_encoder.classes_)
+:
+The dataset is vectorized, and vocabulary indices (word2index) are created. Out-of-vocabulary (OOV) terms are managed using an OOV index. The 
+train-test split is performed with the help of train_test_split from sklearn.
+
+
+3. Neural Model (Classifier) Architecture 
 The init_Net function receives the combined embedding matrix as an argument and uses it to initialize the NeuralClassifier model.
+The initialization function sets up the NeuralClassifier, which is the main model structure. The model can be of various types, such as 
+CNN, LSTM, or other custom architectures. The embeddings, dropout parameters, and other network configurations like hidden units or 
+channels (for CNN) are passed as arguments. The function also includes an option for fine-tuning the embeddings (opt.tunable), allowing 
+the model to adjust the pretrained embeddings to the specific task.
 
-Integrating Embeddings into the Model:
-The function init_Net initializes the neural network with the combined embedding matrix. The model uses these embeddings as 
-input representations for the text data. Depending on the droptype option, the embeddings may undergo dropout to prevent overfitting.
---------------------------------------------------------------------------------------------------------------------------------
+The pretrained embeddings are integrated into the model in the init_Net function, which initializes the neural network. The 
+embedding_matrix function creates the combined embedding matrix by concatenating the pretrained and supervised embeddings (if both 
+are specified). This combined matrix is then returned for use in initializing the model. 
 
---------------------------------------------------------------------------------------------------------------------------------
+Model Initialization:
+The NeuralClassifier is initialized with various parameters, including pretrained_embeddings, which is the combined matrix of 
+pretrained and possibly supervised embeddings. The neural network is initialized with the combined embedding matrix. The model 
+uses these embeddings as input representations for the text data. Depending on the droptype option, the embeddings may 
+undergo dropout to prevent overfitting. Inside the NeuralClassifier, there is an embedding layer that uses these pretrained 
+embeddings as its weights. This allows the model to use rich, pre-learned semantic information from these embeddings.
+
+Dropout and Fine-tuning:
+Depending on the droptype and tunable options, the embeddings may be subject to dropout to prevent overfitting, and they may also be 
+fine-tuned during training to better adapt to the specific task. By setting the pretrained parameter in the NeuralClassifier, the 
+model incorporates these embeddings into its architecture, enhancing its ability to understand and process the input text data effectively.
+
+
+4. Training Process
+Training Loop:
+The train function performs the training, including batching and optimization using Adam (init_optimizer). It iterates over the training 
+data, computes the loss, and updates the model parameters using backpropagation. Dropout is applied based on user-specified options 
+(opt.droptype), helping to prevent overfitting.
+
+Early Stopping:
+The code integrates early stopping using the EarlyStopping utility, which monitors validation performance and halts training if 
+there’s no improvement.
+
+Loss Functions:
+The type of loss (Binary Cross-Entropy or Cross-Entropy) is chosen based on whether the classification task is multilabel or single-label.
+
+
+5. Testing and Evaluation
+The test function evaluates the model on the test data and computes metrics such as macro-F1, micro-F1, and accuracy. These metrics
+provide insight into how well the model performs on the evaluation set. The code logs these metrics using the CSVLog utility, which 
+tracks progress over epochs.
+
+
+6. Optimization Techniques
+Dropout and Fine-Tuning:
+Dropout is applied to different parts of the embedding layer based on user settings, preventing overfitting. Fine-tuning 
+allows the model to adapt pretrained embeddings to the specific task.
+
+Gradient Clipping:
+The code includes clip_gradient in the train function to prevent exploding gradients, particularly useful for RNNs like LSTMs.
+
+
+7. Logging and Monitoring
+The code uses logging utilities (logging and CSVLog) to track model configurations, training progress, and evaluation results.
+System resources (e.g., GPU usage) are logged for reproducibility and analysis.
+
+
+8. Main Function
 The main() function orchestrates the training and testing processes, ensuring the model is trained on the dataset augmented with 
 the pretrained embeddings and then evaluated on the test data. pretrained_mbeddings are loaded based on the specified type and 
 integrated into the model's embedding layer. supervised_embeddings, if specified in the program arguments, are also integrated into the
@@ -93,30 +172,12 @@ embedding matrix can combine both pretrained and supervised embeddings, ensuring
 network. By combining pretrained and supervised embeddings, the model leverages rich, pre-learned semantic information from large 
 corpora (via pretrained embeddings) and task-specific label information (via supervised embeddings) to enhance its performance on 
 specific tasks.
-
-The pretrained embeddings are integrated into the model in the init_Net function, which initializes the neural network. The 
-embedding_matrix function creates the combined embedding matrix by concatenating the pretrained and supervised embeddings (if both 
-are specified). This combined matrix is then returned for use in initializing the model. 
-
-Model Initialization:
-The NeuralClassifier is initialized with various parameters, including pretrained_embeddings, which is the combined matrix of 
-pretrained and possibly supervised embeddings.
-
-Embedding Layer:
-Inside the NeuralClassifier, there is likely an embedding layer that uses these pretrained embeddings as its weights. This allows 
-the model to use rich, pre-learned semantic information from these embeddings.
-
-Dropout and Fine-tuning:
-Depending on the droptype and tunable options, the embeddings may be subject to dropout to prevent overfitting, and they may also be 
-fine-tuned during training to better adapt to the specific task. By setting the pretrained parameter in the NeuralClassifier, the 
-model incorporates these embeddings into its architecture, enhancing its ability to understand and process the input text data effectively.
---------------------------------------------------------------------------------------------------------------------------------
 """
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
 
-def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range, device):
+def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     
     print("------------------ init_Net() ------------------")
 
@@ -148,9 +209,11 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range, device):
         drop_embedding_prop=opt.dropprob)
 
     model.xavier_uniform()
-    model = model.to(device)
+    model = model.to(opt.device)
     if opt.tunable:
         model.finetune_pretrained()
+
+    print("Neural Classifier Model:\n", model)
 
     return model
 
@@ -232,15 +295,16 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay) 
 
 
-def init_loss(classification_type):
+def init_loss(classification_type, device):
     assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
     L = torch.nn.BCEWithLogitsLoss() if classification_type == 'multilabel' else torch.nn.CrossEntropyLoss()
-    return L.cuda()
+    #return L.cuda()
+    return L.to(device)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2index, out_of_vocabulary, pad_index, devel_index, test_index):
+def layer_cake(opt, logfile, pretrained_vectors, method_name, lc_dataset, word2index, out_of_vocabulary, pad_index, devel_index, test_index):
     """
     #main driver method for all logic, called from the __main__ method after args are parsed
     input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
@@ -252,20 +316,45 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
 
     print("opt:", type(opt), opt)
 
+    print("lcd.class_type:", lc_dataset.class_type)
+
+    #
+    # if single label, must use encoded label matrices
+    #
+    if (lc_dataset.class_type == 'singlelabel' or lc_dataset.class_type == 'single-label'):
+        print("singlelabel, getting encoded label matrices...")
+        ytr = lc_dataset.ytr_encoded
+        yte = lc_dataset.yte_encoded
+        print("ytr:", ytr.shape)
+        print("yte:", yte.shape)
+    else:
+        yte = lc_dataset.test_target
+
     print("train / test data split...")
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
     train_index, val_index, ytr, yval = train_test_split(
-        devel_index, dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
+        devel_index, lc_dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
     )
-    yte = dataset.test_target
 
+    # Check if batch_labels is a pandas Series
+    if isinstance(ytr, pd.Series):
+        label_encoder = LabelEncoder()
+        
+        print("converting training labels for neural model...")
+        ytr = label_encoder.fit_transform(ytr)
+        print("ytr:", type(ytr), ytr.shape)
+
+        print("converting test labels for neural model...")    
+        yte = label_encoder.transform(yte)
+        print("yte:", type(yte), yte.shape)
+    
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
 
     # build the word embeddings based upon opt
     print("building the embeddings...")
     pretrained_embeddings, sup_range = embedding_matrix(
-        dataset, 
+        lc_dataset, 
         pretrained_vectors, 
         vocabsize, 
         word2index, 
@@ -285,9 +374,9 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
     loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
     print("setting up model...")
-    model = init_Net(opt, dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
+    model = init_Net(opt, lc_dataset.nC, vocabsize, pretrained_embeddings, sup_range)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
-    criterion = init_loss(dataset.classification_type)
+    criterion = init_loss(lc_dataset.classification_type, opt.device)
 
     # train-validate
     tinit = time.time()
@@ -299,13 +388,13 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
 
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
+                test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
 
         if early_stop.STOP:
             print('[early-stop]')
@@ -333,7 +422,7 @@ def layer_cake(opt, logfile, pretrained_vectors, method_name, dataset, word2inde
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
+        test_loss = test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
@@ -638,8 +727,7 @@ def initialize_testing(args):
         embeddings=embeddings,
         model=args.net, 
         representation=method_name,
-        tunable=args.tunable,
-        wc_supervised=args.supervised,
+        mode=mode,
         run=args.seed
         )
 
@@ -659,7 +747,7 @@ if __name__ == '__main__':
     available_dropouts = {'sup','none','full','learn'}
 
     
-    print("\n\t------------------------------------- LAYER CAKE: Neural text classification with Word-Class Embeddings -------------------------------------\n")
+    print("\n\t\t------------------------------------- LAYER CAKE: Neural text classification with Word-Class Embeddings -------------------------------------\n")
 
     # Training settings
     parser = argparse.ArgumentParser(description='Neural text classification with Word-Class Embeddings')
@@ -812,223 +900,84 @@ if __name__ == '__main__':
 
     torch.manual_seed(opt.seed)
 
-    # single run case
-    if (opt.batch_file is None):                        # running single command 
 
-        print("single run processing...")
+    print("single run processing...")
 
-        assert opt.dataset in available_datasets, \
-            f'unknown dataset {opt.dataset}'
-        
-        assert opt.pretrained in [None]+AVAILABLE_PRETRAINED, \
-            f'unknown pretrained set {opt.pretrained}'
-        
-        assert not opt.plotmode or opt.test_each > 0, \
-            'plot mode implies --test-each>0'
-        
-        assert opt.supervised_method in STWFUNCTIONS, \
-            f'unknown supervised term weighting function; allowed are {STWFUNCTIONS}'
-        
-        assert opt.droptype in available_dropouts, \
-            f'unknown dropout type; allowed are {available_dropouts}'
-        
-        if opt.droptype == 'sup' and opt.supervised==False:
-            opt.droptype = 'none'
-            print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
-            logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
-        
-        if opt.droptype == 'learn' and opt.learnable==0:
-            opt.droptype = 'none'
-            print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-            logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
-        
-        # initialize logging and other system run variables
-        already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(opt)
-
-        # check to see if model params have been computed already
-        if (already_modelled and not opt.force):
-            print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
-            exit(0)
+    assert opt.dataset in available_datasets, \
+        f'unknown dataset {opt.dataset}'
     
-        #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
-
-        embedding_type = get_embedding_type(opt)
-        print("embedding_type:", embedding_type)
-
-        """
-        print(f"initializing dataset: {opt.dataset}")
-        lcd = LCDataset.load_nn(
-            dataset_name=opt.dataset,                       # dataset name
-            vectorization_type=opt.vtype,                   # vectorization type 
-            embedding_type=embedding_type,                  # embedding type ('word or 'token')
-            base_pickle_path=opt.pickle_dir                 # base pickle path
-        ).show()
-        """
+    assert opt.pretrained in [None]+AVAILABLE_PRETRAINED, \
+        f'unknown pretrained set {opt.pretrained}'
     
-        print("embeddings:", embeddings)    
-        print("embedding_path:", emb_path)
-        print("embedding_type:", embedding_type)
+    assert not opt.plotmode or opt.test_each > 0, \
+        'plot mode implies --test-each>0'
+    
+    assert opt.supervised_method in STWFUNCTIONS, \
+        f'unknown supervised term weighting function; allowed are {STWFUNCTIONS}'
+    
+    assert opt.droptype in available_dropouts, \
+        f'unknown dropout type; allowed are {available_dropouts}'
+    
+    if opt.droptype == 'sup' and opt.supervised==False:
+        opt.droptype = 'none'
+        print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
+        logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
+    
+    if opt.droptype == 'learn' and opt.learnable==0:
+        opt.droptype = 'none'
+        print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
+        logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
+    
+    # initialize logging and other system run variables
+    already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(opt)
 
-        #
-        # Load the dataset and the associated (pretrained) embedding structures
-        # to be fed into the model
-        #                                                          
-        lcd = loadpt_data(
-            dataset=opt.dataset,                            # Dataset name
-            vtype=opt.vtype,                                # Vectorization type
-            pretrained=opt.pretrained,                      # pretrained embeddings type
-            embedding_path=emb_path,                        # path to pretrained embeddings
-            emb_type=embedding_type                         # embedding type (word or token)
-            )                                                
+    # check to see if model params have been computed already
+    if (already_modelled and not opt.force):
+        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+        exit(0)
 
-        print("loaded LCDataset object:", type(lcd))
-        print("lcd:", lcd.show())
+    #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
 
-        pretrained_vectors = lcd.lcr_model
-        pretrained_vectors.show()
+    embedding_type = get_embedding_type(opt)
+    print("embedding_type:", embedding_type)
+    print("embeddings:", embeddings)    
+    print("embedding_path:", emb_path)
 
-        """
-        #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
-        #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
-        """
+    #
+    # Load the dataset and the associated (pretrained) embedding structures
+    # to be fed into the model
+    #                                                          
+    lcd = loadpt_data(
+        dataset=opt.dataset,                            # Dataset name
+        vtype=opt.vtype,                                # Vectorization type
+        pretrained=opt.pretrained,                      # pretrained embeddings type
+        embedding_path=emb_path,                        # path to pretrained embeddings
+        emb_type=embedding_type                         # embedding type (word or token)
+        )                                                
 
-        word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+    print("loaded LCDataset object:", type(lcd))
+    print("lcd:", lcd.show())
 
-        layer_cake(
-            opt, 
-            logfile,
-            pretrained_vectors, 
-            method_name,
-            lcd, 
-            word2index, 
-            out_of_vocabulary, 
-            pad_index, 
-            devel_index, 
-            test_index)
+    pretrained_vectors = lcd.lcr_model
+    pretrained_vectors.show()
 
-    else: 
+    """
+    #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
+    #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+    """
 
-        #
-        # we are in batch mode so we build the array of args Namespace 
-        # arguments for all of the batch runs from config file
-        #
-        print("batch processing, reading from file:", opt.batch_file)
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
-        #args = vars(parser.parse_args([]))  # Get default values as a dictionary
-
-        #all_args = parse_arguments(opt.batch_file)
-
-        #parse_arguments(opt.batch_file, args)
-
-        """
-        for opt in all_args:
-            print("opt:", type(opt), opt)
-        """
-
-        # get batch config params
-        configurations = parse_config_file(opt.batch_file, parser)
-
-        line_num = 1
-
-        last_config = None
-        pretrained = False
-        pretrained_vector = None
-        dataset = None
-
-        for current_config in configurations:
-
-            # roll these two argument params over to all current_configs
-            current_config.device = opt.device
-            current_config.batch_file = opt.batch_file
-
-            print(f'\n\t--------------------- processing batch configuration file line #: {line_num} ---------------------')
-
-            print(f'current_config: {type(current_config)}: {current_config}')
-            print(f'last_config: {type(last_config)}: {last_config}')
-
-            # -------------------------------------------------------------------------------------------------------------
-            # check argument parameters
-            # -------------------------------------------------------------------------------------------------------------
-            if (current_config.dataset not in available_datasets):
-                print(f'unknown dataset in config file line # {line_num}', current_config['dataset'])
-                line_num += 1
-                continue
-        
-            if (current_config.pretrained not in [None]+AVAILABLE_PRETRAINED):
-                print(f'unknown pretrained set in config file line # {line_num}', current_config['pretrained'])
-                line_num += 1
-                continue
-        
-            if (current_config.plotmode and current_config.test_each <= 0):
-                print(f'plot mode implies --test-each>0, config file line # {line_num}')
-                line_num += 1
-                continue
-        
-            if (current_config.supervised_method not in STWFUNCTIONS):
-                print(f'unknown supervised term weighting function in config file line # {line_num}, permitted values are {STWFUNCTIONS}')
-                line_num += 1
-                continue
-        
-            if (current_config.droptype not in available_dropouts):
-                print(f'unknown dropout type in config file line # {line_num}, permitted values are {available_dropouts}')
-                line_num += 1
-                continue
-        
-            if (current_config.droptype == 'sup' and current_config.supervised == False):
-                current_config.droptype = 'none'
-                print('warning: droptype="sup" but supervised="False"; the droptype changed to "none"')
-                logging.warning(f'droptype="sup" but supervised="False"; the droptype changed to "none"')
-        
-            if (current_config.droptype == 'learn' and current_config.learnable == 0):
-                current_config.droptype = 'none'
-                print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-                logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
-
-            if current_config.pickle_dir:
-                current_config.pickle_path = join(current_config.pickle_dir, current_config.dataset + '.pickle')
-            # -------------------------------------------------------------------------------------------------------------
-
-            already_modelled = False
-
-            # initialize log file
-            already_modelled, logfile, method_name, cpus, mem, gpus, pretrained, embeddings_log_val = initialize_logfile(current_config)
-
-            # check to see if model params have been computed already
-            if (already_modelled) and not (current_config.force):
-                print(f'Assertion warning: model {method_name} with embeddings {embeddings_log_val}, pretrained == {pretrained}, tunable == {current_config.tunable}, and wc_supervised == {current_config.supervised} for {current_config.dataset} already calculated.')
-                print("Run with --force option to override, continuing...")
-                line_num += 1
-                continue
-
-            # initialize embeddings if need be
-            if 'pretrained' in current_config and (not last_config or current_config.pretrained != last_config.pretrained):
-                print(f"loading pretrained embeddings: {current_config.pretrained}")
-                pretrained, pretrained_vectors = load_pretrained_embeddings(current_config.pretrained, current_config)
-
-            # initialize dataset if need be
-            if 'dataset' in current_config and (not last_config or current_config.dataset != last_config.dataset):
-                print(f"initializing dataset: {current_config.dataset}")
-
-                dataset = LCDataset.load(dataset_name=current_config.dataset, base_pickle_path=current_config.pickle_dir).show()
-                word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, pretrained_vectors)
-
-            # run layer_cake
-            layer_cake(
-                current_config,                         # current_onfig is already a Namespace
-                logfile, 
-                pretrained_vectors, 
-                method_name,
-                dataset, 
-                word2index, 
-                out_of_vocabulary,  
-                pad_index, 
-                devel_index, 
-                test_index)
-            
-            last_config = current_config  # Update last_config to current for next iteration check
-
-            line_num += 1
-
-
+    layer_cake(
+        opt, 
+        logfile,
+        pretrained_vectors, 
+        method_name,
+        lcd, 
+        word2index, 
+        out_of_vocabulary, 
+        pad_index, 
+        devel_index, 
+        test_index)
 
     # --------------------------------------------------------------------------------------------------------------------------------------
