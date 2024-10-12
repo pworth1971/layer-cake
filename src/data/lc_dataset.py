@@ -504,11 +504,6 @@ class LCDataset:
         print("Unique Categories:\n", train_set['Category'].unique())
         numCats = len(train_set['Category'].unique())
         print("# of categories:", numCats)
-
-        #self.X_raw = train_set['Text'].tolist()
-        #self.X_raw = train_set['Text']        
-        #print("X_raw:", type(self.X_raw), len(self.X_raw))
-        #print("X_raw[0]:\n", self.X_raw[0])
         
         # we split the train data into train and test here because that is
         # not done for us with the BBC News dataset (Test data is not labeled)
@@ -553,25 +548,46 @@ class LCDataset:
 
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
-        
-        self.devel_target = self.y_train
-        self.test_target = self.y_test
 
-        # ** Convert single-label targets to a format suitable for _label_matrix **
-        # Each label should be wrapped in a list for compatibility with _label_matrix (even for single-label classification)
-        self.devel_target_formatted = [[label] for label in self.devel_target]
-        self.test_target_formatted = [[label] for label in self.test_target]
+        # Convert target labels to 1D arrays
+        self.devel_target = np.array(self.y_train)  # Flattening the training labels into a 1D array
+        self.test_target = np.array(self.y_test)    # Flattening the test labels into a 1D array
 
-        # Generate label matrix for the training and test sets
-        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(
-            self.devel_target_formatted, self.test_target_formatted
-        )
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(self.devel_target)  # Fit on training labels
 
+        # Transform labels to numeric IDs
+        self.devel_target = label_encoder.transform(self.devel_target)
+        self.test_target = label_encoder.transform(self.test_target)
+
+        # Pass these reshaped arrays to the _label_matrix method
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))      
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
         print("self.labels:\n", self.labels)
 
-        self.target_names = train_set['Category'].unique()       
+        """
+        # ** Convert single-label targets to a format suitable for _label_matrix **
+        # Each label should be wrapped in a list for compatibility with _label_matrix (even for single-label classification)
+        self.devel_target = np.array([[label] for label in self.devel_target])
+        self.test_target = np.array([[label] for label in self.test_target])
+        print("devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("test_target:", type(self.test_target), self.test_target.shape)
+        
+        #
+        # Flatten the 2D label arrays (e.g., [['entertainment'], ['sport']] -> ['entertainment', 'sport'])
+        #
+        self.devel_target = np.array([label for label in self.y_train])  # Flattening the training labels
+        self.test_target = np.array([label for label in self.y_test])    # Flattening the test labels
+        """
+
+
+        # Save the original label names (classes)
+        self.target_names = label_encoder.classes_
+        print("self.target_names (original labels):\n", self.target_names)
+        
+        #self.target_names = train_set['Category'].unique()       
         self.label_names = self.target_names           # set self.labels to the class label names   
         print("self.label_names:\n", self.label_names)
 
@@ -656,6 +672,9 @@ class LCDataset:
         self.devel_target, self.test_target = self.devel.target, self.test.target        
         print("devel_target:", type(self.devel_target), len(self.devel_target))
         print("test_target:", type(self.test_target), len(self.test_target))
+
+        print("encoded devel_target:", self.devel_target)
+        print("encoded test_target:", self.test_target)
 
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
@@ -791,6 +810,11 @@ class LCDataset:
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
 
+        self.ytr_encoded = self.y_train
+        self.yte_encoded = self.y_test
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
+
         return self.label_names
 
 
@@ -841,14 +865,21 @@ class LCDataset:
         self.devel_raw = self.Xtr
         self.test_raw = self.Xte
 
-        self.devel_target, self.test_target = self.devel.target, self.test.target
-        print("devel_target:", type(self.devel_target), len(self.devel_target))
-        print("test_target:", type(self.test_target), len(self.test_target))
-
         self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel.target, self.test.target)
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
         print("labels:\n", self.labels)
+
+        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+        print("devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("test_target:", type(self.test_target), self.test_target.shape)
+        
+        # Convert sparse targets to dense arrays
+        print("Converting devel_target from sparse matrix to dense array...")
+        self.devel_target = self.devel_target.toarray()                           # Convert to dense
+        self.test_target = self.test_target.toarray()                             # Convert to dense
+        print("devel_target (after processing):", type(self.devel_target), self.devel_target.shape)
+        print("test_target (after processing):", type(self.test_target), self.test_target.shape)
 
         self.label_names = self.devel.target_names                                  # set self.labels to the class label names
         print("self.label_names:\n", self.label_names)        
@@ -863,6 +894,7 @@ class LCDataset:
             print("Warning, number of labels does not match number of label names.")
             return None
 
+        """
         print("encoding labels...")
         # Encode the labels using MultiLabelBinarizer
         mlb = MultiLabelBinarizer()
@@ -870,12 +902,26 @@ class LCDataset:
         self.y_test = mlb.transform(self.test_target)           # Transform multi-label targets into a binary matrix
         print("self.y_train:", type(self.y_train), self.y_train.shape)
         print("self.y_test:", type(self.y_test), self.y_test.shape)
-        
+        """
+
+        #
+        # Now self.devel_target is already a dense NumPy array so no need for MultiLabelBinarizer.
+        #
+        self.y_train = self.devel_target                                    # Transform multi-label targets into a binary matrix
+        self.y_test = self.test_target                                      # Transform multi-label targets into a binary matrix
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
+
         # Convert Y to a sparse matrix
         self.y_train_sparse = csr_matrix(self.y_train)                                       # without Transpose to match the expected shape
         self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+
+        self.ytr_encoded = self.y_train
+        self.yte_encoded = self.y_test
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
 
         return self.label_names
 
@@ -994,6 +1040,11 @@ class LCDataset:
         self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
         print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
         print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+
+        self.ytr_encoded = self.y_train
+        self.yte_encoded = self.y_test
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
 
         return self.label_names
 
@@ -1507,18 +1558,24 @@ def _label_matrix(tr_target, te_target):
     - mlb.classes_: A list of all unique classes (labels) across the training data.
     """
     
+    """
     print("_label_matrix...")
+    print("tr_target:", tr_target)
+    print("te_target:", te_target)
+    """
 
     mlb = MultiLabelBinarizer(sparse_output=True)
     
     ytr = mlb.fit_transform(tr_target)
     yte = mlb.transform(te_target)
 
+    """
     print("ytr:", type(ytr), ytr.shape)
     print("yte:", type(yte), yte.shape)
 
-    #print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
-
+    print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
+    """
+    
     return ytr, yte, mlb.classes_
 
 

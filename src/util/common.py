@@ -175,6 +175,7 @@ def batchify(index_list, labels, batchsize, pad_index, device, target_long=False
     print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
     
     #print("labels:", type(labels), labels.shape)
+    #print("labels:", labels)
 
     nsamples = len(index_list)
     nbatches = nsamples // batchsize + 1*(nsamples%batchsize>0)

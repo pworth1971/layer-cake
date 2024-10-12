@@ -14,7 +14,7 @@ CNN="--net cnn"
 LSTM="--net lstm"
 ATTN="--net attn"
 
-EP="60"                # number of epochs
+EP="80"                # number of epochs
 NUM_RUNS=2
 
 # embedding config
@@ -41,9 +41,9 @@ LOG="--log-file ../log/nn_attn_mps.test"                                # output
 # dataset config (list of datasets)
 
 datasets=(
+    "--dataset      bbc-news        --pickle-dir ../pickles"                 # bbc-news (single label, 5 classes)
     "--dataset      20newsgroups    --pickle-dir ../pickles"                 # 20newsgroups (single label, 20 classes)
     "--dataset      reuters21578    --pickle-dir ../pickles"                 # reuters21578 (multi-label, 115 classes)
-    "--dataset      bbc-news        --pickle-dir ../pickles"                 # bbc-news (single label, 5 classes)
     "--dataset      ohsumed         --pickle-dir ../pickles"                 # ohsumed (multi-label, 23 classes)
     "--dataset      rcv1            --pickle-dir ../pickles"                 # RCV1-v2 (multi-label, 101 classes)
 )
@@ -62,18 +62,18 @@ for dataset in "${datasets[@]}"; do
         #$PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256 --seed $run    --nepochs $EP   --supervised
 
         ## GloVe
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE    --seed $run --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --tunable --seed $run   --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--learnable 20	--hidden 256	$GLOVE   --tunable --seed $run --droptype learn  --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --supervised --seed $run    --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --supervised	--tunable --seed $run   --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE    --seed $run --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --tunable --seed $run   --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--learnable 20	--hidden 256	$GLOVE   --tunable --seed $run --droptype learn  --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --supervised --seed $run    --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$GLOVE   --supervised	--tunable --seed $run   --nepochs $EP
 
         ## Word2Vec
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC --seed $run   --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--tunable --seed $run   --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--learnable 20	--hidden 256	$WORD2VEC	--tunable --seed $run --droptype learn  --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--supervised --seed $run    --nepochs $EP
-        #$PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--supervised	--tunable --seed $run   --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC --seed $run   --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--tunable --seed $run   --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--learnable 20	--hidden 256	$WORD2VEC	--tunable --seed $run --droptype learn  --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--supervised --seed $run    --nepochs $EP
+        $PY $LOG $dataset	$ATTN	--hidden 256	$WORD2VEC	--supervised	--tunable --seed $run   --nepochs $EP
 
         ## fastText
         $PY $LOG $dataset	$ATTN	--hidden 256	$FASTTEXT    --seed $run --nepochs $EP

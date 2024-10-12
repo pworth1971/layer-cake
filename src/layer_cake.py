@@ -208,12 +208,14 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
         drop_embedding_range=drop_range,
         drop_embedding_prop=opt.dropprob)
 
+    print("Neural Classifier Model:\n", model)
+
     model.xavier_uniform()
     model = model.to(opt.device)
-    if opt.tunable:
-        model.finetune_pretrained()
 
-    print("Neural Classifier Model:\n", model)
+    if opt.tunable:
+        print("Fine-tuning embeddings...")
+        model.finetune_pretrained()
 
     return model
 
@@ -302,146 +304,19 @@ def init_loss(classification_type, device):
     return L.to(device)
 
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------
-
-def layer_cake(opt, logfile, pretrained_vectors, method_name, lc_dataset, word2index, out_of_vocabulary, pad_index, devel_index, test_index):
-    """
-    #main driver method for all logic, called from the __main__ method after args are parsed
-    input is a Namespace of arguments that the program was run with, i.e. opts or args, or a line 
-    from a config batch file with all the arguments if being run in batch mode
-    """
-    print("\t-- layer_cake() -- ")
-
-    #print("Command line:", ' '.join(sys.argv))                  # Print the full command line
-
-    print("opt:", type(opt), opt)
-
-    print("lcd.class_type:", lc_dataset.class_type)
-
-    #
-    # if single label, must use encoded label matrices
-    #
-    if (lc_dataset.class_type == 'singlelabel' or lc_dataset.class_type == 'single-label'):
-        print("singlelabel, getting encoded label matrices...")
-        ytr = lc_dataset.ytr_encoded
-        yte = lc_dataset.yte_encoded
-        print("ytr:", ytr.shape)
-        print("yte:", yte.shape)
-    else:
-        yte = lc_dataset.test_target
-
-    print("train / test data split...")
-    val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
-    train_index, val_index, ytr, yval = train_test_split(
-        devel_index, lc_dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
-    )
-
-    # Check if batch_labels is a pandas Series
-    if isinstance(ytr, pd.Series):
-        label_encoder = LabelEncoder()
-        
-        print("converting training labels for neural model...")
-        ytr = label_encoder.fit_transform(ytr)
-        print("ytr:", type(ytr), ytr.shape)
-
-        print("converting test labels for neural model...")    
-        yte = label_encoder.transform(yte)
-        print("yte:", type(yte), yte.shape)
-    
-    vocabsize = len(word2index) + len(out_of_vocabulary)
-    print("vocabsize:", {vocabsize})
-
-    # build the word embeddings based upon opt
-    print("building the embeddings...")
-    pretrained_embeddings, sup_range = embedding_matrix(
-        lc_dataset, 
-        pretrained_vectors, 
-        vocabsize, 
-        word2index, 
-        out_of_vocabulary, 
-        opt
-        )
-
-    if (pretrained_embeddings == None):
-        print('\t[pretrained_embeddings]\n\t', None)
-        embedding_dims = -1
-    else:
-        print('\t[pretrained_embeddings]\n\t', pretrained_embeddings.shape)
-        # Log the dimensions of the embeddings if available
-        embedding_dims = pretrained_embeddings.shape[1]
-        print(f"Number of dimensions (embedding size): {embedding_dims}")
-
-    loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
-
-    print("setting up model...")
-    model = init_Net(opt, lc_dataset.nC, vocabsize, pretrained_embeddings, sup_range)
-    optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
-    criterion = init_loss(lc_dataset.classification_type, opt.device)
-
-    # train-validate
-    tinit = time.time()
-    create_if_not_exist(opt.checkpoint_dir)
-    early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
-
-    for epoch in range(1, opt.nepochs + 1):
-
-        print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
-        
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
-
-        early_stop(macrof1, epoch)
-
-        if opt.test_each>0:
-            if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
-
-        if early_stop.STOP:
-            print('[early-stop]')
-            if not opt.plotmode:                # with plotmode activated, early-stop is ignored
-                break
-
-    print("\t...restoring best model...")
-
-    # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
-    stoptime = early_stop.stop_time - tinit
-    stopepoch = early_stop.best_epoch
-
-    #logfile.add_layered_row(epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
-    logfile.insert(dimensions=embedding_dims, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
-
-    if not opt.plotmode:
-        print()
-        print('...performing final evaluation...')
-        model = early_stop.restore_checkpoint()
-
-        if opt.val_epochs>0:
-            print(f'last {opt.val_epochs} epochs on the validation set')
-            for val_epoch in range(1, opt.val_epochs + 1):
-                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch+val_epoch, method_name, loss_history)
-
-        # test
-        print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
-
-
-    if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
-        plot_loss_over_epochs( opt.dataset, {
-            'epochs': np.arange(1, len(loss_history['train_loss']) + 1),
-            'train_loss': loss_history['train_loss'],
-            'test_loss': loss_history['test_loss']
-        }, method_name, '../output')
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
     
-    print("... training...")
+    print("\n\t... training ...")
 
+    #print("--model--\n", model)
+    #print("train_index:", type(train_index))
+    print("ytr:", ytr)
+    #print("pad_index:", type(pad_index))
+    #print("method_name:", method_name)
+    
     epoch_loss = 0
     total_batches = 0
     
@@ -455,7 +330,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
         if to_ < from_:
             train_index = train_index[from_:] + train_index[:to_]
             if issparse(ytr):
-                ytr = vstack((ytr[from_:], ytr[:to_]))
+                ytr = np.vstack((ytr[from_:], ytr[:to_]))
             else:
                 ytr = np.concatenate((ytr[from_:], ytr[:to_]))
         else:
@@ -464,8 +339,9 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
     model.train()
 
-    # Initialize a variable to store the number of dimensions
-    dims = None
+    # Initialize a variable to store # embedding dimensions
+    dims = model.embed.dim()
+    print("dims:", {dims})
 
     for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
 
@@ -490,7 +366,6 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     
     loss_history['train_loss'].append(mean_loss)
 
-    #logfile.add_layered_row(epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
     logfile.insert(dimensions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return mean_loss
@@ -513,7 +388,9 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
 
-    dims = -1
+     # Initialize a variable to store # embedding dimensions
+    dims = model.embed.dim()
+    print("dims:", {dims})
 
     # Retrieve the number of dimensions from the first example in test_index
     if isinstance(test_index, list) and len(test_index) > 0:
@@ -550,18 +427,6 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         Mf1_orig, mf1_orig, acc_orig = multilabel_eval_orig(yte, yte_)
         print("--original calc--")
         print(f'[{measure_prefix}] Macro-F1={Mf1_orig:.3f} Micro-F1={mf1_orig:.3f} Accuracy={acc_orig:.3f}')
-    """
-
-    """
-    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
-
-    logfile.add_layered_row(epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-    logfile.add_layered_row(epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
     """
 
     logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
@@ -901,8 +766,6 @@ if __name__ == '__main__':
     torch.manual_seed(opt.seed)
 
 
-    print("single run processing...")
-
     assert opt.dataset in available_datasets, \
         f'unknown dataset {opt.dataset}'
     
@@ -968,16 +831,90 @@ if __name__ == '__main__':
 
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
-    layer_cake(
-        opt, 
-        logfile,
-        pretrained_vectors, 
-        method_name,
-        lcd, 
-        word2index, 
-        out_of_vocabulary, 
-        pad_index, 
-        devel_index, 
-        test_index)
+    print("training and validation data split...")
+
+    print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
+
+    val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
+    train_index, val_index, ytr, yval = train_test_split(
+        devel_index, lcd.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
+    )
+
+    yte = lcd.test_target
+
+    print("ytr:", type(ytr), ytr.shape)
+    print("ytr:\n", ytr)
+
+    print("yte:", type(yte), yte.shape)
+    print("yte:\n", yte)
+
+    vocabsize = len(word2index) + len(out_of_vocabulary)
+    print("vocabsize:", {vocabsize})
+
+    pretrained_embeddings, sup_range = embedding_matrix(lcd, pretrained_vectors, vocabsize, word2index, out_of_vocabulary, opt)
+    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    
+    model = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
+    optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
+    criterion = init_loss(lcd.classification_type, opt.device)
+
+    embedding_dim = model.embed.dim()
+    print("embedding_dim:", {embedding_dim})
+
+    # train-validate
+    tinit = time.time()
+    create_if_not_exist(opt.checkpoint_dir)
+    early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
+
+    loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
+
+    for epoch in range(1, opt.nepochs + 1):
+
+        print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
+        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
+        
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
+
+        early_stop(macrof1, epoch)
+
+        if opt.test_each>0:
+            if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
+                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
+
+        if early_stop.STOP:
+            print('[early-stop]')
+            if not opt.plotmode:                # with plotmode activated, early-stop is ignored
+                break
+
+    print("\t...restoring best model...")
+
+    # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
+    stoptime = early_stop.stop_time - tinit
+    stopepoch = early_stop.best_epoch
+
+    logfile.insert(dimensions=embedding_dim, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+
+    if not opt.plotmode:
+        print()
+        print('...performing final evaluation...')
+        model = early_stop.restore_checkpoint()
+
+        if opt.val_epochs>0:
+            print(f'last {opt.val_epochs} epochs on the validation set')
+            for val_epoch in range(1, opt.val_epochs + 1):
+                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch+val_epoch, method_name, loss_history)
+
+        # test
+        print('Training complete: testing')
+        test_loss = test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
+
+
+    if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
+        plot_loss_over_epochs( opt.dataset, {
+            'epochs': np.arange(1, len(loss_history['train_loss']) + 1),
+            'train_loss': loss_history['train_loss'],
+            'test_loss': loss_history['test_loss']
+        }, method_name, '../output')
+
 
     # --------------------------------------------------------------------------------------------------------------------------------------
