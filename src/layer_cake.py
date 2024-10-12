@@ -309,11 +309,11 @@ def init_loss(classification_type, device):
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
     
-    print("\n\t... training ...")
+    print("\t... training ...")
 
     #print("--model--\n", model)
     #print("train_index:", type(train_index))
-    print("ytr:", ytr)
+    #print("ytr:", ytr)
     #print("pad_index:", type(pad_index))
     #print("method_name:", method_name)
     
