@@ -422,27 +422,23 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     
     tend = time.time() - tinit
 
-    """
-    if classification_type == 'multilabel':
-        Mf1_orig, mf1_orig, acc_orig = multilabel_eval_orig(yte, yte_)
-        print("--original calc--")
-        print(f'[{measure_prefix}] Macro-F1={Mf1_orig:.3f} Micro-F1={mf1_orig:.3f} Accuracy={acc_orig:.3f}')
-    """
+    if (measure_prefix == 'final-te'):
+        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
-    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
-
-    logfile.insert(dimensions=dims, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dimensions=dims, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+        logfile.insert(dimensions=dims, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
     
+
     mean_loss = test_loss / total_batches
     loss_history['test_loss'].append(mean_loss)
 
-    logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
+    if (measure_prefix == 'final-te'):
+        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return Mf1, mean_loss                          # Return value for use in early stopping and loss plotting
 
@@ -842,12 +838,14 @@ if __name__ == '__main__':
 
     yte = lcd.test_target
 
+    """
     print("ytr:", type(ytr), ytr.shape)
     print("ytr:\n", ytr)
 
     print("yte:", type(yte), yte.shape)
     print("yte:\n", yte)
-
+    """
+    
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
 
@@ -906,7 +904,7 @@ if __name__ == '__main__':
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lc_dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
+        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs

@@ -381,17 +381,23 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def gen_csvs(df, output_dir, debug=False):
+def gen_csvs(df, output_dir, neural=False, debug=False):
 
     print("generating csvs...")
 
-    #print("df:\n", df)
+    if (debug):
+        print("df:\n", df)
     
-    # Split the 'mode' column into separate columns for dataset, model, mode, and mix
-    #
-    # example mode value == 'reuters21578:svm:bert:vmode:avg'
-    #
-    df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Mix', 'M-Comp_Method']] = df['mode'].str.split(':', expand=True)
+    if (neural):
+        df['M-Mix'] = 'solo'
+        df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Comp_Method']] = df[['dataset', 'model', 'embeddings', 'comp_method']]
+    else:
+        # Split the 'mode' column into separate columns for dataset, model, mode, and mix
+        #
+        # example mode value == 'reuters21578:svm:bert:vmode:avg'
+        #
+        df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Mix', 'M-Comp_Method']] = df['mode'].str.split(':', expand=True)
+
 
     # Filter the dataframe for the required measures
     filtered_df = df[df['measure'].isin(MEASURES)]
@@ -534,7 +540,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
     analyze the model performance results, print summary either to sdout or file
     """
 
-    print(f'generating summary to {output_path}...")
+    print(f'generating summary to {output_path}...')
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -626,6 +632,7 @@ if __name__ == "__main__":
     parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
+    parser.add_argument('-n', '--neural', action='store_true', default=False, help='Output from Neural Nets')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
@@ -686,7 +693,7 @@ if __name__ == "__main__":
         
         gen_summary(df, out_dir, debug=debug)
 
-        gen_csvs(df, out_dir, debug=debug)
+        gen_csvs(df, out_dir, neural=args.neural, debug=debug)
 
     if args.charts:
         

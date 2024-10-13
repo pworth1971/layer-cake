@@ -364,7 +364,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
             url = f"https://nlp.stanford.edu/data/glove.840B.300d.zip"
             zipfile = 'glove.840B.zip'
         else:
-            raise ValueError(f"Unsupported model_type {model_type} for download.")
+            raise ValueError(f"Unsupported model {GLOVE_MODEL} for download.")
 
         dest_zip_file = model_dir + '/' + zipfile
         print(f"Downloading embeddings from {url} to {dest_zip_file}...")
