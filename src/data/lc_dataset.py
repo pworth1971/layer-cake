@@ -281,11 +281,7 @@ class LCDataset:
         
         print("fitting training and test data with vectorizer...")
 
-        #print("Xtr:", type(self.Xtr), self.Xtr.shape)
-        #print("Xte:", type(self.Xte), self.Xte.shape)
-
         # Fit and transform the text data
-        #self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
         self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)
         self.Xte_vectorized = self.vectorizer.transform(self.Xte)
 
@@ -313,6 +309,7 @@ class LCDataset:
 
         if not isinstance(self.Xte_vectorized, csr_matrix):
             self.Xte_vectorized = csr_matrix(self.Xte_vectorized)
+
 
 
         return self.Xtr_vectorized, self.Xte_vectorized
@@ -566,22 +563,6 @@ class LCDataset:
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
         print("self.labels:\n", self.labels)
-
-        """
-        # ** Convert single-label targets to a format suitable for _label_matrix **
-        # Each label should be wrapped in a list for compatibility with _label_matrix (even for single-label classification)
-        self.devel_target = np.array([[label] for label in self.devel_target])
-        self.test_target = np.array([[label] for label in self.test_target])
-        print("devel_target:", type(self.devel_target), self.devel_target.shape)
-        print("test_target:", type(self.test_target), self.test_target.shape)
-        
-        #
-        # Flatten the 2D label arrays (e.g., [['entertainment'], ['sport']] -> ['entertainment', 'sport'])
-        #
-        self.devel_target = np.array([label for label in self.y_train])  # Flattening the training labels
-        self.test_target = np.array([label for label in self.y_test])    # Flattening the test labels
-        """
-
 
         # Save the original label names (classes)
         self.target_names = label_encoder.classes_
@@ -893,16 +874,6 @@ class LCDataset:
         if (self.num_labels != self.num_label_names):
             print("Warning, number of labels does not match number of label names.")
             return None
-
-        """
-        print("encoding labels...")
-        # Encode the labels using MultiLabelBinarizer
-        mlb = MultiLabelBinarizer()
-        self.y_train = mlb.fit_transform(self.devel_target)     # Transform multi-label targets into a binary matrix
-        self.y_test = mlb.transform(self.test_target)           # Transform multi-label targets into a binary matrix
-        print("self.y_train:", type(self.y_train), self.y_train.shape)
-        print("self.y_test:", type(self.y_test), self.y_test.shape)
-        """
 
         #
         # Now self.devel_target is already a dense NumPy array so no need for MultiLabelBinarizer.

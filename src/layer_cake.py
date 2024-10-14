@@ -14,16 +14,9 @@ from embedding.supervised import *
 from util.metrics import *
 from data.tsr_function__ import *
 
-from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle, loadpt_data
-
-from model.classification import ml_classification
+from data.lc_dataset import LCDataset, loadpt_data
 
 from util.csv_log import CSVLog
-
-from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
-from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
-
-from data.lc_dataset import LCDataset, save_to_pickle, load_from_pickle
 
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
@@ -182,7 +175,9 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     print("------------------ init_Net() ------------------")
 
     net_type=opt.net
+    
     hidden = opt.channels if net_type == 'cnn' else opt.hidden
+
     if opt.droptype == 'sup':
         drop_range = sup_range
     elif opt.droptype == 'learn':
@@ -447,25 +442,38 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
 
 def set_method_name(opt):
+    
     method_name = opt.net
+    
     if opt.pretrained:
         method_name += f'-{opt.pretrained}'
+    
     if opt.learnable > 0:
         method_name += f'-learn{opt.learnable}'
+    
     if opt.supervised:
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
-        method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
+        #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
+        method_name += f'-wce-d{sup_drop}-{opt.supervised_method}'
+    
     if opt.dropprob > 0:
         if opt.droptype != 'sup':
-            method_name += f'-Drop{opt.droptype}{opt.dropprob}'
+            method_name += f'-drop{opt.droptype}{opt.dropprob}'
+    
     if (opt.pretrained or opt.supervised) and opt.tunable:
         method_name+='-tunable'
+    elif (opt.pretrained or opt.supervised) and not opt.tunable:
+        method_name+='-static'
+
     if opt.weight_decay > 0:
         method_name+=f'_wd{opt.weight_decay}'
+    
     if opt.net in {'lstm', 'attn'}:
         method_name+=f'-h{opt.hidden}'
+    
     if opt.net== 'cnn':
         method_name+=f'-ch{opt.channels}'
+    
     return method_name
 
 
@@ -696,6 +704,22 @@ if __name__ == '__main__':
     parser.add_argument('--val-epochs', type=int, default=1, metavar='int',
                         help='number of training epochs to perform on the validation set once training is over (default 1)')
     
+    parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
+                        help='larger dimension allowed for the feature-label embedding - if larger, then PCA with this '
+                             'number of components is applied (default 300)')
+    
+    parser.add_argument('--max-epoch-length', type=int, default=None, metavar='int',
+                        help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
+    
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='do not check if this experiment has already been run')
+    
+    parser.add_argument('--tunable', action='store_true', default=False,
+                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    
+    parser.add_argument('--nozscore', action='store_true', default=False,
+                        help='disables z-scoring form the computation of WCE')
+    
     parser.add_argument('--glove-path', type=str, default=VECTOR_CACHE+'/GloVe', metavar='PATH',
                         help=f'Drectory to pretrained GloVe embeddings, defaults to {VECTOR_CACHE}/GloVe. Used only with --pretrained glove, '
                             f'defaults to {VECTOR_CACHE}.') 
@@ -726,22 +750,6 @@ if __name__ == '__main__':
     parser.add_argument('--llama-path', type=str, default=VECTOR_CACHE+'/LLaMA',
                         metavar='PATH',
                         help=f'Directory to LLaMA pretrained vectors, defaults to {VECTOR_CACHE}/LlaMa. Used only with --pretrained llama')
-
-    parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
-                        help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
-                             'number of components is applied (default 300)')
-    
-    parser.add_argument('--max-epoch-length', type=int, default=None, metavar='int',
-                        help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
-    
-    parser.add_argument('--force', action='store_true', default=False,
-                        help='do not check if this experiment has already been run')
-    
-    parser.add_argument('--tunable', action='store_true', default=False,
-                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
-    
-    parser.add_argument('--nozscore', action='store_true', default=False,
-                        help='disables z-scoring form the computation of WCE')
     
     parser.add_argument('--batch-file', type=str, default=None, metavar='str',
                         help='path to the config file used for batch processing of multiple experiments')
@@ -820,18 +828,14 @@ if __name__ == '__main__':
     pretrained_vectors = lcd.lcr_model
     pretrained_vectors.show()
 
-    """
-    #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
-    #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
-    """
-
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
     print("training and validation data split...")
 
-    print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
+    #print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
 
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
+    
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, lcd.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
     )

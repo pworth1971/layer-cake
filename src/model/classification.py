@@ -40,6 +40,7 @@ class NeuralClassifier(nn.Module):
                  pretrained = None,
                  drop_embedding_range=None,
                  drop_embedding_prop=0):
+        
         super(NeuralClassifier, self).__init__()
 
         # Initialize the custom embedding layer with pre-trained or learnable embeddings.
