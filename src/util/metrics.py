@@ -43,8 +43,8 @@ def evaluation_nn(y_true, y_pred, classification_type='single-label', debug=Fals
     print("y_pred:", type(y_pred), y_pred.shape)
     """
 
-    print("\n\tevaluating...")
-    print("classification_type:", classification_type)
+    #print("\n\tevaluating...")
+    #print("classification_type:", classification_type)
 
     if classification_type in ['multilabel', 'multi-label']:
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = multilabel_eval(y_true, y_pred, debug=debug)    
@@ -300,7 +300,7 @@ def singlelabel_eval_nn(y, y_, debug=True):
     - j_index (float): Jacard Index
     """
     
-    print("-- util.metrics.singlelabel_eval() --")
+    #print("-- util.metrics.singlelabel_eval_nn() --")
 
     if (debug):
         print("y:", type(y), y.shape)
