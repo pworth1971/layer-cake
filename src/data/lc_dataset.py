@@ -458,7 +458,20 @@ class LCDataset:
         return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
 
 
+    def __len__(self):
+        return len(self.data)
 
+    def __getitem__(self, idx):
+        """
+        Return the preprocessed document (or embedding) and label for the given index.
+        """
+        document = self.data[idx]
+        label = self.labels[idx]
+        
+        # If the document is already tokenized and mapped to embeddings, return as is
+        return document, label
+    
+    
     #
     # -------------------------------------------------------------------------------------------------------------
     # data loading

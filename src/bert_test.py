@@ -710,7 +710,7 @@ if __name__ == '__main__':
 
     if (args.learner == 'ft'):
     
-        print("learner is ft...")
+        print("learner is ft...")xf
 
         fine_tune_model(
             args, 
