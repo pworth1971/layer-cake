@@ -383,7 +383,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
 
-     # Initialize a variable to store # embedding dimensions
+    # Initialize a variable to store # embedding dimensions
     dims = model.embed.dim()
     print("dims:", {dims})
 
