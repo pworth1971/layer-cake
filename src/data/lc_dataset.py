@@ -20,10 +20,8 @@ from scipy.special._precompute.expn_asy import generate_A
 import torch
 
 from sklearn.datasets import fetch_20newsgroups
-from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.datasets import fetch_20newsgroups
+from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer

@@ -4,22 +4,17 @@ import matplotlib.pyplot as plt
 
 import tensorflow as tf
 from tensorflow import keras
+
 from tensorflow.keras.datasets import reuters
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau, EarlyStopping 
-from tensorflow.keras import layers, Sequential
-from tensorflow.keras import backend as K
 
 from sklearn.metrics import f1_score, classification_report
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.utils.class_weight import compute_class_weight
 
-from util.metrics import evaluation_nn
-
-from scipy.sparse import csr_matrix
-import torch
 
 # Function to detect and set the best available device
 def set_device():
@@ -104,25 +99,6 @@ class F1ScoreCallback(Callback):
 
 
 
-def dense_model(input_shape, output_classes, lr=1e-3):
-
-    model = keras.Sequential([
-        layers.Input(shape=(input_shape,)),
-        layers.Dense(64, activation="relu"),
-        layers.Dense(64, activation="relu"),
-        layers.Dense(output_classes, activation="softmax")
-    ])
-
-    # Lower the learning rate to 1e-4
-    model.compile(
-        optimizer=Adam(learning_rate=lr), 
-        loss="categorical_crossentropy",
-        metrics=["accuracy"]
-    )
-    
-    return model
-
-
 
 def plot_history(history):
     loss = history.history["loss"]
@@ -162,6 +138,26 @@ def predict(logits, classification_type='singlelabel'):
         print('unknown classification type')
 
     return prediction
+
+
+def dense_model(input_shape, output_classes, lr=1e-3):
+
+    model = keras.Sequential([
+        layers.Input(shape=(input_shape,)),
+        layers.Dense(64, activation="relu"),
+        layers.Dense(64, activation="relu"),
+        layers.Dense(output_classes, activation="softmax")
+    ])
+
+    # Lower the learning rate to 1e-4
+    model.compile(
+        optimizer=Adam(learning_rate=lr), 
+        loss="categorical_crossentropy",
+        metrics=["accuracy"]
+    )
+    
+    return model
+
 
 
 def main(args):
@@ -228,15 +224,15 @@ def main(args):
         else:
             raise ValueError(f"Unsupported dataset: {args.dataset}")
 
-        # Expand dimensions for CNN (adding channel dimension)
-        if args.model_type == "cnn":
-            x_train = np.expand_dims(x_train, -1)
-            x_test = np.expand_dims(x_test, -1)
-
+        print("x_train:", type(x_train), x_train.shape)
+        print("x_train[0]:", x_train[0])
+        print("y_train:", type(y_train), y_train.shape)
+        print("y_train[0]:", y_train[0])
+ 
         x_val = x_train[:1000]
         partial_x_train = x_train[1000:]
         y_val = y_train[:1000]
-        partial_y_train = y_train[1000:]
+        partial_y_train = y_train[1000:]        
 
         # Build either a Dense model or a CNN model based on user input
         if args.model_type == "dense":
@@ -284,70 +280,6 @@ def main(args):
         
         # Log F1 scores
         print(f"\n\tMacro F1 Score = {macro_f1:.4f}, Micro F1 Score = {micro_f1:.4f}")
-
-        """
-        # predictions
-        y_pred = model.predict(x_test)
-        print("y_pred:", type(y_pred), y_pred.shape)
-        print("y_pred[0]:", y_pred[0])
-
-        yte_ = csr_matrix(predict(y_pred, classification_type=classification_type))
-        print("yte_:", type(yte_), yte_.shape)
-        print("yte_[0]:", yte_[0])
-
-        # actuals (true values)
-        print("y_test:", type(y_test), y_test.shape)
-        print("y_test[0]:", y_test[0])
-
-        if classification_type == 'multilabel':
-            # Multi-label case: Use sigmoid and threshold at 0.5
-            y_pred_classes = (yte_ > 0.5).astype(int)
-        elif classification_type == 'singlelabel':
-            # Single-label case: Use argmax to get class predictions
-            y_pred_classes = np.argmax(yte_, axis=1)
-        else:
-            raise ValueError(f"Unsupported classification type: {classification_type}")
-        
-        print("y_pred_classes:", type(y_pred_classes), y_pred_classes.shape)
-        print("y_pred_classes[0]:", y_pred_classes[0])
-
-        #print("True labels:", type(test_labels), test_labels.shape)
-        #print("True labels[0]:", test_labels[0])
-        #print("Predictions:\n", type(y_pred_classes), y_pred_classes.shape)
-        #print("Predictions[0]:", y_pred_classes[0])
-        
-        # Print the classification report
-        if (classification_type == 'singlelabel'):
-
-            print("\nClassification Report (single-label):\n")
-            print(classification_report(y_test, yte_, target_names=class_names, digits=4))
-
-        elif (classification_type == 'multilabel'):
-
-            print("Classification Report (multi-label):\n")
-            print(classification_report(y_test, yte_, target_names=class_names, digits=4))
-
-        # Use the evaluation method
-        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = evaluation_nn(
-            y_true=y_test, 
-            #y_pred=y_pred_classes,
-            y_pred=yte_,
-            classification_type=classification_type,
-            debug=False
-            )
-        
-        # Print the metrics with four decimal places
-        print(f"Macro F1 Score: {float(Mf1):.4f}")
-        print(f"Micro F1 Score: {float(mf1):.4f}")
-        print(f"Accuracy: {float(accuracy):.4f}")
-        print(f"Hamming Loss: {float(h_loss):.4f}")
-        print(f"Precision: {float(precision):.4f}")
-        print(f"Recall: {float(recall):.4f}")
-        print(f"Jaccard Index: {float(j_index):.4f}")
-        """
-
-        
-
 
 
 if __name__ == "__main__":
