@@ -16,7 +16,6 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.metrics import f1_score, classification_report
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -97,6 +96,9 @@ def load_20newsgroups_data(vtype='count', max_features=MAX_WORDS, debug=False):
     newsgroups_train = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'))
     newsgroups_test = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
 
+    # Get the class names from the 20 Newsgroups dataset
+    class_names = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes')).target_names
+    
     raw_train = newsgroups_train.data
     raw_test = newsgroups_test.data
     
@@ -122,7 +124,136 @@ def load_20newsgroups_data(vtype='count', max_features=MAX_WORDS, debug=False):
     y_train = newsgroups_train.target
     y_test = newsgroups_test.target
 
-    return raw_train, x_train_vectorized, y_train, raw_test, x_test_vectorized, y_test, newsgroups_train.target, newsgroups_test.target, vectorizer
+    return raw_train, x_train_vectorized, y_train, raw_test, x_test_vectorized, y_test, newsgroups_train.target, newsgroups_test.target, class_names, vectorizer
+
+
+
+
+def load_20newsgroups_data_nn(max_words=MAX_WORDS, debug=False):
+
+    # Fetch the data with return_X_y=True returns a tuple (data, labels)
+    train_data, train_labels = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'), return_X_y=True)
+    test_data, test_labels = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'), return_X_y=True)
+
+    # Get the class names from the 20 Newsgroups dataset
+    class_names = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes')).target_names
+    
+    # Now, train_data and test_data contain the raw text
+    train_texts = train_data
+    test_texts = test_data
+
+    if (debug):
+        # Now, train_texts and test_texts can be fed into a tokenizer.
+        print("train_texts:", type(train_texts), len(train_texts))
+        print("train_texts[0]:", type(train_texts[0]), train_texts[0])
+
+        print("test_texts:", type(test_texts), len(test_texts))
+        print("test_texts[0]:", type(test_texts[0]), test_texts[0])
+
+    # Convert labels to numpy.int64
+    train_labels = train_labels.tolist()
+    test_labels = test_labels.tolist()
+
+    if (debug):
+        # Print the types and values
+        print("train_labels:", type(train_labels), len(train_labels))
+        print("train_labels[0]:", type(train_labels[0]), train_labels[0])
+
+        print("test_labels:", type(test_labels), len(test_labels))
+        print("test_labels[0]:", type(test_labels[0]), test_labels[0])
+
+    num_classes = 20
+    print("num_classes:", num_classes)
+
+    # Get the class names from the 20 Newsgroups dataset
+    class_names = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes')).target_names
+    print("class_names:", class_names)
+
+    # One-hot encode the labels
+    y_train = to_categorical(train_labels, num_classes)
+    y_test = to_categorical(test_labels, num_classes)
+
+    if (debug):
+        # Print the shape and type of one-hot encoded labels
+        print("y_train:", type(y_train), y_train.shape)
+        print("y_train[0]:", type(y_train[0]), y_train[0].shape)
+        print("y_train[0]:", y_train[0])
+
+        print("y_test:", type(y_test), y_test.shape)
+        print("y_test[0]:", type(y_test[0]), y_test[0].shape)
+        print("y_test[0]:", y_test[0])
+
+    classification_type = 'singlelabel'
+
+    #Vectorize these text samples into a 2D integer tensor using Keras Tokenizer 
+    #Tokenizer is fit on training data only, and that is used to tokenize both train and test data. 
+    tokenizer = Tokenizer(num_words=max_words) 
+    tokenizer.fit_on_texts(train_texts) 
+    train_sequences = tokenizer.texts_to_sequences(train_texts) #Converting text to a vector of word indexes 
+    test_sequences = tokenizer.texts_to_sequences(test_texts) 
+    word_index = tokenizer.word_index 
+    print('Found %s unique tokens.' % len(word_index))
+
+    if (debug):
+        print("train_sequences:", type(train_sequences), len(train_sequences))              #This is a list of lists, one list for each review
+        print("train_sequences[0]:", type(train_sequences[0]), len(train_sequences[0]))     #This is a list of word indexes for the first review
+        print("train_sequences[0]:", train_sequences[0])                                    #This will print a list of word indexes (depends on the tokenizer)
+
+        print("test_sequences:", type(test_sequences), len(test_sequences))                       #This is a list of lists, one list for each review
+        print("test_sequences[0]:", type(test_sequences[0]), len(test_sequences[0]))              #This is a list of word indexes for the 25000th review
+        print("test_sequences[0]:", test_sequences[0])                                            #This will print a list of word indexes (depends on the tokenizer)
+
+    #Converting this to sequences to be fed into neural network. Max seq. len is 1000 as set earlier
+    #initial padding of 0s, until vector is of size MAX_SEQUENCE_LENGTH
+    trainvalid_data = pad_sequences(train_sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    test_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    trainvalid_labels = to_categorical(np.asarray(train_labels))
+
+    if (debug):
+        print("trainvalid_data:", type(trainvalid_data), trainvalid_data.shape)                         #Will print a 2D tensor
+        print("trainvalid_data[0]:", type(trainvalid_data[0]), trainvalid_data[0].shape)                #Will print a 1D tensor
+        print("trainvalid_data[0]:", trainvalid_data[0])                                                #Will print a 1D tensor with values as indexes
+
+        print("test_data:", type(test_data), test_data.shape)                                   #Will print a 2D tensor
+        print("test_data[0]:", type(test_data[0]), test_data[0].shape)                          #Will print a 1D tensor
+        print("test_data[0]:\n", test_data[0])                                                  #Will print a 1D tensor with values as indexes
+
+    # split the training data into a training set and a validation set
+    indices = np.arange(trainvalid_data.shape[0])
+
+    if (debug):
+        print("indices:", type(indices), indices.shape)
+        print("indices[0]:", type(indices[0]), indices[0].shape)
+        print("indices[0]:", indices[0])
+
+    np.random.shuffle(indices)
+
+    trainvalid_data = trainvalid_data[indices]
+    trainvalid_labels = trainvalid_labels[indices]
+
+    num_validation_samples = int(VALIDATION_SPLIT * trainvalid_data.shape[0])
+    print("num_validation_samples:", num_validation_samples)
+
+    x_train = trainvalid_data[:-num_validation_samples]
+    y_train = trainvalid_labels[:-num_validation_samples]
+    
+    x_val = trainvalid_data[-num_validation_samples:]
+    y_val = trainvalid_labels[-num_validation_samples:]
+
+    x_test = test_data
+
+    if (debug):
+        #This is the data we will use for CNN and RNN training
+        print("x_train:", type(x_train), x_train.shape)
+        print("y_train:", type(y_train), y_train.shape)
+        
+        print("x_val:", type(x_val), x_val.shape)
+        print("y_val:", type(y_val), y_val.shape)
+        
+        print("x_test:", type(x_test), x_test.shape)
+        print("y_test:", type(y_test), y_test.shape)
+
+    return x_train, y_train, train_labels, x_val, y_val, test_data, y_test, test_labels, class_names, word_index
 
 
 
@@ -214,7 +345,6 @@ def prep_nn_data(train_texts, train_labels, test_texts, test_labels, max_words=M
 
 
 
-
 # Dense Neural Network Model
 def build_dense_model(input_shape, num_classes):
     model = Sequential([
@@ -227,9 +357,9 @@ def build_dense_model(input_shape, num_classes):
 
 
 # CNN Model for text classification
-def build_cnn_model(input_shape, num_classes, max_words=MAX_FEATURES, max_sequence_length=MAX_SEQUENCE_LENGTH):
+def build_cnn_model(num_classes, max_words=MAX_WORDS, max_sequence_length=MAX_SEQUENCE_LENGTH):
 
-    print(f'building cnn model with input_shape={input_shape}, num_classes={num_classes}')
+    print(f'building cnn model with max_words = {max_words}, max_sequance_lenth = {max_sequence_length} and num_classes={num_classes}')
 
     # Define the CNN model
     cnnmodel = Sequential()
@@ -473,18 +603,63 @@ def main(args):
         elif args.dataset == "20newsgroups":
 
             print("Loading 20 Newsgroups dataset...")
-            raw_train, x_train_vectorized, y_train, raw_test, x_test_vectorized, y_test, train_labels, test_labels, vectorizer = load_20newsgroups_data(vtype=args.vtype, max_features=args.num_words, debug=args.debug)
+
+            if (args.model_type == 'dense'):
+
+                raw_train, x_train_vectorized, y_train, raw_test, x_test_vectorized, y_test, train_labels, test_labels, class_names, \
+                    vectorizer = load_20newsgroups_data(vtype=args.vtype, max_features=args.num_words, debug=args.debug)
+
+                y_train = to_categorical(y_train, num_classes)
+                y_test = to_categorical(y_test, num_classes)
+
+                if (args.debug):
+                    print("x_train_vectorized:", type(x_train_vectorized), x_train_vectorized.shape)
+                    print("x_train_vectorized[0]:", x_train_vectorized[0])
+                    print("y_train:", type(y_train), y_train.shape)
+                    print("y_train[0]:", y_train[0])
+                    print("train_labels:", type(train_labels), train_labels.shape)
+                    print("train_labels[0]:", type(train_labels[0]), train_labels[0].shape)
+                    print("train_labels[0]:", train_labels[0])
+
+                    print("x_test_vectorized:", type(x_test_vectorized), x_test_vectorized.shape)
+                    print("x_test_vectorized[0]:", x_test_vectorized[0])
+                    print("y_test:", type(y_test), y_test.shape)
+                    print("y_test[0]:", y_test[0])
+                    print("test_labels:", type(test_labels), test_labels.shape)
+                    print("test_labels[0]:", type(test_labels[0]), test_labels[0].shape)
+                    print("test_labels[0]:", test_labels[0])
+
+            elif (args.model_type == 'cnn'):
+
+                x_train, y_train, train_labels, x_val, y_val, x_test, y_test, test_labels, class_names, \
+                    word_index = load_20newsgroups_data_nn(max_words=args.max_words, debug=False)            
+
+                if (args.debug):
+                    print("x_train:", type(x_train), x_train.shape)
+                    print("x_train[0]:", type(x_train[0]), x_train[0].shape)
+                    print("y_train:", type(y_train), y_train.shape)
+                    print("y_train[0]:", y_train[0])
+
+                    print("x_val:", type(x_val), x_val.shape)
+                    print("x_val[0]:", type(x_val[0]), x_val[0].shape)
+                    print("y_val:", type(y_val), y_val.shape)
+                    print("y_val[0]:", y_val[0])
+
+                    print("train_labels:", type(train_labels), len(train_labels))
+                    print("train_labels[0]:", train_labels[0])
+
+                    print("x_test:", type(x_test), x_test.shape)
+                    print("x_test[0]:", type(x_test[0]), x_test[0].shape)
+                    print("y_test:", type(y_test), len(y_test))
+                    print("y_test[0]:", y_test[0])
+                    print("test_labels:", type(test_labels), len(test_labels))
+                    print("test_labels[0]:", test_labels[0])
 
             num_classes = 20
             print("num_classes:", num_classes)
-
-            # Get the class names from the 20 Newsgroups dataset
-            class_names = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes')).target_names
-
-            y_train = to_categorical(y_train, num_classes)
-            y_test = to_categorical(y_test, num_classes)
             
             classification_type = 'singlelabel'
+            print("classification_type:", classification_type)
 
         else:
             raise ValueError(f"Unsupported dataset: {args.dataset}")
@@ -495,19 +670,7 @@ def main(args):
             print("num_classes:", num_classes)
             print("class_names:", class_names)
 
-            print("x_train_vectorized:", type(x_train_vectorized), x_train_vectorized.shape)
-            print("x_train_vectorized[0]:", x_train_vectorized[0])
-            print("y_train:", type(y_train), y_train.shape)
-            print("y_train[0]:", y_train[0])
-            print("train_labels:", type(train_labels), train_labels.shape)
-            print("train_labels:", train_labels)
-
-            print("x_test_vectorized:", type(x_test_vectorized), x_test_vectorized.shape)
-            print("x_test_vectorized[0]:", x_test_vectorized[0])
-            print("y_test:", type(y_test), y_test.shape)
-            print("y_test[0]:", y_test[0])
-            print("test_labels:", type(test_labels), test_labels.shape)
-            print("test_labels:", test_labels)
+            
 
 
         """
@@ -560,9 +723,30 @@ def main(args):
 
             print("...building and fitting cnn model...")
 
-            x_train, y_train, x_val, y_val, x_test, y_test, word_index = prep_nn_data(raw_train, train_labels, raw_test, test_labels, max_words=args.num_words, max_sequence_length=MAX_SEQUENCE_LENGTH, debug=args.debug)
-            
-            model = build_cnn_model(x_train.shape[1], num_classes, max_words=args.num_words, max_sequence_length=MAX_SEQUENCE_LENGTH)
+            model = build_cnn_model(num_classes, max_words=args.max_words, max_sequence_length=MAX_SEQUENCE_LENGTH)
+
+            if (args.debug):
+                print("x_train:", type(x_train), x_train.shape)
+                print("x_train[0]:", type(x_train[0]), x_train[0].shape)
+                print("y_train:", type(y_train), y_train.shape)
+                print("y_train[0]:", y_train[0])
+
+                print("x_val:", type(x_val), x_val.shape)
+                print("x_val[0]:", type(x_val[0]), x_val[0].shape)
+                print("y_val:", type(y_val), y_val.shape)
+                print("y_val[0]:", y_val[0])
+
+                print("train_labels:", type(train_labels), len(train_labels))
+                print("train_labels[0]:", train_labels[0])
+
+                print("x_test:", type(x_test), x_test.shape)
+                print("x_test[0]:", type(x_test[0]), x_test[0].shape)
+                print("y_test:", type(y_test), len(y_test))
+                print("y_test[0]:", y_test[0])
+                print("test_labels:", type(test_labels), len(test_labels))
+                print("test_labels[0]:", test_labels[0])
+
+
             print("model.summary():", model.summary())
 
         elif (args.model_type == 'lstm'):
@@ -580,10 +764,10 @@ def main(args):
         else:
             raise ValueError(f"Unknown model type: {args.model_type}")
         
-
         # Callbacks for learning rate refinement, early stopping, and F1 score tracking
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
         early_stop = EarlyStopping(monitor='val_loss', patience=5)
+        #f1_callback = F1ScoreCallback(validation_data=(x_test, y_test))             # Custom F1 score callback
         f1_callback = F1ScoreCallback(validation_data=(x_test, y_test))             # Custom F1 score callback
 
         # Compute class weights
@@ -641,7 +825,7 @@ if __name__ == '__main__':
     parser.add_argument("--model_type", type=str, default="dense", choices=["dense", "cnn", "lstm", "attn"], help="Type of model to use (dense, cnn, lstm, attn or cnn)")
     parser.add_argument("--epochs", type=int, default=55, help="Number of epochs for training")
     parser.add_argument("--batch_size", type=int, default=512, help="Batch size for training")
-    parser.add_argument("--num_words", type=int, default=MAX_WORDS, help="Number of words to consider in the vocabulary")
+    parser.add_argument("--max_words", type=int, default=MAX_WORDS, help="Number of words to consider in the vocabulary")
     parser.add_argument("--vtype", type=str, default='count', help="Type of vectorization technique, either count or tfidf")
     parser.add_argument("--plot", action='store_true', default=False, help="Plot loss and accurracy history graphs for model training. Defaults to False, no plotting.")
     parser.add_argument("--debug", action='store_true', default=False, help="True if want to see debug output, False otherwise")
