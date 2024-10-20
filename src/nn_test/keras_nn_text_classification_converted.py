@@ -16,13 +16,15 @@
 
 #Make the necessary imports
 import os
-import sys
 import numpy as np
-import tarfile
-import wget
-import warnings
-warnings.filterwarnings("ignore") 
-from zipfile import ZipFile
+
+
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.utils.class_weight import compute_class_weight
+
+import tensorflow as tf
+from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.utils import to_categorical
@@ -30,17 +32,27 @@ from tensorflow.keras.layers import Dense, Input, GlobalMaxPooling1D
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Embedding, LSTM
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.initializers import Constant
-
 from tensorflow.keras.datasets import imdb
 
+
+import warnings
+warnings.filterwarnings("ignore") 
+
+
+MAX_WORDS=20000
+MAX_FEATURES=MAX_WORDS
+
+TRAIN_TEST_SPLIT = 0.2
+VALIDATION_SPLIT = 0.2
+
+
+
+EPOCHS = 50
+BATCH_SIZE = 128
+
+LSTM_BATCH_SIZE = 32
+
 MAX_WORDS = 10000
-
-# Load the IMDb dataset
-(train_data, train_labels), (test_data, test_labels) = imdb.load_data(num_words=MAX_WORDS)
-
-# The data comes preprocessed as sequences of word indices.
-print(train_data[0])  # This will print an integer-encoded review
-
 
 BASE_DIR = '../../layer-cake/.vector_cache/'
 
@@ -61,27 +73,18 @@ MAX_NUM_WORDS = 20000
 EMBEDDING_DIM = 100 
 VALIDATION_SPLIT = 0.2
 
-#Function to load the data from the dataset into the notebook. Will be called twice - for train and test.
-"""
-def get_data(data_dir):
-    texts = []  # list of text samples
-    labels_index = {'pos':1, 'neg':0}  # dictionary mapping label name to numeric id
-    labels = []  # list of label ids
-    for name in sorted(os.listdir(data_dir)):
-        path = os.path.join(data_dir, name)
-        if os.path.isdir(path):
-            if name=='pos' or name=='neg':
-                label_id = labels_index[name]
-                for fname in sorted(os.listdir(path)):
-                        fpath = os.path.join(path, fname)
-                        text = open(fpath,encoding='utf8').read()
-                        texts.append(text)
-                        labels.append(label_id)
-    return texts, labels
+#
+# prep IMDB data
+# 
 
-train_texts, train_labels = get_data(TRAIN_DATA_DIR)
-test_texts, test_labels = get_data(TEST_DATA_DIR)
 """
+import tensorflow_datasets as tfds
+
+# Load the IMDb dataset
+(train_data, train_labels), (test_data, test_labels) = imdb.load_data(num_words=MAX_WORDS)
+
+# The data comes preprocessed as sequences of word indices.
+print(train_data[0])  # This will print an integer-encoded review
 
 train_texts, train_labels = train_data, train_labels
 test_texts, test_labels = test_data, test_labels
@@ -94,13 +97,6 @@ print("train_labels[0]", train_labels[0])
 
 print("test_texts[24999]:", test_texts[24999])
 print("test_labels[24999]:", test_labels[24999])
-
-#
-# prep IMDB data
-# 
-
-"""
-import tensorflow_datasets as tfds
 
 # Load the IMDb dataset
 imdb_data = tfds.load("imdb_reviews", as_supervised=True)
@@ -131,13 +127,6 @@ y_test = to_categorical(y_test, num_classes)
 classification_type = 'singlelabel'
 """
 
-from sklearn.datasets import fetch_20newsgroups
-
-MAX_WORDS=20000
-MAX_FEATURES=MAX_WORDS
-
-TRAIN_TEST_SPLIT = 0.2
-VALIDATION_SPLIT = 0.2
 
 # Fetch the data with return_X_y=True returns a tuple (data, labels)
 train_data, train_labels = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'), return_X_y=True)
@@ -153,10 +142,6 @@ print("train_texts[0]:", type(train_texts[0]), train_texts[0])
 
 print("test_texts:", type(test_texts), len(test_texts))
 print("test_texts[0]:", type(test_texts[0]), test_texts[0])
-
-import numpy as np
-from sklearn.datasets import fetch_20newsgroups
-from tensorflow.keras.utils import to_categorical
 
 # Fetch the dataset
 train_data, train_labels = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'), return_X_y=True)
@@ -296,9 +281,6 @@ print("Preparing of embedding matrix is done")
 print("embedding_layer:", type(embedding_layer))
 print("embedding_layer config:\n", embedding_layer.get_config())
 
-import tensorflow as tf
-from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau, EarlyStopping
-
 # Function to detect and set the best available device
 def set_device():
     if tf.config.list_physical_devices('GPU'):
@@ -358,10 +340,6 @@ print("train_labels[0]:", type(train_labels[0]), train_labels[0])
 print("test_labels:", type(test_labels), test_labels.shape)
 print("test_labels[0]:", test_labels[0])
 
-EPOCHS = 50
-BATCH_SIZE = 128
-
-from sklearn.utils.class_weight import compute_class_weight
 
 # Callbacks for learning rate refinement, early stopping, and F1 score tracking
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6)
@@ -451,13 +429,6 @@ with tf.device(device_name):
     cnnmodel.compile(loss='categorical_crossentropy',
                 optimizer='rmsprop',
                 metrics=['acc'])
-    
-    """
-    #Train the model. Tune to validation set. 
-    cnnmodel.fit(x_train, y_train,
-            batch_size=128,
-            epochs=10, validation_data=(x_val, y_val))
-    """
 
     # Then pass class_weights_dict to the fit function
     history = cnnmodel.fit(
@@ -471,8 +442,6 @@ with tf.device(device_name):
         )
     
 print("history:", type(history), history.history.keys())
-
-
 plot_history(history)
 
 print("y_test:", type(y_test), y_test.shape)
@@ -482,7 +451,6 @@ print("y_test[0]:", y_test[0])
 score, acc = cnnmodel.evaluate(test_data, test_labels)
 print("score:", score)
 print('Test accuracy with CNN:', acc)
-
 
 test_preds = cnnmodel.predict(test_data)
         
@@ -565,7 +533,6 @@ score, acc = cnnmodel.evaluate(test_data, test_labels)
 print("score:", score)
 print('Test accuracy with CNN:', acc)
 
-
 test_preds = cnnmodel.predict(test_data)
         
 # Thresholding for multi-label classification
@@ -595,8 +562,6 @@ if physical_devices:
 tf.debugging.set_log_device_placement(True)
 
 print("Defining and training an LSTM model, training embedding layer on the fly")
-
-LSTM_BATCH_SIZE = 32
 
 # Define the RNN model
 rnnmodel = Sequential()
