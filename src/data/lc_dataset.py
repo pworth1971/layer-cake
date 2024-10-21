@@ -60,6 +60,7 @@ stop_words = set(stopwords.words('english'))
 
 
 class LCDataset:
+
     """
     A class to handle loading and preparing datasets for text classification.
     Supports multiple datasets including Reuters, 20 Newsgroups, Ohsumed, RCV1, and WIPO.
@@ -454,20 +455,6 @@ class LCDataset:
         print("self.Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
         return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
-
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        """
-        Return the preprocessed document (or embedding) and label for the given index.
-        """
-        document = self.data[idx]
-        label = self.labels[idx]
-        
-        # If the document is already tokenized and mapped to embeddings, return as is
-        return document, label
     
     
     #

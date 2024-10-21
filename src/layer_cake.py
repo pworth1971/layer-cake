@@ -361,7 +361,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     
     loss_history['train_loss'].append(mean_loss)
 
-    logfile.insert(dimensions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
+    #logfile.insert(dimensions=dims, epoch=epoch, measure='tr_loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return mean_loss
 
@@ -373,7 +373,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
 def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history):
     
-    print("..testing...")
+    print("\t..testing...")
 
     model.eval()
     predictions = []
