@@ -24,7 +24,7 @@ Y_AXIS_THRESHOLD = 0.25                                     # when to start the 
 
 
 
-def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
     """
     The generate_charts_matplotlib function generates bar charts for each combination of model, dataset, measure, and embedding type 
     from a given DataFrame. It uses Matplotlib and Seaborn to create plots that are colorblind-friendly, showing the performance of 
@@ -77,7 +77,10 @@ def generate_charts_matplotlib(df, output_path='../out', y_axis_threshold=Y_AXIS
                     continue
 
                 # Extract the base embeddings (everything before the colon)
-                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+                if (neural):
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
 
                 # Split into word-based and token-based embeddings
                 word_based_df = df_subset[df_subset['embedding_type'].isin(WORD_BASED_MODELS)]
@@ -261,7 +264,7 @@ import os
 import plotly.express as px
 from datetime import datetime
 
-def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, show_charts=True, debug=False):
+def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False):
     # Filter the dataframe for the measures of interest right away
     df = df[df['measure'].isin(MEASURES)]
     
@@ -275,8 +278,12 @@ def model_performance_comparison(df, output_path='../out', y_axis_threshold=0, s
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # Extract the first term in the colon-delimited 'embeddings' field
-    df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+    if (neural):
+        # Extract the first term in the colon-delimited 'embeddings' field
+        df['embedding_type'] = df['embeddings']
+    else:
+        # Extract the first term in the colon-delimited 'embeddings' field
+        df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
 
     # Generate a separate chart for each measure within each dataset
     for dataset in df['dataset'].unique():
@@ -700,6 +707,7 @@ if __name__ == "__main__":
         model_performance_comparison(
             df, 
             out_dir, 
+            neural=args.neural,
             show_charts=args.show, 
             y_axis_threshold=args.ystart,
             debug=debug
@@ -712,6 +720,7 @@ if __name__ == "__main__":
         generate_charts_matplotlib(
             df, 
             out_dir,
+            neural=args.neural,
             show_charts=args.show,
             y_axis_threshold=args.ystart,
             debug=debug
