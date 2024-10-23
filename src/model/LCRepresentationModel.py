@@ -1,6 +1,8 @@
 import numpy as np
 
 import torch, torchtext
+from torchtext import vocab
+
 
 from tqdm import tqdm
 import os
@@ -46,27 +48,27 @@ PICKLE_DIR = '../pickles/'                          # pickled data directory
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
 #GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+#GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
 FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
-#BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
+#BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
-#ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
-ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
+ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
+#ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
 
-#GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
+GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
 #GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
-GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
+#GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
 
-#XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
-XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
+XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
+#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
 
 
@@ -942,7 +944,30 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
 
         return input_ids, attention_masks
          
+    def dim(self):
+        # Return the hidden size of the Transformer model
+        return self.model.config.hidden_size
+
     
+    def extract(self, words):
+        print(f"Extracting embeddings for words using {self.model_name} model...")
+        input_ids, attention_mask = self._tokenize(words)
+
+        input_ids = input_ids.to(self.device)
+        attention_mask = attention_mask.to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+        
+        return embeddings
+
+    
+    def vocabulary(self):
+        # Get the tokenizer vocabulary from the model
+        return set(self.tokenizer.get_vocab().keys())
+    
+
     def _compute_mean_embedding(self):
         """
         Compute the mean embedding vector using all tokens in the model's vocabulary.

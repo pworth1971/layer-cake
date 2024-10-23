@@ -56,6 +56,11 @@ class NeuralClassifier(nn.Module):
         # Linear layer to map the document embedding to output size (number of classes).
         self.label = nn.Linear(self.projection.dim(), output_size)
 
+        self.embedding_size = vocab_size
+
+    def get_embedding_size(self):
+        return self.embedding_size
+    
     def forward(self, input):
         """
         Expected input:

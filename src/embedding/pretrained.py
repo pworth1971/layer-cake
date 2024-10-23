@@ -8,7 +8,8 @@ import zipfile
 from tqdm import tqdm
 
 import torch
-from torchtext.vocab import GloVe as TorchTextGloVe
+
+#from torchtext.vocab import GloVe as TorchTextGloVe
 
 from transformers import BertModel, BertTokenizer
 from transformers import LlamaModel, LlamaTokenizer

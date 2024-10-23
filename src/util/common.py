@@ -345,18 +345,28 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
 
     print(f'vtype: {vtype}, pretrained: {pretrained}, embedding_type: {embedding_type}, learner: {learner}, mix: {mix}')
 
-    pt_type = 'pretrained:'
-
-    if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
-        pt_type += 'attention:tokenized'
-
-    elif (pretrained in ['glove', 'word2vec']):
-        pt_type += 'co-occurrence:word'
-    
-    elif (pretrained in ['fasttext']):
-        pt_type += 'co-occurrence:subword'
+    if (learner in ML_MODELS):
+        comp_method = 'ML'
+    elif (learner in NEURAL_MODELS):
+        comp_method = 'DL'
     else:
-        pt_type = 'None'
+        comp_method = '??'
+
+    if (pretrained is None):
+        pt_type = 'pt=na'
+    else:
+        pt_type = 'pretrained-'
+
+        if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
+            pt_type += 'attention:tokenized'
+
+        elif (pretrained in ['glove', 'word2vec']):
+            pt_type += 'co-occurrence:word'
+        
+        elif (pretrained in ['fasttext']):
+            pt_type += 'co-occurrence:subword'
+        else:
+            pt_type += '??'
                 
     if (learner in ML_MODELS): 
 
@@ -378,10 +388,10 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
         else:
             raise ValueError(f'Unknown mix type: {mix} for learner: {learner}')
        
-        return type_type
+        return comp_method + '-' + pt_type + '-' + type_type
     
     elif (learner in NEURAL_MODELS):
-        return pt_type
+        return comp_method + '-' + pt_type
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
