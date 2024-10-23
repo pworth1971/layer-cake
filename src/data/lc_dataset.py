@@ -407,12 +407,12 @@ class LCDataset:
 
             print("generating GPT2 based dataset repressentations...")
 
-            self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
+            self.Xtr_avg_embeddings, first_tokens = self.lcr_model.encode_docs(
                 self.Xtr, 
                 self.embedding_vocab_matrix
             )
             
-            self.Xte_avg_embeddings = self.lcr_model.encode_docs(
+            self.Xte_avg_embeddings, first_tokens = self.lcr_model.encode_docs(
                 self.Xte, 
                 self.embedding_vocab_matrix
             )
@@ -1388,7 +1388,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'roberta': ROBERTA_MODEL,
         'gpt2': GPT2_MODEL,
         'xlnet': XLNET_MODEL
-    }.get(pretrained, 'glove')  # default to GloVe if not recognized
+    }
 
     print("model_name:", model_name)
     

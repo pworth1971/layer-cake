@@ -97,6 +97,8 @@ class EmbeddingCustom(nn.Module):
         super(EmbeddingCustom, self).__init__()
         assert 0 <= drop_embedding_prop <= 1, 'drop_embedding_prop: wrong range'
 
+        print("EmbeddingCustom: __init__()")
+
         self.vocab_size = vocab_size
         self.drop_embedding_range = drop_embedding_range
         self.drop_embedding_prop = drop_embedding_prop
@@ -121,6 +123,19 @@ class EmbeddingCustom(nn.Module):
         self.pretrained_embeddings = pretrained_embeddings
         self.learnable_embeddings = learnable_embeddings
         self.embedding_length = embedding_length
+
+        if (self.pretrained_embeddings is None):
+            print("pretrained_embeddings: None")
+        else:    
+            print("pretrained_embeddings:", self.pretrained_embeddings)
+        
+        if (self.learnable_embeddings is None):
+            print("learnable_embeddings: None")
+        else:
+            print("learnable_embeddings:", self.learnable_embeddings)
+    
+        print("embedding_length:", self.embedding_length)
+
         assert self.drop_embedding_range is None or \
                (0<=self.drop_embedding_range[0]<self.drop_embedding_range[1]<=embedding_length), \
             'dropout limits out of range'

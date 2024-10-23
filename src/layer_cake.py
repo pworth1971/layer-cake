@@ -31,8 +31,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+"""
 import torchtext
 torchtext.disable_torchtext_deprecation_warning()
+"""
 
 
 
@@ -212,7 +214,7 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
         print("Fine-tuning embeddings...")
         model.finetune_pretrained()
 
-    return model
+    return model, model.get_embedding_size()
 
 # ---------------------------------------------------------------------------------------------------------------------------
 
@@ -371,7 +373,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history):
+def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size):
     
     print("\t..testing...")
 
@@ -383,6 +385,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
 
+    """
     # Initialize a variable to store # embedding dimensions
     dims = model.embed.dim()
     print("dims:", {dims})
@@ -393,7 +396,8 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         print(f"Number of dimensions in test data: {dims}")
     else:
         print("Unable to determine the number of dimensions from test_index")
-    
+    """
+
     for batch, target in tqdm(
             batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long),
             desc='evaluation: '
@@ -418,22 +422,22 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     tend = time.time() - tinit
 
     if (measure_prefix == 'final-te'):
-        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
-        logfile.insert(dimensions=dims, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-        logfile.insert(dimensions=dims, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
     
 
     mean_loss = test_loss / total_batches
     loss_history['test_loss'].append(mean_loss)
 
     if (measure_prefix == 'final-te'):
-        logfile.insert(dimensions=dims, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
 
     return Mf1, mean_loss                          # Return value for use in early stopping and loss plotting
 
@@ -828,7 +832,13 @@ if __name__ == '__main__':
     pretrained_vectors = lcd.lcr_model
     pretrained_vectors.show()
 
+    if (opt.pretrained is None):
+        pretrained_vectors = None
+        
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+
+    print("word2index:", type(word2index), len(word2index))
+    print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
 
     print("training and validation data split...")
 
@@ -849,16 +859,21 @@ if __name__ == '__main__':
     print("yte:", type(yte), yte.shape)
     print("yte:\n", yte)
     """
-    
+
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", {vocabsize})
 
     pretrained_embeddings, sup_range = embedding_matrix(lcd, pretrained_vectors, vocabsize, word2index, out_of_vocabulary, opt)
-    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    if pretrained_embeddings is not None:
+        print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    else:
+        print("pretrained_embeddings: None")
     
-    model = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
+    model, embedding_size = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
     criterion = init_loss(lcd.classification_type, opt.device)
+
+    print("embedding_size:", {embedding_size})
 
     embedding_dim = model.embed.dim()
     print("embedding_dim:", {embedding_dim})
@@ -875,7 +890,7 @@ if __name__ == '__main__':
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=embedding_size)
 
         early_stop(macrof1, epoch)
 
@@ -894,7 +909,7 @@ if __name__ == '__main__':
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
 
-    logfile.insert(dimensions=embedding_dim, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+    logfile.insert(dimensions=embedding_size, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
 
     if not opt.plotmode:
         print()
@@ -908,7 +923,7 @@ if __name__ == '__main__':
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history)
+        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=embedding_size)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
