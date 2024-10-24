@@ -134,7 +134,7 @@ class EmbeddingCustom(nn.Module):
         else:
             print("learnable_embeddings:", self.learnable_embeddings)
     
-        print("embedding_length:", self.embedding_length)
+        #print("embedding_length:", self.embedding_length)
 
         assert self.drop_embedding_range is None or \
                (0<=self.drop_embedding_range[0]<self.drop_embedding_range[1]<=embedding_length), \

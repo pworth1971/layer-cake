@@ -48,7 +48,7 @@ class NeuralClassifier(nn.Module):
         self.embed = EmbeddingCustom(vocab_size, learnable_length, pretrained, drop_embedding_range, drop_embedding_prop)
 
         print("self.embed:", self.embed)
-        print("self.embed.dim():", self.embed.dim())
+        #print("self.embed.dim():", self.embed.dim())
         
         # Initialize the projection layer (CNN, LSTM, or Attention) based on the net_type.
         self.projection = init__projection(net_type)(self.embed.dim(), hidden_size)
