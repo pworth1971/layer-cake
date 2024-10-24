@@ -337,15 +337,19 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     model.train()
 
     # Initialize a variable to store # embedding dimensions
+    """
     dims = model.embed.dim()
     print("dims:", {dims})
+    """
 
     for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
 
+        """
         if dims is None:
             dims = batch.shape[1]  # Get the number of features (columns) from the batch
             print("# dimensions:", dims)
-
+        """
+        
         optim.zero_grad()
         loss = criterion(model(batch), target)
         loss.backward()
