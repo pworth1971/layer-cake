@@ -103,6 +103,11 @@ class EmbeddingCustom(nn.Module):
         self.drop_embedding_range = drop_embedding_range
         self.drop_embedding_prop = drop_embedding_prop
 
+        self.ptX = 0
+        self.ptY = 0
+        self.lrnX = 0
+        self.lrnY = 0
+
         pretrained_embeddings = None
         pretrained_length = 0
         if pretrained is not None:
@@ -110,12 +115,16 @@ class EmbeddingCustom(nn.Module):
             assert pretrained.shape[0] == vocab_size, \
                 f'pre-trained matrix (shape {pretrained.shape}) does not match with the vocabulary size {vocab_size}'
             pretrained_embeddings = nn.Embedding(vocab_size, pretrained_length)
+            self.ptX = vocab_size
+            self.ptY = pretrained_length
             # by default, pretrained embeddings are static; this can be modified by calling finetune_pretrained()
             pretrained_embeddings.weight = nn.Parameter(pretrained, requires_grad=False)
 
         learnable_embeddings = None
         if learnable_length > 0:
             learnable_embeddings = nn.Embedding(vocab_size, learnable_length)
+            self.lrnX = vocab_size
+            self.lrnY = learnable_length
 
         embedding_length = learnable_length + pretrained_length
         assert embedding_length > 0, '0-size embeddings'
@@ -139,6 +148,12 @@ class EmbeddingCustom(nn.Module):
         assert self.drop_embedding_range is None or \
                (0<=self.drop_embedding_range[0]<self.drop_embedding_range[1]<=embedding_length), \
             'dropout limits out of range'
+
+    def get_pt_dimensions(self):
+        return self.ptX, self.ptY
+
+    def get_lrn_dimensions(self):
+        return self.lrnX, self.lrnY
 
     def forward(self, input):
         input = self._embed(input)

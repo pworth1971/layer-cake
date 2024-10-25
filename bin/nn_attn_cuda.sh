@@ -50,11 +50,11 @@ embeddings=(
 # dataset config (list of datasets)
 
 datasets=(
-    "--dataset      20newsgroups    --pickle-dir ../pickles"                 # 20newsgroups (single label, 20 classes)
     "--dataset      reuters21578    --pickle-dir ../pickles"                 # reuters21578 (multi-label, 115 classes)
     "--dataset      bbc-news        --pickle-dir ../pickles"                 # bbc-news (single label, 5 classes)
     "--dataset      ohsumed         --pickle-dir ../pickles"                 # ohsumed (multi-label, 23 classes)
     "--dataset      rcv1            --pickle-dir ../pickles"                 # RCV1-v2 (multi-label, 101 classes)
+    "--dataset      20newsgroups    --pickle-dir ../pickles"                 # 20newsgroups (single label, 20 classes)
 )
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -72,7 +72,8 @@ for dataset in "${datasets[@]}"; do
 
         for embed_name in "${!embeddings[@]}"; do
             embed=${embeddings[$embed_name]}
-            echo "Processing embedding: $embed_name"
+            echo
+            echo "----- embedding: $embed_name ... -----"
 
             # Base configuration
             $PY $LOG $dataset $ATTN --hidden 256 $embed --seed $run --nepochs $EP

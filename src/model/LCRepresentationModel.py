@@ -950,6 +950,51 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
 
     
     def extract(self, words):
+
+        print(f"Extracting embeddings for words using {self.model_name} model...")
+
+        # Initialize empty list to store embeddings
+        embeddings = []
+        
+        # Process data in batches to avoid OOM
+        for batch in tqdm([words[i:i + self.batch_size] for i in range(0, len(words), self.batch_size)]):
+            input_ids, attention_mask = self._tokenize(batch)
+
+            # Move tensors to the appropriate device (GPU/CPU)
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+
+            with torch.no_grad():  # No gradients needed during extraction
+                try:
+                    # Optionally enable mixed precision for memory optimization
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                    # Extract the mean of the hidden states (sentence-level embeddings)
+                    batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+                    embeddings.append(batch_embeddings)
+
+                except RuntimeError as e:
+                    print(f"RuntimeError during extraction: {e}")
+                    if 'out of memory' in str(e):
+                        print('Clearing CUDA cache to free memory.')
+                        torch.cuda.empty_cache()  # Clear the cache in case of memory issues
+                    else:
+                        raise e  # Re-raise if it's not a memory-related issue
+
+            # Free up memory after each batch
+            torch.cuda.empty_cache()
+
+        # Concatenate all embeddings together after processing batches
+        embeddings = np.concatenate(embeddings, axis=0)
+
+        # Convert to PyTorch tensor and return as a float tensor
+        extraction = torch.from_numpy(embeddings).float()
+
+        return extraction
+
+
+    def extract_old(self, words):
         print(f"Extracting embeddings for words using {self.model_name} model...")
         input_ids, attention_mask = self._tokenize(words)
 
@@ -1324,12 +1369,17 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
                 if word in self.tokenizer.get_vocab():
                     batch_words.append(word)
                     word_indices.append(idx)
+                # If the case-sensitive version is not found, try the lowercase version
+                elif word.lower() in self.tokenizer.get_vocab():
+                    lower_word = word.lower()
+                    batch_words.append(lower_word)
+                    word_indices.append(idx)
                 else:
                     # Track OOV tokens
                     oov_tokens += 1
                     oov_list.append(word)
                     self.embedding_vocab_matrix[idx] = mean_vector
-
+                    
                 if len(batch_words) == self.batch_size:
                     embeddings = process_batch(batch_words)
                     for i, embedding in zip(word_indices, embeddings):

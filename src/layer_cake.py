@@ -6,6 +6,7 @@ import scipy
 from scipy.sparse import csr_matrix
 
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
 
 # custom classes 
 from embedding.pretrained import *
@@ -214,7 +215,18 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
         print("Fine-tuning embeddings...")
         model.finetune_pretrained()
 
-    return model, model.get_embedding_size()
+    print("emb_size:", model.get_embedding_size())
+    print("learnable_emb_size:", model.get_learnable_embedding_size())
+
+    embsizeX, embsizeY = model.get_embedding_size()
+    print("embsizeX:", embsizeX)
+    print("embsizeY:", embsizeY)
+
+    lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
+    print("lrnsizeX:", lrnsizeX)
+    print("lrnsizeY:", lrnsizeY)
+
+    return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
 
 # ---------------------------------------------------------------------------------------------------------------------------
 
@@ -294,10 +306,24 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay) 
 
 
-def init_loss(classification_type, device):
+def init_loss(classification_type, device, class_weights):
     assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
-    L = torch.nn.BCEWithLogitsLoss() if classification_type == 'multilabel' else torch.nn.CrossEntropyLoss()
-    #return L.cuda()
+
+    
+    # In your criterion (loss function) initialization, pass the class weights
+    if classification_type == 'multilabel':
+        L = torch.nn.BCEWithLogitsLoss()
+    else:
+        L = torch.nn.CrossEntropyLoss()
+    
+    """
+    # In your criterion (loss function) initialization, pass the class weights
+    if classification_type == 'multilabel':
+        L = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(class_weights, device=opt.device))
+    else:
+        L = torch.nn.CrossEntropyLoss(weight=torch.tensor(class_weights, device=opt.device))
+    """
+    
     return L.to(device)
 
 
@@ -601,7 +627,7 @@ def initialize_testing(args):
     # check to see if the model has been run before
     already_modelled = logger.already_calculated(
         dataset=args.dataset,
-        embeddings=embeddings,
+        #embeddings=embeddings,
         model=args.net, 
         representation=method_name,
         mode=mode,
@@ -839,8 +865,15 @@ if __name__ == '__main__':
     if (opt.pretrained is None):
         pretrained_vectors = None
         
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+    #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
+    if opt.pretrained in ['bert', 'roberta', 'xlnet', 'gpt2', 'llama']:
+        toke = lcd.tokenizer
+    else:
+        toke = None
+
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, tokenizer=toke, max_length=lcd.max_length, pretrained=pretrained_vectors)
+    
     print("word2index:", type(word2index), len(word2index))
     print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
 
@@ -849,10 +882,32 @@ if __name__ == '__main__':
     #print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
 
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
-    
+
+    # Perform the train_test_split with stratification based on the class labels
+
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, lcd.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
     )
+
+    print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
+    print("lcd.devel_target[0]:\n", type(lcd.devel_target[0]), lcd.devel_target[0])
+
+    print("lcd.devel_labelmatrix:", type(lcd.devel_labelmatrix), lcd.devel_labelmatrix.shape)
+    print("lcd.devel_labelmatrix[0]:\n", type(lcd.devel_labelmatrix[0]), lcd.devel_labelmatrix[0])
+
+    # Compute class weights based on the training set
+    # Convert sparse matrix to dense array
+    dense_labels = lcd.devel_labelmatrix.toarray()
+
+    class_weights = []
+    for i in range(dense_labels.shape[1]):
+        class_weight = compute_class_weight(class_weight='balanced', classes=np.array([0, 1]), y=dense_labels[:, i])
+        class_weights.append(class_weight)
+
+    # Convert to a tensor for PyTorch
+    class_weights = torch.tensor(class_weights, device=opt.device)
+#    class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(lcd.devel_labelmatrix), y=lcd.devel_labelmatrix)
+    #print("class_weights:", class_weights)
 
     yte = lcd.test_target
 
@@ -873,11 +928,18 @@ if __name__ == '__main__':
     else:
         print("pretrained_embeddings: None")
     
-    model, embedding_size = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
+    model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
-    criterion = init_loss(lcd.classification_type, opt.device)
 
-    print("embedding_size:", {embedding_size})
+    criterion = init_loss(lcd.classification_type, opt.device, class_weights)
+
+    emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
+    print("emb_size:", emb_size_str)
+
+    lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
+    print("lrn_size:", lrn_size_str)
+
+    emb_size_str = f'{emb_size_str}:{lrn_size_str}'
 
     embedding_dim = model.embed.dim()
     print("embedding_dim:", {embedding_dim})
@@ -894,13 +956,13 @@ if __name__ == '__main__':
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
         train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=embedding_size)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str)
 
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history)
+                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str)
 
         if early_stop.STOP:
             print('[early-stop]')
@@ -913,7 +975,7 @@ if __name__ == '__main__':
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
 
-    logfile.insert(dimensions=embedding_size, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+    logfile.insert(dimensions=emb_size_str, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
 
     if not opt.plotmode:
         print()
@@ -927,7 +989,7 @@ if __name__ == '__main__':
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=embedding_size)
+        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs

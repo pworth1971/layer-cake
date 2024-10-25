@@ -426,13 +426,13 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
 
     print("rendering data...")
 
-    #print("dataframe:\n", dataframe)
+    print("dataframe:\n", dataframe)
 
     # Group the data by embeddings and mix (formerly Mode) within each embedding
     grouped = dataframe.groupby(['embeddings', 'M-Mix', 'class_type'], as_index=False)
 
     # Select only the required columns, including the new 'dimensions' column
-    selected_columns = ['embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
+    selected_columns = ['class_type', 'embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
 
     # Create an HTML table manually, ensuring that embeddings and mix only display once per group
     rows = []
@@ -440,7 +440,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     previous_mix = None
 
     # Prepare CSV data
-    csv_rows = [['embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+    csv_rows = [['class_type', 'embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
 
     for (embeddings, mix, class_type), group in grouped:
         # Determine if we need a bold line for the first embeddings group
@@ -492,9 +492,14 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     table_html += "".join(rows)
     table_html += "</table>"
 
+    print("dataset:", dataset)
+    print("model:", model)
+    #print("class_type:", class_type)
+
     # Write the HTML table to file, including class_type in the title
     with open(output_html, 'w') as f:
-        f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}, Class Type: {class_type}</h2>")
+        #f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}, Class Type: {class_type}</h2>")
+        f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}</h2>")
         f.write(table_html)
 
     print(f"HTML Table saved as {output_html}.")
@@ -636,7 +641,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts and/or summaries")
 
-    parser.add_argument('file_path', type=str, help='Path to the CSV file with the data')
+    parser.add_argument('file_path', type=str, help='Path to the TSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-n', '--neural', action='store_true', default=False, help='Output from Neural Nets')

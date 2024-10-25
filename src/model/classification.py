@@ -50,16 +50,22 @@ class NeuralClassifier(nn.Module):
         print("self.embed:", self.embed)
         print("self.embed.dim():", self.embed.dim())
         
+        print("pt dimensions:", self.embed.get_pt_dimensions())
+        print("lrn dimensions:", self.embed.get_lrn_dimensions())
+
         # Initialize the projection layer (CNN, LSTM, or Attention) based on the net_type.
         self.projection = init__projection(net_type)(self.embed.dim(), hidden_size)
 
         # Linear layer to map the document embedding to output size (number of classes).
         self.label = nn.Linear(self.projection.dim(), output_size)
 
-        self.embedding_size = vocab_size
+        self.vocab_size = vocab_size
 
     def get_embedding_size(self):
-        return self.embedding_size
+        return self.embed.get_pt_dimensions()
+
+    def get_learnable_embedding_size(self):
+        return self.embed.get_lrn_dimensions()
     
     def forward(self, input):
         """

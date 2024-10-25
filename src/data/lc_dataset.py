@@ -216,6 +216,7 @@ class LCDataset:
             )
 
         self.model = self.lcr_model.model
+        self.max_length = self.lcr_model.max_length
         self.tokenizer = self.lcr_model.tokenizer           # note only transformer models have tokenizers
         self.vectorizer = self.lcr_model.vectorizer
 
@@ -1033,6 +1034,7 @@ class LCDataset:
             'name': self.name,
             'classification_type': self.classification_type,
             'vectorization_type': self.vectorization_type,
+            'vectorizer': self.vectorizer,
             'nC': self.nC,
             'type': self.type,
             'pretrained': self.pretrained,
@@ -1057,6 +1059,8 @@ class LCDataset:
             'target_names': self.target_names,
             'class_type': self.class_type,
             'vocabulary': self.vocabulary,
+            'tokenizer': self.tokenizer,
+            'max_length': self.max_length,
             'embedding_vocab_matrix': self.embedding_vocab_matrix,
             'Xtr_weighted_embeddings': self.Xtr_weighted_embeddings,
             'Xte_weighted_embeddings': self.Xte_weighted_embeddings,
@@ -1096,6 +1100,7 @@ class LCDataset:
             lcd.name = data_loaded['name']
             lcd.classification_type = data_loaded['classification_type']
             lcd.vectorization_type = data_loaded['vectorization_type']
+            lcd.vectorizer = data_loaded['vectorizer']
             lcd.nC = data_loaded['nC']
             lcd.type = data_loaded['type']
             lcd.pretrained = data_loaded['pretrained']
@@ -1120,6 +1125,8 @@ class LCDataset:
             lcd.target_names = data_loaded['target_names']
             lcd.class_type = data_loaded['class_type']
             lcd.vocabulary = data_loaded['vocabulary']
+            lcd.tokenizer = data_loaded['tokenizer']
+            lcd.max_length = data_loaded['max_length']
             lcd.embedding_vocab_matrix = data_loaded['embedding_vocab_matrix']
             lcd.Xtr_weighted_embeddings = data_loaded['Xtr_weighted_embeddings']
             lcd.Xte_weighted_embeddings = data_loaded['Xte_weighted_embeddings']
@@ -1380,7 +1387,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
     print(f'\n\tloading dataset:{dataset} with embedding:{pretrained} data...')
     
     # Determine the model name based on the pretrained option
-    model_name = {
+    model_name_mapping = {
         'glove': GLOVE_MODEL,
         'word2vec': WORD2VEC_MODEL,
         'fasttext': FASTTEXT_MODEL,
@@ -1390,6 +1397,8 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'xlnet': XLNET_MODEL
     }
 
+    # Look up the model name, or raise an error if not found
+    model_name = model_name_mapping.get(pretrained)
     print("model_name:", model_name)
     
     pickle_file_name = f'{dataset}_{vtype}_{pretrained}_{model_name}.pickle'.replace("/", "_")

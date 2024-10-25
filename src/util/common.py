@@ -396,7 +396,58 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
 
 # ---------------------------------------------------------------------------------------------------------------------------
 
-def index_dataset(dataset, pretrained=None):
+def index_dataset(dataset, tokenizer=None, max_length=512, pretrained=None):
+    """
+    Indexes the dataset using either a tokenizer (for Transformer models) or a pretrained word-based embedding model.
+    """
+    print(f"indexing dataset...")
+
+    # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
+    if tokenizer:
+        word2index = dict(tokenizer.get_vocab())
+        unk_index = tokenizer.unk_token_id
+        pad_index = tokenizer.pad_token_id
+    else:
+        word2index = dict(dataset.vocabulary)
+        word2index['UNKTOKEN'] = len(word2index)
+        word2index['PADTOKEN'] = len(word2index)
+        unk_index = word2index['UNKTOKEN']
+        pad_index = word2index['PADTOKEN']
+
+    known_words = set(word2index.keys())
+    if pretrained is not None:
+        known_words.update(pretrained.vocabulary())
+
+    out_of_vocabulary = dict()
+
+    # Define a helper function to tokenize and index documents
+    def tokenize_and_index(documents):
+        indices = []
+        for doc in documents:
+            if tokenizer:
+                # Use the transformer tokenizer for subword tokenization
+                tokens = tokenizer.encode(doc, truncation=True, padding=True, max_length=max_length)
+            else:
+                # Use the dataset analyzer for word-based tokenization
+                tokens = dataset.analyzer()(doc)
+
+            # Convert tokens to indices, handle OOVs
+            indexed_tokens = [word2index.get(token, unk_index) for token in tokens]
+            indices.append(indexed_tokens)
+        return indices
+
+    # Index development and test sets
+    devel_index = tokenize_and_index(dataset.devel_raw)
+    test_index = tokenize_and_index(dataset.test_raw)
+
+    print('[indexing complete]')
+
+    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+
+
+
+
+def index_dataset_old(dataset, pretrained=None):
 
     print(f"indexing dataset...")
     
