@@ -170,7 +170,108 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
 
 
 
-def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
+def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500, is_transformer=False):
+
+    print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}, is_transformer={is_transformer}')
+    
+    nsamples = len(index_list)
+    nbatches = nsamples // batchsize + 1 * (nsamples % batchsize > 0)
+    
+    for b in range(nbatches):
+        batch = index_list[b * batchsize:(b + 1) * batchsize]
+        batch_labels = labels[b * batchsize:(b + 1) * batchsize]
+
+        # Ensure labels are converted to the correct tensor type
+        totype = torch.LongTensor if target_long else torch.FloatTensor
+        target = totype(batch_labels).to(device)
+
+        # Pad batch and handle attention mask for transformers
+        batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
+        batch = torch.LongTensor(batch).to(device)  # Ensure batch is a tensor
+
+        if is_transformer:
+            # Create attention mask and ensure it's a tensor
+            attention_mask = (batch != pad_index).long().to(device)
+            yield (batch, attention_mask), target
+        else:
+            yield batch, target
+
+
+def batchify_old3(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500, is_transformer=False):
+
+    print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}, is_transformer={is_transformer}')
+    
+    nsamples = len(index_list)
+    nbatches = nsamples // batchsize + 1 * (nsamples % batchsize > 0)
+    
+    for b in range(nbatches):
+        batch = index_list[b * batchsize:(b + 1) * batchsize]
+        batch_labels = labels[b * batchsize:(b + 1) * batchsize]
+
+        # Convert labels to appropriate tensor type
+        if isinstance(batch_labels, pd.Series):
+            batch_labels = batch_labels.astype(float)
+        elif issparse(batch_labels):
+            batch_labels = batch_labels.astype(float)
+        
+        totype = torch.LongTensor if target_long else torch.FloatTensor
+        target = totype(batch_labels).to(device)
+
+        # Pad batch and handle attention mask for transformers
+        batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
+        batch = torch.LongTensor(batch).to(device)
+
+        if is_transformer:
+            # Create attention mask (1 for non-padding, 0 for padding)
+            attention_mask = (batch != pad_index).long().to(device)
+            yield (batch, attention_mask), target
+        else:
+            yield batch, target
+
+
+
+
+def batchify_old2(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500, is_transformer=False):
+    
+    print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}, is_transformer={is_transformer}')
+    
+    nsamples = len(index_list)
+    nbatches = nsamples // batchsize + 1 * (nsamples % batchsize > 0)
+    
+    for b in range(nbatches):
+        batch = index_list[b * batchsize:(b + 1) * batchsize]
+        batch_labels = labels[b * batchsize:(b + 1) * batchsize]
+
+        # Check batch_labels object type and convert as necessary
+        if isinstance(batch_labels, pd.Series):
+            batch_labels = batch_labels.astype(float)
+        elif issparse(batch_labels):
+            batch_labels = batch_labels.astype(float)
+
+        # Pad batch and create attention mask for transformers
+        batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
+        batch = torch.LongTensor(batch).to(device)
+        
+        if is_transformer:
+            # Generate attention mask (1 for real tokens, 0 for padding)
+            attention_mask = (batch != pad_index).long()
+        else:
+            attention_mask = None  # No attention mask needed for word-based models
+
+        # Convert labels to appropriate tensor type
+        totype = torch.LongTensor if target_long else torch.FloatTensor
+        target = totype(batch_labels).to(device)
+
+        if is_transformer:
+            # Yield batch and attention mask as tuple for transformers
+            yield (batch, attention_mask), target
+        else:
+            # Yield only batch for word-based models
+            yield batch, target
+
+
+
+def batchify_old(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
     
     print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
     
@@ -531,6 +632,170 @@ def get_embedding_type(pretrained):
         embedding_type = 'word'             # default to word embeddings
 
     return embedding_type
+
+
+
+def set_method_name(opt):
+    
+    method_name = opt.net
+    
+    if opt.pretrained:
+        method_name += f'-{opt.pretrained}'
+    
+    if opt.learnable > 0:
+        method_name += f'-learn{opt.learnable}'
+    
+    if opt.supervised:
+        sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
+        #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
+        method_name += f'-wce-d{sup_drop}-{opt.supervised_method}'
+    
+    if opt.dropprob > 0:
+        if opt.droptype != 'sup':
+            method_name += f'-drop{opt.droptype}{opt.dropprob}'
+    
+    if (opt.pretrained or opt.supervised) and opt.tunable:
+        method_name+='-tunable'
+    elif (opt.pretrained or opt.supervised) and not opt.tunable:
+        method_name+='-static'
+
+    if opt.weight_decay > 0:
+        method_name+=f'_wd{opt.weight_decay}'
+    
+    if opt.net in {'lstm', 'attn'}:
+        method_name+=f'-h{opt.hidden}'
+    
+    if opt.net== 'cnn':
+        method_name+=f'-ch{opt.channels}'
+    
+    return method_name
+
+
+def initialize_testing(args):
+
+    print("\n\tinitializing...")
+
+    print("args:", args)
+
+    # get system info to be used for logging below
+    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
+
+    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
+    mem = total_memory
+    if (num_cuda_devices >0):
+        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
+        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
+    else:
+        gpus = 'None'
+
+    method_name = set_method_name(args)
+    print("method_name:", method_name)
+
+    logger = CSVLog(
+        file=args.log_file, 
+        columns=[
+            'os',
+            'cpus',
+            'mem',
+            'gpus',
+            'dataset', 
+            'class_type',
+            'model', 
+            'embeddings',
+            'lm_type',
+            'mode',
+            'comp_method',
+            'representation',
+            'optimized',
+            'dimensions',
+            'measure', 
+            'value',
+            'timelapse',
+            'epoch',
+            'run',
+            ], 
+        verbose=True, 
+        overwrite=False)
+
+    run_mode = method_name
+    print("run_mode:", {run_mode})
+
+    if args.pretrained:
+        pretrained = True
+    else:
+        pretrained = False
+
+    embeddings = args.pretrained
+    print("embeddings:", {embeddings})
+
+    lm_type = get_language_model_type(embeddings)
+    print("lm_type:", {lm_type})
+
+    if (args.supervised):
+        supervised = True
+        mode = 'supervised'
+    else:
+        supervised = False
+        mode = 'unsupervised'
+
+    # get the path to the embeddings
+    emb_path = get_embeddings_path(embeddings, args)
+    print("emb_path: ", {emb_path})
+
+    system = SystemResources()
+    print("system:\n", system)
+
+    if (args.dataset in ['bbc-news', '20newsgroups']):
+        logger.set_default('class_type', 'single-label')
+    else:
+        logger.set_default('class_type', 'multi-label')
+        
+    # set default system params
+    logger.set_default('os', system.get_os())
+    logger.set_default('cpus', system.get_cpu_details())
+    logger.set_default('mem', system.get_total_mem())
+    logger.set_default('mode', run_mode)
+
+    gpus = system.get_gpu_summary()
+    if gpus is None:
+        gpus = -1   
+    logger.set_default('gpus', gpus)
+
+    logger.set_default('dataset', args.dataset)
+    logger.set_default('model', args.net)
+    logger.set_default('mode', mode)
+    logger.set_default('embeddings', embeddings)
+    logger.set_default('run', args.seed)
+    logger.set_default('representation', method_name)
+    logger.set_default('lm_type', lm_type)
+    logger.set_default('optimized', args.tunable)
+
+    embedding_type = get_embedding_type(embeddings)
+    print("embedding_type:", embedding_type)
+
+    comp_method = get_model_computation_method(
+        vtype=args.vtype,
+        pretrained=embeddings, 
+        embedding_type=embedding_type, 
+        learner=args.net, 
+        mix=None
+        )
+    print("comp_method:", comp_method)
+    logger.set_default('comp_method', comp_method)
+
+    # check to see if the model has been run before
+    already_modelled = logger.already_calculated(
+        dataset=args.dataset,
+        #embeddings=embeddings,
+        model=args.net, 
+        representation=method_name,
+        mode=mode,
+        run=args.seed
+        )
+
+    print("already_modelled:", already_modelled)
+
+    return already_modelled, logger, method_name, pretrained, embeddings, emb_path, lm_type, mode, system
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------

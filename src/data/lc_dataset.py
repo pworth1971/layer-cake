@@ -310,8 +310,6 @@ class LCDataset:
         if not isinstance(self.Xte_vectorized, csr_matrix):
             self.Xte_vectorized = csr_matrix(self.Xte_vectorized)
 
-
-
         return self.Xtr_vectorized, self.Xte_vectorized
     
 

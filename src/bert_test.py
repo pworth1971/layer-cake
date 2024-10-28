@@ -2,21 +2,7 @@ import numpy as np
 import os
 import argparse
 from time import time
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.metrics import confusion_matrix, multilabel_confusion_matrix
-
-from sklearn.pipeline import Pipeline
-from sklearn.utils.class_weight import compute_class_weight
-
-from data.lc_dataset import LCDataset
-from model.classification import run_svm_model, run_lr_model, run_nb_model
-from util.metrics import evaluation
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -25,7 +11,20 @@ import torch.optim as optim
 
 from transformers import BertTokenizerFast, BertModel, RobertaTokenizerFast, RobertaModel
 
-from tqdm import tqdm
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import confusion_matrix, multilabel_confusion_matrix
+from sklearn.pipeline import Pipeline
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import f1_score
+
+from data.lc_dataset import LCDataset, loadpt_data
+from model.classification import run_svm_model, run_lr_model, run_nb_model
+from util.metrics import evaluation_nn, evaluation_ml
+from util.common import get_embedding_type, index_dataset, initialize_testing
 
 
 import warnings
@@ -176,7 +175,7 @@ def classify(dataset='20newsgrouops', args=None, device='cpu'):
         
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(y_test, y_pred, classification_type=class_type, debug=False)
+        evaluation_ml(y_test, y_pred, classification_type=class_type, debug=False)
 
     print("Layer Cake Metrics:\n")
     print(f"Macro F1: {Mf1:.4f}")
@@ -192,12 +191,20 @@ def classify(dataset='20newsgrouops', args=None, device='cpu'):
 
 
 
-def get_model_data(dataset='reuters21578'):
+def get_model_data(dataset='reuters21578', pretrained=None):
+    
     print("Getting model data...")
 
     # Load data    
     print(f"Loading data set {dataset}...")
-    lcd = LCDataset(dataset)
+    lcd = LCDataset(
+        name=dataset,
+        vectorization_type='tfidf',
+        pretrained=pretrained,
+        embedding_type='token',
+        embedding_path=VECTOR_CACHE,
+        embedding_comp_type='avg'
+    )
 
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = lcd.split()
@@ -232,7 +239,12 @@ def get_model_data(dataset='reuters21578'):
 
 # Custom dataset class for loading and tokenizing text data
 class BertDataset(Dataset):
+
     def __init__(self, texts, targets, tokenizer, max_length):
+
+        print("BertDataset:__init__...")
+        print(f'texts: {len(texts)}, targets: {len(targets)}')
+
         self.texts = texts
         self.targets = targets
         self.tokenizer = tokenizer
@@ -351,6 +363,9 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
         # Validation loop
         model.eval()
         total_val_loss = 0
+        all_targets = []
+        all_preds = []
+
         with torch.no_grad():
             for batch in val_loader:
                 ids = batch['ids'].to(device)
@@ -360,12 +375,32 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
 
                 if multilabel:
                     val_loss = loss_fn(outputs, targets.float())  # Convert targets to float for BCEWithLogitsLoss
+                    # Sigmoid + threshold for multi-label predictions
+                    probs = torch.sigmoid(outputs).cpu().numpy()
+                    preds = (probs >= 0.5).astype(int)
                 else:
                     val_loss = loss_fn(outputs, targets)
+                    # Argmax for single-label predictions
+                    preds = torch.argmax(outputs, dim=1).cpu().numpy()
+
+                """    
+                if multilabel:
+                    val_loss = loss_fn(outputs, targets.float())  # Convert targets to float for BCEWithLogitsLoss
+                else:
+                    val_loss = loss_fn(outputs, targets)
+                """
 
                 total_val_loss += val_loss.item()
 
+                # Collect targets and predictions for F1 calculation
+                all_targets.extend(targets.cpu().numpy())
+                all_preds.extend(preds)
+
         avg_val_loss = total_val_loss / len(val_loader)
+
+        # Calculate Macro and Micro F1 Scores
+        macro_f1 = f1_score(all_targets, all_preds, average="macro")
+        micro_f1 = f1_score(all_targets, all_preds, average="micro")
 
         print(f'Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}')
 
@@ -425,17 +460,92 @@ def fine_tune_model(args, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max_
     print("Fine-tuning and testing model...")
 
     # Load training and testing data
-    X_train, X_test, y_train, y_test, category_names, _, class_type = get_model_data(args.dataset)
+    #X_train, X_test, y_train, y_test, category_names, _, class_type = get_model_data(args.dataset, args.pretrained)
 
-    print("X_train:", type(X_train), X_train.shape)
-    print("X_test:", type(X_test), X_test.shape)
-    print("y_train:", type(y_train), y_train.shape)
-    print("y_test:", type(y_test), y_test.shape)
+    # initialize logging and other system run variables
+    already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(args)
+
+    # check to see if model params have been computed already
+    if (already_modelled):
+        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {args.tunable}, and wc_supervised == {args.supervised} for {args.dataset} already calculated, run with --force option to override. ---')
+        exit(0)
+
+    print("dataset:", args.dataset)
+    print("pretrained:", args.pretrained)
+    print("vtype:", args.vtype)
+    print("embedding-dir:", args.embedding_dir)
+
+    embedding_type = get_embedding_type(args.pretrained)
+    print("embedding_type:", embedding_type)
+    print("embeddings:", embeddings)    
+    print("embedding_path:", emb_path)
+
+    #
+    # Load the dataset and the associated (pretrained) embedding structures
+    # to be fed into the model
+    #                                                          
+    lcd = loadpt_data(
+        dataset=args.dataset,                            # Dataset name
+        vtype=args.vtype,                                # Vectorization type
+        pretrained=args.pretrained,                      # pretrained embeddings type
+        embedding_path=emb_path,                        # path to pretrained embeddings
+        emb_type=embedding_type                         # embedding type (word or token)
+        )                                                
+
+    print("loaded LCDataset object:", type(lcd))
+    print("lcd:", lcd.show())
+
+    pretrained_vectors = lcd.lcr_model
+    pretrained_vectors.show()
+
+    if (args.pretrained is None):
+        pretrained_vectors = None
+        
+    #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
+
+    if args.pretrained in ['bert', 'roberta', 'xlnet', 'gpt2', 'llama']:
+        toke = lcd.tokenizer
+        transformer_model = True
+    else:
+        toke = None
+        transdformer_model = False
+
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, tokenizer=toke, max_length=lcd.max_length, pretrained=pretrained_vectors)
+    
+    print("word2index:", type(word2index), len(word2index))
+    print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
+
+    print("training and validation data split...")
+
+    #print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
+
+    val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
+
+    # Perform the train_test_split with stratification based on the class labels
+
+    train_index, val_index, ytr, yval = train_test_split(
+        devel_index, lcd.devel_target, test_size=val_size, random_state=args.seed, shuffle=True
+    )
+
+    print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
+    print("lcd.devel_target[0]:\n", type(lcd.devel_target[0]), lcd.devel_target[0])
+
+    print("lcd.devel_labelmatrix:", type(lcd.devel_labelmatrix), lcd.devel_labelmatrix.shape)
+    print("lcd.devel_labelmatrix[0]:\n", type(lcd.devel_labelmatrix[0]), lcd.devel_labelmatrix[0])
+
+    X_train = lcd.Xtr
+    X_test = lcd.Xte
+    y_train = lcd.ytr_encoded
+    y_test = lcd.yte_encoded
 
     # Split validation data from test set
-    X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, test_size=0.5, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, test_size=.25, random_state=42)
+
+    print("X_train:", type(X_train), X_train.shape)
     print("X_val:", type(X_val), X_val.shape)
     print("X_test:", type(X_test), X_test.shape)
+
+    print("y_train:", type(y_train), y_train.shape)
     print("y_val:", type(y_val), y_val.shape)
     print("y_test:", type(y_test), y_test.shape)
 
@@ -449,9 +559,9 @@ def fine_tune_model(args, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max_
         return
 
     # Create dataset and data loaders
-    train_dataset = BertDataset(X_train, y_train, tokenizer, max_length)
-    val_dataset = BertDataset(X_val, y_val, tokenizer, max_length)
-    test_dataset = BertDataset(X_test, y_test, tokenizer, max_length)
+    train_dataset = BertDataset(X_train, y_train, lcd.tokenizer, lcd.max_length)
+    val_dataset = BertDataset(X_val, y_val, lcd.tokenizer, lcd.max_length)
+    test_dataset = BertDataset(X_test, y_test, lcd.tokenizer, lcd.max_length)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -468,6 +578,9 @@ def fine_tune_model(args, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max_
     model = TransformerClassifier(num_classes=num_classes, model_name=model_name).to(device)
 
     print("model:\n", model)
+
+    class_type = lcd.class_type
+    print("class_type:", class_type)
 
     # Compute class weights for single-label case, ignored in multilabel case
     if class_type == 'multilabel':
@@ -499,7 +612,7 @@ def fine_tune_model(args, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max_
     train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epochs, multilabel=(class_type == 'multilabel'))
 
     # Test the model on test set
-    evaluate_model(model, test_loader, device, category_names, multilabel=(class_type == 'multilabel'))
+    evaluate_model(model, test_loader, device, lcd.target_names, multilabel=(class_type == 'multilabel'))
 
 
 
@@ -599,7 +712,7 @@ def evaluate_model(model, test_loader, device, target_names, threshold=0.5, mult
 
     # Evaluate the model
     Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
-        evaluation(all_targets, all_preds, classification_type=class_type, debug=False)
+        evaluation_nn(all_targets, all_preds, classification_type=class_type, debug=False)
 
     print("Layer Cake Metrics:\n")
     print(f"Macro F1: {Mf1:.4f}")
@@ -625,10 +738,48 @@ if __name__ == '__main__':
     
     parser.add_argument('--learner', required=True, type=str, default='svm', help='Choose the learner: nn, ft, svm, lr, nb.')
 
-    parser.add_argument('--pretrained', type=str, default=None, metavar='bert|roberta',
-                        help='pretrained embeddings, use "bert", or "roberta" (default None)')
+    parser.add_argument('--net', type=str, default='lstm', metavar='str',
+                        help=f'net, one in (CNN, LSTM, ATTN)')
     
-    parser.add_argument('--embedding-dir', type=str, default='../.vector_cache', metavar='str',
+    parser.add_argument('--dropprob', type=float, default=0.5, metavar='[0.0, 1.0]',
+                        help='dropout probability (default: 0.5)')
+    
+    parser.add_argument('--droptype', type=str, default='sup', metavar='DROPTYPE',
+                        help=f'chooses the type of dropout to apply after the embedding layer. Default is "sup" which '
+                             f'only applies to word-class embeddings (if present). Other options include "none" which '
+                             f'does not apply dropout (same as "sup" with no supervised embeddings), "full" which '
+                             f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
+                             f'learnable embedding.')
+    
+    parser.add_argument('--pretrained', type=str, default=None, metavar='str',
+                        help='pretrained embeddings, one of "bert", "roberta", "xlnet", "gpt2", or "llama" (default None)')
+
+    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
+                        help=f'dataset base vectorization strategy, in [tfidf, count]')
+
+    parser.add_argument('--seed', type=int, default=1, metavar='int',
+                        help='random seed (default: 1)')
+            
+    parser.add_argument('--supervised', action='store_true', default=False,
+                        help='use supervised embeddings')
+    
+    parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
+                        help='method used to create the supervised matrix. Available methods include dotn (default), '
+                             'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
+    
+    parser.add_argument('--learnable', type=int, default=0, metavar='int',
+                        help='dimension of the learnable embeddings (default 0)')
+
+    parser.add_argument('--tunable', action='store_true', default=False,
+                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    
+    parser.add_argument('--weight_decay', type=float, default=0, metavar='float',
+                        help='weight decay (default: 0)')
+    
+    parser.add_argument('--hidden', type=int, default=512, metavar='int',
+                        help='hidden lstm size (default: 512)')
+    
+    parser.add_argument('--embedding-dir', type=str, default=VECTOR_CACHE, metavar='str',
                         help=f'path where to load and save document embeddings')
     
     parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE,
@@ -645,6 +796,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs, used with --learner ft')
 
+    parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', metavar='str',
+                        help='path to the log logger output file')
+    
     parser.add_argument('--cm', action='store_true', help='Generate confusion matrix.')
     
     args = parser.parse_args()
@@ -665,9 +819,11 @@ if __name__ == '__main__':
         print(f'Using {num_replicas} GPU(s)')
         
         # If using multiple GPUs, use DataParallel or DistributedDataParallel
+        """
         if num_gpus > 1:
             model = torch.nn.DataParallel(model)    
-        
+        """
+
     # Check for MPS availability (for Apple Silicon)
     elif torch.backends.mps.is_available():
         print("MPS is available")
@@ -710,7 +866,7 @@ if __name__ == '__main__':
 
     if (args.learner == 'ft'):
     
-        print("learner is ft...")xf
+        print("learner is ft...")
 
         fine_tune_model(
             args, 

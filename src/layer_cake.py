@@ -22,7 +22,7 @@ from util.csv_log import CSVLog
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
 
-from model.classification import NeuralClassifier
+from model.classification import NeuralClassifier, TransformerAttentionModel
 from util.early_stop import EarlyStopping
 from util.file import create_if_not_exist
 
@@ -174,12 +174,110 @@ specific tasks.
 # ---------------------------------------------------------------------------------------------------------------------------
 
 def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
+
+    print("\n------------------ init_Net() ------------------")
+
+    net_type = opt.net
+    print("net_type:", net_type)
+
+    hidden = opt.channels if net_type == 'cnn' else opt.hidden
+    print("hidden:", hidden)
+
+    # Determine dropout range based on specified type
+    if opt.droptype == 'sup':
+        drop_range = sup_range
+    elif opt.droptype == 'learn':
+        drop_range = [pretrained_embeddings.shape[1], pretrained_embeddings.shape[1] + opt.learnable]
+    elif opt.droptype == 'none':
+        drop_range = None
+    elif opt.droptype == 'full':
+        drop_range = [0, pretrained_embeddings.shape[1] + opt.learnable]
+
+    print('droptype =', opt.droptype)
+    print('droprange =', drop_range)
+    print('dropprob =', opt.dropprob)
+
+    # Map short names to Hugging Face model names
+    model_name_mapping = {
+        'bert': 'bert-base-uncased',
+        'roberta': 'roberta-base',
+        'gpt2': 'gpt2',
+        'xlnet': 'xlnet-base-cased',
+        'llama': 'llama'
+    }
+
+    model_name = model_name_mapping.get(opt.pretrained, opt.pretrained)
+    print("model_name:", model_name)
+
+    # Check if using a transformer-based model
+    if opt.pretrained in model_name_mapping:
+    
+        print(f"Initializing transformer-based model with EmbeddingCustom: {model_name}")
+
+        # Initialize TransformerAttentionModel with EmbeddingCustom
+        model = TransformerAttentionModel(
+            model_name=model_name,
+            vocab_size=vocabsize,
+            learnable_length=opt.learnable,
+            num_classes=nC,
+            hidden_size=hidden,
+            dropout_prob=opt.dropprob,
+            pretrained=pretrained_embeddings  # Pass pretrained embeddings to EmbeddingCustom
+        )
+
+    else:
+        # Fallback to NeuralClassifier for non-transformer models
+        model = NeuralClassifier(
+            net_type=net_type,
+            output_size=nC,
+            hidden_size=hidden,
+            vocab_size=vocabsize,
+            learnable_length=opt.learnable,
+            pretrained=pretrained_embeddings,
+            drop_embedding_range=drop_range,
+            drop_embedding_prop=opt.dropprob
+        )
+        print("Neural Classifier Model:\n", model)
+
+        # Initialize parameters and move to device
+        model.xavier_uniform()
+
+    model = model.to(opt.device)
+
+    # Fine-tune if specified
+    if opt.tunable:
+        print("Fine-tuning embeddings...")
+        model.finetune_pretrained()
+
+    # Print embedding sizes for both transformer and non-transformer models
+    if isinstance(model, NeuralClassifier):
+        embsizeX, embsizeY = model.get_embedding_size()
+        print("embsizeX:", embsizeX)
+        print("embsizeY:", embsizeY)
+
+        lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
+        print("lrnsizeX:", lrnsizeX)
+        print("lrnsizeY:", lrnsizeY)
+
+        return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
+    else:
+        # For transformer-based models, use transformer-specific dimensions
+        embedding_size = model.transformer.config.hidden_size
+        print("embedding_size:", embedding_size)
+
+        return model, vocabsize, embedding_size, 0, 0
+
+
+
+def init_Net_old(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     
     print("------------------ init_Net() ------------------")
 
     net_type=opt.net
-    
+    print("net_type:", net_type)
+
     hidden = opt.channels if net_type == 'cnn' else opt.hidden
+    print("hidden:", hidden)
 
     if opt.droptype == 'sup':
         drop_range = sup_range
@@ -194,8 +292,67 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     print('droprange =', drop_range)
     print('dropprob =', opt.dropprob)
 
-    logging.info(f"Network initialized with dropout type: {opt.droptype}, dropout range: {drop_range}, dropout probability: {opt.dropprob}")
+    print(f'Neural Network initialized with dropout type: {opt.droptype}, dropout range: {drop_range}, dropout probability: {opt.dropprob}')
 
+    # Map short names to full Hugging Face model names
+    model_name_mapping = {
+        'bert': 'bert-base-uncased',
+        'roberta': 'roberta-base',
+        'gpt2': 'gpt2',
+        'xlnet': 'xlnet-base-cased',
+        'llama': 'llama'
+    }
+
+    if opt.pretrained in model_name_mapping:
+        model_name = model_name_mapping[opt.pretrained]
+    else:
+        model_name = opt.pretrained                         # Use as-is if no mapping is found
+
+    # Check if a transformer-based model is being used (BERT, RoBERTa, GPT-2, XLNet, etc.)
+    if opt.pretrained in model_name_mapping:
+
+        print(f"Initializing transformer-based model: {model_name}")
+
+        #
+        # Initialize the transformer-attention based model 
+        # Input Tokens -> Transformer Embeddings (BERT, GPT-2, etc.) -> Self-Attention -> Feedforward -> Output
+        #
+        model = TransformerAttentionModel(
+            model_name=model_name,     # Mapped model name (e.g., 'bert-base-uncased')
+            num_classes=nC,            # Number of output classes
+            hidden_size=hidden,        # Hidden size of the transformer
+            attn_heads=8,              # Number of attention heads
+            dropout_prob=opt.dropprob  # Dropout probability
+        )
+
+        # Move the model to the specified device
+        model = model.to(opt.device)
+
+    else:
+        # Fallback to the existing NeuralClassifier for non-transformer models
+        model = NeuralClassifier(
+            net_type,
+            output_size=nC,
+            hidden_size=hidden,
+            vocab_size=vocabsize,
+            learnable_length=opt.learnable,
+            pretrained=pretrained_embeddings,
+            drop_embedding_range=drop_range,
+            drop_embedding_prop=opt.dropprob
+        )
+
+        print("Neural Classifier Model:\n", model)
+
+        # Initialize the model's parameters
+        model.xavier_uniform()
+        model = model.to(opt.device)
+
+        if opt.tunable:
+            print("Fine-tuning embeddings...")
+            model.finetune_pretrained()
+
+
+    """        
     model = NeuralClassifier(
         net_type,
         output_size=nC,
@@ -227,7 +384,27 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     print("lrnsizeY:", lrnsizeY)
 
     return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
+    """
 
+    # Print embedding sizes for both transformer and non-transformer models
+    if isinstance(model, NeuralClassifier):
+        embsizeX, embsizeY = model.get_embedding_size()
+        print("embsizeX:", embsizeX)
+        print("embsizeY:", embsizeY)
+
+        lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
+        print("lrnsizeX:", lrnsizeX)
+        print("lrnsizeY:", lrnsizeY)
+
+        return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
+    else:
+        # For transformer-based models, return transformer-specific dimensions
+        embedding_size = model.transformer.config.hidden_size
+        print("embedding_size:", embedding_size)
+
+        return model, vocabsize, embedding_size, 0, 0
+    
+    
 # ---------------------------------------------------------------------------------------------------------------------------
 
 
@@ -309,7 +486,6 @@ def init_optimizer(model, lr, weight_decay):
 def init_loss(classification_type, device, class_weights):
     assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
 
-    
     # In your criterion (loss function) initialization, pass the class weights
     if classification_type == 'multilabel':
         L = torch.nn.BCEWithLogitsLoss()
@@ -328,9 +504,62 @@ def init_loss(classification_type, device, class_weights):
 
 
 
+
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
+def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history, is_transformer=False):
+
+    print("\t... training ...")
+    
+    epoch_loss = 0
+    total_batches = 0
+    as_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
+    
+    # Optionally limit epoch length
+    if opt.max_epoch_length is not None:
+        tr_len = len(train_index)
+        train_for = opt.max_epoch_length * opt.batch_size
+        from_, to_ = (epoch * train_for) % tr_len, ((epoch + 1) * train_for) % tr_len
+        if to_ < from_:
+            train_index = train_index[from_:] + train_index[:to_]
+            ytr = np.concatenate((ytr[from_:], ytr[:to_])) if not issparse(ytr) else np.vstack((ytr[from_:], ytr[:to_]))
+        else:
+            train_index, ytr = train_index[from_:to_], ytr[from_:to_]
+
+    model.train()
+
+    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long, is_transformer=is_transformer)):
+        optim.zero_grad()
+
+        if is_transformer:
+            # Unpack input_ids and attention_mask for transformer models
+            input_ids, attention_mask = batch
+            output = model(input_ids=input_ids, attention_mask=attention_mask)
+        else:
+            output = model(batch)  # Word-based models
+        
+        # Calculate loss and backpropagate
+        loss = criterion(output, target)
+        loss.backward()
+        clip_gradient(model)
+        optim.step()
+        
+        epoch_loss += loss.item()
+        total_batches += 1
+
+        if idx % opt.log_interval == 0:
+            print(f'{dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {loss.item():.6f}')
+
+    mean_loss = epoch_loss / total_batches
+    loss_history['train_loss'].append(mean_loss)
+
+    return mean_loss
+
+
+
+def train_old(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history, is_transformer=False):
     
     print("\t... training ...")
 
@@ -368,7 +597,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     print("dims:", {dims})
     """
 
-    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
+    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long, is_transformer=is_transformer)):
 
         """
         if dims is None:
@@ -403,7 +632,67 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size):
+def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size, is_transformer=False):
+    print("\t..testing...")
+
+    model.eval()
+    predictions = []
+
+    test_loss = 0
+    total_batches = 0
+    target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
+
+    for batch, target in tqdm(
+            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long, is_transformer=is_transformer),
+            desc='evaluation: '
+    ):
+        # Conditional unpacking based on whether we're using a transformer model
+        if is_transformer:
+            input_ids, attention_mask = batch
+            logits = model(input_ids=input_ids, attention_mask=attention_mask)
+        else:
+            logits = model(batch)  # For word-based models without attention mask
+        
+        # Calculate loss and convert to item for logging
+        loss = criterion(logits, target).item()
+        prediction = csr_matrix(predict(logits, classification_type=classification_type))
+        predictions.append(prediction)
+
+        test_loss += loss
+        total_batches += 1
+
+    yte_ = scipy.sparse.vstack(predictions)
+    
+    print("evaluating test run...")
+    
+    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
+    
+    print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
+    
+    tend = time.time() - tinit
+
+    # Log the metrics for final test evaluation
+    if measure_prefix == 'final-te':
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    
+    mean_loss = test_loss / total_batches
+    loss_history['test_loss'].append(mean_loss)
+
+    # Log final loss if required
+    if measure_prefix == 'final-te':
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
+
+    return Mf1, mean_loss  # Return value for use in early stopping and loss plotting
+
+
+def test_old(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size, is_transformer=False):
     
     print("\t..testing...")
 
@@ -429,7 +718,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     """
 
     for batch, target in tqdm(
-            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long),
+            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long, is_transformer=is_transformer),
             desc='evaluation: '
     ):
         logits = model(batch)
@@ -475,168 +764,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
 
 
-def set_method_name(opt):
-    
-    method_name = opt.net
-    
-    if opt.pretrained:
-        method_name += f'-{opt.pretrained}'
-    
-    if opt.learnable > 0:
-        method_name += f'-learn{opt.learnable}'
-    
-    if opt.supervised:
-        sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
-        #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
-        method_name += f'-wce-d{sup_drop}-{opt.supervised_method}'
-    
-    if opt.dropprob > 0:
-        if opt.droptype != 'sup':
-            method_name += f'-drop{opt.droptype}{opt.dropprob}'
-    
-    if (opt.pretrained or opt.supervised) and opt.tunable:
-        method_name+='-tunable'
-    elif (opt.pretrained or opt.supervised) and not opt.tunable:
-        method_name+='-static'
 
-    if opt.weight_decay > 0:
-        method_name+=f'_wd{opt.weight_decay}'
-    
-    if opt.net in {'lstm', 'attn'}:
-        method_name+=f'-h{opt.hidden}'
-    
-    if opt.net== 'cnn':
-        method_name+=f'-ch{opt.channels}'
-    
-    return method_name
-
-
-
-def initialize_testing(args):
-
-    print("\n\tinitializing...")
-
-    print("args:", args)
-
-    # get system info to be used for logging below
-    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
-
-    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
-    mem = total_memory
-    if (num_cuda_devices >0):
-        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
-        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
-    else:
-        gpus = 'None'
-
-    method_name = set_method_name(args)
-    print("method_name:", method_name)
-
-    logger = CSVLog(
-        file=args.log_file, 
-        columns=[
-            'os',
-            'cpus',
-            'mem',
-            'gpus',
-            'dataset', 
-            'class_type',
-            'model', 
-            'embeddings',
-            'lm_type',
-            'mode',
-            'comp_method',
-            'representation',
-            'optimized',
-            'dimensions',
-            'measure', 
-            'value',
-            'timelapse',
-            'epoch',
-            'run',
-            ], 
-        verbose=True, 
-        overwrite=False)
-
-    run_mode = method_name
-    print("run_mode:", {run_mode})
-
-    if args.pretrained:
-        pretrained = True
-    else:
-        pretrained = False
-
-    embeddings = args.pretrained
-    print("embeddings:", {embeddings})
-
-    lm_type = get_language_model_type(embeddings)
-    print("lm_type:", {lm_type})
-
-    if (args.supervised):
-        supervised = True
-        mode = 'supervised'
-    else:
-        supervised = False
-        mode = 'unsupervised'
-
-    # get the path to the embeddings
-    emb_path = get_embeddings_path(embeddings, args)
-    print("emb_path: ", {emb_path})
-
-    system = SystemResources()
-    print("system:\n", system)
-
-    if (args.dataset in ['bbc-news', '20newsgroups']):
-        logger.set_default('class_type', 'single-label')
-    else:
-        logger.set_default('class_type', 'multi-label')
-        
-    # set default system params
-    logger.set_default('os', system.get_os())
-    logger.set_default('cpus', system.get_cpu_details())
-    logger.set_default('mem', system.get_total_mem())
-    logger.set_default('mode', run_mode)
-
-    gpus = system.get_gpu_summary()
-    if gpus is None:
-        gpus = -1   
-    logger.set_default('gpus', gpus)
-
-    logger.set_default('dataset', args.dataset)
-    logger.set_default('model', args.net)
-    logger.set_default('mode', mode)
-    logger.set_default('embeddings', embeddings)
-    logger.set_default('run', args.seed)
-    logger.set_default('representation', method_name)
-    logger.set_default('lm_type', lm_type)
-    logger.set_default('optimized', args.tunable)
-
-    embedding_type = get_embedding_type(embeddings)
-    print("embedding_type:", embedding_type)
-
-    comp_method = get_model_computation_method(
-        vtype=args.vtype,
-        pretrained=embeddings, 
-        embedding_type=embedding_type, 
-        learner=args.net, 
-        mix=None
-        )
-    print("comp_method:", comp_method)
-    logger.set_default('comp_method', comp_method)
-
-    # check to see if the model has been run before
-    already_modelled = logger.already_calculated(
-        dataset=args.dataset,
-        #embeddings=embeddings,
-        model=args.net, 
-        representation=method_name,
-        mode=mode,
-        run=args.seed
-        )
-
-    print("already_modelled:", already_modelled)
-
-    return already_modelled, logger, method_name, pretrained, embeddings, emb_path, lm_type, mode, system
     
 
 # --------------------------------------------------------------------------------------------------------------------------------------
@@ -803,7 +931,6 @@ if __name__ == '__main__':
 
     torch.manual_seed(opt.seed)
 
-
     assert opt.dataset in available_datasets, \
         f'unknown dataset {opt.dataset}'
     
@@ -869,8 +996,10 @@ if __name__ == '__main__':
 
     if opt.pretrained in ['bert', 'roberta', 'xlnet', 'gpt2', 'llama']:
         toke = lcd.tokenizer
+        transformer_model = True
     else:
         toke = None
+        transdformer_model = False
 
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, tokenizer=toke, max_length=lcd.max_length, pretrained=pretrained_vectors)
     
@@ -905,8 +1034,10 @@ if __name__ == '__main__':
         class_weights.append(class_weight)
 
     # Convert to a tensor for PyTorch
-    class_weights = torch.tensor(class_weights, device=opt.device)
-#    class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(lcd.devel_labelmatrix), y=lcd.devel_labelmatrix)
+    class_weights = torch.tensor(class_weights, dtype=torch.float32, device=opt.device)
+
+    #class_weights = torch.tensor(class_weights, device=opt.device)
+    #class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(lcd.devel_labelmatrix), y=lcd.devel_labelmatrix)
     #print("class_weights:", class_weights)
 
     yte = lcd.test_target
@@ -929,20 +1060,20 @@ if __name__ == '__main__':
         print("pretrained_embeddings: None")
     
     model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
+    print("NN Model Specs:", model)
+
     optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
 
     criterion = init_loss(lcd.classification_type, opt.device, class_weights)
 
+    #
+    # establish dimensions (really shapes) of embedding and learning layers for logging
+    #
     emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
     print("emb_size:", emb_size_str)
-
     lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
     print("lrn_size:", lrn_size_str)
-
     emb_size_str = f'{emb_size_str}:{lrn_size_str}'
-
-    embedding_dim = model.embed.dim()
-    print("embedding_dim:", {embedding_dim})
 
     # train-validate
     tinit = time.time()
@@ -954,15 +1085,15 @@ if __name__ == '__main__':
     for epoch in range(1, opt.nepochs + 1):
 
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
+        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history, transformer_model)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
 
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str)
+                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
 
         if early_stop.STOP:
             print('[early-stop]')
@@ -989,7 +1120,7 @@ if __name__ == '__main__':
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str)
+        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
