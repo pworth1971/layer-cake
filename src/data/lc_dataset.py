@@ -455,7 +455,80 @@ class LCDataset:
 
         return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
     
-    
+
+
+    def get_initialized_neural_data():
+
+        return self.word2index, self.out_of_vocabulary, self.unk_index, self.pad_index, self.devel_index, self.test_index
+
+
+    def init_neural_data(self):
+
+        """
+        Indexes the dataset using either a tokenizer (for Transformer models) or a pretrained word-based embedding model.
+        """
+
+        print(f"init_neural_model()...")
+
+        # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
+        if tokenizer:
+            self.word2index = dict(self.tokenizer.get_vocab())
+            self.unk_index = self.tokenizer.unk_token_id
+            self.pad_index = self.tokenizer.pad_token_id
+        else:
+            self.word2index = dict(self.vocabulary)
+            self.word2index['UNKTOKEN'] = len(self.word2index)
+            self.word2index['PADTOKEN'] = len(self.word2index)
+            self.unk_index = word2index['UNKTOKEN']
+            self.pad_index = word2index['PADTOKEN']
+
+        known_words = set(self.word2index.keys())
+        if self.model is not None:
+            known_words.update(self.model.vocabulary())
+
+        self.out_of_vocabulary = dict()
+
+        # Define a helper function to tokenize and index documents
+        def tokenize_and_index(documents):
+            indices = []
+            for doc in documents:
+                if tokenizer:
+                    # Use the transformer tokenizer for subword tokenization
+                    tokens = tokenizer.encode(doc, truncation=True, padding=True, max_length=max_length)
+                else:
+                    # Use the dataset analyzer for word-based tokenization
+                    tokens = dataset.analyzer()(doc)
+
+                # Convert tokens to indices, handle OOVs
+                indexed_tokens = [word2index.get(token, unk_index) for token in tokens]
+                indices.append(indexed_tokens)
+            return indices
+
+        # Index development and test sets
+        self.devel_index = tokenize_and_index(self.devel_raw)
+        self.test_index = tokenize_and_index(self.test_raw)
+
+        print('[indexing complete]')
+
+        return self.word2index, self.out_of_vocabulary, self.unk_index, self.pad_index, self.devel_index, self.test_index
+
+
+    def split_val_data(self, val_ratio=0.2, min=20000, seed=1):
+
+        print("split_val_data()...")
+
+        val_size = min(int(len(devel_index) * val_ratio), min)                   # dataset split tr/val/test
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            self.devel_index, 
+            self.devel_target, 
+            test_size=val_size, 
+            random_state=seed, 
+            shuffle=True
+        )
+
+        return X_train, X_val, y_train, y_test
+
     #
     # -------------------------------------------------------------------------------------------------------------
     # data loading
@@ -1021,6 +1094,9 @@ class LCDataset:
         return self._vectorizer.build_analyzer()
     
 
+
+    # ----------------------------------------------------------------------------------------------------------------------------------------------------------
+
     def save(self, pickle_file):
         """
         Save the LCDataset instance to a pickle file.
@@ -1066,7 +1142,13 @@ class LCDataset:
             'Xte_avg_embeddings': self.Xte_avg_embeddings,
             'Xtr_summary_embeddings': self.Xtr_summary_embeddings,
             'Xte_summary_embeddings': self.Xte_summary_embeddings,
-            'lcr_model': self.lcr_model,  # Include the lcr_model object
+            'word2index': self.word2index,
+            'out_of_vocabulary': self.out_of_vocabulary,
+            'unk_index': self.unk_index,
+            'pad_index': self.pad_index,
+            'devel_index': self.devel_index,
+            'test_index': self.test_index,
+            'lcr_model': self.lcr_model,                    # Include the lcr_model object
             'loaded': self.loaded,
             'initialized': self.initialized
         }
@@ -1132,7 +1214,13 @@ class LCDataset:
             lcd.Xte_avg_embeddings = data_loaded['Xte_avg_embeddings']
             lcd.Xtr_summary_embeddings = data_loaded['Xtr_summary_embeddings']
             lcd.Xte_summary_embeddings = data_loaded['Xte_summary_embeddings']
-            lcd.lcr_model = data_loaded['lcr_model']  # Restore the lcr_model object
+            lcd.word2index = data_loaded['word2index']
+            lcd.out_of_vocabulary = data_loaded['out_of_vocabulary']
+            lcd.unk_index = data_loaded['unk_index']
+            lcd.pad_index = data_loaded['pad_index']
+            lcd.devel_index = data_loaded['devel_index']
+            lcd.test_index = data_loaded['test_index']
+            lcd.lcr_model = data_loaded['lcr_model']                                # Restore the lcr_model object
             lcd.loaded = data_loaded['loaded']
             lcd.initialized = data_loaded['initialized']
 
@@ -1392,7 +1480,8 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'bert': BERT_MODEL,
         'roberta': ROBERTA_MODEL,
         'gpt2': GPT2_MODEL,
-        'xlnet': XLNET_MODEL
+        'xlnet': XLNET_MODEL,
+        'llama': LLAMA_MODEL
     }
 
     # Look up the model name, or raise an error if not found
@@ -1427,91 +1516,12 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 
         lcd.vectorize()                             # vectorize the dataset
         lcd.init_embedding_matrices()               # initialize the embedding matrices
+        lcd.init_neural_data()                      # initialize the neural data inputs
 
         # Save the dataset instance to a pickle file
         lcd.save(pickle_file)
 
         return lcd
-
-
-# ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-def save_to_pickle(Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train, y_test, target_names, class_type, embedding_matrix, Xtr_weighted_embeddings, 
-                   Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings, pickle_file):
-    
-    print(f'saving {pickle_file} to pickle...')
-
-    # Open the file for writing and write the pickle data
-    try:
-
-        # Combine multiple variables into a dictionary
-        lc_pt_data = {
-            'Xtr_raw': Xtr_raw,
-            'Xte_raw': Xte_raw,
-            'Xtr_vectorized': Xtr_vectorized,
-            'Xte_vectorized': Xte_vectorized,
-            'y_train': y_train,
-            'y_test': y_test,
-            'target_names': target_names,
-            'class_type': class_type,
-            'embedding_matrix': embedding_matrix,
-            'Xtr_weighted_embeddings': Xtr_weighted_embeddings,
-            'Xte_weighted_embeddings': Xte_weighted_embeddings,
-            'Xtr_avg_embeddings': Xtr_avg_embeddings,
-            'Xte_avg_embeddings': Xte_avg_embeddings,
-            'Xtr_summary_embeddings': Xtr_summary_embeddings,
-            'Xte_summary_embeddings': Xte_summary_embeddings
-        }
-
-        with open(pickle_file, 'wb', pickle.HIGHEST_PROTOCOL) as f:
-            pickle.dump(lc_pt_data, f)
-        
-        print("data successfully pickled at:", pickle_file)
-
-        return True
-
-    except Exception as e:
-        print(f'\n\t------*** ERROR: Exception raised, failed to save pickle file {pickle_file}. {e} ***------')
-        return False
-        
-   
-
-def load_from_pickle(pickle_file):
-    
-    print(f"Loading pickle file: {pickle_file}...")
-
-    try:
-        # open the pickle file for reading
-        with open(pickle_file, 'rb') as f:
-            data_loaded = pickle.load(f)                # load the data from the pickle file
-
-        # Access the individual variables
-        Xtr_raw = data_loaded['Xtr_raw']
-        Xte_raw = data_loaded['Xte_raw']
-        Xtr_vectorized = data_loaded['Xtr_vectorized']
-        Xte_vectorized = data_loaded['Xte_vectorized']
-        y_train = data_loaded['y_train']
-        y_test = data_loaded['y_test']
-        target_names = data_loaded['target_names']
-        class_type = data_loaded['class_type']
-        embedding_matrix = data_loaded['embedding_matrix']
-        Xtr_weighted_embeddings = data_loaded['Xtr_weighted_embeddings']
-        Xte_weighted_embeddings = data_loaded['Xte_weighted_embeddings']
-        Xtr_avg_embeddings = data_loaded['Xtr_avg_embeddings']
-        Xte_avg_embeddings = data_loaded['Xte_avg_embeddings']
-        Xtr_summary_embeddings = data_loaded['Xtr_summary_embeddings']
-        Xte_summary_embeddings = data_loaded['Xte_summary_embeddings']
-
-    except EOFError:
-        print("\n\tError: Unexpected end of file while reading the pickle file.")
-        return None
-
-    print("embedding_matrix:", type(embedding_matrix), embedding_matrix.shape)
-    #print("embedding_matrix[0]:\n", embedding_matrix[0])
-
-    return Xtr_raw, Xte_raw, Xtr_vectorized, Xte_vectorized, y_train, y_test, target_names, class_type, embedding_matrix, Xtr_weighted_embeddings, Xte_weighted_embeddings, Xtr_avg_embeddings, Xte_avg_embeddings, Xtr_summary_embeddings, Xte_summary_embeddings
-
-# ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 def _label_matrix(tr_target, te_target):
