@@ -34,10 +34,7 @@ from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
-from model.LCRepresentationModel import Word2VecLCRepresentationModel, GloVeLCRepresentationModel, FastTextGensimLCRepresentationModel
-from model.LCRepresentationModel import BERTLCRepresentationModel, RoBERTaLCRepresentationModel, GPT2LCRepresentationModel, XLNetLCRepresentationModel
-from model.LCRepresentationModel import WORD2VEC_MODEL, GLOVE_MODEL, FASTTEXT_MODEL, BERT_MODEL, ROBERTA_MODEL, GPT2_MODEL, XLNET_MODEL
-from model.LCRepresentationModel import VECTOR_CACHE, PICKLE_DIR, DEFAULT_CPU_BATCH_SIZE, DEFAULT_GPU_BATCH_SIZE, DEFAULT_MPS_BATCH_SIZE
+from model.LCRepresentationModel import *
 
 
 DATASET_DIR = '../datasets/'                        # dataset directory
@@ -471,7 +468,7 @@ class LCDataset:
         print(f"init_neural_model()...")
 
         # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
-        if tokenizer:
+        if self.tokenizer:
             self.word2index = dict(self.tokenizer.get_vocab())
             self.unk_index = self.tokenizer.unk_token_id
             self.pad_index = self.tokenizer.pad_token_id
@@ -484,7 +481,7 @@ class LCDataset:
 
         known_words = set(self.word2index.keys())
         if self.model is not None:
-            known_words.update(self.model.vocabulary())
+            known_words.update(self.model.vocabulary())         # polymorphic behavior
 
         self.out_of_vocabulary = dict()
 
@@ -492,15 +489,15 @@ class LCDataset:
         def tokenize_and_index(documents):
             indices = []
             for doc in documents:
-                if tokenizer:
+                if self.tokenizer:
                     # Use the transformer tokenizer for subword tokenization
-                    tokens = tokenizer.encode(doc, truncation=True, padding=True, max_length=max_length)
+                    tokens = self.tokenizer.encode(doc, truncation=True, padding=True, max_length=self.max_length)
                 else:
                     # Use the dataset analyzer for word-based tokenization
-                    tokens = dataset.analyzer()(doc)
+                    tokens = self.analyzer()(doc)
 
                 # Convert tokens to indices, handle OOVs
-                indexed_tokens = [word2index.get(token, unk_index) for token in tokens]
+                indexed_tokens = [self.word2index.get(token, self.unk_index) for token in tokens]
                 indices.append(indexed_tokens)
             return indices
 

@@ -70,6 +70,8 @@ GPT2_MODEL = 'gpt2'                                          # dimension = 768, 
 XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
 #XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
+LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
+
 
 
 # -------------------------------------------------------------------------------------------------------
@@ -1088,7 +1090,7 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         batch_size = self.batch_size
 
         # Add a progress bar to track the processing of the vocabulary
-        with tqdm(total=len(vocabulary), desc="computing Transformer (BERT / RoBERTa embedding vocab matrix", unit="word") as pbar:
+        with tqdm(total=len(vocabulary), desc="computing transformer (BERT / RoBERTa) embedding vocab matrix...", unit="word") as pbar:
             for i in range(0, len(vocabulary), batch_size):
                 batch_words = vocabulary[i:i+batch_size]
                 embeddings = process_batch(batch_words)
