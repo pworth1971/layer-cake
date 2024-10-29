@@ -267,15 +267,14 @@ class LCDataset:
         corresponds to.
         """
 
-        print("\tvectorizing dataset...")
-        
-        if (debug):
-            print("model:\n", self.model)
-            print("tokenizer:\n", self.tokenizer)
-            print("vectorizer:\n", self.vectorizer)
-            print("self.vectorization_type:", self.vectorization_type)
-            print("self.embedding_type:", self.embedding_type)
-        
+        print("\tvectorizing dataset...")    
+    
+        print("model:\n", self.model)
+        print("tokenizer:\n", self.tokenizer)
+        print("vectorizer:\n", self.vectorizer)
+        print("self.vectorization_type:", self.vectorization_type)
+        print("self.embedding_type:", self.embedding_type)
+    
         print("fitting training and test data with vectorizer...")
 
         # Fit and transform the text data
@@ -454,7 +453,7 @@ class LCDataset:
     
 
 
-    def get_initialized_neural_data():
+    def get_initialized_neural_data(self):
 
         return self.word2index, self.out_of_vocabulary, self.unk_index, self.pad_index, self.devel_index, self.test_index
 
@@ -468,23 +467,32 @@ class LCDataset:
         print(f"init_neural_model()...")
 
         # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
+        """
         if self.tokenizer:
             self.word2index = dict(self.tokenizer.get_vocab())
             self.unk_index = self.tokenizer.unk_token_id
             self.pad_index = self.tokenizer.pad_token_id
         else:
-            self.word2index = dict(self.vocabulary)
-            self.word2index['UNKTOKEN'] = len(self.word2index)
-            self.word2index['PADTOKEN'] = len(self.word2index)
-            self.unk_index = word2index['UNKTOKEN']
-            self.pad_index = word2index['PADTOKEN']
+        """
 
+        # build the vocabulary from the dataset and 
+        # the pretrained language model (if not None)
+        self.word2index = dict(self.vocabulary)                 # dataset vocabulary
         known_words = set(self.word2index.keys())
-        if self.model is not None:
-            known_words.update(self.model.vocabulary())         # polymorphic behavior
+        
+        if self.lcr_model is not None:
+            print("self.model: ", self.model)
+            known_words.update(self.lcr_model.vocabulary())         # polymorphic behavior
+
+        self.word2index['UNKTOKEN'] = len(self.word2index)
+        self.word2index['PADTOKEN'] = len(self.word2index)
+        self.unk_index = self.word2index['UNKTOKEN']
+        self.pad_index = self.word2index['PADTOKEN']
 
         self.out_of_vocabulary = dict()
+        analyzer = self.analyzer()
 
+        """
         # Define a helper function to tokenize and index documents
         def tokenize_and_index(documents):
             indices = []
@@ -504,17 +512,77 @@ class LCDataset:
         # Index development and test sets
         self.devel_index = tokenize_and_index(self.devel_raw)
         self.test_index = tokenize_and_index(self.test_raw)
+        """
+
+        self.devel_index = self.index(self.devel_raw, self.word2index, known_words, analyzer, self.unk_index, self.out_of_vocabulary)
+        self.test_index = self.index(self.test_raw, self.word2index, known_words, analyzer, self.unk_index, self.out_of_vocabulary)
 
         print('[indexing complete]')
 
         return self.word2index, self.out_of_vocabulary, self.unk_index, self.pad_index, self.devel_index, self.test_index
 
 
-    def split_val_data(self, val_ratio=0.2, min=20000, seed=1):
+    def index(self, data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
+        """
+        Index (i.e., replaces word strings with numerical indexes) a list of string documents
+        
+        :param data: list of string documents
+        :param vocab: a fixed mapping [str]->[int] of words to indexes
+        :param known_words: a set of known words (e.g., words that, despite not being included in the vocab, can be retained
+        because they are anyway contained in a pre-trained embedding set that we know in advance)
+        :param analyzer: the preprocessor in charge of transforming the document string into a chain of string words
+        :param unk_index: the index of the 'unknown token', i.e., a symbol that characterizes all words that we cannot keep
+        :param out_of_vocabulary: an incremental mapping [str]->[int] of words to indexes that will index all those words that
+        are not in the original vocab but that are in the known_words
+        :return:
+        """
+        indexes=[]
+        vocabsize = len(vocab)
+        unk_count = 0
+        knw_count = 0
+        out_count = 0
+        pbar = tqdm(data, desc=f'indexing documents')
+        for text in pbar:
+            words = analyzer(text)
+            index = []
+            for word in words:
+                if word in vocab:
+                    idx = vocab[word]
+                else:
+                    if word in known_words:
+                        if word not in out_of_vocabulary:
+                            out_of_vocabulary[word] = vocabsize+len(out_of_vocabulary)
+                        idx = out_of_vocabulary[word]
+                        out_count += 1
+                    else:
+                        idx = unk_index
+                        unk_count += 1
+                index.append(idx)
+            indexes.append(index)
+            knw_count += len(index)
+            pbar.set_description(f'[unk = {unk_count}/{knw_count}={(100.*unk_count/knw_count):.2f}%]'
+                                f'[out = {out_count}/{knw_count}={(100.*out_count/knw_count):.2f}%]')
+        return indexes
+
+
+
+    def split_val_data(self, val_ratio=0.2, min_samples=20000, seed=1):
+        """
+        Split the validation data off of the training data (this is not cached in the pickle file).
+        NB, must be called after init_neural_data()
+
+        arguments:
+            val_ratio: float, ratio of validation data to training data
+            min: int, minimum number of samples in each class       
+            seed: int, random seed for train_test_split
+
+        returns:
+            X_train, X_val, y_train, y_val: numpy arrays of training and validation data
+        """
 
         print("split_val_data()...")
 
-        val_size = min(int(len(devel_index) * val_ratio), min)                   # dataset split tr/val/test
+        val_size = min(int(len(self.devel_index) * val_ratio), min_samples)                   # dataset split tr/val/test
 
         X_train, X_val, y_train, y_val = train_test_split(
             self.devel_index, 
@@ -524,7 +592,7 @@ class LCDataset:
             shuffle=True
         )
 
-        return X_train, X_val, y_train, y_test
+        return X_train, X_val, y_train, y_val
 
     #
     # -------------------------------------------------------------------------------------------------------------
