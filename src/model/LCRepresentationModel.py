@@ -158,7 +158,8 @@ class LCRepresentationModel(RepresentationModel, ABC):
         self.tokenizer = None
 
         self.initialized = True
-
+        
+        self.max_length = 512
 
     def _download_file(self, url, destination):
         """

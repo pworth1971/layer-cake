@@ -268,14 +268,16 @@ class LCDataset:
         """
 
         print("\tvectorizing dataset...")    
-    
-        print("model:\n", self.model)
+
+        """    
+        print("model:\n", self.lcr_model)
         print("tokenizer:\n", self.tokenizer)
         print("vectorizer:\n", self.vectorizer)
         print("self.vectorization_type:", self.vectorization_type)
         print("self.embedding_type:", self.embedding_type)
-    
+        
         print("fitting training and test data with vectorizer...")
+        """
 
         # Fit and transform the text data
         self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)

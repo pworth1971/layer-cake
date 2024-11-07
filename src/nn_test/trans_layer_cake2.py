@@ -42,6 +42,7 @@ SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news"]
 MODEL_MAP = {
     "bert": "bert-base-uncased",
     "roberta": "roberta-base",
+    "distilbert": "distilbert-base-uncased",
     "xlnet": "xlnet-base-cased",
     "gpt2": "gpt2",
     "llama": "meta-llama/Llama-2-7b-chat-hf"  # Example for a possible LLaMA identifier
@@ -327,6 +328,15 @@ class TextClassifier(torch.nn.Module):
 
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
+import torch.nn.init as init
+
+
 
 # Wrapper for TransformerTextClassifier with tokenizer integration
 class TransformerTextClassifier(nn.Module):
@@ -356,6 +366,9 @@ def init_weights(module):
         torch.nn.init.xavier_uniform_(module.weight)
         if module.bias is not None:
             module.bias.data.fill_(0.01)
+
+
+
 
 
 # Updated create_attention_mask function
@@ -395,9 +408,18 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
             alpha = 0.1
             smoothed_labels = batch_labels * (1 - alpha) + alpha / model.model.config.num_labels
 
-            # Compute loss (using Focal Loss here as an alternative)
-            loss = focal_loss(outputs, smoothed_labels)  # Replace with `loss_fn(outputs, smoothed_labels)` if using BCE
+            # Compute loss with focal loss if applicable, else use BCE
+            loss = loss_fn(outputs, smoothed_labels)
             total_loss += loss.item()
+
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # Compute loss (using Focal Loss here as an alternative)
+            #loss = focal_loss(outputs, smoothed_labels)  # Replace with `loss_fn(outputs, smoothed_labels)` if using BCE
+            #total_loss += loss.item()
 
             """
             loss = loss_fn(outputs, batch_labels)
@@ -411,11 +433,6 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
             print("total_loss:", total_loss)
             """
             
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
             PRED_THRSHOLD = 0.3
 
             # Calculate accuracy
@@ -437,7 +454,9 @@ def train_model(model, train_loader, val_loader, optimizer, loss_fn, device, epo
         else:  # Multi-label
             train_accuracy = total_correct / total_labels
 
-        val_accuracy, val_macro_f1, val_micro_f1, f1_by_class = evaluate_model(model, val_loader, class_type, loss_fn, device)
+        val_accuracy, val_macro_f1, val_micro_f1, f1_by_class = evaluate_model(
+            model, val_loader, class_type, loss_fn, device
+        )
         print(f"Epoch {epoch + 1}: Train Loss = {total_loss:.4f}, Train Acc = {train_accuracy:.4f}, Val Acc = {val_accuracy:.4f}, Val Macro-F1 = {val_macro_f1:.4f}, Val Micro-F1 = {val_micro_f1:.4f}")
         
         # Early stopping based on validation macro F1 score
@@ -536,12 +555,11 @@ def evaluate_model(model, data_loader, class_type, loss_fn, device):
     )
 
     # Display F1 scores by class along with precision, recall, and support
+    """
     print("Class-wise Metrics (Validation):")
     for i in range(len(f1_by_class)):
         print(f"  Class {i}: Precision = {precision[i]:.4f}, Recall = {recall[i]:.4f}, F1 Score = {f1_by_class[i]:.4f}, Support = {support[i]}")
-
-
-
+    """
 
     macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(all_labels, all_preds, classification_type=class_type)
     print("\n--Layer Cake Metrics--")
@@ -702,7 +720,7 @@ def parse_args():
     parser.add_argument('--dropprob', type=float, default=0.5, help='Dropout probability')
     parser.add_argument('--lr', type=float, default=1e-6, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
-    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
+    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--vtype', type=str, default='tfidf', choices=['tfidf', 'count'], help='Vectorization strategy')
     parser.add_argument('--seed', type=int, default=1, help='Random seed')
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings')
@@ -822,7 +840,6 @@ if __name__ == "__main__":
         """
         loss_fn = torch.nn.BCEWithLogitsLoss()
         
-    
     print("loss_fn:", loss_fn)
 
     # Train and evaluate

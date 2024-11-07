@@ -22,7 +22,8 @@ from util.csv_log import CSVLog
 from model.LCRepresentationModel import FASTTEXT_MODEL, GLOVE_MODEL, WORD2VEC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, XLNET_MODEL, GPT2_MODEL
 
-from model.classification import NeuralClassifier, TransformerAttentionModel
+from model.classification import NeuralClassifier
+
 from util.early_stop import EarlyStopping
 from util.file import create_if_not_exist
 
@@ -209,6 +210,7 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     model_name = model_name_mapping.get(opt.pretrained, opt.pretrained)
     print("model_name:", model_name)
 
+    """
     # Check if using a transformer-based model
     if opt.pretrained in model_name_mapping:
     
@@ -225,24 +227,24 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
             pretrained=pretrained_embeddings  # Pass pretrained embeddings to EmbeddingCustom
         )
 
-    else:
-        # Fallback to NeuralClassifier for non-transformer models
-        model = NeuralClassifier(
-            net_type=net_type,
-            output_size=nC,
-            hidden_size=hidden,
-            vocab_size=vocabsize,
-            learnable_length=opt.learnable,
-            pretrained=pretrained_embeddings,
-            drop_embedding_range=drop_range,
-            drop_embedding_prop=opt.dropprob
-        )
-        print("Neural Classifier Model:\n", model)
+    """
 
-        # Initialize parameters and move to device
-        model.xavier_uniform()
+    # Fallback to NeuralClassifier for non-transformer models
+    model = NeuralClassifier(
+        net_type=net_type,
+        output_size=nC,
+        hidden_size=hidden,
+        vocab_size=vocabsize,
+        learnable_length=opt.learnable,
+        pretrained=pretrained_embeddings,
+        drop_embedding_range=drop_range,
+        drop_embedding_prop=opt.dropprob
+    )
 
+    # Initialize parameters and move to device
+    model.xavier_uniform()
     model = model.to(opt.device)
+    print("model:\n", model)
 
     # Fine-tune if specified
     if opt.tunable:
@@ -438,10 +440,8 @@ def init_Net_old(opt, nC, vocabsize, pretrained_embeddings, sup_range):
 # ---------------------------------------------------------------------------------------------------------------------------
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
 
-    print('embedding_matrix()...')
+    print(f'embedding_matrix()... dataset: {dataset}, pretrained: {pretrained}, vocabsize: {vocabsize}')
 
-    #logging.info(f"embedding_matrix()...")
-    
     pretrained_embeddings = None
     sup_range = None
     
@@ -504,62 +504,7 @@ def init_loss(classification_type, device, class_weights):
 
 
 
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------
-
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history, is_transformer=False):
-
-    print("\t... training ...")
-    
-    epoch_loss = 0
-    total_batches = 0
-    as_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
-    
-    # Optionally limit epoch length
-    if opt.max_epoch_length is not None:
-        tr_len = len(train_index)
-        train_for = opt.max_epoch_length * opt.batch_size
-        from_, to_ = (epoch * train_for) % tr_len, ((epoch + 1) * train_for) % tr_len
-        if to_ < from_:
-            train_index = train_index[from_:] + train_index[:to_]
-            ytr = np.concatenate((ytr[from_:], ytr[:to_])) if not issparse(ytr) else np.vstack((ytr[from_:], ytr[:to_]))
-        else:
-            train_index, ytr = train_index[from_:to_], ytr[from_:to_]
-
-    model.train()
-
-    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long, is_transformer=is_transformer)):
-        optim.zero_grad()
-
-        if is_transformer:
-            # Unpack input_ids and attention_mask for transformer models
-            input_ids, attention_mask = batch
-            output = model(input_ids=input_ids, attention_mask=attention_mask)
-        else:
-            output = model(batch)  # Word-based models
-        
-        # Calculate loss and backpropagate
-        loss = criterion(output, target)
-        loss.backward()
-        clip_gradient(model)
-        optim.step()
-        
-        epoch_loss += loss.item()
-        total_batches += 1
-
-        if idx % opt.log_interval == 0:
-            print(f'{dataset} {method_name} Epoch: {epoch}, Step: {idx}, Training Loss: {loss.item():.6f}')
-
-    mean_loss = epoch_loss / total_batches
-    loss_history['train_loss'].append(mean_loss)
-
-    return mean_loss
-
-
-
-def train_old(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history, is_transformer=False):
     
     print("\t... training ...")
 
@@ -597,7 +542,7 @@ def train_old(model, train_index, ytr, pad_index, tinit, logfile, criterion, opt
     print("dims:", {dims})
     """
 
-    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long, is_transformer=is_transformer)):
+    for idx, (batch, target) in enumerate(batchify(train_index, ytr, opt.batch_size, pad_index, opt.device, as_long)):
 
         """
         if dims is None:
@@ -630,69 +575,7 @@ def train_old(model, train_index, ytr, pad_index, tinit, logfile, criterion, opt
 
 
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------
-
-def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size, is_transformer=False):
-    print("\t..testing...")
-
-    model.eval()
-    predictions = []
-
-    test_loss = 0
-    total_batches = 0
-    target_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
-
-    for batch, target in tqdm(
-            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long, is_transformer=is_transformer),
-            desc='evaluation: '
-    ):
-        # Conditional unpacking based on whether we're using a transformer model
-        if is_transformer:
-            input_ids, attention_mask = batch
-            logits = model(input_ids=input_ids, attention_mask=attention_mask)
-        else:
-            logits = model(batch)  # For word-based models without attention mask
-        
-        # Calculate loss and convert to item for logging
-        loss = criterion(logits, target).item()
-        prediction = csr_matrix(predict(logits, classification_type=classification_type))
-        predictions.append(prediction)
-
-        test_loss += loss
-        total_batches += 1
-
-    yte_ = scipy.sparse.vstack(predictions)
-    
-    print("evaluating test run...")
-    
-    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
-    
-    print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
-    
-    tend = time.time() - tinit
-
-    # Log the metrics for final test evaluation
-    if measure_prefix == 'final-te':
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
-    
-    mean_loss = test_loss / total_batches
-    loss_history['test_loss'].append(mean_loss)
-
-    # Log final loss if required
-    if measure_prefix == 'final-te':
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=mean_loss, timelapse=time.time() - tinit)
-
-    return Mf1, mean_loss  # Return value for use in early stopping and loss plotting
-
-
-def test_old(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size, is_transformer=False):
+def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, loss_history, embedding_size):
     
     print("\t..testing...")
 
@@ -718,7 +601,7 @@ def test_old(model, test_index, yte, pad_index, classification_type, tinit, epoc
     """
 
     for batch, target in tqdm(
-            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long, is_transformer=is_transformer),
+            batchify(test_index, yte, opt.batch_size_test, pad_index, opt.device, target_long=target_long),
             desc='evaluation: '
     ):
         logits = model(batch)
@@ -1085,15 +968,15 @@ if __name__ == '__main__':
     for epoch in range(1, opt.nepochs + 1):
 
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history, transformer_model)
+        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
+        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str)
 
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
+                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str)
 
         if early_stop.STOP:
             print('[early-stop]')
@@ -1120,7 +1003,7 @@ if __name__ == '__main__':
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str, is_transformer=transformer_model)
+        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs

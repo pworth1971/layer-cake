@@ -30,6 +30,7 @@ NUM_RUNS=1
 #"LLAMA --pretrained llama --llama-path ../.vector_cache/LLaMa"
 #
 declare -a embeddings=(  
+    "GLOVE --pretrained glove --glove-path ../.vector_cache/GloVe"
     "BERT --pretrained bert --bert-path ../.vector_cache/BERT"
     "ROBERTA --pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
     "XLNET --pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
@@ -40,11 +41,11 @@ declare -a embeddings=(
 # dataset config (list of datasets)
 #
 datasets=(
-    "--dataset      bbc-news        --pickle-dir ../pickles"                 # bbc-news (single label, 5 classes)
-    "--dataset      reuters21578    --pickle-dir ../pickles"                 # reuters21578 (multi-label, 115 classes)
-    "--dataset      20newsgroups    --pickle-dir ../pickles"                 # 20newsgroups (single label, 20 classes)
-    "--dataset      ohsumed         --pickle-dir ../pickles"                 # ohsumed (multi-label, 23 classes)
-    "--dataset      rcv1            --pickle-dir ../pickles"                 # RCV1-v2 (multi-label, 101 classes)
+    "--dataset 20newsgroups"        # 20newsgroups (single label, 20 classes)
+    "--dataset reuters21578"        # reuters21578 (multi-label, 115 classes)
+    "--dataset bbc-news"            # bbc-news (single label, 5 classes)
+    "--dataset ohsumed"             # ohsumed (multi-label, 23 classes)
+    "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
 )
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -52,7 +53,7 @@ datasets=(
 
 for dataset in "${datasets[@]}"; do
     echo
-    echo "-----------------------------------------------------------------------------------------------"
+    echo "------------------------------------------------------------------------------------------------"
     echo "---------- Processing dataset: $dataset ----------"
 
     for ((run=1; run<=NUM_RUNS; run++)); do
