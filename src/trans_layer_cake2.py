@@ -3,11 +3,19 @@ import os
 import numpy as np
 import pandas as pd
 
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+import nltk
+from nltk.corpus import reuters
+
 from sklearn.datasets import fetch_20newsgroups, fetch_rcv1
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.metrics import confusion_matrix, precision_score, recall_score
+from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_score
+from sklearn.metrics import precision_recall_fscore_support
 
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
@@ -21,17 +29,13 @@ import torch.nn.functional as F
 
 import transformers     # Hugging Face transformers
 from transformers import AutoModelForSequenceClassification, AutoModel, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
+from torch.utils.data import Dataset
+from torch.optim import Adam
+import torch.nn.init as init
+from torch.optim.lr_scheduler import StepLR
 
 from util.metrics import evaluation_nn
-import matplotlib.pyplot as plt
-
-from tqdm import tqdm
-
-import nltk
-from nltk.corpus import reuters
-
-
-
 
 
 
@@ -328,13 +332,6 @@ class TextClassifier(torch.nn.Module):
 
 
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR
-import torch.nn.init as init
 
 
 
@@ -482,7 +479,7 @@ def print_confusion_matrix(conf_matrix, labels, title):
         print(f"{labels[i]:>5}  {row_str}")
 
 
-from sklearn.metrics import precision_recall_fscore_support
+
 
 
 # Evaluation function for single-label and multi-label cases
@@ -737,8 +734,8 @@ def parse_args():
     return parser.parse_args()
 
 
-# Main
-if __name__ == "__main__":
+
+def main_old():
 
     print("\n\ttrans layer cake")
 
@@ -850,3 +847,272 @@ if __name__ == "__main__":
     test_accuracy, test_macro_f1, test_micro_f1, test_f1_by_class = evaluate_model(model, test_loader, class_type, loss_fn, device)
     print("\n--Final Test Metrics--")
     print(f"Test Accuracy = {test_accuracy:.4f}, Test Macro-F1 = {test_macro_f1:.4f}, Test Micro-F1 = {test_micro_f1:.4f}")
+
+
+
+
+# Modify: Dataset class to handle single-label and multi-label formats
+class LCDataset(Dataset):
+    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label'):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.class_type = class_type
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        labels = self.labels[idx]
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        item = {key: val.squeeze(0) for key, val in encoding.items()}
+        
+        # Modify: Handle labels based on classification type
+        if self.class_type == 'single-label':
+            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label
+        else:
+            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label
+        return item
+    
+
+class LCDatasetOld(Dataset):
+    def __init__(self, texts, labels, tokenizer, max_length=512):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        labels = self.labels[idx]
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        # Squeeze to remove extra dimensions and prepare correct format
+        item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove extra dimension
+        item["labels"] = torch.tensor(labels, dtype=torch.float)
+        return item
+
+
+# Modify: Enhanced metrics function to handle single-label and multi-label
+def compute_metrics(pred, threshold=0.5, class_type='multi-label'):
+    labels = pred.label_ids
+    
+    if class_type == 'single-label':
+        preds = np.argmax(pred.predictions, axis=1)
+    else:
+        preds = pred.predictions > threshold  # Adjust threshold for multi-label classification
+
+    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
+    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
+    
+    # Additional metrics for multi-label, optional for single-label
+    hamming = hamming_loss(labels, preds) if class_type == 'multi-label' else None
+    jaccard = jaccard_score(labels, preds, average='samples', zero_division=1) if class_type == 'multi-label' else None
+    accuracy = accuracy_score(labels, preds)
+    precision_micro = precision_score(labels, preds, average='micro', zero_division=1)
+    recall_micro = recall_score(labels, preds, average='micro', zero_division=1)
+    
+    return {
+        'f1_micro': f1_micro,
+        'f1_macro': f1_macro,
+        'hamming_loss': hamming,
+        'jaccard_index': jaccard,
+        'precision_micro': precision_micro,
+        'recall_micro': recall_micro,
+        'accuracy': accuracy
+    }
+
+
+# Metrics function
+def compute_metricsOld(pred, threshold=0.5):
+    
+    labels = pred.label_ids
+    
+    preds = pred.predictions > threshold  # Adjust threshold for multi-label classification
+    
+    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
+    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
+
+    return {'f1_micro': f1_micro, 'f1_macro': f1_macro}
+
+
+
+# Main
+if __name__ == "__main__":
+
+    print("\n\ttrans layer cake2")
+
+    args = parse_args()
+    print("args:", args)
+    
+    device = get_device()
+    print("device:", device)
+    
+    torch.manual_seed(args.seed)
+
+    # Load the Reuters dataset
+    """
+    train_data = fetch_reuters21578(subset='train')
+    test_data = fetch_reuters21578(subset='test')
+
+    texts_train, labels_train = train_data.data, train_data.target
+    texts_test, labels_test = test_data.data, test_data.target
+    """
+
+    """
+    data_path = os.path.join(DATASET_DIR, 'reuters21578')    
+    print("data_path:", data_path)  
+
+    train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
+    test_labelled_doc = fetch_reuters21578(subset='test', data_path=data_path)
+
+    train_data = train_labelled_docs.data
+    train_target = train_labelled_docs.target
+    test_data = test_labelled_doc.data
+    test_target = test_labelled_doc.target
+    
+    class_type = 'multi-label'
+
+    train_target, test_target, target_names = _label_matrix(train_target, test_target)
+    train_target = train_target.toarray()                                     # Convert to dense
+    test_target = test_target.toarray()                                       # Convert to dense
+    
+    target_names = train_labelled_docs.target_names
+    num_classes = len(target_names)
+    """
+
+    # Load dataset and print class information
+    (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type = load_dataset(args.dataset)
+
+    print("num_classes:", num_classes)
+    print("target_names:", target_names)
+
+    print("train_data:", type(train_data), len(train_data))
+    print("train_data[0]:", type(train_data[0]), train_data[0])
+    print("train_target:", type(train_target), len(train_target))
+    print("train_target[0]:", type(train_target[0]), train_target[0].shape, train_target[0])
+
+    print("test_data:", type(test_data), len(test_data))
+    print("test_data[0]:", type(test_data[0]), test_data[0])
+    print("test_target:", type(test_target), len(test_target))
+    print("test_target[0]:", type(test_target[0]), test_target[0].shape, test_target[0])
+
+    # Get the full model identifier and cache directory path for tokenizer/model
+    model_name, model_path = get_model_identifier(args.pretrained)
+    print("model_name:", model_name)
+    print("model_path:", model_path)
+
+    #MODEL_NAME = 'bert-base-uncased'  # Change this to 'roberta-base' or 'distilbert-base-uncased' if needed
+    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
+
+    model.to(device)
+    print("model:", model)
+
+    # Split train into train and validation
+    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=0.2, random_state=42)
+
+    print("texts_train:", type(texts_train), len(texts_train))
+    print("texts_train[0]:", type(texts_train[0]), texts_train[0])
+    print("labels_train:", type(labels_train), len(labels_train))
+    print("labels_traint[0]:", type(labels_train[0]), labels_train[0].shape, labels_train[0])
+
+    print("texts_val:", type(texts_val), len(texts_val))
+    print("texts_val[0]:", type(texts_val[0]), texts_val[0])
+    print("labels_val:", type(labels_val), len(labels_val))
+    print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
+
+    # Prepare datasets
+    train_dataset = LCDataset(texts_train, labels_train, tokenizer, class_type=class_type)
+    val_dataset = LCDataset(texts_val, labels_val, tokenizer, class_type=class_type)
+    test_dataset = LCDataset(test_data, test_target, tokenizer, class_type=class_type)
+    
+    # Define training arguments
+    training_args = TrainingArguments(
+        output_dir='../out',
+        eval_strategy="epoch",
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        num_train_epochs=3,
+        logging_dir='../log',
+        run_name='layer_cake'
+    )
+
+    # Modify: Trainer setup with `class_type` passed to `compute_metrics`
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=lambda pred: compute_metrics(pred, class_type=class_type),
+    )
+
+    # Train and evaluate
+    trainer.train()
+    results = trainer.evaluate(test_dataset)
+    print("Evaluation Results:", results)
+
+
+    """    
+    # Prepare datasets
+    train_dataset = LCDataset(texts_train, labels_train, tokenizer)
+    val_dataset = LCDataset(texts_val, labels_val, tokenizer)
+    test_dataset = LCDataset(test_data, test_target, tokenizer)
+    
+    # Training arguments
+    training_args = TrainingArguments(
+        output_dir='../out',
+        eval_strategy="epoch",
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        num_train_epochs=3,
+        logging_dir='../log/',
+        run_name='layer_cake',
+    )
+
+    # Trainer setup
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=compute_metrics,
+    )
+
+    # Training and evaluation
+    trainer.train()
+    results = trainer.evaluate(test_dataset)
+    print(results)
+    """
+
+    # Generate detailed classification report on test set
+    preds = trainer.predict(test_dataset)
+
+    if class_type == 'single-label':
+        # Single-label classification: use argmax to get class predictions
+        y_pred = np.argmax(preds.predictions, axis=1)
+    else:
+        # Multi-label classification: threshold predictions to get binary matrix
+        y_pred = (preds.predictions > 0.5).astype(int)
+
+    print(classification_report(test_target, y_pred, target_names=target_names, digits=4))
+
+    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(test_target, y_pred, classification_type=class_type)
+    print("\n--Layer Cake Metrics--")
+    print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
