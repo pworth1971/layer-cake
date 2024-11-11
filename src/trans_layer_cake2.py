@@ -52,18 +52,25 @@ MODEL_MAP = {
     "llama": "meta-llama/Llama-2-7b-chat-hf"  # Example for a possible LLaMA identifier
 }
 
-BATCH_SIZE = 32
 
 MAX_LENGTH = 512  # Max sequence length for the transformer models
 
-TEST_SIZE = 0.3
-VAL_SIZE = 0.3
+TEST_SIZE = 0.2
+VAL_SIZE = 0.2
 
-DATASET_DIR = "../datasets"
+DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
 
 RANDOM_SEED = 42
 
+#
+# hyper parameters
+#
+BATCH_SIZE = 8
+MC_THRESHOLD = 0.5          # Multi-class threshold
+PATIENCE = 5                # Early stopping patience
+LEARNING_RATE = 1e-6        # Learning rate
+EPOCHS = 10
 
 
 # Check device
@@ -121,14 +128,28 @@ def load_dataset(name):
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = 1
+            random_state = RANDOM_SEED,
         )
 
         # reset indeces
         train_data = train_data.reset_index(drop=True)
         test_data = test_data.reset_index(drop=True)
 
-        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+        #
+        # set up label targets
+        # Convert target labels to 1D arrays
+        train_target_arr = np.array(train_target)  # Flattening the training labels into a 1D array
+        test_target_arr = np.array(test_target)    # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(train_target_arr)  # Fit on training labels
+
+        # Transform labels to numeric IDs
+        train_target_encoded = label_encoder.transform(train_target_arr)
+        test_target_encoded = label_encoder.transform(test_target_arr)
+
+        return (train_data.tolist(), train_target_encoded), (test_data.tolist(), test_target_encoded), num_classes, target_names, class_type
     
     elif name == "reuters21578":
         
@@ -715,18 +736,18 @@ def parse_args():
     
     # Training parameters
     parser.add_argument('--dropprob', type=float, default=0.5, help='Dropout probability')
-    parser.add_argument('--lr', type=float, default=1e-6, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--vtype', type=str, default='tfidf', choices=['tfidf', 'count'], help='Vectorization strategy')
-    parser.add_argument('--seed', type=int, default=1, help='Random seed')
+    parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings')
     parser.add_argument('--learnable', type=int, default=0, help='Dimension of learnable embeddings')
     parser.add_argument('--tunable', action='store_true', help='Unfreeze pretrained embeddings')
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--hidden', type=int, default=512, help='Hidden layer size')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
-    parser.add_argument('--patience', type=int, default=10, help='Patience for early stopping')
+    parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
+    parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--static', action='store_true', help='Keep pretrained model static (freeze layers)')
     parser.add_argument('--log_file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
     parser.add_argument('--cm', action='store_true', help='Generate confusion matrix')
@@ -909,42 +930,18 @@ class LCDatasetOld(Dataset):
         return item
 
 
-# Modify: Enhanced metrics function to handle single-label and multi-label
-def compute_metrics(pred, threshold=0.5, class_type='multi-label'):
+
+# Metrics function
+def compute_metrics(pred, class_type='single-label', threshold=0.5):
+    
     labels = pred.label_ids
     
     if class_type == 'single-label':
+        # Single-label classification: use argmax to get class predictions
         preds = np.argmax(pred.predictions, axis=1)
     else:
-        preds = pred.predictions > threshold  # Adjust threshold for multi-label classification
-
-    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
-    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
-    
-    # Additional metrics for multi-label, optional for single-label
-    hamming = hamming_loss(labels, preds) if class_type == 'multi-label' else None
-    jaccard = jaccard_score(labels, preds, average='samples', zero_division=1) if class_type == 'multi-label' else None
-    accuracy = accuracy_score(labels, preds)
-    precision_micro = precision_score(labels, preds, average='micro', zero_division=1)
-    recall_micro = recall_score(labels, preds, average='micro', zero_division=1)
-    
-    return {
-        'f1_micro': f1_micro,
-        'f1_macro': f1_macro,
-        'hamming_loss': hamming,
-        'jaccard_index': jaccard,
-        'precision_micro': precision_micro,
-        'recall_micro': recall_micro,
-        'accuracy': accuracy
-    }
-
-
-# Metrics function
-def compute_metricsOld(pred, threshold=0.5):
-    
-    labels = pred.label_ids
-    
-    preds = pred.predictions > threshold  # Adjust threshold for multi-label classification
+        # Multi-label classification: threshold predictions to get binary matrix
+        preds = pred.predictions > threshold            # Adjust threshold for multi-label classification
     
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
     f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
@@ -965,37 +962,6 @@ if __name__ == "__main__":
     print("device:", device)
     
     torch.manual_seed(args.seed)
-
-    # Load the Reuters dataset
-    """
-    train_data = fetch_reuters21578(subset='train')
-    test_data = fetch_reuters21578(subset='test')
-
-    texts_train, labels_train = train_data.data, train_data.target
-    texts_test, labels_test = test_data.data, test_data.target
-    """
-
-    """
-    data_path = os.path.join(DATASET_DIR, 'reuters21578')    
-    print("data_path:", data_path)  
-
-    train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
-    test_labelled_doc = fetch_reuters21578(subset='test', data_path=data_path)
-
-    train_data = train_labelled_docs.data
-    train_target = train_labelled_docs.target
-    test_data = test_labelled_doc.data
-    test_target = test_labelled_doc.target
-    
-    class_type = 'multi-label'
-
-    train_target, test_target, target_names = _label_matrix(train_target, test_target)
-    train_target = train_target.toarray()                                     # Convert to dense
-    test_target = test_target.toarray()                                       # Convert to dense
-    
-    target_names = train_labelled_docs.target_names
-    num_classes = len(target_names)
-    """
 
     # Load dataset and print class information
     (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type = load_dataset(args.dataset)
@@ -1018,15 +984,20 @@ if __name__ == "__main__":
     print("model_name:", model_name)
     print("model_path:", model_path)
 
-    #MODEL_NAME = 'bert-base-uncased'  # Change this to 'roberta-base' or 'distilbert-base-uncased' if needed
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
+    # Add padding token if it doesn't exist
+    if tokenizer.pad_token is None:
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    print("tokenizer:", tokenizer)
 
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
+    # Set the pad_token_id in the model configuration
+    model.config.pad_token_id = tokenizer.pad_token_id
     model.to(device)
     print("model:", model)
 
     # Split train into train and validation
-    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=0.2, random_state=42)
+    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
 
     print("texts_train:", type(texts_train), len(texts_train))
     print("texts_train[0]:", type(texts_train[0]), texts_train[0])
@@ -1042,14 +1013,67 @@ if __name__ == "__main__":
     train_dataset = LCDataset(texts_train, labels_train, tokenizer, class_type=class_type)
     val_dataset = LCDataset(texts_val, labels_val, tokenizer, class_type=class_type)
     test_dataset = LCDataset(test_data, test_target, tokenizer, class_type=class_type)
-    
+
     # Define training arguments
     training_args = TrainingArguments(
         output_dir='../out',
         eval_strategy="epoch",
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
-        num_train_epochs=3,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=args.epochs,
+        logging_dir='../log',
+        run_name='layer_cake'
+    )
+
+    # Early stopping variables
+    patience = args.patience
+    best_f1_macro = 0
+    patience_counter = 0
+
+    # Define trainer with early stopping
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=lambda pred: compute_metrics(pred, class_type=class_type, threshold=MC_THRESHOLD),
+    )
+
+    # Custom training loop with early stopping
+    for epoch in range(training_args.num_train_epochs):
+        print(f"\nEpoch {epoch + 1}/{training_args.num_train_epochs}")
+        trainer.train()
+        
+        # Evaluate on validation data
+        results = trainer.evaluate(val_dataset)
+        val_f1_macro = results["eval_f1_macro"]
+        print(f"Validation F1 Macro: {val_f1_macro:.4f}")
+
+        # Check early stopping condition
+        if val_f1_macro > best_f1_macro:
+            best_f1_macro = val_f1_macro
+            patience_counter = 0  # Reset patience counter if improvement
+        else:
+            patience_counter += 1  # Increment if no improvement
+            print(f"Patience counter: {patience_counter}/{patience}")
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
+
+    # Final evaluation on test set
+    test_results = trainer.evaluate(test_dataset)
+    print("Test Results:", test_results)
+    preds = trainer.predict(test_dataset)
+
+            
+    """
+    # Define training arguments
+    training_args = TrainingArguments(
+        output_dir='../out',
+        eval_strategy="epoch",
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=args.epochs,
         logging_dir='../log',
         run_name='layer_cake'
     )
@@ -1068,41 +1092,9 @@ if __name__ == "__main__":
     results = trainer.evaluate(test_dataset)
     print("Evaluation Results:", results)
 
-
-    """    
-    # Prepare datasets
-    train_dataset = LCDataset(texts_train, labels_train, tokenizer)
-    val_dataset = LCDataset(texts_val, labels_val, tokenizer)
-    test_dataset = LCDataset(test_data, test_target, tokenizer)
-    
-    # Training arguments
-    training_args = TrainingArguments(
-        output_dir='../out',
-        eval_strategy="epoch",
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
-        num_train_epochs=3,
-        logging_dir='../log/',
-        run_name='layer_cake',
-    )
-
-    # Trainer setup
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        compute_metrics=compute_metrics,
-    )
-
-    # Training and evaluation
-    trainer.train()
-    results = trainer.evaluate(test_dataset)
-    print(results)
-    """
-
     # Generate detailed classification report on test set
     preds = trainer.predict(test_dataset)
+    """
 
     if class_type == 'single-label':
         # Single-label classification: use argmax to get class predictions
