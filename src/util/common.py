@@ -27,7 +27,7 @@ from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
 
 
 
-NEURAL_MODELS = ['cnn', 'lstm', 'attn']
+NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff']
 ML_MODELS = ['svm', 'lr', 'nb']
 
 
@@ -169,7 +169,7 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
     return word_list
 
 
-def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
+def batchify_old(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
     
     print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
     
@@ -356,7 +356,7 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
     else:
         pt_type = 'pretrained-'
 
-        if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
+        if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'distilbert', 'gpt2']):
             pt_type += 'attention:tokenized'
 
         elif (pretrained in ['glove', 'word2vec']):
@@ -481,6 +481,8 @@ def get_embeddings_path(pretrained, args):
         return args.bert_path
     elif pretrained == 'roberta':
         return args.roberta_path
+    elif pretrained == 'distilbert':
+        return args.distilbert_path
     elif pretrained == 'glove':
         return args.glove_path
     elif pretrained == 'word2vec':
@@ -510,6 +512,8 @@ def get_language_model_type(embeddings):
         return 'transformer:token:autoregressive:unidirectional:causal'
     elif (embeddings in ['bert', 'roberta']):
         return 'transformer:token:autoregressive:bidirectional:masked'
+    elif (embeddings in ['distilbert']):
+        return 'transformer:token:bidirectional:masked'
     elif (embeddings in ['xlnet']):
         return 'transformer:token:autoregressive:bidirectional:permutated'
     else:
@@ -520,7 +524,7 @@ def get_language_model_type(embeddings):
 
 def get_embedding_type(pretrained):
 
-    if (pretrained is not None and pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2']):
+    if (pretrained is not None and pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2', 'llama']):
         embedding_type = 'token'
     elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
         embedding_type = 'word'
@@ -540,7 +544,7 @@ def set_method_name(opt):
     if opt.pretrained:
         method_name += f'-{opt.pretrained}'
     
-    if opt.learnable > 0:
+    if opt.learnable is not None and opt.learnable > 0:
         method_name += f'-learn{opt.learnable}'
     
     if opt.supervised:
