@@ -18,6 +18,7 @@ from sklearn.metrics import classification_report, accuracy_score
 from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_score
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.preprocessing import LabelBinarizer
 
 import torch
 import torch.nn as nn
@@ -105,7 +106,7 @@ def load_dataset(name):
         num_classes = len(target_names)
         print(f"num_classes: {len(target_names)}")
         print("class_names:", target_names)
-        
+
         class_type = 'single-label'
 
         return (train_data.data, train_data.target), (test_data.data, test_data.target), num_classes, target_names, class_type
@@ -681,17 +682,38 @@ if __name__ == "__main__":
     print("Xte:", type(Xte), Xte.shape)
     print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
 
-    # Call `embedding_matrix` with the loaded model and tokenizer
-    pretrained_embeddings, sup_range = embedding_matrix(
-        model=model,
-        tokenizer=tokenizer,
-        vocabsize=vocab_size,
-        word2index=tokenizer.get_vocab(),
-        out_of_vocabulary=[],
-        vectorized_training_data=Xtr,
-        training_label_matrix=labels_train,
-        opt=args
-    )
+    # convert single label y values from array of scalaers to one hot encoded
+    
+    if (class_type:='single-label'):
+        label_binarizer = LabelBinarizer()
+        y_train_one_hot = label_binarizer.fit_transform(labels_train)
+        
+        print("y_train_one_hot:", type(y_train_one_hot), y_train_one_hot.shape)
+        print("y_train_one_hot[0]:", type(y_train_one_hot[0]), y_train_one_hot[0])
+
+        # Call `embedding_matrix` with the loaded model and tokenizer
+        pretrained_embeddings, sup_range = embedding_matrix(
+            model=model,
+            tokenizer=tokenizer,
+            vocabsize=vocab_size,
+            word2index=tokenizer.get_vocab(),
+            out_of_vocabulary=[],
+            vectorized_training_data=Xtr,
+            training_label_matrix=y_train_one_hot,
+            opt=args
+        )
+    else:
+        # Call `embedding_matrix` with the loaded model and tokenizer
+        pretrained_embeddings, sup_range = embedding_matrix(
+            model=model,
+            tokenizer=tokenizer,
+            vocabsize=vocab_size,
+            word2index=tokenizer.get_vocab(),
+            out_of_vocabulary=[],
+            vectorized_training_data=Xtr,
+            training_label_matrix=labels_train,
+            opt=args
+        )
 
     # Prepare datasets
     train_dataset = LCDataset(texts_train, labels_train, tokenizer, class_type=class_type)

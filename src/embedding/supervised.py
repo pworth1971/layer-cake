@@ -19,7 +19,6 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     label space exceeds a defined limit.
     """
 
-
     print("---------- get_supervised_embeddings() ----------")
 
     print("X:", type(X), X.shape)
