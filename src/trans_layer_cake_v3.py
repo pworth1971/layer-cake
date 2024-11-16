@@ -53,7 +53,7 @@ MODEL_MAP = {
     "bert": "bert-base-uncased",
     "roberta": "roberta-base",
     "distilbert": "distilbert-base-uncased",
-    "xlnet": "xlnet-base-uncased",
+    "xlnet": "xlnet-base-cased",
     "gpt2": "gpt2",
     "llama": "meta-llama/Llama-2-7b-chat-hf"  # Example for a possible LLaMA identifier
 }
@@ -104,8 +104,8 @@ def load_dataset(name):
 
         target_names = list(set(train_data.target_names))  # Ensures unique class names
         num_classes = len(target_names)
-        print(f"num_classes: {len(target_names)}")
-        print("class_names:", target_names)
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
 
         class_type = 'single-label'
 
@@ -125,8 +125,8 @@ def load_dataset(name):
         
         target_names = train_set['Category'].unique()
         num_classes = len(train_set['Category'].unique())
-        print(f"num_classes: {len(target_names)}")
-        print("class_names:", target_names)
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
         
         # we split the train data into train and test here because that is
         # not done for us with the BBC News dataset (Test data is not labeled)
@@ -167,7 +167,7 @@ def load_dataset(name):
 
         train_data = train_labelled_docs.data
         train_target = train_labelled_docs.target
-        test_data = test_labelled_doc.data
+        test_data = list(test_labelled_doc.data)
         test_target = test_labelled_doc.target
 
         class_type = 'multi-label'
@@ -179,8 +179,8 @@ def load_dataset(name):
 
         target_names = train_labelled_docs.target_names
         num_classes = len(target_names)
-        print(f"num_classes: {len(target_names)}")
-        print("class_names:", target_names)
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
@@ -200,8 +200,8 @@ def load_dataset(name):
         
         target_names = rcv1.target_names
         num_classes = len(target_names)
-        print(f"num_classes: {num_classes}")
-        print("class_names:", target_names)
+        #print(f"num_classes: {num_classes}")
+        #print("class_names:", target_names)
         
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
 
@@ -330,8 +330,23 @@ def show_class_distribution(target, target_names=None, dataset_name="Dataset"):
 
 
 
+def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
-def vectorize(train_data, val_data, test_data, vtype='tfidf'):
+    print(f'vectorize(), vtype: {vtype}')
+
+    if vtype == 'tfidf':
+        vectorizer = TfidfVectorizer(min_df=5, lowercase=False, sublinear_tf=True, vocabulary=tokenizer.get_vocab())
+    elif vtype == 'count':
+        vectorizer = CountVectorizer(min_df=5, lowercase=False, vocabulary=tokenizer.get_vocab())
+
+    Xtr = vectorizer.fit_transform(texts_train)
+    Xval = vectorizer.transform(texts_val)
+    Xte = vectorizer.transform(texts_test)
+
+    return vectorizer, Xtr.toarray(), Xval.toarray(), Xte.toarray()
+
+
+def vectorize_old(train_data, val_data, test_data, vtype='tfidf'):
 
     print(f'vectorize(), vtype: {vtype}')
 
@@ -422,6 +437,244 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     return pretrained_embeddings, sup_range
 
 
+class LCDataset(Dataset):
+
+    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label', 
+                 pretrained_embeddings=None, sup_range=None):
+        """
+        Dataset class for handling both input text and labels, with optional support for 
+        pretrained embeddings and supervised ranges.
+
+        Parameters:
+        - texts: List of input text samples.
+        - labels: Multi-label binary vectors or single-label indices.
+        - tokenizer: Hugging Face tokenizer for text tokenization.
+        - max_length: Maximum length of tokenized sequences.
+        - class_type: 'multi-label' or 'single-label' classification type.
+        - pretrained_embeddings: Tensor containing pretrained embeddings.
+        - sup_range: Range of supervised embeddings within the concatenated embeddings.
+        """
+        self.texts = texts
+        self.labels = labels  # Binary vectors (multi-label format) or indices (single-label)
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.class_type = class_type
+        self.pretrained_embeddings = pretrained_embeddings
+        self.sup_range = sup_range
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        """
+        Get an individual sample from the dataset.
+
+        Returns:
+        - item: Dictionary containing tokenized inputs and labels.
+        """
+        text = self.texts[idx]
+        labels = self.labels[idx]
+        
+        # Tokenize the text
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove batch dim
+
+        # Handle labels based on classification type
+        if self.class_type == 'single-label':
+            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label: integer index
+        else:
+            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label: binary vector
+
+        # Add pretrained embeddings if provided
+        if self.pretrained_embeddings is not None:
+            item["pretrained_embeddings"] = self.pretrained_embeddings  # Pretrained embeddings
+
+        # Add supervised embedding range if provided
+        if self.sup_range is not None:
+            item["sup_range"] = self.sup_range  # Supervised embedding range
+
+        return item
+
+
+
+class SingleLabelLCDataset(Dataset):
+    def __init__(self, texts, labels, tokenizer, class_type='multi-label', max_length=512, pretrained_embeddings=None, sup_range=None):
+        """
+        Initialize the SingleLabelLCDataset object.
+
+        Parameters:
+        - texts: List of input texts.
+        - labels: List or array of target labels.
+        - tokenizer: Hugging Face tokenizer object.
+        - class_type: Classification type ('single-label' or 'multi-label').
+        - max_length: Maximum sequence length for tokenization.
+        - pretrained_embeddings: Combined pretrained and supervised embeddings (optional).
+        - sup_range: Range in the embedding matrix for supervised embeddings (optional).
+        """
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.class_type = class_type
+        self.max_length = max_length
+        self.pretrained_embeddings = pretrained_embeddings
+        self.sup_range = sup_range
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        """
+        Get an individual sample from the dataset.
+
+        Returns:
+        - item: Dictionary containing tokenized inputs and labels.
+        """
+        text = self.texts[idx]
+        labels = self.labels[idx]
+
+        # Tokenize the text
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        item = {key: val.squeeze(0) for key, val in encoding.items()}
+
+        # Add labels to the item
+        if self.class_type == 'single-label':
+            item["labels"] = torch.tensor(labels, dtype=torch.long)
+        else:
+            item["labels"] = torch.tensor(labels, dtype=torch.float)
+
+        # Add pretrained and supervised embeddings if available
+        if self.pretrained_embeddings is not None:
+            item["embeddings"] = self.pretrained_embeddings
+
+        if self.sup_range is not None:
+            item["sup_range"] = torch.tensor(self.sup_range)
+
+        return item
+
+
+
+
+class LCDatasetOld(Dataset):
+
+    def __init__(self, texts, labels, tokenizer, pretrained_embeddings=None, max_length=512, class_type='multi-label'):
+        """
+        Initializes the LCDataset with texts, labels, and additional pretrained embeddings.
+
+        Parameters:
+        - texts: List of input texts.
+        - labels: Corresponding labels for each text.
+        - tokenizer: Hugging Face tokenizer for tokenizing input texts.
+        - pretrained_embeddings: Pretrained embedding matrix (e.g., from embedding_matrix function).
+        - max_length: Maximum length for padding/truncating tokenized sequences.
+        - class_type: Type of classification ('single-label' or 'multi-label').
+        """
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.pretrained_embeddings = pretrained_embeddings  # Pretrained embeddings matrix
+        self.max_length = max_length
+        self.class_type = class_type
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        labels = self.labels[idx]
+        
+        # Tokenize the input text
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        
+        item = {key: val.squeeze(0) for key, val in encoding.items()}
+        
+        # Convert labels based on the classification type
+        if class_type == 'multi-label':
+            item["labels"] = torch.tensor(labels, dtype=torch.float)        # Shape: [batch_size, num_classes]
+        else:
+            item["labels"] = torch.tensor(labels, dtype=torch.long)         # Shape: [batch_size]
+
+        # Incorporate pretrained embeddings if available
+        if self.pretrained_embeddings is not None:
+            # Get token IDs from the tokenizer output
+            input_ids = item["input_ids"]
+            
+            # Use input_ids to index into pretrained embeddings
+            # Shape: (seq_len, embedding_dim)
+            word_embeddings = self.pretrained_embeddings[input_ids]
+            
+            # Add word embeddings to the item for use in the model
+            item["word_embeddings"] = word_embeddings  # Shape: (seq_len, embedding_dim)
+
+        return item
+
+
+
+class LCDatasetOldOld(Dataset):
+    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label'):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.class_type = class_type
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        labels = self.labels[idx]
+        encoding = self.tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+        item = {key: val.squeeze(0) for key, val in encoding.items()}
+        
+        # Modify: Handle labels based on classification type
+        if self.class_type == 'single-label':
+            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label
+        else:
+            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label
+        return item
+
+
+
+# Metrics function
+def compute_metrics(pred, class_type='single-label', threshold=0.5):
+    
+    labels = pred.label_ids
+    
+    if class_type == 'single-label':
+        # Single-label classification: use argmax to get class predictions
+        preds = np.argmax(pred.predictions, axis=1)
+    else:
+        # Multi-label classification: threshold predictions to get binary matrix
+        preds = pred.predictions > threshold            # Adjust threshold for multi-label classification
+    
+    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
+    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
+
+    return {'f1_micro': f1_micro, 'f1_macro': f1_macro}
 
 
 
@@ -465,114 +718,6 @@ def parse_args():
     return parser.parse_args()
 
 
-class LCDataset(Dataset):
-
-    def __init__(self, texts, labels, tokenizer, pretrained_embeddings=None, max_length=512, class_type='multi-label'):
-        """
-        Initializes the LCDataset with texts, labels, and additional pretrained embeddings.
-
-        Parameters:
-        - texts: List of input texts.
-        - labels: Corresponding labels for each text.
-        - tokenizer: Hugging Face tokenizer for tokenizing input texts.
-        - pretrained_embeddings: Pretrained embedding matrix (e.g., from embedding_matrix function).
-        - max_length: Maximum length for padding/truncating tokenized sequences.
-        - class_type: Type of classification ('single-label' or 'multi-label').
-        """
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.pretrained_embeddings = pretrained_embeddings  # Pretrained embeddings matrix
-        self.max_length = max_length
-        self.class_type = class_type
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, idx):
-        text = self.texts[idx]
-        labels = self.labels[idx]
-        
-        # Tokenize the input text
-        encoding = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-        )
-        
-        item = {key: val.squeeze(0) for key, val in encoding.items()}
-        
-        # Convert labels based on the classification type
-        if self.class_type == 'single-label':
-            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label classification
-        else:
-            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label classification
-
-        # Incorporate pretrained embeddings if available
-        if self.pretrained_embeddings is not None:
-            # Get token IDs from the tokenizer output
-            input_ids = item["input_ids"]
-            
-            # Use input_ids to index into pretrained embeddings
-            # Shape: (seq_len, embedding_dim)
-            word_embeddings = self.pretrained_embeddings[input_ids]
-            
-            # Add word embeddings to the item for use in the model
-            item["word_embeddings"] = word_embeddings  # Shape: (seq_len, embedding_dim)
-
-        return item
-
-
-
-class LCDatasetOld(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label'):
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.class_type = class_type
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, idx):
-        text = self.texts[idx]
-        labels = self.labels[idx]
-        encoding = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-        )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}
-        
-        # Modify: Handle labels based on classification type
-        if self.class_type == 'single-label':
-            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label
-        else:
-            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label
-        return item
-
-
-# Metrics function
-def compute_metrics(pred, class_type='single-label', threshold=0.5):
-    
-    labels = pred.label_ids
-    
-    if class_type == 'single-label':
-        # Single-label classification: use argmax to get class predictions
-        preds = np.argmax(pred.predictions, axis=1)
-    else:
-        # Multi-label classification: threshold predictions to get binary matrix
-        preds = pred.predictions > threshold            # Adjust threshold for multi-label classification
-    
-    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
-    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
-
-    return {'f1_micro': f1_micro, 'f1_macro': f1_macro}
 
 
 
@@ -629,6 +774,7 @@ if __name__ == "__main__":
     # Load dataset and print class information
     (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type = load_dataset(args.dataset)
 
+    print("class_type:", class_type)
     print("num_classes:", num_classes)
     print("target_names:", target_names)
 
@@ -655,7 +801,7 @@ if __name__ == "__main__":
     # Set the pad_token_id in the model configuration
     model.config.pad_token_id = tokenizer.pad_token_id
     model.to(device)
-    print("model:", model)
+    print("model:\n", model)
 
     # Split train into train and validation
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -670,21 +816,27 @@ if __name__ == "__main__":
     print("labels_val:", type(labels_val), len(labels_val))
     print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
 
-    vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, vtype=args.vtype)
+    print("test_data:", type(test_data), len(test_data))
+    print("test_data[0]:", type(test_data[0]), test_data[0])
+    print("test_target:", type(test_target), len(test_target))
+    print("test_target[0]:", type(test_target[0]), test_target[0].shape, test_target[0])
+
+    vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
     print("vectorizer:", vectorizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
-    print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0])
+    #print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0])
     
     print("Xval:", type(Xval), Xval.shape)
-    print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
+    #print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
     
     print("Xte:", type(Xte), Xte.shape)
-    print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
+    #print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
 
     # convert single label y values from array of scalaers to one hot encoded
     
-    if (class_type:='single-label'):
+    if (class_type in ['single-label', 'singlelabel']):
+
         label_binarizer = LabelBinarizer()
         y_train_one_hot = label_binarizer.fit_transform(labels_train)
         
@@ -715,23 +867,79 @@ if __name__ == "__main__":
             opt=args
         )
 
+    print("supervised range: ", sup_range)
+
     # Prepare datasets
-    train_dataset = LCDataset(texts_train, labels_train, tokenizer, class_type=class_type)
-    val_dataset = LCDataset(texts_val, labels_val, tokenizer, class_type=class_type)
-    test_dataset = LCDataset(test_data, test_target, tokenizer, class_type=class_type)
+    train_dataset = LCDataset(
+        texts_train, 
+        labels_train, 
+        tokenizer, 
+        class_type=class_type, 
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
+    )
+
+    val_dataset = LCDataset(
+        texts_val, 
+        labels_val, 
+        tokenizer, 
+        class_type=class_type, 
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
+    )
+
+    test_dataset = LCDataset(
+        test_data, 
+        test_target, 
+        tokenizer, 
+        class_type=class_type, 
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
+    )
+
+    """
+    # debug datasets
+    print("\ntrain_dataset:", train_dataset)
+    for i in range(3):                  # Sample a few batches
+        sample = train_dataset[i]
+        print(f"Input IDs shape: {sample['input_ids'].shape}")
+        print(f"Attention Mask shape: {sample['attention_mask'].shape}")
+        print(f"Labels shape: {sample['labels'].shape}")
+
+    print("\nval_dataset:", val_dataset)        
+    for i in range(3):                  # Sample a few batches
+        sample = val_dataset[i]
+        print(f"Input IDs shape: {sample['input_ids'].shape}")
+        print(f"Attention Mask shape: {sample['attention_mask'].shape}")
+        print(f"Labels shape: {sample['labels'].shape}")
+
+    print("\ntest_dataset:", test_dataset)    
+    for i in range(3):                  # Sample a few batches
+        sample = test_dataset[i]
+        print(f"Input IDs shape: {sample['input_ids'].shape}")
+        print(f"Attention Mask shape: {sample['attention_mask'].shape}")
+        print(f"Labels shape: {sample['labels'].shape}")
+    """
     
     tinit = time()
     
     # Define training arguments
     training_args = TrainingArguments(
         output_dir='../out',
-        eval_strategy="epoch",
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        save_total_limit=3,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_f1_macro",
+        greater_is_better=True,
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
         num_train_epochs=args.epochs,
         weight_decay=args.weight_decay,
         logging_dir='../log',
-        run_name='layer_cake'
+        run_name='trans_layer_cake',
+        seed=args.seed,
+        report_to="none"
     )
 
     # Early stopping variables
@@ -768,7 +976,7 @@ if __name__ == "__main__":
             if patience_counter >= patience:
                 print("Early stopping triggered.")
                 break
-
+    
     # Final evaluation on test set
     test_results = trainer.evaluate(test_dataset)
     print("Test Results:", test_results)

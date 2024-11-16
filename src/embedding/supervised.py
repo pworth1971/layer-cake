@@ -19,22 +19,18 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     label space exceeds a defined limit.
     """
 
-    print("---------- get_supervised_embeddings() ----------")
+    print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
 
-    print("X:", type(X), X.shape)
-    print("Y:", type(y), y.shape)
-
-    print("method:", {method})
-    print("dozscore:", {dozscore})
+    #print("X:", type(X), X.shape)
+    #print("Y:", type(y), y.shape)
 
     nC = y.shape[1]
+    #print("nC:", {nC})
+
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')
 
-    print("nC:", {nC})
-
-    print("method: ", {method})
-
+    
     if method=='ppmi':
         F = supervised_embeddings_ppmi(X, y)
     elif method == 'dotn':
@@ -54,7 +50,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         #F = zscores(F, axis=0)
         F = normalize_zscores(F)
 
-    print("after zscore normalization:", {F.shape})
+    #print("after zscore normalization:", {F.shape})
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
