@@ -573,7 +573,7 @@ def parse_args():
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--log_file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
-    parser.add_argument('--dropprob', type=float, default=0.1, metavar='[0.0, 1.0]', help='dropout probability (default: 0.5)')
+    parser.add_argument('--dropprob', type=float, default=0.1, metavar='[0.0, 1.0]', help='dropout probability (default: 0.1)')
     parser.add_argument('--net', type=str, default='ff', metavar='str', help=f'net, defaults to ff (only supported option)')
     parser.add_argument('--learnable', type=int, default=0, metavar='int', help='dimension of the learnable embeddings (default 0)')
     parser.add_argument('--droptype', type=str, default='sup', metavar='DROPTYPE',
