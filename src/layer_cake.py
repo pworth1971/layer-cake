@@ -3,7 +3,7 @@ from time import time
 import logging
 
 import scipy
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, coo_matrix
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
@@ -198,38 +198,6 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     print('droprange =', drop_range)
     print('dropprob =', opt.dropprob)
 
-    # Map short names to Hugging Face model names
-    model_name_mapping = {
-        'bert': 'bert-base-uncased',
-        'roberta': 'roberta-base',
-        'gpt2': 'gpt2',
-        'xlnet': 'xlnet-base-cased',
-        'llama': 'llama'
-    }
-
-    model_name = model_name_mapping.get(opt.pretrained, opt.pretrained)
-    print("model_name:", model_name)
-
-    """
-    # Check if using a transformer-based model
-    if opt.pretrained in model_name_mapping:
-    
-        print(f"Initializing transformer-based model with EmbeddingCustom: {model_name}")
-
-        # Initialize TransformerAttentionModel with EmbeddingCustom
-        model = TransformerAttentionModel(
-            model_name=model_name,
-            vocab_size=vocabsize,
-            learnable_length=opt.learnable,
-            num_classes=nC,
-            hidden_size=hidden,
-            dropout_prob=opt.dropprob,
-            pretrained=pretrained_embeddings  # Pass pretrained embeddings to EmbeddingCustom
-        )
-
-    """
-
-    # Fallback to NeuralClassifier for non-transformer models
     model = NeuralClassifier(
         net_type=net_type,
         output_size=nC,
@@ -251,132 +219,6 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
         print("Fine-tuning embeddings...")
         model.finetune_pretrained()
 
-    # Print embedding sizes for both transformer and non-transformer models
-    if isinstance(model, NeuralClassifier):
-        embsizeX, embsizeY = model.get_embedding_size()
-        print("embsizeX:", embsizeX)
-        print("embsizeY:", embsizeY)
-
-        lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
-        print("lrnsizeX:", lrnsizeX)
-        print("lrnsizeY:", lrnsizeY)
-
-        return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
-    else:
-        # For transformer-based models, use transformer-specific dimensions
-        embedding_size = model.transformer.config.hidden_size
-        print("embedding_size:", embedding_size)
-
-        return model, vocabsize, embedding_size, 0, 0
-
-
-
-def init_Net_old(opt, nC, vocabsize, pretrained_embeddings, sup_range):
-    
-    print("------------------ init_Net() ------------------")
-
-    net_type=opt.net
-    print("net_type:", net_type)
-
-    hidden = opt.channels if net_type == 'cnn' else opt.hidden
-    print("hidden:", hidden)
-
-    if opt.droptype == 'sup':
-        drop_range = sup_range
-    elif opt.droptype == 'learn':
-        drop_range = [pretrained_embeddings.shape[1], pretrained_embeddings.shape[1]+opt.learnable]
-    elif opt.droptype == 'none':
-        drop_range = None
-    elif opt.droptype == 'full':
-        drop_range = [0, pretrained_embeddings.shape[1]+opt.learnable]
-
-    print('droptype =', opt.droptype)
-    print('droprange =', drop_range)
-    print('dropprob =', opt.dropprob)
-
-    print(f'Neural Network initialized with dropout type: {opt.droptype}, dropout range: {drop_range}, dropout probability: {opt.dropprob}')
-
-    # Map short names to full Hugging Face model names
-    model_name_mapping = {
-        'bert': 'bert-base-uncased',
-        'roberta': 'roberta-base',
-        'gpt2': 'gpt2',
-        'xlnet': 'xlnet-base-cased',
-        'llama': 'llama'
-    }
-
-    if opt.pretrained in model_name_mapping:
-        model_name = model_name_mapping[opt.pretrained]
-    else:
-        model_name = opt.pretrained                         # Use as-is if no mapping is found
-
-    # Check if a transformer-based model is being used (BERT, RoBERTa, GPT-2, XLNet, etc.)
-    if opt.pretrained in model_name_mapping:
-
-        print(f"Initializing transformer-based model: {model_name}")
-
-        #
-        # Initialize the transformer-attention based model 
-        # Input Tokens -> Transformer Embeddings (BERT, GPT-2, etc.) -> Self-Attention -> Feedforward -> Output
-        #
-        model = TransformerAttentionModel(
-            model_name=model_name,     # Mapped model name (e.g., 'bert-base-uncased')
-            num_classes=nC,            # Number of output classes
-            hidden_size=hidden,        # Hidden size of the transformer
-            attn_heads=8,              # Number of attention heads
-            dropout_prob=opt.dropprob  # Dropout probability
-        )
-
-        # Move the model to the specified device
-        model = model.to(opt.device)
-
-    else:
-        # Fallback to the existing NeuralClassifier for non-transformer models
-        model = NeuralClassifier(
-            net_type,
-            output_size=nC,
-            hidden_size=hidden,
-            vocab_size=vocabsize,
-            learnable_length=opt.learnable,
-            pretrained=pretrained_embeddings,
-            drop_embedding_range=drop_range,
-            drop_embedding_prop=opt.dropprob
-        )
-
-        print("Neural Classifier Model:\n", model)
-
-        # Initialize the model's parameters
-        model.xavier_uniform()
-        model = model.to(opt.device)
-
-        if opt.tunable:
-            print("Fine-tuning embeddings...")
-            model.finetune_pretrained()
-
-
-    """        
-    model = NeuralClassifier(
-        net_type,
-        output_size=nC,
-        hidden_size=hidden,
-        vocab_size=vocabsize,
-        learnable_length=opt.learnable,
-        pretrained=pretrained_embeddings,
-        drop_embedding_range=drop_range,
-        drop_embedding_prop=opt.dropprob)
-
-    print("Neural Classifier Model:\n", model)
-
-    model.xavier_uniform()
-    model = model.to(opt.device)
-
-    if opt.tunable:
-        print("Fine-tuning embeddings...")
-        model.finetune_pretrained()
-
-    print("emb_size:", model.get_embedding_size())
-    print("learnable_emb_size:", model.get_learnable_embedding_size())
-
     embsizeX, embsizeY = model.get_embedding_size()
     print("embsizeX:", embsizeX)
     print("embsizeY:", embsizeY)
@@ -386,26 +228,6 @@ def init_Net_old(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     print("lrnsizeY:", lrnsizeY)
 
     return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
-    """
-
-    # Print embedding sizes for both transformer and non-transformer models
-    if isinstance(model, NeuralClassifier):
-        embsizeX, embsizeY = model.get_embedding_size()
-        print("embsizeX:", embsizeX)
-        print("embsizeY:", embsizeY)
-
-        lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
-        print("lrnsizeX:", lrnsizeX)
-        print("lrnsizeY:", lrnsizeY)
-
-        return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
-    else:
-        # For transformer-based models, return transformer-specific dimensions
-        embedding_size = model.transformer.config.hidden_size
-        print("embedding_size:", embedding_size)
-
-        return model, vocabsize, embedding_size, 0, 0
-    
     
 # ---------------------------------------------------------------------------------------------------------------------------
 
@@ -440,7 +262,7 @@ def init_Net_old(opt, nC, vocabsize, pretrained_embeddings, sup_range):
 # ---------------------------------------------------------------------------------------------------------------------------
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
 
-    print(f'embedding_matrix()... dataset: {dataset}, pretrained: {pretrained}, vocabsize: {vocabsize}')
+    print(f'embedding_matrix()... dataset: {dataset}, pretrained: {pretrained}, vocabsize: {vocabsize}, supervised: {opt.supervised}')
 
     pretrained_embeddings = None
     sup_range = None
@@ -462,6 +284,14 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
                                           method=opt.supervised_method,
                                           max_label_space=opt.max_label_space,
                                           dozscore=(not opt.nozscore))
+            
+            # Check if the matrix is a COO matrix and if 
+            # so convert to desnse array for vstack operation
+            if isinstance(F, coo_matrix):
+                F = F.toarray()
+
+            #print("F:", type(F), F.shape)
+
             num_missing_rows = vocabsize - F.shape[0]
             F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))
             F = torch.from_numpy(F).float()
@@ -504,7 +334,7 @@ def init_loss(classification_type, device, class_weights):
 
 
 
-def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history, is_transformer=False):
+def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, dataset, epoch, method_name, loss_history):
     
     print("\t... training ...")
 
@@ -874,8 +704,6 @@ if __name__ == '__main__':
 
     if (opt.pretrained is None):
         pretrained_vectors = None
-        
-    #word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(lcd, pretrained_vectors)
 
     if opt.pretrained in ['bert', 'roberta', 'xlnet', 'gpt2', 'llama']:
         toke = lcd.tokenizer
@@ -884,18 +712,15 @@ if __name__ == '__main__':
         toke = None
         transdformer_model = False
 
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, tokenizer=toke, max_length=lcd.max_length, pretrained=pretrained_vectors)
-    
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, pretrained=pretrained_vectors)
+
     print("word2index:", type(word2index), len(word2index))
     print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
 
     print("training and validation data split...")
 
-    #print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
-
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
-
-    # Perform the train_test_split with stratification based on the class labels
+    print("val_size:", val_size)
 
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, lcd.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
@@ -989,7 +814,7 @@ if __name__ == '__main__':
     stoptime = early_stop.stop_time - tinit
     stopepoch = early_stop.best_epoch
 
-    logfile.insert(dimensions=emb_size_str, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
+    #logfile.insert(dimensions=emb_size_str, epoch=stopepoch, measure=f'early-stop', value=early_stop.best_score, timelapse=stoptime)
 
     if not opt.plotmode:
         print()

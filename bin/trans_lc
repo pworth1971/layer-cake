@@ -1,0 +1,2 @@
+echo python ../src/trans_layer_cake_v5.py --dataset reuters21578 --seed 47 --pretrained xlnet --log_file ../log/trans_lc_test5.test --epochs 4 --patience 1
+python ../src/trans_layer_cake_v5.py --dataset reuters21578 --seed 47 --pretrained xlnet --log_file ../log/trans_lc_test5.test --epochs 4 --patience 1

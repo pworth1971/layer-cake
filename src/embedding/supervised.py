@@ -9,7 +9,7 @@ from data.tsr_function__ import  STWFUNCTIONS
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True):
+def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True, transformers=False):
     """
     General function to compute supervised embeddings using different methods (e.g., TF-IDF, 
     PPMI, various TSR functions).
@@ -21,16 +21,18 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 
     print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
 
-    #print("X:", type(X), X.shape)
-    #print("Y:", type(y), y.shape)
+    print("X:", type(X), X.shape)
+    print("X[0]:", type(X[0]), X[0])
+
+    print("Y:", type(y), y.shape)
+    print("Y[0]:", type(y[0]), y[0])
 
     nC = y.shape[1]
-    #print("nC:", {nC})
+    print("nC:", {nC})
 
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')
 
-    
     if method=='ppmi':
         F = supervised_embeddings_ppmi(X, y)
     elif method == 'dotn':
@@ -44,13 +46,14 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, y, word_prob)
 
-    #print("F:", {F.shape})
+    #F = F.toarray()
+    print("F:", type(F), {F.shape})
+    #print("F[0]:", type(F[0]), F[0])
 
     if dozscore:
         #F = zscores(F, axis=0)
         F = normalize_zscores(F)
-
-    #print("after zscore normalization:", {F.shape})
+        print("after zscore normalization:", {F.shape})
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -64,7 +67,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_tfidf(X,Y):
+def supervised_embeddings_tfidf(X, Y):
     """
     Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with 
     label information Y.
@@ -72,9 +75,9 @@ def supervised_embeddings_tfidf(X,Y):
     Implementation: Uses the term frequencies X and a supervised label matrix Y to weight 
     the term frequencies by how frequently terms and labels co-occur. 
     """
-
     tfidf_norm = X.sum(axis=0)
     F = (X.T).dot(Y) / tfidf_norm.T
+
     return F
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -166,7 +169,7 @@ def normalize_zscores(data, debug=False):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def zscores(x, axis=0):                             #scipy.stats.zscores does not avoid division by 0
+def zscores_deprecated(x, axis=0):                             #scipy.stats.zscores does not avoid division by 0
     """
     Normalizes an array X using z-score normalization.
 
@@ -175,11 +178,13 @@ def zscores(x, axis=0):                             #scipy.stats.zscores does no
     has zero mean and unit variance.
     """    
     print("\t--- zscores() ---")
-    print("x shape:", {x.shape})
-    print("x dtype:", x.dtype)              # Check data type
+    print("x:", type(x), {x.shape})
+    #print("x[0]:", x[0])
+    print("x dtype:", x.dtype)                  # Check data type
     print("axis: ", {axis})
 
-    arrX = x.todense(x)
+    #arrX = x.todense(x)
+    arrX = x.todense()                          # coo_matrix -> dense matrix
     print("arrX shape:", {arrX.shape})
     
     np_std = np.std(arrX, ddof=1, axis=axis)

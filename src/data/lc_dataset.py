@@ -466,7 +466,7 @@ class LCDataset:
         Indexes the dataset using either a tokenizer (for Transformer models) or a pretrained word-based embedding model.
         """
 
-        print(f"init_neural_model()...")
+        print(f"init_neural_data()...")
 
         # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
         """
@@ -481,6 +481,9 @@ class LCDataset:
         # the pretrained language model (if not None)
         self.word2index = dict(self.vocabulary)                 # dataset vocabulary
         known_words = set(self.word2index.keys())
+
+        print("self.word2index:", type(self.word2index), len(self.word2index))
+        print("known_words:", type(known_words), len(known_words))
         
         if self.lcr_model is not None:
             print("self.model: ", self.model)

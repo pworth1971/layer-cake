@@ -265,75 +265,6 @@ def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
 
 
 
-def show_multilabel_class_distribution(targets, target_names=None, dataset_name="Dataset"):
-    """
-    Show and plot the distribution of each class in a multi-label dataset.
-    
-    Parameters:
-    - targets: List or ndarray of one-hot encoded targets. Each row corresponds to a document, and each column to a class.
-    - target_names: List of class names, matching the number of columns in the targets.
-    - dataset_name: Name of the dataset (for display purposes).
-    """
-    # Check that the number of columns in targets matches the length of target_names
-    if targets.shape[1] != len(target_names):
-        raise ValueError("The number of target columns does not match the number of target names.")
-
-    # Convert targets to a DataFrame using target_names as columns
-    target_df = pd.DataFrame(targets, columns=target_names)
-    
-    # Sum each column to get the count of documents per class
-    class_counts = target_df.sum()
-    
-    # Plot the distribution
-    plt.figure(figsize=(10, 6))
-    plt.bar(class_counts.index, class_counts.values)
-    plt.xticks(rotation=90)
-    plt.xlabel("Class Labels")
-    plt.ylabel("Document Count")
-    plt.title(f"Class Distribution in {dataset_name}")
-    plt.tight_layout()
-    plt.show()
-
-    return class_counts
-
-
-
-def show_class_distribution(target, target_names=None, dataset_name="Dataset"):
-    """
-    Show and plot the distribution of each class in a single-label dataset.
-    
-    Parameters:
-    - data: List or array of document data.
-    - target: List or array of target labels.
-    - target_names: Optional list of class names corresponding to each unique label in the target.
-    - dataset_name: Name of the dataset (for display purposes).
-    """
-    # Calculate the class distribution
-    class_counts = pd.Series(target).value_counts().sort_index()
-    
-    # Map the class indices to class names if provided
-    if target_names:
-        class_counts.index = [target_names[idx] for idx in class_counts.index]
-    
-    # Print class distribution
-    print(f"\nClass distribution in {dataset_name}:")
-    print(class_counts)
-    
-    # Plot the distribution
-    plt.figure(figsize=(10, 6))
-    plt.bar(class_counts.index, class_counts.values)
-    plt.xticks(rotation=90)
-    plt.xlabel("Class Labels")
-    plt.ylabel("Document Count")
-    plt.title(f"Class Distribution in {dataset_name}")
-    plt.tight_layout()
-    plt.show()
-    
-    return class_counts
-
-
-
-
 def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
     print(f'vectorize(), vtype: {vtype}')
@@ -360,26 +291,6 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
     if not isinstance(Xte, csr_matrix):
         Xte = csr_matrix(Xte)
-
-    return vectorizer, Xtr, Xval, Xte
-
-
-def vectorize_old(train_data, val_data, test_data, vtype='tfidf'):
-
-    print(f'vectorize(), vtype: {vtype}')
-
-    if vtype == 'tfidf':
-        vectorizer = TfidfVectorizer(min_df=5, lowercase=False, sublinear_tf=True)
-    elif vtype == 'count':
-        vectorizer = CountVectorizer(min_df=5, lowercase=False)
-
-    Xtr = vectorizer.fit_transform(train_data)
-    Xval = vectorizer.transform(val_data)
-    Xte = vectorizer.transform(test_data)
-
-    Xtr.sort_indices()
-    Xval.sort_indices()
-    Xte.sort_indices()
 
     return vectorizer, Xtr, Xval, Xte
 
@@ -464,7 +375,8 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1) if pretrained_embeddings else None
     print(f'\t[final pretrained_embeddings] {pretrained_embeddings.shape}')
 
-    return pretrained_embeddings, sup_range
+    return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
+
 
 
 class LCDataset(Dataset):
@@ -485,7 +397,7 @@ class LCDataset(Dataset):
         - sup_range: Range of supervised embeddings within the concatenated embeddings.
         """
         self.texts = texts
-        self.labels = labels  # Binary vectors (multi-label format) or indices (single-label)
+        self.labels = labels                                    # Binary vectors (multi-label format) or indices (single-label)
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.class_type = class_type
@@ -495,6 +407,7 @@ class LCDataset(Dataset):
     def __len__(self):
         return len(self.texts)
 
+
     def __getitem__(self, idx):
         """
         Get an individual sample from the dataset.
@@ -503,8 +416,14 @@ class LCDataset(Dataset):
         - item: Dictionary containing tokenized inputs and labels.
         """
         text = self.texts[idx]
-        labels = self.labels[idx]
+        labels = self.labels[idx] if self.labels is not None else [0]           # Default label if labels are missing
         
+        """
+        # Add debug statements
+        print(f"Fetching item {idx}:")
+        print(f"Labels: {labels}")
+        """
+
         # Tokenize the text
         encoding = self.tokenizer(
             text,
@@ -515,15 +434,17 @@ class LCDataset(Dataset):
         )
         item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove batch dim
 
-        # Handle labels based on classification type
+        # Add labels
         if self.class_type == 'single-label':
-            item["labels"] = torch.tensor(labels, dtype=torch.long)  # Single-label: integer index
+            item["labels"] = torch.tensor(labels, dtype=torch.long)
         else:
-            item["labels"] = torch.tensor(labels, dtype=torch.float)  # Multi-label: binary vector
+            item["labels"] = torch.tensor(labels, dtype=torch.float)
 
         # Add pretrained embeddings if provided
         if self.pretrained_embeddings is not None:
-            item["pretrained_embeddings"] = self.pretrained_embeddings  # Pretrained embeddings
+            item["pretrained_embeddings"] = torch.tensor(
+                self.pretrained_embeddings[idx], dtype=torch.float
+            )
 
         # Add supervised embedding range if provided
         if self.sup_range is not None:
@@ -532,22 +453,108 @@ class LCDataset(Dataset):
         return item
 
 
-# Metrics function
-def compute_metrics(pred, class_type='single-label', threshold=0.5):
-    
-    labels = pred.label_ids
-    
+
+def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
+    """
+    Compute evaluation metrics for classification tasks.
+
+    Args:
+    - eval_pred: `EvalPrediction` object with `predictions` and `label_ids`.
+    - class_type: 'single-label' or 'multi-label'.
+    - threshold: Threshold for binary classification in multi-label tasks.
+
+    Returns:
+    - Dictionary of computed metrics.
+    """
+    predictions, labels = eval_pred.predictions, eval_pred.label_ids
+
     if class_type == 'single-label':
-        # Single-label classification: use argmax to get class predictions
-        preds = np.argmax(pred.predictions, axis=1)
+        # Convert predictions to class indices
+        preds = np.argmax(predictions, axis=1)
+        #labels = np.argmax(labels, axis=1)                              # Convert one-hot to class indices if needed
+    elif class_type == 'multi-label':
+        # Threshold predictions for multi-label classification
+        preds = (predictions > threshold).astype(int)
+        labels = labels.astype(int)                                     # Ensure labels are binary
     else:
-        # Multi-label classification: threshold predictions to get binary matrix
-        preds = pred.predictions > threshold            # Adjust threshold for multi-label classification
-    
+        raise ValueError(f"Unsupported class_type: {class_type}")
+
+    print("preds:", type(preds), preds.shape)
+    print("labels:", type(labels), labels.shape)
+
+    # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
     f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
+    precision = precision_score(labels, preds, average='micro', zero_division=1)
+    recall = recall_score(labels, preds, average='micro', zero_division=1)
 
-    return {'f1_micro': f1_micro, 'f1_macro': f1_macro}
+    return {
+        'f1_micro': f1_micro,
+        'f1_macro': f1_macro,
+        'precision': precision,
+        'recall': recall,
+    }
+
+
+
+
+def compute_embedding_dimensions(model, num_classes, opt):
+    """
+    Compute the total embedding dimensions based on the model and supervised embeddings.
+
+    Parameters:
+    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
+    - num_classes: Number of classes in the dataset (used for supervised embeddings).
+    - opt: Options object with configuration (e.g., whether supervised embeddings are enabled).
+
+    Returns:
+    - total_dimensions: Total embedding dimensions (pretrained + supervised if enabled).
+    """
+    # Extract the base model's hidden size
+    base_dimensions = model.config.hidden_size
+
+    # Add supervised dimensions if supervised embeddings are enabled
+    supervised_dimensions = num_classes if opt.supervised else 0
+
+    # Compute total dimensions
+    total_dimensions = base_dimensions + supervised_dimensions
+
+    print(f"Base dimensions: {base_dimensions}")
+    if opt.supervised:
+        print(f"Supervised dimensions (num_classes): {supervised_dimensions}")
+    print(f"Total embedding dimensions: {total_dimensions}")
+
+    return total_dimensions
+
+
+def custom_data_collator(batch):
+    """
+    Custom data collator for handling variable-length sequences and labels.
+
+    Parameters:
+    - batch: List of individual samples from the dataset.
+
+    Returns:
+    - collated: Dictionary containing collated inputs and labels.
+    """
+
+    collated = {
+        "input_ids": torch.stack([f["input_ids"] for f in batch]),
+        "attention_mask": torch.stack([f["attention_mask"] for f in batch]),
+    }
+
+    if "labels" in batch[0]:
+        collated["labels"] = torch.stack([f["labels"] for f in batch])
+    else:
+        print("Missing 'labels' key in batch!")  # Debugging missing labels
+        collated["labels"] = torch.zeros(len(batch), dtype=torch.long)
+
+    if "pretrained_embeddings" in batch[0]:
+        collated["pretrained_embeddings"] = torch.stack([f["pretrained_embeddings"] for f in batch])
+
+    #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
+
+    return collated
 
 
 
@@ -592,8 +599,6 @@ def parse_args():
 
 
 
-
-
 # Main
 if __name__ == "__main__":
 
@@ -632,8 +637,6 @@ if __name__ == "__main__":
         print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, and wc_supervised == {args.supervised} for {args.dataset} already calculated, run with --force option to override. ---')
         exit(0)
 
-    #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
-
     embedding_type = get_embedding_type(args)
     print("embedding_type:", embedding_type)
     print("embeddings:", embeddings)    
@@ -645,7 +648,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Load dataset and print class information
-    (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type = load_dataset(args.dataset)
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = load_dataset(args.dataset)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)
@@ -658,23 +661,29 @@ if __name__ == "__main__":
 
     print("test_data:", type(test_data), len(test_data))
     print("test_data[0]:", type(test_data[0]), test_data[0])
-    print("test_target:", type(test_target), len(test_target))
-    print("test_target[0]:", type(test_target[0]), test_target[0].shape, test_target[0])
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
     # Add padding token if it doesn't exist
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-    print("tokenizer:", tokenizer)
+    print("tokenizer:\n", tokenizer)
 
-    vocab_size = len(tokenizer)
-    print("vocab_size:", vocab_size)
+    # Get the pad_token_id
+    pad_token_id = tokenizer.pad_token_id
 
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
+    tok_vocab_size = len(tokenizer)
+    print("tok_vocab_size:", tok_vocab_size)
+
+    hf_model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
     # Set the pad_token_id in the model configuration
-    model.config.pad_token_id = tokenizer.pad_token_id
-    model.to(device)
-    print("model:\n", model)
+    hf_model.config.pad_token_id = tokenizer.pad_token_id
+    hf_model.to(device)
+    print("model:\n", hf_model)
+
+    num_dimensions = compute_embedding_dimensions(hf_model, num_classes, args)
+    print("num_dimensions:", num_dimensions)
 
     # Split train into train and validation
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -691,11 +700,11 @@ if __name__ == "__main__":
 
     print("test_data:", type(test_data), len(test_data))
     print("test_data[0]:", type(test_data[0]), test_data[0])
-    print("test_target:", type(test_target), len(test_target))
-    print("test_target[0]:", type(test_target[0]), test_target[0].shape, test_target[0])
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
     vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
-    print("vectorizer:", vectorizer)
+    print("vectorizer:\n", vectorizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
     #print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0])
@@ -708,43 +717,40 @@ if __name__ == "__main__":
 
     # convert single label y values from array of scalaers to one hot encoded
     print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
-    vocab_size = len(vectorizer.vocabulary_)
-    print("vocab_size:", vocab_size)
+    vec_vocab_size = len(vectorizer.vocabulary_)
+    print("vec_vocab_size:", vec_vocab_size)
 
+    """
     if (class_type in ['single-label', 'singlelabel']):
 
-        label_binarizer = LabelBinarizer()
-        y_train_one_hot = label_binarizer.fit_transform(labels_train)
-        
-        print("y_train_one_hot:", type(y_train_one_hot), y_train_one_hot.shape)
-        print("y_train_one_hot[0]:", type(y_train_one_hot[0]), y_train_one_hot[0])
+        print("single label, converting target labels to to one-hot")
 
-        # Call `embedding_matrix` with the loaded model and tokenizer
-        pretrained_embeddings, sup_range = embedding_matrix(
-            model=model,
-            tokenizer=tokenizer,
-            vocabsize=vocab_size,
-            #word2index=tokenizer.get_vocab(),
-            word2index=vectorizer.vocabulary_,
-            out_of_vocabulary=[],
-            vectorized_training_data=Xtr,
-            training_label_matrix=y_train_one_hot,
-            opt=args
-        )
-    else:
-        # Call `embedding_matrix` with the loaded model and tokenizer
-        pretrained_embeddings, sup_range = embedding_matrix(
-            model=model,
-            tokenizer=tokenizer,
-            vocabsize=vocab_size,
-            #word2index=tokenizer.get_vocab(),
-            word2index=vectorizer.vocabulary_,
-            out_of_vocabulary=[],
-            vectorized_training_data=Xtr,
-            training_label_matrix=labels_train,
-            opt=args
-        )
+        label_binarizer = LabelBinarizer()        
+        labels_train = label_binarizer.fit_transform(labels_train)
+        labels_val = label_binarizer.transform(labels_val)
+        labels_test = label_binarizer.transform(labels_test)
 
+        print("labels_train:", type(labels_train), labels_train.shape)
+        print("labels_train[0]:", type(labels_train[0]), labels_train[0])
+        print("labels_val:", type(labels_val), labels_val.shape)
+        print("labels_val[0]:", type(labels_val[0]), labels_val[0])
+        print("labels_test:", type(labels_test), labels_test.shape)
+        print("labels_test[0]:", type(labels_test[0]), labels_test[0])
+    """
+
+    # Call `embedding_matrix` with the loaded model and tokenizer
+    pretrained_embeddings, sup_range, num_dimensions = embedding_matrix(
+        model=hf_model,
+        tokenizer=tokenizer,
+        vocabsize=vec_vocab_size,
+        word2index=vectorizer.vocabulary_,
+        out_of_vocabulary=[],
+        vectorized_training_data=Xtr,
+        training_label_matrix=labels_train,
+        opt=args
+    )
+
+    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
     print("supervised range: ", sup_range)
 
     # Prepare datasets
@@ -757,6 +763,13 @@ if __name__ == "__main__":
         sup_range=sup_range
     )
 
+    """
+    for i in range(len(train_dataset)):
+        sample = train_dataset[i]
+        assert "labels" in sample, f"Missing 'labels' in sample {i}"
+        print(f"Sample {i} is valid.")
+    """
+
     val_dataset = LCDataset(
         texts_val, 
         labels_val, 
@@ -768,25 +781,29 @@ if __name__ == "__main__":
 
     test_dataset = LCDataset(
         test_data, 
-        test_target, 
+        labels_test, 
         tokenizer, 
         class_type=class_type, 
         pretrained_embeddings=pretrained_embeddings, 
         sup_range=sup_range
     )
-
+    
     """
     # debug datasets
     print("\ntrain_dataset:", train_dataset)
     for i in range(3):                  # Sample a few batches
         sample = train_dataset[i]
+        print("Sample Keys:", sample.keys())
+        print("Pretrained Embeddings Shape:", sample["pretrained_embeddings"].shape)
         print(f"Input IDs shape: {sample['input_ids'].shape}")
         print(f"Attention Mask shape: {sample['attention_mask'].shape}")
         print(f"Labels shape: {sample['labels'].shape}")
-
+        
     print("\nval_dataset:", val_dataset)        
     for i in range(3):                  # Sample a few batches
         sample = val_dataset[i]
+        print("Sample Keys:", sample.keys())
+        print("Pretrained Embeddings Shape:", sample["pretrained_embeddings"].shape)
         print(f"Input IDs shape: {sample['input_ids'].shape}")
         print(f"Attention Mask shape: {sample['attention_mask'].shape}")
         print(f"Labels shape: {sample['labels'].shape}")
@@ -794,11 +811,13 @@ if __name__ == "__main__":
     print("\ntest_dataset:", test_dataset)    
     for i in range(3):                  # Sample a few batches
         sample = test_dataset[i]
+        print("Sample Keys:", sample.keys())
+        print("Pretrained Embeddings Shape:", sample["pretrained_embeddings"].shape)
         print(f"Input IDs shape: {sample['input_ids'].shape}")
         print(f"Attention Mask shape: {sample['attention_mask'].shape}")
         print(f"Labels shape: {sample['labels'].shape}")
     """
-    
+
     tinit = time()
 
     # Training arguments
@@ -820,13 +839,14 @@ if __name__ == "__main__":
         report_to="none"
     )
 
-    # Define Trainer with EarlyStoppingCallback
+    # Trainer with custom data collator
     trainer = Trainer(
-        model=model,
+        model=hf_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=lambda pred: compute_metrics(pred, class_type=class_type, threshold=MC_THRESHOLD),
+        data_collator=custom_data_collator,
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
 
@@ -844,28 +864,35 @@ if __name__ == "__main__":
     else:
         y_pred = (preds.predictions > 0.5).astype(int)
 
+    """
+    if (class_type in ['single-label', 'singlelabel']):
+        # Convert one-hot encoded labels and predictions to class indices
+        labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
+    """
+    
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("y_pred:", type(y_pred), len(y_pred))
 
-    print(classification_report(test_target, y_pred, target_names=target_names, digits=4))
+    print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
 
-    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(test_target, y_pred, classification_type=class_type)
+    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels_test, y_pred, classification_type=class_type)
     print("\n--Layer Cake Metrics--")
     print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
     
     tend = time() - tinit
 
-    embedding_size = vocab_size
     measure_prefix = 'final'
     epoch = trainer.state.epoch
     
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
     #logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dimensions=embedding_size, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     print("\n\t--- model training and evaluation complete---\n")
 

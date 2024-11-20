@@ -160,16 +160,21 @@ def pad(index_list, pad_index, max_pad_length=None):
 
 
 def get_word_list(word2index1, word2index2=None): #TODO: redo
+
     print("get_word_list()")
+    
     def extract_word_list(word2index):
         return [w for w,i in sorted(word2index.items(), key=lambda x: x[1])]
+    
     word_list = extract_word_list(word2index1)
+    
     if word2index2 is not None:
         word_list += extract_word_list(word2index2)
+    
     return word_list
 
 
-def batchify_old(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
+def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
     
     print(f'batchify(): batchsize={batchsize}, pad_index={pad_index}, device={device}, target_long={target_long}, max_pad_length={max_pad_length}')
     
@@ -393,60 +398,7 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
         return comp_method + '-' + pt_type
 
 
-# ---------------------------------------------------------------------------------------------------------------------------
-
-def index_dataset(dataset, tokenizer=None, max_length=512, pretrained=None):
-    """
-    Indexes the dataset using either a tokenizer (for Transformer models) or a pretrained word-based embedding model.
-    """
-    print(f"indexing dataset...")
-
-    # For word-based models, use the dataset's vocabulary. For Transformer models, use the tokenizer's vocabulary.
-    if tokenizer:
-        word2index = dict(tokenizer.get_vocab())
-        unk_index = tokenizer.unk_token_id
-        pad_index = tokenizer.pad_token_id
-    else:
-        word2index = dict(dataset.vocabulary)
-        word2index['UNKTOKEN'] = len(word2index)
-        word2index['PADTOKEN'] = len(word2index)
-        unk_index = word2index['UNKTOKEN']
-        pad_index = word2index['PADTOKEN']
-
-    known_words = set(word2index.keys())
-    if pretrained is not None:
-        known_words.update(pretrained.vocabulary())
-
-    out_of_vocabulary = dict()
-
-    # Define a helper function to tokenize and index documents
-    def tokenize_and_index(documents):
-        indices = []
-        for doc in documents:
-            if tokenizer:
-                # Use the transformer tokenizer for subword tokenization
-                tokens = tokenizer.encode(doc, truncation=True, padding=True, max_length=max_length)
-            else:
-                # Use the dataset analyzer for word-based tokenization
-                tokens = dataset.analyzer()(doc)
-
-            # Convert tokens to indices, handle OOVs
-            indexed_tokens = [word2index.get(token, unk_index) for token in tokens]
-            indices.append(indexed_tokens)
-        return indices
-
-    # Index development and test sets
-    devel_index = tokenize_and_index(dataset.devel_raw)
-    test_index = tokenize_and_index(dataset.test_raw)
-
-    print('[indexing complete]')
-
-    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
-
-
-
-
-def index_dataset_old(dataset, pretrained=None):
+def index_dataset(dataset, pretrained=None):
 
     print(f"indexing dataset...")
     

@@ -24,11 +24,6 @@ NUM_RUNS=1
 # embedding config command arguments
 # regular array to enforce ordering
 #
-#"GLOVE --pretrained glove --glove-path ../.vector_cache/GloVe"
-#"WORD2VEC --pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
-#"FASTTEXT --pretrained fasttext --fasttext-path ../.vector_cache/fastText"
-#"LLAMA --pretrained llama --llama-path ../.vector_cache/LLaMa"
-#
 declare -a embeddings=(  
     "GLOVE --pretrained glove --glove-path ../.vector_cache/GloVe"
     "BERT --pretrained bert --bert-path ../.vector_cache/BERT"
