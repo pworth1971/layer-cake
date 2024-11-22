@@ -379,6 +379,71 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
+
+class LCTransformerClassifier(nn.Module):
+
+    def __init__(self, base_model, num_classes, embedding_dim, supervised_dim=0, dropout=0.1, class_type='single-label'):
+        """
+        Custom classifier with optional extended embeddings.
+        
+        Args:
+        - base_model: Pretrained Hugging Face transformer model.
+        - num_classes: Number of output classes.
+        - embedding_dim: Dimension of pretrained embeddings.
+        - supervised_dim: Dimension of supervised embeddings (default: 0).
+        - dropout: Dropout rate.
+        - class_type: Classification type ('single-label' or 'multi-label').
+        """
+        super(LCTransformerClassifier, self).__init__()
+        self.base_model = base_model
+        self.class_type = class_type
+        self.extended_dim = embedding_dim + supervised_dim
+        self.num_classes = num_classes
+        self.dropout = nn.Dropout(p=dropout)
+        
+        # Classification head for combined embeddings
+        self.classifier = nn.Linear(self.extended_dim, num_classes)
+
+
+    def forward(self, input_ids, attention_mask, pretrained_embeddings=None, labels=None):
+        """
+        Forward pass for the LCTransformerClassifier.
+
+        Args:
+        - input_ids: Tensor of input token IDs.
+        - attention_mask: Tensor of attention masks.
+        - pretrained_embeddings: Tensor of additional pretrained embeddings (optional).
+        - labels: Tensor of labels (optional, required for Hugging Face Trainer).
+
+        Returns:
+        - logits: Model predictions.
+        """
+        # Pass input through the transformer base model
+        outputs = self.base_model(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+        )
+        pooled_output = outputs.last_hidden_state[:, 0]  # Use [CLS] token embedding
+        
+        # If extended embeddings are provided, concatenate
+        if pretrained_embeddings is not None:
+            pooled_output = torch.cat([pooled_output, pretrained_embeddings], dim=1)
+        
+        # Apply dropout and classify
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        
+        # Adjust logits for multi-label classification
+        if self.class_type == 'multi-label':
+            logits = torch.sigmoid(logits)
+        
+        return logits
+
+
+
+
+
+    
+
 class LCDataset(Dataset):
 
     def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label', 
@@ -524,7 +589,7 @@ def compute_embedding_dimensions(model, num_classes, opt):
         print(f"Supervised dimensions (num_classes): {supervised_dimensions}")
     print(f"Total embedding dimensions: {total_dimensions}")
 
-    return total_dimensions, base_dimensions, supervised_dimensions
+    return base_dimensions, supervised_dimensions, total_dimensions
 
 
 def custom_data_collator(batch):
@@ -555,6 +620,51 @@ def custom_data_collator(batch):
     #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
 
     return collated
+
+
+class LCTransformerClassifier(nn.Module):
+
+    def __init__(self, base_model, num_classes, embedding_dim, supervised_dim=0, dropout=0.1, class_type='single-label'):
+        """
+        Custom classifier with optional extended embeddings.
+        
+        Args:
+        - base_model: Pretrained Hugging Face transformer model.
+        - num_classes: Number of output classes.
+        - embedding_dim: Dimension of pretrained embeddings.
+        - supervised_dim: Dimension of supervised embeddings (default: 0).
+        - dropout: Dropout rate.
+        - class_type: Classification type ('single-label' or 'multi-label').
+        """
+        super(LCTransformerClassifier, self).__init__()
+        self.base_model = base_model
+        self.class_type = class_type
+        self.extended_dim = embedding_dim + supervised_dim
+        self.num_classes = num_classes
+        self.dropout = nn.Dropout(p=dropout)
+        
+        # Classification head for combined embeddings
+        self.classifier = nn.Linear(self.extended_dim, num_classes)
+
+    def forward(self, input_ids, attention_mask, pretrained_embeddings=None):
+        # Pass input through the transformer base model
+        outputs = self.base_model(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+        )
+        pooled_output = outputs.last_hidden_state[:, 0]  # Use [CLS] token embedding
+        
+        # If extended embeddings are provided, concatenate
+        if pretrained_embeddings is not None:
+            pooled_output = torch.cat([pooled_output, pretrained_embeddings], dim=1)
+        
+        # Apply dropout and classify
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        
+        # Adjust logits for multi-label classification
+        if self.class_type == 'multi-label':
+            logits = torch.sigmoid(logits)
+        return logits
 
 
 
@@ -680,12 +790,12 @@ if __name__ == "__main__":
     # Set the pad_token_id in the model configuration
     hf_model.config.pad_token_id = tokenizer.pad_token_id
     hf_model.to(device)
-    print("model:\n", hf_model)
+    print("hf_model:\n", hf_model)
 
-    total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
-    print("total_dims:", total_dims)
-    print("pt_base_dims:", pt_base_dims)
-    print("supervised_dims:", supervised_dims)
+    base_dimensions, supervised_dimensions, total_dimensions = compute_embedding_dimensions(hf_model, num_classes, args)
+    print("base_dimensions:", base_dimensions)
+    print("supervised_dimensions:", supervised_dimensions)
+    print("total_dimensions:", total_dimensions)
 
     # Split train into train and validation
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -754,6 +864,17 @@ if __name__ == "__main__":
 
     print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
     print("supervised range: ", sup_range)
+
+    # Initialize the custom classifier
+    lc_transformer_model = LCTransformerClassifier(
+        base_model=hf_model.base_model,
+        num_classes=num_classes,
+        embedding_dim=total_dimensions,
+        supervised_dim=supervised_dimensions,
+        dropout=args.dropprob,
+        class_type=class_type
+    ).to(device)
+    print("lc_transformer_model:\n", lc_transformer_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
@@ -843,7 +964,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=hf_model,
+        model=lc_transformer_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,

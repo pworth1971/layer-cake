@@ -296,6 +296,76 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
 
 
+def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
+    """
+    Creates an embedding matrix that includes both pretrained and supervised embeddings.
+
+    Parameters:
+    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
+    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
+    - vocabsize: Size of the vocabulary.
+    - word2index: Dictionary mapping words to their index.
+    - out_of_vocabulary: List of words not found in the pretrained model.
+    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
+    - training_label_matrix: Multi-label binary matrix for training labels.
+    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+
+    Returns:
+    - pretrained_embeddings: A tensor containing pretrained embeddings for the text at hand
+    - wce_matrix: computed supervised (Word-Class) embeddings, aka WCEs
+    - sup_range: Range in the embedding matrix where supervised embeddings are located.
+    """
+
+    print(f'embedding_matrices(): opt.pretrained: {opt.pretrained}, vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
+          
+    pretrained_embeddings = []
+    sup_range = None
+    embedding_layer = model.get_input_embeddings()
+    embedding_dim = embedding_layer.embedding_dim
+    embedding_matrix = torch.zeros((vocabsize, embedding_dim))
+
+    # Pretrained embeddings
+    if opt.pretrained:
+        for word, idx in word2index.items():
+            token_id = tokenizer.convert_tokens_to_ids(word)
+            if token_id is not None and token_id < embedding_layer.num_embeddings:
+                with torch.no_grad():
+                    embedding = embedding_layer.weight[token_id].cpu()
+                embedding_matrix[idx] = embedding
+            else:
+                out_of_vocabulary.append(word)
+
+        pretrained_embeddings.append(embedding_matrix)
+        print(f'\t[pretrained-matrix] {embedding_matrix.shape}')
+
+    # Supervised embeddings (WCEs)
+    wce_matrix = None
+    if opt.supervised:
+        print(f'computing supervised embeddings...')
+        Xtr = vectorized_training_data
+        Ytr = training_label_matrix
+        print("\tXtr:", type(Xtr), Xtr.shape)
+        print("\tYtr:", type(Ytr), Ytr.shape)
+
+        WCE = get_supervised_embeddings(Xtr, Ytr, method=opt.supervised_method,
+                                         max_label_space=opt.max_label_space,
+                                         dozscore=(not opt.nozscore),
+                                         transformers=True)
+
+        # Adjust WCE matrix size
+        num_missing_rows = vocabsize - WCE.shape[0]
+        WCE = np.vstack((WCE, np.zeros((num_missing_rows, WCE.shape[1]))))
+        wce_matrix = torch.from_numpy(WCE).float()
+        print('\t[supervised-matrix]', wce_matrix.shape)
+
+        offset = pretrained_embeddings[0].shape[1] if pretrained_embeddings else 0
+        sup_range = [offset, offset + F.shape[1]]
+        print("supervised range: ", sup_range)
+
+    return embedding_matrix, wce_matrix, sup_range
+
+
+
 def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
     """
     Creates an embedding matrix that includes both pretrained and supervised embeddings.

@@ -78,9 +78,9 @@ RANDOM_SEED = 42
 #
 BATCH_SIZE = 8
 MC_THRESHOLD = 0.5          # Multi-class threshold
-PATIENCE = 5                # Early stopping patience
-LEARNING_RATE = 1e-6        # Learning rate
-EPOCHS = 10
+PATIENCE = 2                # Early stopping patience
+LEARNING_RATE = 1e-3        # Default Learning rate
+EPOCHS = 12
 
 
 # Check device
@@ -297,35 +297,16 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
 
 def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
-    """
-    Creates an embedding matrix that includes both pretrained and supervised embeddings.
-
-    Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
-    - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-
-    Returns:
-    - pretrained_embeddings: A tensor containing combined pretrained and supervised embeddings.
-    - sup_range: Range in the embedding matrix where supervised embeddings are located.
-    """
-    print(f'embedding_matrix(): opt.pretrained: {opt.pretrained},  vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
+    print(f'embedding_matrix(): opt.pretrained: {opt.pretrained}, vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
           
     pretrained_embeddings = []
     sup_range = None
-
-     # Get the embedding layer for pretrained embeddings
-    embedding_layer = model.get_input_embeddings()                  # Works across models like BERT, RoBERTa, DistilBERT, GPT, XLNet, LLaMA
+    embedding_layer = model.get_input_embeddings()
     embedding_dim = embedding_layer.embedding_dim
     embedding_matrix = torch.zeros((vocabsize, embedding_dim))
 
-    # If pretrained embeddings are needed
+    # Pretrained embeddings
     if opt.pretrained:
-
-        # Populate embedding matrix with pretrained embeddings
         for word, idx in word2index.items():
             token_id = tokenizer.convert_tokens_to_ids(word)
             if token_id is not None and token_id < embedding_layer.num_embeddings:
@@ -338,91 +319,184 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
         pretrained_embeddings.append(embedding_matrix)
         print(f'\t[pretrained-matrix] {embedding_matrix.shape}')
 
-    # If supervised embeddings are needed
+    # Supervised embeddings (WCEs)
+    wce_matrix = None
     if opt.supervised:
-
         print(f'computing supervised embeddings...')
-        #Xtr, _ = vectorize_data(word2index, dataset)                # Function to vectorize the dataset
-        #Ytr = dataset.devel_labelmatrix                             # Assuming devel_labelmatrix is the label matrix for training data
-        
         Xtr = vectorized_training_data
         Ytr = training_label_matrix
-        
         print("\tXtr:", type(Xtr), Xtr.shape)
         print("\tYtr:", type(Ytr), Ytr.shape)
 
-        F = get_supervised_embeddings(
-            Xtr, 
-            Ytr,
-            method=opt.supervised_method,
-            max_label_space=opt.max_label_space,
-            dozscore=(not opt.nozscore),
-            transformers=True
-        )
-        
-        # Adjust supervised embedding matrix to match vocabulary size
-        num_missing_rows = vocabsize - F.shape[0]
-        F = np.vstack((F, np.zeros((num_missing_rows, F.shape[1]))))
-        F = torch.from_numpy(F).float()
-        print('\t[supervised-matrix]', F.shape)
+        WCE = get_supervised_embeddings(Xtr, Ytr, method=opt.supervised_method,
+                                         max_label_space=opt.max_label_space,
+                                         dozscore=(not opt.nozscore),
+                                         transformers=True)
 
-        # Concatenate supervised embeddings
+        # Adjust WCE matrix size
+        num_missing_rows = vocabsize - WCE.shape[0]
+        WCE = np.vstack((WCE, np.zeros((num_missing_rows, WCE.shape[1]))))
+        wce_matrix = torch.from_numpy(WCE).float()
+        print('\t[supervised-matrix]', wce_matrix.shape)
+
         offset = pretrained_embeddings[0].shape[1] if pretrained_embeddings else 0
         sup_range = [offset, offset + F.shape[1]]
-        pretrained_embeddings.append(F)
+        print("supervised range: ", sup_range)
 
-    # Concatenate all embeddings along the feature dimension
-    pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1) if pretrained_embeddings else None
-    print(f'\t[final pretrained_embeddings] {pretrained_embeddings.shape}')
+    return embedding_matrix, wce_matrix, sup_range
 
-    return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
+
+class LCLSTMClassifier(nn.Module):
+
+    def __init__(self, pretrained_model_name, pretrained_embedding_dim=None, wce_dim=None, 
+                 hidden_dim=128, output_dim=1, lstm_layers=1, dropout=0.2):
+        
+        super(LCLSTMClassifier, self).__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
+        self.transformer = AutoModel.from_pretrained(pretrained_model_name)
+
+        # Freeze transformer parameters (optional)
+        for param in self.transformer.parameters():
+            param.requires_grad = False
+
+        # Compute input dimension for LSTM dynamically
+        lstm_input_dim = pretrained_embedding_dim
+        if wce_dim:
+            lstm_input_dim += wce_dim
+
+        # LSTM layer
+        self.lstm = nn.LSTM(
+            input_size=lstm_input_dim,
+            hidden_size=hidden_dim,
+            num_layers=lstm_layers,
+            batch_first=True,
+            bidirectional=True
+        )
+
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        # Fully connected classifier layer
+        self.classifier = nn.Linear(hidden_dim * 2, output_dim)
+
+
+    def forward(self, input_ids, attention_mask, pretrained_embeddings=None, wce_embeddings=None):
+
+        # Pass input through the transformer model
+        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        hidden_states = transformer_outputs.last_hidden_state  # Shape: (batch_size, seq_len, embedding_dim)
+
+        # Concatenate embeddings
+        combined_embeddings = hidden_states
+        if pretrained_embeddings is not None:
+            combined_embeddings = torch.cat((combined_embeddings, pretrained_embeddings), dim=2)
+        if wce_embeddings is not None:
+            combined_embeddings = torch.cat((combined_embeddings, wce_embeddings), dim=2)
+
+        # Pass through the LSTM
+        lstm_out, _ = self.lstm(combined_embeddings)  # Shape: (batch_size, seq_len, hidden_dim * 2)
+
+        # Apply dropout to the LSTM output
+        lstm_out = self.dropout(lstm_out)
+
+        # Use the final hidden state (mean pooling across sequence length)
+        pooled_output = torch.mean(lstm_out, dim=1)  # Shape: (batch_size, hidden_dim * 2)
+
+        # Pass through the classifier
+        logits = self.classifier(pooled_output)  # Shape: (batch_size, output_dim)
+
+        return logits
+
+
+
+class LCLSTMClassifierOld(nn.Module):
+
+    def __init__(self, pretrained_model_name, embedding_dim, hidden_dim, output_dim, lstm_layers=1, dropout=0.2):
+
+        super(LCLSTMClassifierOld, self).__init__()
+        # Load the pretrained transformer model
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
+        self.transformer = AutoModel.from_pretrained(pretrained_model_name)
+        
+        # Freeze transformer parameters (optional)
+        for param in self.transformer.parameters():
+            param.requires_grad = False
+
+        # LSTM layer
+        self.lstm = nn.LSTM(
+            input_size=embedding_dim,
+            hidden_size=hidden_dim,
+            num_layers=lstm_layers,
+            batch_first=True,
+            bidirectional=True
+        )
+
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        # Fully connected classifier layer
+        self.classifier = nn.Linear(hidden_dim * 2, output_dim)  # bidirectional doubles the hidden_dim
+
+    def forward(self, input_ids, attention_mask, pretrained_embeddings=None, wce_embeddings=None):
+        # Pass input through transformer model
+        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        hidden_states = transformer_outputs.last_hidden_state  # Shape: (batch_size, seq_len, transformer_embedding_dim)
+
+        # Concatenate embeddings
+        combined_embeddings = hidden_states
+
+        # Expand pretrained_embeddings if provided
+        if pretrained_embeddings is not None:
+            # Expand to (batch_size, seq_len, embedding_dim)
+            pretrained_embeddings = pretrained_embeddings.unsqueeze(1).expand(-1, combined_embeddings.size(1), -1)
+            combined_embeddings = torch.cat((combined_embeddings, pretrained_embeddings), dim=2)
+
+        # Expand wce_embeddings if provided
+        if wce_embeddings is not None:
+            # Expand to (batch_size, seq_len, embedding_dim)
+            wce_embeddings = wce_embeddings.unsqueeze(1).expand(-1, combined_embeddings.size(1), -1)
+            combined_embeddings = torch.cat((combined_embeddings, wce_embeddings), dim=2)
+
+        # Pass through LSTM
+        lstm_out, _ = self.lstm(combined_embeddings)
+
+        # Apply dropout
+        lstm_out = self.dropout(lstm_out)
+
+        # Mean pooling
+        pooled_output = torch.mean(lstm_out, dim=1)
+
+        # Classifier
+        logits = self.classifier(pooled_output)
+        return logits
+
+
+    
 
 
 class LCDataset(Dataset):
 
-    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label', 
-                 pretrained_embeddings=None, sup_range=None):
-        """
-        Dataset class for handling both input text and labels, with optional support for 
-        pretrained embeddings and supervised ranges.
+    def __init__(self, texts, labels, tokenizer, max_length=MAX_LENGTH, class_type='single-label', 
+                 pretrained_embeddings=None, sup_range=None, wce_matrix=None):
 
-        Parameters:
-        - texts: List of input text samples.
-        - labels: Multi-label binary vectors or single-label indices.
-        - tokenizer: Hugging Face tokenizer for text tokenization.
-        - max_length: Maximum length of tokenized sequences.
-        - class_type: 'multi-label' or 'single-label' classification type.
-        - pretrained_embeddings: Tensor containing pretrained embeddings.
-        - sup_range: Range of supervised embeddings within the concatenated embeddings.
-        """
         self.texts = texts
-        self.labels = labels                                    # Binary vectors (multi-label format) or indices (single-label)
+        self.labels = labels
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.class_type = class_type
         self.pretrained_embeddings = pretrained_embeddings
         self.sup_range = sup_range
+        self.wce_matrix = wce_matrix
+        
 
     def __len__(self):
         return len(self.texts)
-
+    
 
     def __getitem__(self, idx):
-        """
-        Get an individual sample from the dataset.
-
-        Returns:
-        - item: Dictionary containing tokenized inputs and labels.
-        """
         text = self.texts[idx]
-        labels = self.labels[idx] if self.labels is not None else [0]           # Default label if labels are missing
-        
-        """
-        # Add debug statements
-        print(f"Fetching item {idx}:")
-        print(f"Labels: {labels}")
-        """
+        labels = self.labels[idx] if self.labels is not None else [0]
 
         # Tokenize the text
         encoding = self.tokenizer(
@@ -432,7 +506,7 @@ class LCDataset(Dataset):
             max_length=self.max_length,
             return_tensors="pt",
         )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove batch dim
+        item = {key: val.squeeze(0) for key, val in encoding.items()}
 
         # Add labels
         if self.class_type == 'single-label':
@@ -449,6 +523,10 @@ class LCDataset(Dataset):
         # Add supervised embedding range if provided
         if self.sup_range is not None:
             item["sup_range"] = self.sup_range  # Supervised embedding range
+
+        # Add WCEs
+        if self.wce_matrix is not None:
+            item["wce_embeddings"] = self.wce_matrix[idx]
 
         return item
 
@@ -527,6 +605,8 @@ def compute_embedding_dimensions(model, num_classes, opt):
     return total_dimensions, base_dimensions, supervised_dimensions
 
 
+
+
 def custom_data_collator(batch):
     """
     Custom data collator for handling variable-length sequences and labels.
@@ -537,22 +617,21 @@ def custom_data_collator(batch):
     Returns:
     - collated: Dictionary containing collated inputs and labels.
     """
-
     collated = {
         "input_ids": torch.stack([f["input_ids"] for f in batch]),
         "attention_mask": torch.stack([f["attention_mask"] for f in batch]),
+        "labels": torch.stack([f["labels"] for f in batch]),
     }
-
-    if "labels" in batch[0]:
-        collated["labels"] = torch.stack([f["labels"] for f in batch])
-    else:
-        print("Missing 'labels' key in batch!")  # Debugging missing labels
-        collated["labels"] = torch.zeros(len(batch), dtype=torch.long)
 
     if "pretrained_embeddings" in batch[0]:
         collated["pretrained_embeddings"] = torch.stack([f["pretrained_embeddings"] for f in batch])
 
-    #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
+    if "suo_range" in batch[0]:
+        collated["sup_range"] = torch.stack([f["sup_range"] for f in batch])
+
+    # Add WCE embeddings if present
+    if "wce_embeddings" in batch[0]:
+        collated["wce_embeddings"] = torch.stack([f["wce_embeddings"] for f in batch])
 
     return collated
 
@@ -682,9 +761,9 @@ if __name__ == "__main__":
     hf_model.to(device)
     print("model:\n", hf_model)
 
-    total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
-    print("total_dims:", total_dims)
-    print("pt_base_dims:", pt_base_dims)
+    toal_dims, base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
+    print("toal_dims:", toal_dims)
+    print("base_dims:", base_dims)
     print("supervised_dims:", supervised_dims)
 
     # Split train into train and validation
@@ -741,7 +820,8 @@ if __name__ == "__main__":
     """
 
     # Call `embedding_matrix` with the loaded model and tokenizer
-    pretrained_embeddings, sup_range, num_dimensions = embedding_matrix(
+
+    pt_embedding_matrix, wce_matrix, sup_range = embedding_matrix(
         model=hf_model,
         tokenizer=tokenizer,
         vocabsize=vec_vocab_size,
@@ -752,41 +832,52 @@ if __name__ == "__main__":
         opt=args
     )
 
-    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
-    print("supervised range: ", sup_range)
+    # Initialize the CustomLSTMClassifier
+    hidden_dim = 128
+    output_dim = len(target_names)
+    lstm_layers = 2
+    dropout = args.dropprob
+
+    lstm_model = LCLSTMClassifier(
+        pretrained_model_name=model_name,
+        pretrained_embedding_dim=base_dims,
+        wce_dim=supervised_dims,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        lstm_layers=lstm_layers,
+        dropout=dropout
+    ).to(device)
+    print("lstm_model:\n", lstm_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
-        texts_train, 
-        labels_train, 
-        tokenizer, 
+        texts=texts_train, 
+        labels=labels_train, 
+        tokenizer=tokenizer,
+        max_length=MAX_LENGTH, 
         class_type=class_type, 
-        pretrained_embeddings=pretrained_embeddings, 
+        pretrained_embeddings=pt_embedding_matrix,
+        wce_matrix=wce_matrix, 
         sup_range=sup_range
     )
 
-    """
-    for i in range(len(train_dataset)):
-        sample = train_dataset[i]
-        assert "labels" in sample, f"Missing 'labels' in sample {i}"
-        print(f"Sample {i} is valid.")
-    """
-
     val_dataset = LCDataset(
-        texts_val, 
-        labels_val, 
-        tokenizer, 
+        texts=texts_val, 
+        labels=labels_val, 
+        tokenizer=tokenizer, 
         class_type=class_type, 
-        pretrained_embeddings=pretrained_embeddings, 
+        pretrained_embeddings=pt_embedding_matrix,
+        wce_matrix=wce_matrix, 
         sup_range=sup_range
     )
 
     test_dataset = LCDataset(
-        test_data, 
-        labels_test, 
-        tokenizer, 
+        texts=test_data, 
+        labels=labels_test, 
+        tokenizer=tokenizer, 
         class_type=class_type, 
-        pretrained_embeddings=pretrained_embeddings, 
+        pretrained_embeddings=pt_embedding_matrix,
+        wce_matrix=wce_matrix, 
         sup_range=sup_range
     )
     
@@ -820,71 +911,150 @@ if __name__ == "__main__":
         print(f"Labels shape: {sample['labels'].shape}")
     """
 
+    # Define the optimizer, loss function, and data loaders
+    optimizer = torch.optim.Adam(lstm_model.parameters(), lr=args.lr)
+    loss_fn = nn.CrossEntropyLoss()
+    
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=custom_data_collator)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_data_collator)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_data_collator)
+
     tinit = time()
 
-    # Training arguments
-    training_args = TrainingArguments(
-        output_dir='../out',
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        save_total_limit=3,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_f1_macro",
-        greater_is_better=True,
-        per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=BATCH_SIZE,
-        num_train_epochs=args.epochs,
-        weight_decay=args.weight_decay,
-        logging_dir='../log',
-        run_name='trans_layer_cake',
-        seed=args.seed,
-        report_to="none"
-    )
+    # Initialize variables for early stopping
+    patience = args.patience            # Number of epochs to wait before stopping
+    best_val_macro_f1 = 0               # Best validation macro F1 (larger is better)
+    no_improvement_counter = 0          # Counter for consecutive non-improving epochs
 
-    # Trainer with custom data collator
-    trainer = Trainer(
-        model=hf_model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=custom_data_collator,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
-    )
-
-    # Train and evaluate
-    trainer.train()
-
-    # Evaluate on test set
-    test_results = trainer.evaluate(test_dataset)
-    print("Test Results:", test_results)
-
-    # Predictions
-    preds = trainer.predict(test_dataset)
-    if class_type == 'single-label':
-        y_pred = np.argmax(preds.predictions, axis=1)
-    else:
-        y_pred = (preds.predictions > 0.5).astype(int)
-
-    """
-    if (class_type in ['single-label', 'singlelabel']):
-        # Convert one-hot encoded labels and predictions to class indices
-        labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
-    """
+    # Training loop
+    best_val_f1 = 0
+    for epoch in range(args.epochs):
+        lstm_model.train()
+        train_loss = 0
+        train_preds, train_labels = [], []
     
-    print("labels_test:", type(labels_test), len(labels_test))
-    print("y_pred:", type(y_pred), len(y_pred))
+        # Progress bar for training
+        train_loader_tqdm = tqdm(train_loader, desc=f"Training Epoch {epoch + 1}")
 
-    print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
+        for batch in train_loader_tqdm:
+            optimizer.zero_grad()
+            inputs = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+            
+            # Pretrained embeddings
+            pretrained_embeddings = batch.get("pretrained_embeddings")
+            if pretrained_embeddings is not None:
+                pretrained_embeddings = pretrained_embeddings.to(device)
 
-    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels_test, y_pred, classification_type=class_type)
-    print("\n--Layer Cake Metrics--")
-    print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
+            # WCE embeddings
+            wce_embeddings = batch.get("wce_embeddings")
+            if wce_embeddings is not None:
+                wce_embeddings = wce_embeddings.to(device)
+
+            # Forward pass
+            outputs = lstm_model(
+                input_ids=inputs,
+                attention_mask=attention_mask,
+                pretrained_embeddings=pretrained_embeddings,
+                wce_embeddings=wce_embeddings
+            )
+
+            loss = loss_fn(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+
+            # Collect predictions and labels for F1 and accuracy
+            preds = outputs.argmax(dim=1).cpu().numpy()
+            train_preds.extend(preds)
+            train_labels.extend(labels.cpu().numpy())
+
+            # Update progress bar with loss
+            train_loader_tqdm.set_postfix(loss=loss.item())
+            
+        # Compute train metrics
+        train_macro_f1 = f1_score(train_labels, train_preds, average='macro')
+        train_micro_f1 = f1_score(train_labels, train_preds, average='micro')
+        train_accuracy = accuracy_score(train_labels, train_preds)
+        avg_train_loss = train_loss / len(train_loader)
+
+        # Evaluate on validation set
+        lstm_model.eval()
+        val_loss = 0
+        val_preds, val_labels = [], []
+        with torch.no_grad():
+            for batch in val_loader:
+                inputs = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+
+                outputs = lstm_model(inputs, attention_mask)
+                loss = loss_fn(outputs, labels)
+                val_loss += loss.item()
+
+                preds = outputs.argmax(dim=1).cpu().numpy()
+                val_preds.extend(preds)
+                val_labels.extend(labels.cpu().numpy())
+
+        # Compute validation metrics
+        val_macro_f1 = f1_score(val_labels, val_preds, average='macro')
+        val_micro_f1 = f1_score(val_labels, val_preds, average='micro')
+        val_accuracy = accuracy_score(val_labels, val_preds)
+        avg_val_loss = val_loss / len(val_loader)
     
+        # Clear progress bar for a cleaner output
+        train_loader_tqdm.close()
+    
+        print(f"Epoch {epoch + 1}:")
+        print(f"  Train Loss: {avg_train_loss:.4f}, Macro F1: {train_macro_f1:.4f}, Micro F1: {train_micro_f1:.4f}, Accuracy: {train_accuracy:.4f}")
+        print(f"  Val Loss:   {avg_val_loss:.4f}, Macro F1: {val_macro_f1:.4f}, Micro F1: {val_micro_f1:.4f}, Accuracy: {val_accuracy:.4f}")
+
+        # Early stopping logic
+        if val_macro_f1 > best_val_macro_f1:
+            best_val_macro_f1 = val_macro_f1
+            torch.save(lstm_model.state_dict(), "best_model.pth")
+            no_improvement_counter = 0  # Reset counter
+            print("  Validation macro F1 improved, saving model.")
+        else:
+            no_improvement_counter += 1
+            print(f"  No improvement in validation macro F1 for {no_improvement_counter} epoch(s).")
+
+        if no_improvement_counter >= patience:
+            print(f"Early stopping triggered after {epoch + 1} epochs.")
+            break
+            
+    # Load the best model and evaluate on the test set
+    lstm_model.load_state_dict(torch.load("best_model.pth"))
+    lstm_model.eval()
+    test_preds, test_labels = [], []
+    with torch.no_grad():
+        for batch in test_loader:
+            inputs = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+
+            outputs = lstm_model(inputs, attention_mask)
+            preds = outputs.argmax(dim=1).cpu().numpy()
+            test_preds.extend(preds)
+            test_labels.extend(labels.cpu().numpy())
+
+
     tend = time() - tinit
 
+    print("\nTest Set Results:")
+
+    print("test_labels:", type(test_labels), len(test_labels))
+    print("test_preds:", type(test_preds), len(test_preds))
+
+    print(classification_report(test_labels, test_preds, target_names=target_names, digits=4))
+
+    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(test_labels, test_preds, classification_type=class_type)
+    print("\n--Layer Cake Metrics--")
+    print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
+
     measure_prefix = 'final'
-    epoch = trainer.state.epoch
     
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)
@@ -897,5 +1067,3 @@ if __name__ == "__main__":
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     print("\n\t--- model training and evaluation complete---\n")
-
-

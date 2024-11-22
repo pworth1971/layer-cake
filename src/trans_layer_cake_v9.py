@@ -81,7 +81,7 @@ MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
 EPOCHS = 10
-
+HIDDEN_DIM = 256
 
 # Check device
 def get_device():
@@ -453,34 +453,124 @@ class LCDataset(Dataset):
         return item
 
 
+class AttentionClassifier(nn.Module):
+
+    def __init__(self, vec_len, seq_len, n_classes):
+        super(AttentionClassifier, self).__init__()
+
+        self.vec_len = vec_len
+        self.seq_len = seq_len
+        self.attn_weights = torch.cat([torch.tensor([[0.]]),
+                                       torch.randn(vec_len, 1) /
+                                       torch.sqrt(torch.tensor(vec_len))])
+        self.attn_weights.requires_grad = True
+        self.attn_weights = nn.Parameter(self.attn_weights)
+        self.activation = nn.Tanh()
+        self.softmax = nn.Softmax(dim=1)
+        self.linear = nn.Linear(vec_len + 1, n_classes)
+
+    def forward(self, input_data):
+        hidden = torch.matmul(input_data, self.attn_weights)
+        hidden = self.activation(hidden)
+        attn = self.softmax(hidden)
+        attn = attn.repeat(1, 1, self.vec_len + 1).reshape(attn.shape[0],
+                                                           self.seq_len,
+                                                           self.vec_len + 1)
+        attn_output = input_data * attn
+        attn_output = torch.sum(attn_output, axis=1)
+        output = self.linear(attn_output)
+        
+        return output
+    
+
+
+
+# LSTM Classifier
+class LSTMClassifier(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim, n_layers, 
+                 bidirectional, dropout, class_type='single-label'):
+        super().__init__()
+        self.class_type = class_type
+        
+        # Embedding layer
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        
+        # LSTM layer
+        self.lstm = nn.LSTM(
+            embedding_dim, 
+            hidden_dim, 
+            num_layers=n_layers, 
+            bidirectional=bidirectional, 
+            dropout=dropout,
+            batch_first=True
+        )
+        
+        # Fully connected layer
+        self.fc = nn.Linear(hidden_dim * 2, output_dim)
+        
+        # Final activation (only for multi-label)
+        if class_type == 'multi-label':
+            self.activation = nn.Sigmoid()
+        else:
+            self.activation = None
+
+    def forward(self, text, text_lengths):
+        # Embedding
+        embedded = self.embedding(text)
+        text_lengths = text_lengths.cpu().to(torch.int64)
+        
+        # Packed sequence
+        packed_embedded = nn.utils.rnn.pack_padded_sequence(embedded, text_lengths, batch_first=True)
+        packed_output, (hidden, cell) = self.lstm(packed_embedded)
+        
+        # Concat the final forward and backward hidden state
+        hidden = torch.cat((hidden[-2, :, :], hidden[-1, :, :]), dim=1)
+        
+        # Fully connected layer
+        logits = self.fc(hidden)
+
+        # Apply activation for multi-label classification
+        if self.class_type == 'multi-label':
+            return self.activation(logits)
+    
+        return logits  # Return raw logits for single-label
+    
+
+
+
+
+class EvalPrediction:
+    def __init__(self, predictions, label_ids):
+        self.predictions = predictions
+        self.label_ids = label_ids
+
+
 
 def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     """
     Compute evaluation metrics for classification tasks.
 
     Args:
-    - eval_pred: `EvalPrediction` object with `predictions` and `label_ids`.
+    - eval_pred: A tuple containing predictions and labels.
     - class_type: 'single-label' or 'multi-label'.
     - threshold: Threshold for binary classification in multi-label tasks.
 
     Returns:
     - Dictionary of computed metrics.
     """
-    predictions, labels = eval_pred.predictions, eval_pred.label_ids
+    predictions, labels = eval_pred
 
     if class_type == 'single-label':
-        # Convert predictions to class indices
-        preds = np.argmax(predictions, axis=1)
-        #labels = np.argmax(labels, axis=1)                              # Convert one-hot to class indices if needed
+        # Convert logits to class indices
+        preds = np.argmax(predictions, axis=1)  # Ensure predictions are 2D before argmax
     elif class_type == 'multi-label':
         # Threshold predictions for multi-label classification
         preds = (predictions > threshold).astype(int)
-        labels = labels.astype(int)                                     # Ensure labels are binary
     else:
         raise ValueError(f"Unsupported class_type: {class_type}")
 
-    print("preds:", type(preds), preds.shape)
-    print("labels:", type(labels), labels.shape)
+    print("preds shape:", preds.shape)
+    print("labels shape:", labels.shape)
 
     # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
@@ -494,7 +584,6 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
         'precision': precision,
         'recall': recall,
     }
-
 
 
 
@@ -526,35 +615,110 @@ def compute_embedding_dimensions(model, num_classes, opt):
 
     return total_dimensions, base_dimensions, supervised_dimensions
 
+# Data Collator for LSTM
+def lstm_data_collator(batch):
+    texts = [torch.tensor(f["input_ids"], dtype=torch.long) for f in batch]
+    labels = torch.stack([f["labels"] for f in batch])
+    lengths = torch.tensor([len(f["input_ids"]) for f in batch], dtype=torch.long)
+    padded_texts = pad_sequence(texts, batch_first=True, padding_value=0)  # Use padding token
+    return {"texts": padded_texts, "lengths": lengths, "labels": labels}
 
-def custom_data_collator(batch):
-    """
-    Custom data collator for handling variable-length sequences and labels.
-
-    Parameters:
-    - batch: List of individual samples from the dataset.
-
-    Returns:
-    - collated: Dictionary containing collated inputs and labels.
-    """
-
-    collated = {
-        "input_ids": torch.stack([f["input_ids"] for f in batch]),
-        "attention_mask": torch.stack([f["attention_mask"] for f in batch]),
-    }
-
-    if "labels" in batch[0]:
-        collated["labels"] = torch.stack([f["labels"] for f in batch])
+# Compute Metrics
+def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
+    predictions, labels = eval_pred
+    if class_type == 'single-label':
+        preds = np.argmax(predictions, axis=1)
+    elif class_type == 'multi-label':
+        preds = (predictions > threshold).astype(int)
+        labels = labels.astype(int)
     else:
-        print("Missing 'labels' key in batch!")  # Debugging missing labels
-        collated["labels"] = torch.zeros(len(batch), dtype=torch.long)
+        raise ValueError(f"Unsupported class_type: {class_type}")
 
-    if "pretrained_embeddings" in batch[0]:
-        collated["pretrained_embeddings"] = torch.stack([f["pretrained_embeddings"] for f in batch])
+    # Compute metrics
+    f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
+    f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
+    precision = precision_score(labels, preds, average='micro', zero_division=1)
+    recall = recall_score(labels, preds, average='micro', zero_division=1)
 
-    #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
+    return {'f1_micro': f1_micro, 'f1_macro': f1_macro, 'precision': precision, 'recall': recall}
 
-    return collated
+# Initialize Weights
+def init_weights(m):
+    if isinstance(m, nn.Linear) or isinstance(m, nn.Embedding):
+        nn.init.xavier_uniform_(m.weight)
+    if isinstance(m, nn.LSTM):
+        for name, param in m.named_parameters():
+            if "weight" in name:
+                nn.init.xavier_uniform_(param)
+            elif "bias" in name:
+                nn.init.zeros_(param)
+
+
+
+# Training Loop
+def train_model(model, train_loader, val_loader, optimizer, criterion, scheduler, device, epochs, class_type):
+    model.train()
+    best_macro_f1 = 0
+
+    for epoch in range(epochs):
+        epoch_loss = 0
+        all_preds = []
+        all_labels = []
+
+        for batch in train_loader:
+            texts = batch["texts"].to(device)
+            lengths = batch["lengths"].to(device)
+            labels = batch["labels"].to(device)
+
+            optimizer.zero_grad()
+            outputs = model(texts, lengths)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+            preds = outputs.detach().cpu().numpy()
+            labels = labels.cpu().numpy()
+
+            all_preds.append(preds)
+            all_labels.append(labels)
+
+        scheduler.step()
+
+        # Evaluate metrics
+        all_preds = np.vstack(all_preds)
+        all_labels = np.vstack(all_labels) if class_type == 'multi-label' else np.concatenate(all_labels)
+        metrics = compute_metrics((all_preds, all_labels), class_type=class_type)
+        print(f"Epoch {epoch + 1}: Loss = {epoch_loss:.4f}, Macro F1 = {metrics['f1_macro']:.4f}, Micro F1 = {metrics['f1_micro']:.4f}")
+
+        # Save the best model
+        if metrics['f1_macro'] > best_macro_f1:
+            best_macro_f1 = metrics['f1_macro']
+            torch.save(model.state_dict(), "best_lstm_model.pt")
+
+# Evaluation Loop
+def evaluate_model(model, data_loader, device, class_type):
+    model.eval()
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch in data_loader:
+            texts = batch["texts"].to(device)
+            lengths = batch["lengths"].to(device)
+            labels = batch["labels"].to(device)
+
+            outputs = model(texts, lengths)
+            preds = outputs.detach().cpu().numpy()
+            labels = labels.cpu().numpy()
+
+            all_preds.append(preds)
+            all_labels.append(labels)
+
+    all_preds = np.vstack(all_preds)
+    all_labels = np.vstack(all_labels) if class_type == 'multi-label' else np.concatenate(all_labels)
+    metrics = compute_metrics((all_preds, all_labels), class_type=class_type)
+    return metrics
 
 
 
@@ -682,9 +846,9 @@ if __name__ == "__main__":
     hf_model.to(device)
     print("model:\n", hf_model)
 
-    total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
+    total_dims, base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
     print("total_dims:", total_dims)
-    print("pt_base_dims:", pt_base_dims)
+    print("base_dims:", base_dims)
     print("supervised_dims:", supervised_dims)
 
     # Split train into train and validation
@@ -820,61 +984,73 @@ if __name__ == "__main__":
         print(f"Labels shape: {sample['labels'].shape}")
     """
 
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=lstm_data_collator, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=lstm_data_collator)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=lstm_data_collator)
+
+    # Model Initialization
+    print("Initializing model...")
+    output_dim = labels_train.shape[1] if class_type == 'multi-label' else len(np.unique(labels_train))
+    lstm_model = LSTMClassifier(
+        vocab_size=tok_vocab_size,
+        embedding_dim=total_dims,                           # Pretrained embedding dimension
+        hidden_dim=HIDDEN_DIM,
+        output_dim=output_dim,
+        n_layers=2,
+        bidirectional=True,
+        dropout=args.dropprob,
+        class_type=class_type
+    ).to(device)
+    print("lstm_model:\n", lstm_model)
+
+    # Initialize weights
+    lstm_model.apply(init_weights)
+
+    # Load pre-trained embeddings
+    # Example: pretrained_embeddings = get_pretrained_embeddings(...)
+    # lstm_model.embedding.weight.data.copy_(pretrained_embeddings)
+    lstm_model.embedding.weight.requires_grad = True  # Allow fine-tuning of embeddings
+
+    # Optimizer, Scheduler, Loss
+    optimizer = Adam(lstm_model.parameters(), lr=args.lr)
+    scheduler = StepLR(optimizer, step_size=2, gamma=0.1)
+    if class_type == "multi-label":
+        criterion = nn.BCEWithLogitsLoss()
+    else:
+        criterion = nn.CrossEntropyLoss()
+
+    print("optimizer:", optimizer)
+    print("scheduler:", scheduler)
+    print("criterion:", criterion)
+
     tinit = time()
 
-    # Training arguments
-    training_args = TrainingArguments(
-        output_dir='../out',
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        save_total_limit=3,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_f1_macro",
-        greater_is_better=True,
-        per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=BATCH_SIZE,
-        num_train_epochs=args.epochs,
-        weight_decay=args.weight_decay,
-        logging_dir='../log',
-        run_name='trans_layer_cake',
-        seed=args.seed,
-        report_to="none"
+    # Training
+    print("Starting training...")
+    train_model(
+        model=lstm_model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        criterion=criterion,
+        scheduler=scheduler,
+        device=device,
+        epochs=args.epochs,
+        class_type=class_type
     )
 
-    # Trainer with custom data collator
-    trainer = Trainer(
-        model=hf_model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=custom_data_collator,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
-    )
+    # Load Best Model
+    lstm_model.load_state_dict(torch.load("best_lstm_model.pt"))
 
-    # Train and evaluate
-    trainer.train()
-
-    # Evaluate on test set
-    test_results = trainer.evaluate(test_dataset)
-    print("Test Results:", test_results)
-
-    # Predictions
-    preds = trainer.predict(test_dataset)
-    if class_type == 'single-label':
-        y_pred = np.argmax(preds.predictions, axis=1)
-    else:
-        y_pred = (preds.predictions > 0.5).astype(int)
+    # Evaluation
+    print("Evaluating model on the test set...")
+    test_metrics = evaluate_model(lstm_model, test_loader, device, class_type)
+    print("\nTest Metrics:", test_metrics)
 
     """
-    if (class_type in ['single-label', 'singlelabel']):
-        # Convert one-hot encoded labels and predictions to class indices
-        labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
-    """
-    
     print("labels_test:", type(labels_test), len(labels_test))
     print("y_pred:", type(y_pred), len(y_pred))
-
+    
     print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
 
     macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels_test, y_pred, classification_type=class_type)
@@ -884,7 +1060,7 @@ if __name__ == "__main__":
     tend = time() - tinit
 
     measure_prefix = 'final'
-    epoch = trainer.state.epoch
+    #epoch = trainer.state.epoch
     
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)
@@ -895,6 +1071,7 @@ if __name__ == "__main__":
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    """
 
     print("\n\t--- model training and evaluation complete---\n")
 

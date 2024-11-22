@@ -524,7 +524,7 @@ def compute_embedding_dimensions(model, num_classes, opt):
         print(f"Supervised dimensions (num_classes): {supervised_dimensions}")
     print(f"Total embedding dimensions: {total_dimensions}")
 
-    return total_dimensions, base_dimensions, supervised_dimensions
+    return total_dimensions
 
 
 def custom_data_collator(batch):
@@ -555,6 +555,98 @@ def custom_data_collator(batch):
     #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
 
     return collated
+
+
+
+class LCTransformerClassifier(nn.Module):
+    def __init__(self, base_model, num_classes, total_embedding_dim, pad_token_id, class_type="single-label", dropout_prob=0.1):
+        """
+        Custom classifier to handle single-label and multi-label classification.
+
+        Args:
+        - base_model: Hugging Face transformer model (e.g., BERT, RoBERTa, etc.).
+        - num_classes: Number of output classes.
+        - total_embedding_dim: Combined dimension of pretrained and supervised embeddings.
+        - pad_token_id: ID of the pad token.
+        - class_type: 'single-label' or 'multi-label'.
+        - dropout_prob: Dropout probability.
+        """
+        super(LCTransformerClassifier, self).__init__()
+        self.base_model = base_model
+        self.base_hidden_size = base_model.config.hidden_size
+        self.pad_token_id = pad_token_id
+        self.class_type = class_type
+
+        # Adjust embedding layer for combined dimensions
+        self.embedding_adapter = nn.Linear(total_embedding_dim, self.base_hidden_size)
+
+        # Classification head
+        self.dropout = nn.Dropout(dropout_prob)
+        self.classifier = nn.Linear(self.base_hidden_size, num_classes)
+
+        # Loss function based on classification type
+        if self.class_type == "single-label":
+            self.loss_fn = nn.CrossEntropyLoss()
+        elif self.class_type == "multi-label":
+            self.loss_fn = nn.BCEWithLogitsLoss()
+        else:
+            raise ValueError(f"Unsupported class_type: {self.class_type}")
+
+    def forward(self, input_ids, attention_mask, pretrained_embeddings=None, labels=None):
+        """
+        Forward pass for the custom classifier.
+
+        Args:
+        - input_ids: Input token IDs.
+        - attention_mask: Attention mask.
+        - pretrained_embeddings: Combined pretrained and supervised embeddings.
+        - labels: Ground truth labels (optional).
+
+        Returns:
+        - logits: Output logits for classification.
+        - loss: Computed loss if `labels` are provided.
+        """
+        # Mask out padding tokens in the embeddings
+        pad_mask = input_ids != self.pad_token_id
+        extended_attention_mask = attention_mask * pad_mask
+
+        # Get transformer outputs
+        outputs = self.base_model(
+            input_ids=input_ids,
+            attention_mask=extended_attention_mask,
+            return_dict=True
+        )
+        transformer_output = outputs.last_hidden_state[:, 0, :]  # CLS token representation
+
+        # Combine embeddings if provided
+        if pretrained_embeddings is not None:
+            combined_embeddings = torch.cat((transformer_output, pretrained_embeddings), dim=1)
+            combined_embeddings = self.embedding_adapter(combined_embeddings)  # Adjust to hidden size
+        else:
+            combined_embeddings = transformer_output
+
+        # Apply dropout and classifier
+        combined_embeddings = self.dropout(combined_embeddings)
+        logits = self.classifier(combined_embeddings)
+
+        # Compute loss if labels are provided
+        loss = None
+        if labels is not None:
+            if self.class_type == "single-label":
+                loss = self.loss_fn(logits, labels)  # For single-label, labels should be integer class indices
+            elif self.class_type == "multi-label":
+                loss = self.loss_fn(logits, labels.float())  # For multi-label, labels should be binary vectors
+
+        return {"logits": logits, "loss": loss} if loss is not None else {"logits": logits}
+
+
+    def get_input_embeddings(self):
+        """
+        Expose the input embeddings from the base model.
+        """
+        return self.base_model.get_input_embeddings()
+
+
 
 
 
@@ -680,12 +772,22 @@ if __name__ == "__main__":
     # Set the pad_token_id in the model configuration
     hf_model.config.pad_token_id = tokenizer.pad_token_id
     hf_model.to(device)
-    print("model:\n", hf_model)
+    print("hf_model:\n", hf_model)
 
-    total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
-    print("total_dims:", total_dims)
-    print("pt_base_dims:", pt_base_dims)
-    print("supervised_dims:", supervised_dims)
+    # Calculate total embedding dimensions
+    total_dimensions = compute_embedding_dimensions(hf_model, num_classes, args)
+    print("total_dimensions:", total_dimensions)
+
+    # Initialize the custom classifier
+    lc_model = LCTransformerClassifier(
+        base_model=hf_model.base_model,                     # Pass only the transformer base
+        num_classes=num_classes,
+        total_embedding_dim=total_dimensions,
+        pad_token_id=pad_token_id,
+        class_type=class_type,
+        dropout_prob=args.dropprob
+    ).to(device)
+    print("lc_model:\n", lc_model)
 
     # Split train into train and validation
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -742,7 +844,7 @@ if __name__ == "__main__":
 
     # Call `embedding_matrix` with the loaded model and tokenizer
     pretrained_embeddings, sup_range, num_dimensions = embedding_matrix(
-        model=hf_model,
+        model=lc_model,
         tokenizer=tokenizer,
         vocabsize=vec_vocab_size,
         word2index=vectorizer.vocabulary_,
@@ -843,7 +945,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=hf_model,
+        model=lc_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,

@@ -15,3 +15,5 @@ src/supervised_term_weighting/__pycache__/
 /out
 bin/wandb/
 
+bin/best_model.pth
+*.pt

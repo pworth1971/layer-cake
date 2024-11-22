@@ -379,6 +379,70 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
+class LCMultiLabelClassifier(nn.Module):
+
+    def __init__(self, input_dim, output_dim, hidden_dim=128, dropout=0.1):
+        """
+        Multi-Label Classifier with a simple feed-forward architecture.
+
+        Args:
+            input_dim (int): Input feature dimension.
+            output_dim (int): Number of output labels.
+            hidden_dim (int): Hidden layer dimension. Default is 128.
+            dropout (float): Dropout rate. Default is 0.1.
+        """
+        super(LCMultiLabelClassifier, self).__init__()
+
+        print(f'LCMultiLabelClassifier(): input_dim: {input_dim}, output_dim: {output_dim}, hidden_dim: {hidden_dim}, dropout: {dropout}')
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        """
+        Forward pass for the model. 
+        Assumes `x` has shape (batch_size, sequence_length, embedding_dim) or (batch_size, embedding_dim).
+        """
+        if len(x.shape) == 3:  # Input is a sequence (batch_size, seq_len, embedding_dim)
+            # Apply mean pooling over the sequence dimension
+            x = x.mean(dim=1)  # (batch_size, embedding_dim)
+            print(f"Input shape after pooling: {x.shape}")  # Debugging
+    
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+    
+        return torch.sigmoid(x)
+    
+
+
+class LCSingleLabelClassifier(nn.Module):
+
+    def __init__(self, pretrained_model_name, num_classes, dropout=0.1):
+        super(LCSingleLabelClassifier, self).__init__()
+        # Load the pretrained model without its classification head
+        self.pretrained_model = AutoModel.from_pretrained(pretrained_model_name)
+        
+        # Define custom classification layers
+        hidden_size = self.pretrained_model.config.hidden_size  # e.g., 768 for BERT
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Linear(hidden_size, num_classes)
+
+    def forward(self, input_ids, attention_mask):
+        # Extract features from the pretrained model
+        outputs = self.pretrained_model(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = outputs.last_hidden_state[:, 0]  # [CLS] token embedding
+        
+        # Pass through custom classifier
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        return logits
+
+
+
 class LCDataset(Dataset):
 
     def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label', 
@@ -599,6 +663,216 @@ def parse_args():
 
 
 
+def train_and_validate(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience, class_type, pretrained_embeddings):
+    """
+    Train and validate the model.
+
+    Args:
+        model: The classification model.
+        train_loader: DataLoader for training data.
+        val_loader: DataLoader for validation data.
+        criterion: Loss function.
+        optimizer: Optimizer for training.
+        num_epochs: Number of training epochs.
+        device: The device to run the training on (CPU/GPU).
+        patience: Early stopping patience.
+        class_type: 'single-label' or 'multi-label'.
+        pretrained_embeddings: Pretrained embeddings tensor.
+
+    Returns:
+        Tuple of (best epoch, best macro F1 score, final macro F1 score, final validation loss).
+    """
+    best_f1 = 0.0
+    patience_counter = 0
+    best_model_path = "best_model.pth"
+
+    # Move pretrained_embeddings to the same device
+    pretrained_embeddings = pretrained_embeddings.to(device)
+
+    for epoch in range(1, num_epochs + 1):
+        print(f"\nEpoch {epoch}/{num_epochs}")
+
+        # Training
+        model.train()
+        train_loss = 0.0
+        train_preds, train_labels = [], []
+        train_loader_tqdm = tqdm(train_loader, desc="Training", leave=False)
+
+        for batch in train_loader_tqdm:
+            inputs = batch["input_ids"].to(device).long()  # Ensure indices are long type
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            # Get pretrained embeddings
+            embedded_inputs = pretrained_embeddings[inputs]  # Shape: (batch_size, seq_len, embedding_dim)
+            pooled_inputs = embedded_inputs.mean(dim=1)  # Mean pooling over the sequence dimension
+
+            optimizer.zero_grad()
+            outputs = model(pooled_inputs)
+
+            # Calculate loss and predictions
+            if class_type == "single-label":
+                loss = criterion(outputs, labels)
+                preds = torch.argmax(outputs, dim=1)
+            elif class_type == "multi-label":
+                loss = criterion(outputs, labels)
+                preds = (outputs > 0.5).float()
+            else:
+                raise ValueError(f"Unsupported class type: {class_type}")
+
+            # Backpropagation
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            train_preds.append(preds.cpu().numpy())
+            train_labels.append(labels.cpu().numpy())
+
+        train_preds = np.concatenate(train_preds, axis=0)
+        train_labels = np.concatenate(train_labels, axis=0)
+
+        if class_type == "single-label":
+            train_f1_macro = f1_score(train_labels, train_preds, average="macro")
+            train_f1_micro = f1_score(train_labels, train_preds, average="micro")
+        else:
+            train_f1_macro = f1_score(train_labels, train_preds, average="macro", zero_division=1)
+            train_f1_micro = f1_score(train_labels, train_preds, average="micro", zero_division=1)
+
+        train_loss /= len(train_loader)
+        print(f"Train Loss: {train_loss:.4f} | Macro F1: {train_f1_macro:.4f} | Micro F1: {train_f1_micro:.4f}")
+
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        val_preds, val_labels = [], []
+
+        with torch.no_grad():
+            val_loader_tqdm = tqdm(val_loader, desc="Validation", leave=False)
+            for batch in val_loader_tqdm:
+                inputs = batch["input_ids"].to(device).long()
+                attention_mask = batch["attention_mask"].to(device)
+                labels = batch["labels"].to(device)
+
+                # Get pretrained embeddings
+                embedded_inputs = pretrained_embeddings[inputs]  # Shape: (batch_size, seq_len, embedding_dim)
+                pooled_inputs = embedded_inputs.mean(dim=1)  # Mean pooling over the sequence dimension
+
+                outputs = model(pooled_inputs)
+                if class_type == "single-label":
+                    loss = criterion(outputs, labels)
+                    preds = torch.argmax(outputs, dim=1)
+                elif class_type == "multi-label":
+                    loss = criterion(outputs, labels)
+                    preds = (outputs > 0.5).float()
+
+                val_loss += loss.item()
+                val_preds.append(preds.cpu().numpy())
+                val_labels.append(labels.cpu().numpy())
+
+        val_preds = np.concatenate(val_preds, axis=0)
+        val_labels = np.concatenate(val_labels, axis=0)
+
+        if class_type == "single-label":
+            val_f1_macro = f1_score(val_labels, val_preds, average="macro")
+            val_f1_micro = f1_score(val_labels, val_preds, average="micro")
+        else:
+            val_f1_macro = f1_score(val_labels, val_preds, average="macro", zero_division=1)
+            val_f1_micro = f1_score(val_labels, val_preds, average="micro", zero_division=1)
+
+        val_loss /= len(val_loader)
+        print(f"Val Loss: {val_loss:.4f} | Macro F1: {val_f1_macro:.4f} | Micro F1: {val_f1_micro:.4f}")
+
+        # Early Stopping & Save Best Model
+        if val_f1_macro > best_f1:
+            print(f"New best model found! Saving model with Macro F1: {val_f1_macro:.4f}")
+            best_f1 = val_f1_macro
+            torch.save(model.state_dict(), best_model_path)
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print("Early stopping triggered.")
+            break
+
+    print("Training completed.")
+
+    return epoch, val_f1_macro, val_f1_micro, val_loss
+
+
+def test_model(model, test_loader, criterion, device, class_type, target_names, pretrained_embeddings):
+    """
+    Test the model.
+
+    Args:
+        model: The trained model.
+        test_loader: DataLoader for test data.
+        criterion: Loss function.
+        device: The device to run testing on (CPU/GPU).
+        class_type: 'single-label' or 'multi-label'.
+        target_names: List of class names.
+        pretrained_embeddings: Pretrained embeddings tensor.
+
+    Returns:
+        Tuple of (true labels, predicted labels).
+    """
+    model.eval()
+    test_loss = 0.0
+    test_preds, test_labels = [], []
+
+    # Move pretrained_embeddings to the same device
+    pretrained_embeddings = pretrained_embeddings.to(device)
+
+    with torch.no_grad():
+        test_loader_tqdm = tqdm(test_loader, desc="Testing", leave=True)
+        for batch in test_loader_tqdm:
+            inputs = batch["input_ids"].to(device).long()  # Ensure indices are long
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            # Extract pretrained embeddings and pool them
+            embedded_inputs = pretrained_embeddings[inputs]  # Shape: (batch_size, seq_len, embedding_dim)
+            pooled_inputs = embedded_inputs.mean(dim=1)  # Mean pooling over sequence dimension
+
+            outputs = model(pooled_inputs)
+
+            # Compute loss and predictions
+            if class_type == "single-label":
+                loss = criterion(outputs, labels)
+                preds = torch.argmax(outputs, dim=1)
+            elif class_type == "multi-label":
+                loss = criterion(outputs, labels)
+                preds = (outputs > 0.5).float()
+
+            test_loss += loss.item()
+            test_preds.append(preds.cpu().numpy())
+            test_labels.append(labels.cpu().numpy())
+
+    test_preds = np.concatenate(test_preds, axis=0)
+    test_labels = np.concatenate(test_labels, axis=0)
+
+    # Compute metrics
+    if class_type == "single-label":
+        test_f1_macro = f1_score(test_labels, test_preds, average="macro")
+        test_f1_micro = f1_score(test_labels, test_preds, average="micro")
+    else:
+        test_f1_macro = f1_score(test_labels, test_preds, average="macro", zero_division=1)
+        test_f1_micro = f1_score(test_labels, test_preds, average="micro", zero_division=1)
+
+    test_loss /= len(test_loader)
+    print(f"Test Loss: {test_loss:.4f} | Macro F1: {test_f1_macro:.4f} | Micro F1: {test_f1_micro:.4f}")
+
+    print("\nClassification Report:")
+    if class_type == "single-label":
+        print(classification_report(test_labels, test_preds, digits=4, target_names=target_names))
+    else:
+        print(classification_report(test_labels, test_preds, digits=4, target_names=target_names, zero_division=1))
+
+    return test_labels, test_preds
+
+
+
+
 # Main
 if __name__ == "__main__":
 
@@ -680,12 +954,17 @@ if __name__ == "__main__":
     # Set the pad_token_id in the model configuration
     hf_model.config.pad_token_id = tokenizer.pad_token_id
     hf_model.to(device)
-    print("model:\n", hf_model)
+    print("hf_model:\n", hf_model)
 
-    total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
-    print("total_dims:", total_dims)
-    print("pt_base_dims:", pt_base_dims)
-    print("supervised_dims:", supervised_dims)
+    total_dims, base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
+    #print("num_dimensions:", num_dimensions)
+    
+    if (class_type in ['single-label', 'singlelabel']):
+        model = LCSingleLabelClassifier(pretrained_model_name=model_name, num_classes=num_classes, dropout=args.dropprob)
+    elif (class_type in ['multi-label', 'multilabel']):    
+        model = LCMultiLabelClassifier(input_dim=total_dims, output_dim=num_classes, hidden_dim=num_classes*2, dropout=args.dropprob)
+    model.to(device)
+    print("model:\n", model)
 
     # Split train into train and validation
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -822,6 +1101,7 @@ if __name__ == "__main__":
 
     tinit = time()
 
+    """
     # Training arguments
     training_args = TrainingArguments(
         output_dir='../out',
@@ -866,25 +1146,62 @@ if __name__ == "__main__":
     else:
         y_pred = (preds.predictions > 0.5).astype(int)
 
-    """
     if (class_type in ['single-label', 'singlelabel']):
         # Convert one-hot encoded labels and predictions to class indices
         labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
-    """
     
     print("labels_test:", type(labels_test), len(labels_test))
     print("y_pred:", type(y_pred), len(y_pred))
 
     print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
+    """
 
-    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels_test, y_pred, classification_type=class_type)
+    # Define loss and optimizer
+    criterion = nn.CrossEntropyLoss() if class_type == 'single-label' else nn.BCEWithLogitsLoss()
+    optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # Dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+
+    patience = args.patience  # Number of epochs to wait for improvement
+    num_epochs = args.epochs
+
+    # Training & Validation
+    epoch, val_f1_macro, val_f1_macro, val_loss = train_and_validate(
+        model, 
+        train_loader, 
+        val_loader, 
+        criterion, 
+        optimizer, 
+        num_epochs=args.epochs, 
+        device=device, 
+        patience=args.patience, 
+        class_type=class_type,
+        pretrained_embeddings=pretrained_embeddings
+    )
+
+    # Testing
+    test_labels, test_preds = test_model(
+        model=model, 
+        test_loader=test_loader, 
+        criterion=criterion, 
+        device=device, 
+        class_type=class_type, 
+        target_names=target_names,
+        pretrained_embeddings=pretrained_embeddings
+    )
+
+    #macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels_test, y_pred, classification_type=class_type)
+    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(test_labels, test_preds, classification_type=class_type)
     print("\n--Layer Cake Metrics--")
     print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
     
     tend = time() - tinit
 
     measure_prefix = 'final'
-    epoch = trainer.state.epoch
+#    epoch = trainer.state.epoch
     
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
     logfile.insert(dimensions=pretrained_embeddings.shape, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)

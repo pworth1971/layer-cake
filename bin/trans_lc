@@ -1,2 +1,2 @@
-echo python ../src/trans_layer_cake_v5.py --dataset 20newsgroups --seed 47 --pretrained gpt2 --log_file ../log/trans_lc_test5.test --epochs 4 --patience 1
-python ../src/trans_layer_cake_v5.py --dataset 20newsgroups --seed 47 --pretrained gpt2 --log_file ../log/trans_lc_test5.test --epochs 4 --patience 1
+echo python ../src/trans_layer_cake_v10.py --dataset bbc-news --seed 47 --pretrained distilbert --log_file ../log/trans_lc_test6.test --epochs 10 --patience 2 --force
+python ../src/trans_layer_cake_v10.py --dataset bbc-news --seed 47 --pretrained distilbert --log_file ../log/trans_lc_test6.test --epochs 10 --patience 2 --force
