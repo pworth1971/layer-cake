@@ -184,6 +184,15 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
+        elif (pretrained == 'distilbert'):
+            print("Using DistilBERT pretrained embeddings...")
+
+            self.lcr_model = DistilBERTLCRepresentationModel(
+                model_name=DISTILBERT_MODEL, 
+                model_dir=embedding_path,
+                vtype=vectorization_type
+            )
+
         elif (pretrained == 'gpt2'):
             print("Using GPT2 pretrained embeddings...")
 
@@ -269,7 +278,6 @@ class LCDataset:
 
         print("\tvectorizing dataset...")    
 
-        """    
         print("model:\n", self.lcr_model)
         print("tokenizer:\n", self.tokenizer)
         print("vectorizer:\n", self.vectorizer)
@@ -277,7 +285,6 @@ class LCDataset:
         print("self.embedding_type:", self.embedding_type)
         
         print("fitting training and test data with vectorizer...")
-        """
 
         # Fit and transform the text data
         self.Xtr_vectorized = self.vectorizer.fit_transform(self.Xtr)

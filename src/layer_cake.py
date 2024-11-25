@@ -280,6 +280,12 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
         if opt.supervised:
             Xtr, _ = dataset.vectorize()
             Ytr = dataset.devel_labelmatrix
+
+            print("Xtr:", type(Xtr), Xtr.shape)
+            print("Xtr[0]:", type(Xtr[0]), Xtr[0])
+            print("Ytr:", type(Ytr), Ytr.shape)
+            print("Ytr[0]:", type(Ytr[0]), Ytr[0])
+
             F = get_supervised_embeddings(Xtr, Ytr,
                                           method=opt.supervised_method,
                                           max_label_space=opt.max_label_space,
@@ -289,8 +295,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             # so convert to desnse array for vstack operation
             if isinstance(F, coo_matrix):
                 F = F.toarray()
-
-            #print("F:", type(F), F.shape)
+            print("F:\n", type(F), F.shape, F)
 
             num_missing_rows = vocabsize - F.shape[0]
             F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))

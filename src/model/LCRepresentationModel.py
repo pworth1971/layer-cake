@@ -11,8 +11,8 @@ import requests
 from abc import ABC, abstractmethod
 
 from simpletransformers.language_representation import RepresentationModel
-from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel
-from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
 
 from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_model
@@ -63,6 +63,8 @@ BERT_MODEL = 'bert-base-cased'                              # dimension = 768, c
 ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
 #ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
 
+DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
+
 GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
 #GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
 #GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
@@ -75,7 +77,7 @@ LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096,
 
 
 # -------------------------------------------------------------------------------------------------------
-MAX_VOCAB_SIZE = 15000                                      # max feature size for TF-IDF vectorization
+MAX_VOCAB_SIZE = 20000                                      # max feature size for TF-IDF vectorization
 MIN_DF_COUNT = 5                                            # min document frequency for TF-IDF vectorization
 # -------------------------------------------------------------------------------------------------------
 
@@ -1091,7 +1093,7 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         batch_size = self.batch_size
 
         # Add a progress bar to track the processing of the vocabulary
-        with tqdm(total=len(vocabulary), desc="computing transformer (BERT / RoBERTa) embedding vocab matrix...", unit="word") as pbar:
+        with tqdm(total=len(vocabulary), desc="computing transformer (BERT / RoBERTa / DistilBERT) embedding vocab matrix...", unit="word") as pbar:
             for i in range(0, len(vocabulary), batch_size):
                 batch_words = vocabulary[i:i+batch_size]
                 embeddings = process_batch(batch_words)
@@ -1257,6 +1259,44 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
         
         self.model.to(self.device)      # put the model on the appropriate device
 
+
+class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    DistilBERT representation model implementing sentence encoding using DistilBERT.
+    """
+
+    def __init__(self, model_name='distilbert-base-cased', model_dir=VECTOR_CACHE+'/DistilBERT', vtype='tfidf'):
+        print("Initializing DistilBERT representation model...")
+
+        super().__init__(model_name, model_dir)  # parent constructor
+
+        # Load the DistilBERT model and tokenizer
+        self.model = DistilBertModel.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = DistilBertTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
+
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
+        self.type = 'distilbert'
+
+        # Use the custom tokenizer for both TF-IDF and CountVectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
+                sublinear_tf=True, 
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
+                lowercase=False, 
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
 
 
 

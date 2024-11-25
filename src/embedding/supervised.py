@@ -19,16 +19,21 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     label space exceeds a defined limit.
     """
 
-    print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
+    print(f'\tget_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
 
+    """
+    if isinstance(X, csr_matrix):
+        X = X.toarray()
+        
     print("X:", type(X), X.shape)
     print("X[0]:", type(X[0]), X[0])
 
     print("Y:", type(y), y.shape)
     print("Y[0]:", type(y[0]), y[0])
-
+    """
+    
     nC = y.shape[1]
-    print("nC:", {nC})
+    #print("nC:", {nC})
 
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')
@@ -47,13 +52,15 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         F = supervised_embeddings_tsr(X, y, word_prob)
 
     #F = F.toarray()
-    print("F:", type(F), {F.shape})
-    #print("F[0]:", type(F[0]), F[0])
+    """
+    print("\tF:", type(F), {F.shape})
+    print("\tF[0]:", type(F[0]), F[0])
+    """
 
     if dozscore:
         #F = zscores(F, axis=0)
         F = normalize_zscores(F)
-        print("after zscore normalization:", {F.shape})
+        #print("after zscore normalization:", {F.shape})
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -73,11 +80,35 @@ def supervised_embeddings_tfidf(X, Y):
     label information Y.
 
     Implementation: Uses the term frequencies X and a supervised label matrix Y to weight 
-    the term frequencies by how frequently terms and labels co-occur. 
+    the term frequencies by how
     """
-    tfidf_norm = X.sum(axis=0)
-    F = (X.T).dot(Y) / tfidf_norm.T
 
+    """
+    print("supervised_embeddings_tfidf()")
+
+    print("X:", type(X), {X.shape})
+    print("X[0]:", type(X[0]), X[0])
+    print("Y:", type(Y), {Y.shape})
+    print("Y[0]:", type(Y[0]), Y[0])
+    """
+    
+    tfidf_norm = X.sum(axis=0)
+    print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
+    print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
+
+    """
+    first_part = (X.T).dot(Y)
+    print("first_part:", type(first_part), {first_part.shape})
+    print("first_part[0]:", type(first_part[0]), first_part[0])
+
+    second_part = tfidf_norm.T
+    print("second_part:", type(second_part), {second_part.shape})
+    print("second_part[0]:", type(second_part[0]), second_part[0])
+    """
+
+    F = (X.T).dot(Y) / tfidf_norm.T
+    #print("F:", type(F), {F.shape})
+    
     return F
 # ----------------------------------------------------------------------------------------------------------------------
 
