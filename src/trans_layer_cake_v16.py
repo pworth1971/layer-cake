@@ -663,145 +663,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
 
 
 
-
-class CustomTransformerForSequenceClassification(nn.Module):
-
-    def __init__(self, model_name, num_labels, pretrained_embeddings=None, class_type='single-label', dropprob=0.1, freeze_embeddings=True):
-        
-        super(CustomTransformerForSequenceClassification, self).__init__()
-        
-        self.model_name = model_name
-
-        self.class_type = class_type
-
-        # Load the transformer model and its configuration
-        self.transformer = AutoModel.from_pretrained(model_name)
-        self.config = self.transformer.config
-
-        # Handle dropout dynamically based on the model's configuration
-        if hasattr(self.config, "hidden_dropout_prob"):
-            self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
-        elif hasattr(self.config, "dropout"):
-            self.dropout = nn.Dropout(self.config.dropout)
-        else:
-            self.dropout = nn.Dropout(dropprob)                         # Default to 0.1 if no dropout attribute is found
-
-        # Pretrained embeddings
-        self.pretrained_embeddings = pretrained_embeddings
-    
-        embedding_dim = pretrained_embeddings.size(1)
-
-        # Optionally freeze the embeddings if required
-        if freeze_embeddings:
-            self.transformer.get_input_embeddings().weight.requires_grad = False
-
-        # Fully connected classifier
-        self.classifier = nn.Linear(embedding_dim, num_labels)
-
-
-    def forward(self, input_ids, attention_mask=None, labels=None):
-
-        # Ensure all tensors are on the same device as the model
-        device = self.transformer.device
-        input_ids = input_ids.to(device)
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(device)
-        if self.pretrained_embeddings is not None:
-            self.pretrained_embeddings = self.pretrained_embeddings.to(device)
-
-        # Extract transformer outputs
-        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-
-        # Get the [CLS] token representation
-        pooled_output = transformer_outputs.last_hidden_state[:, 0, :]
-
-        # Optionally integrate pretrained embeddings
-        if self.pretrained_embeddings is not None:
-            batch_embeddings = self.pretrained_embeddings[input_ids]  # Shape: (batch_size, seq_len, embedding_dim)
-
-            # Aggregate embeddings along the sequence length dimension (e.g., mean pooling)
-            batch_embeddings = batch_embeddings.mean(dim=1)  # Shape: (batch_size, embedding_dim)
-
-            # Concatenate the pooled transformer output with the aggregated embeddings
-            pooled_output = torch.cat([pooled_output, batch_embeddings], dim=1)  # Shape: (batch_size, hidden_size + embedding_dim)
-
-        # Apply dropout
-        pooled_output = self.dropout(pooled_output)
-
-        # Pass through the classifier
-        logits = self.classifier(pooled_output)
-
-        # Compute loss if labels are provided
-        if labels is not None:
-            if self.class_type in ['single-label', 'singlelabel']:
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits, labels)
-            elif self.class_type in ['multi-label', 'multilabel']:
-                loss_fct = nn.BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels.float())
-            else:
-                raise ValueError(f"Unsupported problem type: {self.config.problem_type}")
-            return loss, logits
-
-        return logits
-    
-
-
-
 class LCDataset(Dataset):
-
-    def __init__(self, texts, labels, tokenizer, max_length=MAX_LENGTH, class_type='single-label'):
-        """
-        Dataset class for handling tokenized inputs and labels.
-
-        Parameters:
-        - texts: List of input text samples.
-        - labels: Binary vectors (multi-label format) or indices (single-label).
-        - tokenizer: Hugging Face tokenizer for text tokenization.
-        - max_length: Maximum length of tokenized sequences.
-        - class_type: 'multi-label' or 'single-label' classification type.
-        """
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.class_type = class_type
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, idx):
-        """
-        Get an individual sample from the dataset.
-
-        Returns:
-        - item: Dictionary containing tokenized inputs and labels.
-        """
-        text = self.texts[idx]
-        labels = self.labels[idx] if self.labels is not None else [0]  # Default label if missing
-
-        # Tokenize the text
-        encoding = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-        )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove batch dimension
-
-        # Add labels
-        if self.class_type == 'single-label':
-            item["labels"] = torch.tensor(labels, dtype=torch.long)
-        else:
-            item["labels"] = torch.tensor(labels, dtype=torch.float)
-
-        return item
-
-
-
-
-class LCDatasetOld(Dataset):
 
     def __init__(self, texts, labels, tokenizer, max_length=MAX_LENGTH, class_type='single-label', pretrained_embeddings=None):
         """
@@ -815,7 +677,6 @@ class LCDatasetOld(Dataset):
         - max_length: Maximum length of tokenized sequences.
         - class_type: 'multi-label' or 'single-label' classification type.
         - pretrained_embeddings: Tensor containing pretrained embeddings.
-        - sup_range: Range of supervised embeddings within the concatenated embeddings.
         """
         self.texts = texts
         self.labels = labels                                    # Binary vectors (multi-label format) or indices (single-label)
@@ -1240,7 +1101,7 @@ if __name__ == "__main__":
     # Set the pad_token_id in the model configuration
     hf_model.config.pad_token_id = tokenizer.pad_token_id
     hf_model.to(device)
-    print("model:\n", hf_model)
+    print("hf_model:\n", hf_model)
 
     num_classes = lcd.nC
     print("num_classes:", num_classes)
@@ -1250,7 +1111,6 @@ if __name__ == "__main__":
     print("pt_base_dims:", pt_base_dims)
     print("supervised_dims:", supervised_dims)
     
-
 
     """
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target_dense, test_size=VAL_SIZE, random_state=RANDOM_SEED)
@@ -1340,8 +1200,10 @@ if __name__ == "__main__":
     class_type = lcd.class_type
     print("class_type:", class_type)
 
+    """
     print("labels_train_dense:", type(labels_train_dense), len(labels_train_dense))
     print("labels_train_dense[0]:", type(labels_train_dense[0]), labels_train_dense[0].shape, labels_train_dense[0])
+    """
 
     # Prepare datasets
     train_dataset = LCDataset(
@@ -1350,7 +1212,7 @@ if __name__ == "__main__":
         labels_train_dense,
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings
     )
 
     """
@@ -1369,7 +1231,7 @@ if __name__ == "__main__":
         labels_val_dense, 
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings
     )
 
     print("labels_test_dense:", type(labels_test_dense), len(labels_test_dense))
@@ -1381,7 +1243,7 @@ if __name__ == "__main__":
         labels_test_dense, 
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings
     )
     
     """
@@ -1414,17 +1276,6 @@ if __name__ == "__main__":
         print(f"Labels shape: {sample['labels'].shape}")
     """
 
-
-    # Initialize the custom model
-    lc_model = CustomTransformerForSequenceClassification(
-        model_name=model_name, 
-        num_labels=num_classes,
-        pretrained_embeddings=pretrained_embeddings, 
-        class_type=class_type,
-        dropprob=args.dropprob,
-        freeze_embeddings=True                                             # Optionally freeze the embeddings
-    ).to(device)
-
     tinit = time()
 
     # Training arguments
@@ -1448,7 +1299,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=lc_model,
+        model=hf_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,

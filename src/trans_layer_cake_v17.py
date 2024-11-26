@@ -5,9 +5,6 @@ import pandas as pd
 from time import time
 
 import matplotlib.pyplot as plt
-
-from scipy.sparse import csr_matrix, coo_matrix
-
 from tqdm import tqdm
 
 import nltk
@@ -43,10 +40,11 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 from util.metrics import evaluation_nn
-from util.common import initialize_testing, get_embedding_type, get_word_list, index_dataset
+from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import get_supervised_embeddings
-from data.lc_dataset import LCDataset, loadpt_data
+
+from scipy.sparse import csr_matrix
 
 
 
@@ -178,27 +176,17 @@ def load_dataset(name):
 
         class_type = 'multi-label'
 
-        train_target_sparse, test_target_sparse, target_names = _label_matrix(train_target, test_target)
-        """
-        print("label_matrix output")
-        print("train_target:", type(train_target), train_target.shape)
-        print("test_target:", type(test_target), test_target.shape)
-        """
+        train_target, test_target, target_names = _label_matrix(train_target, test_target)
 
-        train_target_dense = train_target_sparse.toarray()                                     # Convert to dense
-        test_target_dense = test_target_sparse.toarray()                                       # Convert to dense
-        """
-        print("array output")
-        print("train_target:", type(train_target), train_target.shape)
-        print("test_target:", type(test_target), test_target.shape)
-        """
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
 
         target_names = train_labelled_docs.target_names
         num_classes = len(target_names)
         #print(f"num_classes: {len(target_names)}")
         #print("class_names:", target_names)
 
-        return (train_data, train_target_dense, train_target_sparse), (test_data, test_target_dense, test_target_sparse), num_classes, target_names, class_type
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
     elif name == "rcv1":
 
@@ -282,18 +270,9 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
     print(f'vectorize(), vtype: {vtype}')
 
     if vtype == 'tfidf':
-        vectorizer = TfidfVectorizer(
-            min_df=5, 
-            lowercase=False, 
-            sublinear_tf=True, 
-            #vocabulary=tokenizer.get_vocab()
-        )
+        vectorizer = TfidfVectorizer(min_df=5, lowercase=False, sublinear_tf=True, vocabulary=tokenizer.get_vocab())
     elif vtype == 'count':
-        vectorizer = CountVectorizer(
-            min_df=5, 
-            lowercase=False, 
-            #vocabulary=tokenizer.get_vocab()
-        )
+        vectorizer = CountVectorizer(min_df=5, lowercase=False, vocabulary=tokenizer.get_vocab())
 
     Xtr = vectorizer.fit_transform(texts_train)
     Xval = vectorizer.transform(texts_val)
@@ -317,7 +296,7 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
 
 
-def embedding_matrix_split(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
+def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
     """
     Creates an embedding matrix that includes both pretrained and supervised embeddings.
 
@@ -379,11 +358,15 @@ def embedding_matrix_split(model, tokenizer, vocabsize, word2index, out_of_vocab
         wce_matrix = torch.from_numpy(WCE).float()
         print('\t[supervised-matrix]', wce_matrix.shape)
 
-    return embedding_matrix, wce_matrix
+        offset = pretrained_embeddings[0].shape[1] if pretrained_embeddings else 0
+        sup_range = [offset, offset + F.shape[1]]
+        print("supervised range: ", sup_range)
+
+    return embedding_matrix, wce_matrix, sup_range
 
 
 
-def embedding_matrix_cat(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
+def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
     """
     Creates an embedding matrix that includes both pretrained and supervised embeddings.
 
@@ -466,344 +449,10 @@ def embedding_matrix_cat(model, tokenizer, vocabsize, word2index, out_of_vocabul
 
 
 
-def embedding_matrix_dot(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
-    """
-    Creates a single embedding matrix by combining pretrained and supervised embeddings.
-
-    Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
-    - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-
-    Returns:
-    - final_matrix: Tensor containing the result of multiplying pretrained embeddings with the word-class embedding matrix.
-    """
-    print(f'\n\tembedding_matrix(): opt.pretrained: {opt.pretrained}, vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
-          
-    # Get the embedding layer for pretrained embeddings
-    embedding_layer = model.get_input_embeddings()                  # Works across models like BERT, RoBERTa, DistilBERT, GPT, XLNet, LLaMA
-    embedding_dim = embedding_layer.embedding_dim                   # Pretrained embedding dimension
-    print(f'\tembedding_dim: {embedding_dim}') 
-
-    # initialize variables
-    pretrained_matrix = torch.zeros((vocabsize, embedding_dim))  
-    wce_matrix = None
-    OOV = 0
-
-    # If pretrained embeddings are needed, populate pretrained_matrix 
-    # with pretrained model embeddings for each word in word2index
-    if opt.pretrained:
-
-        #print("\tcomputing pretrained embeddings...")
-
-        # Wrap word2index items in tqdm for progress tracking
-        for word, idx in tqdm(word2index.items(), desc="computing pretrained embeddings", total=len(word2index)):
-        #for word, idx in word2index.items():
-            token_id = tokenizer.convert_tokens_to_ids(word)
-            if token_id is not None and token_id < embedding_layer.num_embeddings:
-                with torch.no_grad():
-                    pretrained_matrix[idx] = embedding_layer.weight[token_id].cpu()
-            else:
-                out_of_vocabulary.append(word)
-                OOV += 1
-        
-        print("\tOOV words:", OOV)
-        print(f'\n\t[pretrained-matrix]: {type(pretrained_matrix)}, {pretrained_matrix.shape}')
-
-
-    # Compute Word-Class Embeddings (WCE) if supervised embeddings are needed
-    if opt.supervised:
-        print(f'\tcomputing supervised embeddings...')
-        
-        Xtr = vectorized_training_data
-        Ytr = training_label_matrix
-
-        """
-        # Ensure Xtr is converted to numpy.ndarray
-        if isinstance(Xtr, csr_matrix):
-            Xtr = Xtr.toarray()
-            print(f'Converted Xtr to numpy.ndarray: {type(Xtr)}, {Xtr.shape}')
-        else:
-            print(f'Xtr is already a numpy.ndarray: {type(Xtr)}, {Xtr.shape}')
-        """
-
-        """
-        # Ensure Ytr is converted to csr_matrix
-        if not isinstance(Ytr, csr_matrix):
-            Ytr = csr_matrix(Ytr)
-            print(f'Converted Ytr to csr_matrix: {type(Ytr)}, {Ytr.shape}')
-        else:
-            print(f'Ytr is already a csr_matrix: {type(Ytr)}, {Ytr.shape}')
-        """
-
-        print("Xtr:", type(Xtr), Xtr.shape)
-        print("Xtr[0]:", type(Xtr[0]), Xtr[0])
-        print("Ytr:", type(Ytr), Ytr.shape)
-        print("Ytr[0]:", type(Ytr[0]), Ytr[0])
-        
-        WCE = get_supervised_embeddings(
-            Xtr, 
-            Ytr,
-            method=opt.supervised_method,
-            max_label_space=opt.max_label_space,
-            dozscore=(not opt.nozscore),
-            transformers=True
-        )
-
-        print("WCE:\n", type(WCE), WCE.shape, WCE)
-    
-        # Check if the matrix is a COO matrix and if 
-        # so convert to desnse array for vstack operation
-        if isinstance(WCE, coo_matrix):
-            print('converting WCE to dense array...')
-            WCE = WCE.toarray()
-        print("WCE:\n", type(WCE), WCE.shape, WCE)
-    
-        num_missing_rows = vocabsize - WCE.shape[0]
-        print("\tnum_missing_rows:", num_missing_rows)
-
-        wce_matrix = np.vstack((WCE, np.zeros((num_missing_rows, WCE.shape[1]))))
-        #wce_matrix = torch.from_numpy(WCE).float()
-        print(f'\t[wce-matrix]: {type(wce_matrix)}, {wce_matrix.shape}')
-        print(f'\twce_matrix[0]: {type(wce_matrix[0])}, {wce_matrix[0]}')
-
-        # Project WCE matrix into the pretrained embedding space
-        print("\tProjecting WCE matrix into pretrained embedding space...")
-
-        # Transpose pretrained_matrix for dot product
-        pretrained_matrix_np = pretrained_matrix.numpy()  # Convert to numpy for faster operations if needed
-        print(f'\tpretrained_matrix_np: {type(pretrained_matrix_np)}, {pretrained_matrix_np.shape}')
-    
-        # Step 1: Define a projection matrix to map WCE into pretrained embedding space
-        num_classes = wce_matrix.shape[1]
-        embedding_dim = pretrained_matrix_np.shape[1]
-        
-        projection_layer = nn.Linear(num_classes, embedding_dim, bias=False)  # Project 115 -> 768
-        torch.nn.init.xavier_uniform_(projection_layer.weight)  # Initialize weights
-
-        # Step 2: Convert WCE to torch tensor for projection
-        wce_matrix_tensor = torch.from_numpy(wce_matrix).float()  # Shape [30522, 115]
-
-        # Step 3: Perform projection
-        wce_projected = projection_layer(wce_matrix_tensor).detach().numpy()  # Shape [30522, 768]
-
-        # Step 4: Combine with pretrained matrix
-        final_matrix_np = pretrained_matrix_np + wce_projected  # Element-wise addition
-        print(f'\t[final_matrix_np]: {type(final_matrix_np)}, {final_matrix_np.shape}')
-        print(f'\tfinal_matrix_np[0]:, {type(final_matrix_np[0])}, {final_matrix_np[0]}')
-
-        final_matrix = final_matrix_np
-
-    else:
-        # If no WCE, return pretrained embeddings as the final matrix
-        final_matrix = pretrained_matrix
-
-    print(f'\t[final matrix]: {type(final_matrix)}, {final_matrix.shape}')
-    print(f'\tfinal_matrix[0]:, {type(final_matrix[0])}, {final_matrix[0]}')
-    
-    return final_matrix
-
-
-
-def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
-
-    print(f'embedding_matrix()... dataset: {dataset}, pretrained: {pretrained}, vocabsize: {vocabsize}, supervised: {opt.supervised}')
-
-    pretrained_embeddings = None
-    sup_range = None
-    
-    if opt.pretrained or opt.supervised:
-        pretrained_embeddings = []
-
-        if pretrained is not None:
-            word_list = get_word_list(word2index, out_of_vocabulary)
-            weights = pretrained.extract(word_list)
-            pretrained_embeddings.append(weights)
-            print('\t[pretrained-matrix]', weights.shape)
-            del pretrained
-
-        if opt.supervised:
-            Xtr, _ = dataset.vectorize()
-            Ytr = dataset.devel_labelmatrix
-
-            print("Xtr:", type(Xtr), Xtr.shape)
-            print("Xtr[0]:", type(Xtr[0]), Xtr[0])
-            print("Ytr:", type(Ytr), Ytr.shape)
-            print("Ytr[0]:", type(Ytr[0]), Ytr[0])
-
-            F = get_supervised_embeddings(Xtr, Ytr,
-                                          method=opt.supervised_method,
-                                          max_label_space=opt.max_label_space,
-                                          dozscore=(not opt.nozscore))
-            
-            # Check if the matrix is a COO matrix and if 
-            # so convert to desnse array for vstack operation
-            if isinstance(F, coo_matrix):
-                F = F.toarray()
-            print("F:\n", type(F), F.shape, F)
-
-            num_missing_rows = vocabsize - F.shape[0]
-            F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))
-            F = torch.from_numpy(F).float()
-            print('\t[supervised-matrix]', F.shape)
-
-            offset = 0
-            if pretrained_embeddings:
-                offset = pretrained_embeddings[0].shape[1]
-            sup_range = [offset, offset + F.shape[1]]
-            pretrained_embeddings.append(F)
-
-        pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
-        print('\t[final pretrained_embeddings]\n\t', pretrained_embeddings.shape)
-
-    return pretrained_embeddings, sup_range
-
-
-
-
-class CustomTransformerForSequenceClassification(nn.Module):
-
-    def __init__(self, model_name, num_labels, pretrained_embeddings=None, class_type='single-label', dropprob=0.1, freeze_embeddings=True):
-        
-        super(CustomTransformerForSequenceClassification, self).__init__()
-        
-        self.model_name = model_name
-
-        self.class_type = class_type
-
-        # Load the transformer model and its configuration
-        self.transformer = AutoModel.from_pretrained(model_name)
-        self.config = self.transformer.config
-
-        # Handle dropout dynamically based on the model's configuration
-        if hasattr(self.config, "hidden_dropout_prob"):
-            self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
-        elif hasattr(self.config, "dropout"):
-            self.dropout = nn.Dropout(self.config.dropout)
-        else:
-            self.dropout = nn.Dropout(dropprob)                         # Default to 0.1 if no dropout attribute is found
-
-        # Pretrained embeddings
-        self.pretrained_embeddings = pretrained_embeddings
-    
-        embedding_dim = pretrained_embeddings.size(1)
-
-        # Optionally freeze the embeddings if required
-        if freeze_embeddings:
-            self.transformer.get_input_embeddings().weight.requires_grad = False
-
-        # Fully connected classifier
-        self.classifier = nn.Linear(embedding_dim, num_labels)
-
-
-    def forward(self, input_ids, attention_mask=None, labels=None):
-
-        # Ensure all tensors are on the same device as the model
-        device = self.transformer.device
-        input_ids = input_ids.to(device)
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(device)
-        if self.pretrained_embeddings is not None:
-            self.pretrained_embeddings = self.pretrained_embeddings.to(device)
-
-        # Extract transformer outputs
-        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-
-        # Get the [CLS] token representation
-        pooled_output = transformer_outputs.last_hidden_state[:, 0, :]
-
-        # Optionally integrate pretrained embeddings
-        if self.pretrained_embeddings is not None:
-            batch_embeddings = self.pretrained_embeddings[input_ids]  # Shape: (batch_size, seq_len, embedding_dim)
-
-            # Aggregate embeddings along the sequence length dimension (e.g., mean pooling)
-            batch_embeddings = batch_embeddings.mean(dim=1)  # Shape: (batch_size, embedding_dim)
-
-            # Concatenate the pooled transformer output with the aggregated embeddings
-            pooled_output = torch.cat([pooled_output, batch_embeddings], dim=1)  # Shape: (batch_size, hidden_size + embedding_dim)
-
-        # Apply dropout
-        pooled_output = self.dropout(pooled_output)
-
-        # Pass through the classifier
-        logits = self.classifier(pooled_output)
-
-        # Compute loss if labels are provided
-        if labels is not None:
-            if self.class_type in ['single-label', 'singlelabel']:
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits, labels)
-            elif self.class_type in ['multi-label', 'multilabel']:
-                loss_fct = nn.BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels.float())
-            else:
-                raise ValueError(f"Unsupported problem type: {self.config.problem_type}")
-            return loss, logits
-
-        return logits
-    
-
-
-
 class LCDataset(Dataset):
 
-    def __init__(self, texts, labels, tokenizer, max_length=MAX_LENGTH, class_type='single-label'):
-        """
-        Dataset class for handling tokenized inputs and labels.
-
-        Parameters:
-        - texts: List of input text samples.
-        - labels: Binary vectors (multi-label format) or indices (single-label).
-        - tokenizer: Hugging Face tokenizer for text tokenization.
-        - max_length: Maximum length of tokenized sequences.
-        - class_type: 'multi-label' or 'single-label' classification type.
-        """
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.class_type = class_type
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, idx):
-        """
-        Get an individual sample from the dataset.
-
-        Returns:
-        - item: Dictionary containing tokenized inputs and labels.
-        """
-        text = self.texts[idx]
-        labels = self.labels[idx] if self.labels is not None else [0]  # Default label if missing
-
-        # Tokenize the text
-        encoding = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-        )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}  # Remove batch dimension
-
-        # Add labels
-        if self.class_type == 'single-label':
-            item["labels"] = torch.tensor(labels, dtype=torch.long)
-        else:
-            item["labels"] = torch.tensor(labels, dtype=torch.float)
-
-        return item
-
-
-
-
-class LCDatasetOld(Dataset):
-
-    def __init__(self, texts, labels, tokenizer, max_length=MAX_LENGTH, class_type='single-label', pretrained_embeddings=None):
+    def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label', 
+                 pretrained_embeddings=None, sup_range=None):
         """
         Dataset class for handling both input text and labels, with optional support for 
         pretrained embeddings and supervised ranges.
@@ -823,9 +472,11 @@ class LCDatasetOld(Dataset):
         self.max_length = max_length
         self.class_type = class_type
         self.pretrained_embeddings = pretrained_embeddings
+        self.sup_range = sup_range
 
     def __len__(self):
         return len(self.texts)
+
 
     def __getitem__(self, idx):
         """
@@ -865,11 +516,15 @@ class LCDatasetOld(Dataset):
                 self.pretrained_embeddings[idx], dtype=torch.float
             )
 
+        # Add supervised embedding range if provided
+        if self.sup_range is not None:
+            item["sup_range"] = self.sup_range  # Supervised embedding range
+
         return item
 
 
 
-def compute_metrics(eval_pred, class_type='single-label', threshold=MC_THRESHOLD):
+def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     """
     Compute evaluation metrics for classification tasks.
 
@@ -883,21 +538,19 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=MC_THRESHOLD
     """
     predictions, labels = eval_pred.predictions, eval_pred.label_ids
 
-    if class_type in ['single-label', 'singlelabel']:
+    if class_type == 'single-label':
         # Convert predictions to class indices
         preds = np.argmax(predictions, axis=1)
-        #labels = np.argmax(labels, axis=1)                                         # Convert one-hot to class indices if needed
-    elif class_type in ['multi-label', 'multilabel']:
+        #labels = np.argmax(labels, axis=1)                              # Convert one-hot to class indices if needed
+    elif class_type == 'multi-label':
         # Threshold predictions for multi-label classification
         preds = (predictions > threshold).astype(int)
-        labels = labels.astype(int)                                                 # Ensure labels are binary
+        labels = labels.astype(int)                                     # Ensure labels are binary
     else:
         raise ValueError(f"Unsupported class_type: {class_type}")
 
-    """
     print("preds:", type(preds), preds.shape)
     print("labels:", type(labels), labels.shape)
-    """
 
     # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
@@ -905,8 +558,6 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=MC_THRESHOLD
     precision = precision_score(labels, preds, average='micro', zero_division=1)
     recall = recall_score(labels, preds, average='micro', zero_division=1)
 
-    print(f'f1_micro: {f1_micro}, f1_macro: {f1_macro}, precision: {precision}, recall: {recall}')
-    
     return {
         'f1_micro': f1_micro,
         'f1_macro': f1_macro,
@@ -1066,160 +717,22 @@ if __name__ == "__main__":
     
     torch.manual_seed(args.seed)
 
-    
-    # ----------------------------------------------------------------------------------------------------------------------------------------------
-    #
-    # Load the dataset and the associated (pretrained) embedding structures
-    # to be fed into the model
-    #                                                          
-    lcd = loadpt_data(
-        dataset=args.dataset,                       # Dataset name
-        vtype=args.vtype,                           # Vectorization type
-        pretrained=args.pretrained,                 # pretrained embeddings type
-        embedding_path=emb_path,                    # path to pretrained embeddings
-        emb_type=embedding_type                     # embedding type (word or token)
-        )                                                
-
-    print("loaded LCDataset object:", type(lcd))
-    print("lcd:", lcd.show())
-
-    pretrained_vectors = lcd.lcr_model
-    pretrained_vectors.show()
-
-    if (args.pretrained is None):
-        pretrained_vectors = None
-
-    if args.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']:
-        toke = lcd.tokenizer
-        transformer_model = True
-    else:
-        toke = None
-        transdformer_model = False
-
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, pretrained=pretrained_vectors)
-    print("word2index:", type(word2index), len(word2index))
-    print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
-
-    """
-    print("training and validation data split...")
-
-    val_size = min(int(len(devel_index) * VAL_SIZE), 20000)                   # dataset split tr/val/test
-    print("val_size:", val_size)
-
-    train_index, val_index, ytr, yval = train_test_split(
-        devel_index, lcd.devel_target, test_size=val_size, random_state=args.seed, shuffle=True
-    )
-    """
-
-    print("lcd.devel_target:", type(lcd.devel_target), lcd.devel_target.shape)
-    print("lcd.devel_target[0]:\n", type(lcd.devel_target[0]), lcd.devel_target[0])
-
-    print("lcd.test_target:", type(lcd.test_target), lcd.test_target.shape)
-    print("lcd.test_target[0]:\n", type(lcd.test_target[0]), lcd.test_target[0])
-    
-    print("lcd.devel_labelmatrix:", type(lcd.devel_labelmatrix), lcd.devel_labelmatrix.shape)
-    print("lcd.devel_labelmatrix[0]:\n", type(lcd.devel_labelmatrix[0]), lcd.devel_labelmatrix[0])
-
-    print("lcd.test_labelmatrix:", type(lcd.test_labelmatrix), lcd.test_labelmatrix.shape)
-    print("lcd.test_labelmatrix[0]:\n", type(lcd.test_labelmatrix[0]), lcd.test_labelmatrix[0])
-
-
-    #texts_train, texts_val, labels_train, labels_val = train_test_split(lcd.Xtr, lcd.devel_labelmatrix, test_size=VAL_SIZE, random_state=RANDOM_SEED)
-
-    # Splitting the data using `train_test_split` and the sparse labels
-    texts_train, texts_val, labels_train, labels_val = train_test_split(
-        lcd.Xtr, lcd.devel_labelmatrix, test_size=VAL_SIZE, random_state=RANDOM_SEED
-    )
-
-    # Ensuring the same split indices for dense labels
-    _, _, labels_train_dense, labels_val_dense = train_test_split(
-        lcd.Xtr, lcd.ytr_encoded, test_size=VAL_SIZE, random_state=RANDOM_SEED
-    )
-
-    print("texts_train:", type(texts_train), len(texts_train))
-    print("texts_train[0]:", type(texts_train[0]), texts_train[0])
-    print("labels_train:", type(labels_train), labels_train.shape)
-    print("labels_traint[0]:", type(labels_train[0]), labels_train[0].shape, labels_train[0])
-
-    print("texts_val:", type(texts_val), len(texts_val))
-    print("texts_val[0]:", type(texts_val[0]), texts_val[0])
-    print("labels_val:", type(labels_val), labels_val.shape)
-    print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
-
-    labels_test_sparse = lcd.test_labelmatrix
-    labels_test_dense = lcd.yte_encoded
-    test_data = lcd.Xte
-
-    labels_test = labels_test_sparse
-    print("test_data:", type(test_data), len(test_data))
-    print("test_data[0]:", type(test_data[0]), test_data[0])
-    print("labels_test:", type(labels_test), labels_test.shape)
-    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
-
-
-    # Compute class weights based on the training set
-    # Convert sparse matrix to dense array
-    dense_labels = lcd.devel_labelmatrix.toarray()
-
-    """
-    class_weights = []
-    for i in range(dense_labels.shape[1]):
-        class_weight = compute_class_weight(class_weight='balanced', classes=np.array([0, 1]), y=dense_labels[:, i])
-        class_weights.append(class_weight)
-
-    # Convert to a tensor for PyTorch
-    class_weights = torch.tensor(class_weights, dtype=torch.float32, device=opt.device)
-
-    #class_weights = torch.tensor(class_weights, device=opt.device)
-    #class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(lcd.devel_labelmatrix), y=lcd.devel_labelmatrix)
-    #print("class_weights:", class_weights)
-    """
-
-    yte = lcd.test_target
-
-    """
-    print("ytr:", type(ytr), ytr.shape)
-    print("ytr:\n", ytr)
-
-    print("yte:", type(yte), yte.shape)
-    print("yte:\n", yte)
-    """
-
-    vocabsize = len(word2index) + len(out_of_vocabulary)
-    print("vocabsize:", {vocabsize})
-
-    pretrained_embeddings, sup_range = embedding_matrix(lcd, pretrained_vectors, vocabsize, word2index, out_of_vocabulary, args)
-    if pretrained_embeddings is not None:
-        print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
-    else:
-        print("pretrained_embeddings: None")
-    
-
-    """
     # Load dataset and print class information
-    (train_data, train_target_dense, train_target_sparse), (test_data, labels_test_dense, labels_test_sparse), num_classes, target_names, class_type = load_dataset(args.dataset)
-
-    print("train_data:", type(train_data), len(train_data))
-    print("train_data[0]:", type(train_data[0]), train_data[0])
-    print("train_target_dense:", type(train_target_dense), len(train_target_dense))
-    print("train_target_dense[0]:", type(train_target_dense[0]), train_target_dense[0].shape, train_target_dense[0])
-    
-    print("test_data:", type(test_data), len(test_data))
-    print("test_data[0]:", type(test_data[0]), test_data[0])
-    print("labels_test_dense:", type(labels_test_dense), len(labels_test_dense))
-    print("labels_test_dense[0]:", type(labels_test_dense[0]), labels_test_dense[0].shape, labels_test_dense[0])
-    
-    print("\n")
-    print("train_target_sparse:", type(train_target_sparse), train_target_sparse.shape)
-    print("train_target_sparse[0]:", type(train_target_sparse[0]), train_target_sparse[0].shape, train_target_sparse[0])
-    print("labels_test_sparse:", type(labels_test_sparse), labels_test_sparse.shape)
-    print("labels_test_sparse[0]:", type(labels_test_sparse[0]), labels_test_sparse[0].shape, labels_test_sparse[0])
-    print("\n")
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = load_dataset(args.dataset)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)
     print("target_names:", target_names)
-    """
+
+    print("train_data:", type(train_data), len(train_data))
+    print("train_data[0]:", type(train_data[0]), train_data[0])
+    print("train_target:", type(train_target), len(train_target))
+    print("train_target[0]:", type(train_target[0]), train_target[0].shape, train_target[0])
+
+    print("test_data:", type(test_data), len(test_data))
+    print("test_data[0]:", type(test_data[0]), test_data[0])
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
     # Add padding token if it doesn't exist
@@ -1233,27 +746,20 @@ if __name__ == "__main__":
     tok_vocab_size = len(tokenizer)
     print("tok_vocab_size:", tok_vocab_size)
 
-    target_names = lcd.target_names
-    print("target_names:", target_names)
-
     hf_model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
     # Set the pad_token_id in the model configuration
     hf_model.config.pad_token_id = tokenizer.pad_token_id
     hf_model.to(device)
     print("model:\n", hf_model)
 
-    num_classes = lcd.nC
-    print("num_classes:", num_classes)
-
     total_dims, pt_base_dims, supervised_dims = compute_embedding_dimensions(hf_model, num_classes, args)
     print("total_dims:", total_dims)
     print("pt_base_dims:", pt_base_dims)
     print("supervised_dims:", supervised_dims)
-    
 
+    # Split train into train and validation
+    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
 
-    """
-    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target_dense, test_size=VAL_SIZE, random_state=RANDOM_SEED)
     print("texts_train:", type(texts_train), len(texts_train))
     print("texts_train[0]:", type(texts_train[0]), texts_train[0])
     print("labels_train:", type(labels_train), len(labels_train))
@@ -1264,29 +770,9 @@ if __name__ == "__main__":
     print("labels_val:", type(labels_val), len(labels_val))
     print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
 
-    labels_test = labels_test_dense
     print("test_data:", type(test_data), len(test_data))
     print("test_data[0]:", type(test_data[0]), test_data[0])
     print("labels_test:", type(labels_test), len(labels_test))
-    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
-    """
-
-    """
-    texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target_sparse, test_size=VAL_SIZE, random_state=RANDOM_SEED)
-    print("texts_train:", type(texts_train), len(texts_train))
-    print("texts_train[0]:", type(texts_train[0]), texts_train[0])
-    print("labels_train:", type(labels_train), labels_train.shape)
-    print("labels_traint[0]:", type(labels_train[0]), labels_train[0].shape, labels_train[0])
-
-    print("texts_val:", type(texts_val), len(texts_val))
-    print("texts_val[0]:", type(texts_val[0]), texts_val[0])
-    print("labels_val:", type(labels_val), labels_val.shape)
-    print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
-
-    labels_test = labels_test_sparse
-    print("test_data:", type(test_data), len(test_data))
-    print("test_data[0]:", type(test_data[0]), test_data[0])
-    print("labels_test:", type(labels_test), labels_test.shape)
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
     vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
@@ -1306,6 +792,7 @@ if __name__ == "__main__":
     vec_vocab_size = len(vectorizer.vocabulary_)
     print("vec_vocab_size:", vec_vocab_size)
 
+    """
     if (class_type in ['single-label', 'singlelabel']):
 
         print("single label, converting target labels to to one-hot")
@@ -1323,9 +810,8 @@ if __name__ == "__main__":
         print("labels_test[0]:", type(labels_test[0]), labels_test[0])
     """
 
-    """
     # Call `embedding_matrix` with the loaded model and tokenizer
-    pretrained_embeddings = embedding_matrix_dot(
+    pretrained_embeddings, sup_range, num_dimensions = embedding_matrix(
         model=hf_model,
         tokenizer=tokenizer,
         vocabsize=vec_vocab_size,
@@ -1335,22 +821,18 @@ if __name__ == "__main__":
         training_label_matrix=labels_train,
         opt=args
     )
-    """
 
-    class_type = lcd.class_type
-    print("class_type:", class_type)
-
-    print("labels_train_dense:", type(labels_train_dense), len(labels_train_dense))
-    print("labels_train_dense[0]:", type(labels_train_dense[0]), labels_train_dense[0].shape, labels_train_dense[0])
+    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    print("supervised range: ", sup_range)
 
     # Prepare datasets
     train_dataset = LCDataset(
         texts_train, 
-        #labels_train, 
-        labels_train_dense,
+        labels_train, 
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
     )
 
     """
@@ -1360,28 +842,22 @@ if __name__ == "__main__":
         print(f"Sample {i} is valid.")
     """
 
-    print("labels_val_dense:", type(labels_val_dense), len(labels_val_dense))
-    print("labels_val_dense[0]:", type(labels_val_dense[0]), labels_val_dense[0].shape, labels_val_dense[0])
-
     val_dataset = LCDataset(
         texts_val, 
-        #labels_val,
-        labels_val_dense, 
+        labels_val, 
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
     )
-
-    print("labels_test_dense:", type(labels_test_dense), len(labels_test_dense))
-    print("labels_test_dense[0]:", type(labels_test_dense[0]), labels_test_dense[0].shape, labels_test_dense[0])
 
     test_dataset = LCDataset(
         test_data, 
-        #labels_test,
-        labels_test_dense, 
+        labels_test, 
         tokenizer, 
         class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings
+        pretrained_embeddings=pretrained_embeddings, 
+        sup_range=sup_range
     )
     
     """
@@ -1414,17 +890,6 @@ if __name__ == "__main__":
         print(f"Labels shape: {sample['labels'].shape}")
     """
 
-
-    # Initialize the custom model
-    lc_model = CustomTransformerForSequenceClassification(
-        model_name=model_name, 
-        num_labels=num_classes,
-        pretrained_embeddings=pretrained_embeddings, 
-        class_type=class_type,
-        dropprob=args.dropprob,
-        freeze_embeddings=True                                             # Optionally freeze the embeddings
-    ).to(device)
-
     tinit = time()
 
     # Training arguments
@@ -1448,7 +913,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=lc_model,
+        model=hf_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
@@ -1469,7 +934,7 @@ if __name__ == "__main__":
     if class_type == 'single-label':
         y_pred = np.argmax(preds.predictions, axis=1)
     else:
-        y_pred = (preds.predictions > MC_THRESHOLD).astype(int)
+        y_pred = (preds.predictions > 0.5).astype(int)
 
     """
     if (class_type in ['single-label', 'singlelabel']):
@@ -1477,10 +942,8 @@ if __name__ == "__main__":
         labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
     """
     
-    """
-    print("labels_test:", type(labels_test), labels_test.shape)
-    print("y_pred:", type(y_pred), y_pred.shape)
-    """
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("y_pred:", type(y_pred), len(y_pred))
 
     print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
 
