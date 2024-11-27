@@ -28,6 +28,7 @@ declare -a embeddings=(
     #["FASTTEXT"]="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
     #["BERT"]="--pretrained bert --bert-path ../.vector_cache/BERT"
     #["ROBERTA"]="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
+    #["DISTILBERT"]="--pretrained distilbert --distilbert-path ../.vector_cache/DistilBERT"
     #["XLNET"]="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
     #["GPT2"]="--pretrained gpt2 --gpt2-path ../.vector_cache/GPT2"
     #["LLAMA"]="--pretrained llama --llama-path ../.vector_cache/LLaMa"
