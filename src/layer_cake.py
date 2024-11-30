@@ -300,6 +300,9 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
     sup_range = None
     
     if opt.pretrained or opt.supervised:
+
+        print("computing pretrained embeddings...")
+
         pretrained_embeddings = []
 
         if pretrained is not None:
@@ -310,38 +313,48 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             del pretrained
 
         if opt.supervised:
-            Xtr, _ = dataset.vectorize()
+
+            print("computing wce embeddings...")
+        
+            #Xtr, _ = dataset.vectorize()
+            Xtr = dataset.Xtr_vectorized
             Ytr = dataset.devel_labelmatrix
 
             print("Xtr:", type(Xtr), Xtr.shape)
-            print("Xtr[0]:", type(Xtr[0]), Xtr[0])
+            #print("Xtr[0]:", type(Xtr[0]), Xtr[0])
             print("Ytr:", type(Ytr), Ytr.shape)
-            print("Ytr[0]:", type(Ytr[0]), Ytr[0])
+            #print("Ytr[0]:", type(Ytr[0]), Ytr[0])
 
-            F = get_supervised_embeddings(Xtr, Ytr,
-                                          method=opt.supervised_method,
-                                          max_label_space=opt.max_label_space,
-                                          dozscore=(not opt.nozscore))
+            WCE = get_supervised_embeddings(
+                Xtr, 
+                Ytr,
+                method=opt.supervised_method,
+                max_label_space=opt.max_label_space,
+                dozscore=(not opt.nozscore)
+            )
             
             # Check if the matrix is a COO matrix and if 
             # so convert to desnse array for vstack operation
-            if isinstance(F, coo_matrix):
-                F = F.toarray()
-            print("F:\n", type(F), F.shape, F)
+            if isinstance(WCE, coo_matrix):
+                WCE = WCE.toarray()
+            #print("WCE:\n", type(WCE), WCE.shape, WCE)
+            print("WCE:\n", type(WCE), WCE.shape)         
 
-            num_missing_rows = vocabsize - F.shape[0]
-            F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))
-            F = torch.from_numpy(F).float()
-            print('\t[supervised-matrix]', F.shape)
+            num_missing_rows = vocabsize - WCE.shape[0]
+            WCE = np.vstack((WCE, np.zeros(shape=(num_missing_rows, WCE.shape[1]))))
+            WCE = torch.from_numpy(WCE).float()
+            print('\t[wce-matrix]', WCE.shape)
 
             offset = 0
             if pretrained_embeddings:
                 offset = pretrained_embeddings[0].shape[1]
-            sup_range = [offset, offset + F.shape[1]]
-            pretrained_embeddings.append(F)
+            sup_range = [offset, offset + WCE.shape[1]]
+            print("sup_range:", sup_range)
+
+            pretrained_embeddings.append(WCE)
 
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
-        print('\t[final pretrained_embeddings]\n\t', pretrained_embeddings.shape)
+        print('\t[final embeddings]\n\t', pretrained_embeddings.shape)
 
     return pretrained_embeddings, sup_range
 
