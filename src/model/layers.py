@@ -85,6 +85,18 @@ from torch.nn import functional as F
 from torch.autograd import Variable
 
 
+
+
+# Setup device prioritizing CUDA, then MPS, then CPU
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+
+
+
 class EmbeddingCustom(nn.Module):
 
     def __init__(self,
@@ -219,6 +231,7 @@ class EmbeddingCustom(nn.Module):
         return True
 
 
+
 class CNNprojection(nn.Module):
 
     def __init__(self, embedding_dim, out_channels, kernel_heights=[3, 5, 7], stride=1, padding=0, drop_prob=0.5):
@@ -230,25 +243,29 @@ class CNNprojection(nn.Module):
         self.dropout = nn.Dropout(drop_prob)
         self.out_dimensions = len(kernel_heights) * out_channels
 
+
     def conv_block(self, input, conv_layer):
-        conv_out = conv_layer(input)  # conv_out.size() = (batch_size, out_channels, dim, 1)
-        activation = F.relu(conv_out.squeeze(3))  # activation.size() = (batch_size, out_channels, dim1)
-        max_out = F.max_pool1d(activation, activation.size()[2]).squeeze(2)  # maxpool_out.size() = (batch_size, out_channels)
+        conv_out = conv_layer(input)                                                        # conv_out.size() = (batch_size, out_channels, dim, 1)
+        activation = F.relu(conv_out.squeeze(3))                                            # activation.size() = (batch_size, out_channels, dim1)
+        max_out = F.max_pool1d(activation, activation.size()[2]).squeeze(2)                 # maxpool_out.size() = (batch_size, out_channels)
         return max_out
 
-    def forward(self, input): # input.size() = (batch_size, num_seq, embedding_dim)
-        input = input.unsqueeze(1)  # input.size() = (batch_size, 1, num_seq, embedding_length)
+
+    def forward(self, input):                                                               # input.size() = (batch_size, num_seq, embedding_dim)
+        input = input.unsqueeze(1)                                                          # input.size() = (batch_size, 1, num_seq, embedding_length)
 
         max_out1 = self.conv_block(input, self.conv1)
         max_out2 = self.conv_block(input, self.conv2)
         max_out3 = self.conv_block(input, self.conv3)
 
-        all_out = torch.cat((max_out1, max_out2, max_out3), 1)  # all_out.size() = (batch_size, num_kernels*out_channels)
-        fc_in = self.dropout(all_out)  # fc_in.size()) = (batch_size, num_kernels*out_channels)
+        all_out = torch.cat((max_out1, max_out2, max_out3), 1)                              # all_out.size() = (batch_size, num_kernels*out_channels)
+        fc_in = self.dropout(all_out)                                                       # fc_in.size()) = (batch_size, num_kernels*out_channels)
         return fc_in
+
 
     def dim(self):
         return self.out_dimensions
+
 
 
 class LSTMprojection(nn.Module):
@@ -258,26 +275,29 @@ class LSTMprojection(nn.Module):
         self.hidden_size = hidden_size
         self.lstm = nn.LSTM(embedding_dim, hidden_size)
 
-    def forward(self, input):  # input.size() = (batch_size, num_seq, embedding_dim)
+
+    def forward(self, input):                                                               # input.size() = (batch_size, num_seq, embedding_dim)
         batch_size = input.shape[0]
         input = input.permute(1, 0, 2)
+
+        """
         h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
         c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
+        """
+
+        h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).to(device))
+        c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).to(device))
+
         output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0))
+        
         return final_hidden_state[-1]
+
 
     def dim(self):
         return self.hidden_size
 
 
 
-# Setup device prioritizing CUDA, then MPS, then CPU
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-elif torch.backends.mps.is_available():
-    device = torch.device("mps")
-else:
-    device = torch.device("cpu")
     
 class ATTNprojection(torch.nn.Module):
 
@@ -286,6 +306,7 @@ class ATTNprojection(torch.nn.Module):
         self.hidden_size = hidden_size
         self.lstm = nn.LSTM(embedding_dim, hidden_size)
 
+
     def attention_net(self, lstm_output, final_state):
         hidden = final_state.squeeze(0)
         attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)
@@ -293,7 +314,8 @@ class ATTNprojection(torch.nn.Module):
         new_hidden_state = torch.bmm(lstm_output.transpose(1, 2), soft_attn_weights.unsqueeze(2)).squeeze(2)
         return new_hidden_state
 
-    def forward(self, input):  # input.size() = (batch_size, num_seq, embedding_dim)
+
+    def forward(self, input):                                                               # input.size() = (batch_size, num_seq, embedding_dim)
         batch_size = input.shape[0]
         input = input.permute(1, 0, 2)
         """
@@ -304,9 +326,11 @@ class ATTNprojection(torch.nn.Module):
         c_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).to(device))
         
         output, (final_hidden_state, final_cell_state) = self.lstm(input, (h_0, c_0))
-        output = output.permute(1, 0, 2)  # output.size() = (batch_size, num_seq, hidden_size)
+        output = output.permute(1, 0, 2)                                                    # output.size() = (batch_size, num_seq, hidden_size)
         attn_output = self.attention_net(output, final_hidden_state)
+        
         return attn_output
+
 
     def dim(self):
         return self.hidden_size

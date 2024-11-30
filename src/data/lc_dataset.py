@@ -235,7 +235,7 @@ class LCDataset:
         self.loaded = True
         self.initialized = True
 
-        print("LCDataset initialized...\n")
+        #print("LCDataset initialized...\n")
 
 
 
@@ -492,7 +492,7 @@ class LCDataset:
         print("known_words:", type(known_words), len(known_words))
         
         if self.lcr_model is not None:
-            print("self.model: ", self.model)
+            print("self.lcr_model\n: ", self.model)
             known_words.update(self.lcr_model.vocabulary())         # polymorphic behavior
 
         self.word2index['UNKTOKEN'] = len(self.word2index)
@@ -768,12 +768,11 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
-        print("self.devel.data[0]:\n", self.devel.data[0])
+        print("self.devel.data[0]:\n", type(self.devel.data[0]), self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
-        print("self.test.data[0]:\n", self.test.data[0])
+        print("self.test.data[0]:\n", type(self.test.data[0]), self.test.data[0])
 
         #
         # preprocess: we remove stopwords, mask numbers and remove punctuation
@@ -786,7 +785,7 @@ class LCDataset:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
 
-        print("\t--- preprocessed text ---")
+        print("...preprocessed text...")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
         
@@ -866,12 +865,11 @@ class LCDataset:
         #
         # inspect the raw text
         #
-        print("\t--- unprocessed text ---")
         print("self.devel.data:", type(self.devel.data), len(self.devel.data))
-        print("self.devel.data[0]:\n", self.devel.data[0])
+        print("self.devel.data[0]:\n", type(self.devel.data[0]), self.devel.data[0])
 
         print("self.test.data:", type(self.test.data), len(self.test.data))
-        print("self.test.data[0]:\n", self.test.data[0])
+        print("self.test.data[0]:\n", type(self.test.data[0]), self.test.data[0])
 
         #
         # preprocess: we remove stopwords, mask numbers and remove punctuation
@@ -884,7 +882,7 @@ class LCDataset:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
 
-        print("\t--- preprocessed text ---")
+        print("...preprocessed text...")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
         

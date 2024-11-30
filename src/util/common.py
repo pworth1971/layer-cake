@@ -101,6 +101,37 @@ def load_pretrained_embeddings(model, args):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------------------
+
+
+def index_dataset(dataset, pretrained=None):
+
+    print(f"\n\tindexing dataset...")
+    
+    # retreive the vocabulary
+    word2index = dict(dataset.vocabulary)
+    known_words = set(word2index.keys())
+    if pretrained is not None:
+        known_words.update(pretrained.vocabulary())
+
+    word2index['UNKTOKEN'] = len(word2index)
+    word2index['PADTOKEN'] = len(word2index)
+    unk_index = word2index['UNKTOKEN']
+    pad_index = word2index['PADTOKEN']
+
+    # index documents and keep track of test terms outside the development vocabulary that are in GloVe (if available)
+    out_of_vocabulary = dict()
+    analyzer = dataset.analyzer()
+
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
+    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
+
+    #print('[indexing complete]')
+
+    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+
+
+
 def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents
@@ -120,6 +151,7 @@ def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
     unk_count = 0
     knw_count = 0
     out_count = 0
+
     pbar = tqdm(data, desc=f'indexing documents')
     for text in pbar:
         words = analyzer(text)
@@ -141,8 +173,8 @@ def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
         knw_count += len(index)
         pbar.set_description(f'[unk = {unk_count}/{knw_count}={(100.*unk_count/knw_count):.2f}%]'
                              f'[out = {out_count}/{knw_count}={(100.*out_count/knw_count):.2f}%]')
+    
     return indexes
-# ---------------------------------------------------------------------------------------------------------------------------------------
 
 
 def define_pad_length(index_list):
@@ -172,6 +204,9 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
         word_list += extract_word_list(word2index2)
     
     return word_list
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------------------
 
 
 def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
@@ -398,30 +433,6 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
         return comp_method + '-' + pt_type
 
 
-def index_dataset(dataset, pretrained=None):
-
-    print(f"indexing dataset...")
-    
-    # retreive the vocabulary
-    word2index = dict(dataset.vocabulary)
-    known_words = set(word2index.keys())
-    if pretrained is not None:
-        known_words.update(pretrained.vocabulary())
-
-    word2index['UNKTOKEN'] = len(word2index)
-    word2index['PADTOKEN'] = len(word2index)
-    unk_index = word2index['UNKTOKEN']
-    pad_index = word2index['PADTOKEN']
-
-    # index documents and keep track of test terms outside the development vocabulary that are in GloVe (if available)
-    out_of_vocabulary = dict()
-    analyzer = dataset.analyzer()
-    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
-    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
-
-    print('[indexing complete]')
-
-    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
 
 

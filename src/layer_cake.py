@@ -156,7 +156,7 @@ specific tasks.
 
 def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
 
-    print("\n------------------ init_Net() ------------------")
+    print("\n\t------------------ init_Net() ------------------")
 
     net_type = opt.net
     print("net_type:", net_type)
@@ -192,7 +192,7 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
     # Initialize parameters and move to device
     model.xavier_uniform()
     model = model.to(opt.device)
-    print("model:\n", model)
+    #print("model:\n", model)
 
     # Fine-tune if specified
     if opt.tunable:
@@ -200,12 +200,12 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
         model.finetune_pretrained()
 
     embsizeX, embsizeY = model.get_embedding_size()
-    print("embsizeX:", embsizeX)
-    print("embsizeY:", embsizeY)
+    #print("embsizeX:", embsizeX)
+    #print("embsizeY:", embsizeY)
 
     lrnsizeX, lrnsizeY = model.get_learnable_embedding_size()
-    print("lrnsizeX:", lrnsizeX)
-    print("lrnsizeY:", lrnsizeY)
+    #print("lrnsizeX:", lrnsizeX)
+    #print("lrnsizeY:", lrnsizeY)
 
     return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
     
@@ -213,36 +213,88 @@ def init_Net(opt, nC, vocabsize, pretrained_embeddings, sup_range):
 
 
 
-# ---------------------------------------------------------------------------------------------------------------------------
-# 
-# embedding_matrix(): construct the embedding matrix that model will use for input (text) representations. 
-# 
-# Pretrained Embeddings Loading: If the model configuration includes using pretrained embeddings 
-# (such as GloVe, Word2Vec, FastText or [BERT]), this function extracts these embeddings based 
-# on the vocabulary of thedataset. 
-# 
-# Supervised Embeddings Construction: If your setup includes supervised embeddings, the function 
-# constructs these embeddings based on the labels associated with the data, i.e. Word-Class Embeddings,
-# so as to integrate semantic information from the labels directly into the embeddings, improving 
-# model performance on specific tasks.
-#
-# Combination of Embeddings: If both pretrained and supervised embeddings are used, this function 
-# combines them into a single embedding matrix. This combination can be a simple concatenation along the 
-# feature dimension.
-#
-# Handling Missing Embeddings: The function also handles scenarios where certain words in the dataset 
-# vocabulary might not be covered by the pretrained embeddings. This often involves assigning a zero 
-# vector or some other form of default vector for these out-of-vocabulary (OOV) terms.
-#
-# Embedding Matrix Finalization: Finally, the function prepares the combined embedding matrix to be 
-# used by the neural network. This includes ensuring the matrix is of the correct size and format,
-# potentially converting it to a torch.Tensor if using PyTorch, and ensuring it's ready for GPU processing 
-# if necessary.
-# 
-# ---------------------------------------------------------------------------------------------------------------------------
-def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
 
-    print(f'embedding_matrix()... dataset: {dataset}, pretrained: {pretrained}, vocabsize: {vocabsize}, supervised: {opt.supervised}')
+def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
+    """
+    Construct the embedding matrix that the model will use for input (text) representations.
+
+    Parameters:
+    ----------
+    dataset : object
+        The dataset used for constructing supervised embeddings. Should have the `show()`, `vectorize()` 
+        methods and a `devel_labelmatrix` attribute. Contains training and label data.
+
+    pretrained : object or None
+        The pretrained embedding model (e.g., GloVe, Word2Vec, FastText, or Transformer-based). Expected 
+        to have an `extract()` method for retrieving embeddings. If `None`, no pretrained embeddings are included.
+
+    vocabsize : int
+        The size of the vocabulary for the dataset. Determines the number of rows in the final embedding matrix.
+
+    word2index : dict
+        A dictionary mapping each word in the dataset's vocabulary to a unique index. Used to place words in 
+        the correct positions in the embedding matrix.
+
+    out_of_vocabulary : list of str
+        A list of words not covered by the pretrained embeddings. These words are assigned default vectors 
+        (e.g., zero vectors) in the embedding matrix.
+
+    opt : object
+        Configuration options for embedding matrix construction. Includes:
+            - opt.pretrained (bool): Whether to include pretrained embeddings.
+            - opt.supervised (bool): Whether to include supervised embeddings.
+            - opt.supervised_method (str): Method used to generate supervised embeddings.
+            - opt.max_label_space (int): Maximum dimensionality for supervised embeddings.
+            - opt.nozscore (bool): Whether to disable z-score normalization of supervised embeddings.
+
+    Returns:
+    -------
+    pretrained_embeddings : torch.Tensor or None
+        The final embedding matrix for the model to use. If both pretrained and supervised embeddings are 
+        enabled, this matrix combines them. Shape: `(vocabsize, embedding_dim)`, where `embedding_dim` 
+        is the combined dimensionality of pretrained and supervised embeddings.
+
+    sup_range : list of int or None
+        The range of columns in the embedding matrix corresponding to supervised embeddings. If supervised 
+        embeddings are not included, this is `None`. For example, `[300, 500]` if supervised embeddings 
+        occupy columns 300–500.
+
+    Notes:
+    -----
+    - Handles missing words in the pretrained embeddings (`out_of_vocabulary`) by assigning default vectors.
+    - Combines pretrained and supervised embeddings if both are enabled.
+    - Ensures the embedding matrix is formatted correctly for use in neural networks (e.g., converting 
+      to `torch.Tensor`).
+
+    # 
+    # Pretrained Embeddings Loading: If the model configuration includes using pretrained embeddings 
+    # (such as GloVe, Word2Vec, FastText or [BERT]), this function extracts these embeddings based 
+    # on the vocabulary of thedataset. 
+    # 
+    # Supervised Embeddings Construction: If your setup includes supervised embeddings, the function 
+    # constructs these embeddings based on the labels associated with the data, i.e. Word-Class Embeddings,
+    # so as to integrate semantic information from the labels directly into the embeddings, improving 
+    # model performance on specific tasks.
+    #
+    # Combination of Embeddings: If both pretrained and supervised embeddings are used, this function 
+    # combines them into a single embedding matrix via concatenation along the feature dimension.
+    #
+    # Handling Missing Embeddings: The function also handles scenarios where certain words in the dataset 
+    # vocabulary might not be covered by the pretrained embeddings. This often involves assigning a zero 
+    # vector or some other form of default vector for these out-of-vocabulary (OOV) terms.
+    #
+    # Embedding Matrix Finalization: Finally, the function prepares the combined embedding matrix to be 
+    # used by the neural network. This includes ensuring the matrix is of the correct size and format,
+    # potentially converting it to a torch.Tensor if using PyTorch, and ensuring it's ready for GPU processing 
+    # if necessary.
+    #
+    """
+
+    print(f'embedding_matrix(): dataset: {dataset.show()}, pretrained: {pretrained.show()}, vocabsize: {vocabsize}, \
+          word2index: {len(word2index)}, oov: {len(out_of_vocabulary)}, supervised: {opt.supervised}')
+
+    print("word2index:", type(word2index), len(word2index))
+    print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
 
     pretrained_embeddings = None
     sup_range = None
@@ -523,8 +575,8 @@ if __name__ == '__main__':
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
     
-    parser.add_argument('--dropprob', type=float, default=0.5, metavar='[0.0, 1.0]',
-                        help='dropout probability (default: 0.5)')
+    parser.add_argument('--dropprob', type=float, default=0.2, metavar='[0.0, 1.0]',
+                        help='dropout probability (default: 0.2)')
     
     parser.add_argument('--seed', type=int, default=1, metavar='int',
                         help='random seed (default: 1)')
@@ -549,7 +601,7 @@ if __name__ == '__main__':
                         help=f'net, one in {NeuralClassifier.ALLOWED_NETS}')
     
     parser.add_argument('--pretrained', type=str, default=None, metavar='embeddings',
-                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", "roberts", "xlnet", "gpt2", or "llama" (default None)')
+                        help='pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", "roberts", "distilbert", "xlnet", "gpt2", or "llama" (default None)')
     
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
@@ -598,6 +650,10 @@ if __name__ == '__main__':
     parser.add_argument('--roberta-path', type=str, default=VECTOR_CACHE+'/RoBERTa',
                         metavar='PATH',
                         help=f'Directory to RoBERTa pretrained vectors, defaults to {VECTOR_CACHE}/RoBERTA. Used only with --pretrained roberta')
+
+    parser.add_argument('--distilbert-path', type=str, default=VECTOR_CACHE+'/DistilBERT',
+                        metavar='PATH',
+                        help=f'Directory to DistilBERT pretrained vectors, defaults to {VECTOR_CACHE}/DistilBERT. Used only with --pretrained distilbert')
     
     parser.add_argument('--xlnet-path', type=str, default=VECTOR_CACHE+'/XLNet',
                         metavar='PATH',
@@ -611,10 +667,6 @@ if __name__ == '__main__':
                         metavar='PATH',
                         help=f'Directory to LLaMA pretrained vectors, defaults to {VECTOR_CACHE}/LlaMa. Used only with --pretrained llama')
     
-    parser.add_argument('--distilbert-path', type=str, default=VECTOR_CACHE+'/DistilBERT',
-                        metavar='PATH',
-                        help=f'Directory to DistilBERT pretrained vectors, defaults to {VECTOR_CACHE}/DistilBERT. Used only with --pretrained distilbert')
-
     opt = parser.parse_args()
     print("opt:", type(opt), opt)
 
@@ -625,7 +677,6 @@ if __name__ == '__main__':
         opt.device = torch.device("mps")
     else:
         opt.device = torch.device("cpu")
-        
     print(f'running on {opt.device}')
 
     torch.manual_seed(opt.seed)
@@ -660,7 +711,8 @@ if __name__ == '__main__':
 
     # check to see if model params have been computed already
     if (already_modelled and not opt.force):
-        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and \
+              wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
         exit(0)
 
     #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
@@ -682,10 +734,12 @@ if __name__ == '__main__':
         emb_type=embedding_type                         # embedding type (word or token)
         )                                                
 
-    print("loaded LCDataset object:", type(lcd))
-    print("lcd:", lcd.show())
+    #print("loaded LCDataset object:", type(lcd))
+    print("lcd:") 
+    lcd.show()
 
     pretrained_vectors = lcd.lcr_model
+    print("lcd.lcr_model (pretrained_vectors):")
     pretrained_vectors.show()
 
     if (opt.pretrained is None):
@@ -696,15 +750,22 @@ if __name__ == '__main__':
         transformer_model = True
     else:
         toke = None
-        transdformer_model = False
+        transformer_model = False
+    print("transformer_model:", transformer_model)
+    print("tokenizer:", toke)
 
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset=lcd, pretrained=pretrained_vectors)
 
     print("word2index:", type(word2index), len(word2index))
     print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
 
-    print("training and validation data split...")
+    print("unk_index:", type(unk_index), unk_index)
+    print("pad_index:", type(pad_index), pad_index)
 
+    print("devel_index:", type(devel_index), len(devel_index))
+    print("test_index:", type(test_index), len(test_index))
+
+    print("training and validation data split...")
     val_size = min(int(len(devel_index) * .2), 20000)                   # dataset split tr/val/test
     print("val_size:", val_size)
 
@@ -753,48 +814,53 @@ if __name__ == '__main__':
     else:
         print("pretrained_embeddings: None")
     
-    model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
-    print("NN Model Specs:", model)
-
-    optim = init_optimizer(model, lr=opt.lr, weight_decay=opt.weight_decay)
-
+    lc_model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(opt, lcd.nC, vocabsize, pretrained_embeddings, sup_range)
+    print("lc_model::\n",lc_model)
+    
+    optim = init_optimizer(lc_model, lr=opt.lr, weight_decay=opt.weight_decay)
+    print("optim:", optim)
+    
     criterion = init_loss(lcd.classification_type, opt.device, class_weights)
-
+    print("criterion:", criterion)
+    
     #
     # establish dimensions (really shapes) of embedding and learning layers for logging
     #
+    
     emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
-    print("emb_size:", emb_size_str)
+    #print("emb_size:", emb_size_str)
     lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
-    print("lrn_size:", lrn_size_str)
+    #print("lrn_size:", lrn_size_str)
+    
     emb_size_str = f'{emb_size_str}:{lrn_size_str}'
+    print("emb_size_str:", emb_size_str)
 
     # train-validate
     tinit = time.time()
     create_if_not_exist(opt.checkpoint_dir)
-    early_stop = EarlyStopping(model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
+    early_stop = EarlyStopping(lc_model, patience=opt.patience, checkpoint=f'{opt.checkpoint_dir}/{opt.net}-{opt.dataset}')
 
     loss_history = {'train_loss': [], 'test_loss': []}              # Initialize loss tracking
 
     for epoch in range(1, opt.nepochs + 1):
 
         print(" \n-------------- EPOCH ", {epoch}, "-------------- ")    
-        train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
+        train(lc_model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch, method_name, loss_history)
         
-        macrof1, test_loss = test(model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str)
+        macrof1, test_loss = test(lc_model, val_index, yval, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'va', loss_history, embedding_size=emb_size_str)
 
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str)
+                test(lc_model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'te', loss_history, embedding_size=emb_size_str)
 
         if early_stop.STOP:
             print('[early-stop]')
             if not opt.plotmode:                # with plotmode activated, early-stop is ignored
                 break
 
-    print("\t...restoring best model...")
+    print("...restoring best model...")
 
     # restores the best model according to the Mf1 of the validation set (only when plotmode==False)
     stoptime = early_stop.stop_time - tinit
@@ -805,16 +871,16 @@ if __name__ == '__main__':
     if not opt.plotmode:
         print()
         print('...performing final evaluation...')
-        model = early_stop.restore_checkpoint()
+        es_model = early_stop.restore_checkpoint()
 
         if opt.val_epochs>0:
             print(f'last {opt.val_epochs} epochs on the validation set')
             for val_epoch in range(1, opt.val_epochs + 1):
-                train(model, val_index, yval, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch+val_epoch, method_name, loss_history)
+                train(es_model, val_index, yval, pad_index, tinit, logfile, criterion, optim, opt.dataset, epoch+val_epoch, method_name, loss_history)
 
         # test
         print('Training complete: testing')
-        test_loss = test(model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str)
+        test_loss = test(es_model, test_index, yte, pad_index, lcd.classification_type, tinit, epoch, logfile, criterion, 'final-te', loss_history, embedding_size=emb_size_str)
 
 
     if (opt.plotmode):                                          # Plot the training and testing loss after all epochs
