@@ -11,7 +11,7 @@
 #ATTN="--net attn --dropprob .2"
 
 PY="python ../src/layer_cake.py"                                # source file
-LOG="--log-file ../log/nn_cnn_mps2.test"                        # output log file for metrics
+LOG="--log-file ../log/nn_cnn_mps.test"                        # output log file for metrics
 
 CNN="--net cnn"
 LSTM="--net lstm"
@@ -24,7 +24,7 @@ NUM_RUNS=1
 declare -a embeddings=(
     ["GLOVE"]="--pretrained glove --glove-path ../.vector_cache/GloVe"
     ["WORD2VEC"]="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
-    #["FASTTEXT"]="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
+    ["FASTTEXT"]="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
     #["BERT"]="--pretrained bert --bert-path ../.vector_cache/BERT"
     #["ROBERTA"]="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
     #["XLNET"]="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
@@ -55,46 +55,43 @@ for dataset in "${datasets[@]}"; do
         echo "RUN: $run"
         
         # Base configurations for training without embeddings
-        #echo "$PY $LOG $dataset $CNN --learnable 200 --hidden 256 --seed $run --nepochs $EP"
-        #echo
-        #$PY $LOG $dataset   $CNN   --learnable 200 --hidden 256    --seed $run --nepochs $EP
-        #echo
+        echo "$PY $LOG $dataset $CNN --learnable 200 --hidden 256 --seed $run --nepochs $EP"
+        echo
+        $PY $LOG $dataset   $CNN   --learnable 200 --hidden 256    --seed $run --nepochs $EP
+        echo
 
-        #echo "$PY $LOG $dataset $CNN --learnable 200 --hidden 256 --supervised --seed $run --nepochs $EP"
-        #echo
-        #$PY $LOG $dataset	$CNN	--learnable 200	--hidden 256    --supervised   --seed $run    --nepochs $EP 
+        echo "$PY $LOG $dataset $CNN --learnable 200 --hidden 256 --supervised --seed $run --nepochs $EP"
+        echo
+        $PY $LOG $dataset	$CNN	--learnable 200	--hidden 256    --supervised   --seed $run    --nepochs $EP 
 
-        # Loop over ordered embeddings
-        for embedding in "${embeddings[@]}"; do
-
-            # Split the embedding name and command
-            embed_name=$(echo $embedding | awk '{print $2}')
-            embed_cmd=$(echo $embedding | cut -d' ' -f2-)
+        for embedding_key in "${!embeddings[@]}"; do
+            embed_name="$embedding_key"
+            embed_cmd="${embeddings[$embedding_key]}"
             
             echo
-            echo "-------- running $embed_name language model via $embedding --------"
+            echo "-------- Running $embed_name language model via $embed_cmd --------"
             echo
             
             #
             # Command with embedding configurations
             #
-            echo "$PY $LOG $dataset $CNN --hidden 256 $embedding --seed $run --nepochs $EP"
-            $PY $LOG $dataset $CNN --hidden 256 $embedding --seed $run --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --hidden 256 $embed_cmd --seed $run --nepochs $EP"
+            $PY $LOG $dataset $CNN --hidden 256 $embed_cmd --seed $run --nepochs $EP
             
-            #echo "$PY $LOG $dataset $CNN --hidden 256 $embedding --tunable --seed $run --nepochs $EP"
-            #$PY $LOG $dataset $CNN --hidden 256 $embedding --tunable --seed $run --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --hidden 256 $embed_cmd --tunable --seed $run --nepochs $EP"
+            $PY $LOG $dataset $CNN --hidden 256 $embed_cmd --tunable --seed $run --nepochs $EP
             
-            #echo "$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embedding --tunable --seed $run --droptype learn --nepochs $EP"
-            #$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embedding --tunable --seed $run --droptype learn --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embed_cmd --tunable --seed $run --droptype learn --nepochs $EP"
+            $PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embed_cmd --tunable --seed $run --droptype learn --nepochs $EP
             
-            echo "$PY $LOG $dataset $CNN --hidden 2048 $embedding --supervised --seed $run --nepochs $EP"
-            $PY $LOG $dataset $CNN --hidden 2048 $embedding --supervised --seed $run --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --hidden 2048 $embed_cmd --supervised --seed $run --nepochs $EP"
+            $PY $LOG $dataset $CNN --hidden 2048 $embed_cmd --supervised --seed $run --nepochs $EP
             
-            #echo "$PY $LOG $dataset $CNN --hidden 1024 $embedding --supervised --tunable --seed $run --nepochs $EP"
-            #$PY $LOG $dataset $CNN --hidden 1024 $embedding --supervised --tunable --seed $run --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --hidden 1024 $embed_cmd --supervised --tunable --seed $run --nepochs $EP"
+            $PY $LOG $dataset $CNN --hidden 1024 $embed_cmd --supervised --tunable --seed $run --nepochs $EP
             
-            #echo "$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embedding --supervised --tunable --seed $run --droptype learn --nepochs $EP"
-            #$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embedding --supervised --tunable --seed $run --droptype learn --nepochs $EP
+            echo "$PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embed_cmd --supervised --tunable --seed $run --droptype learn --nepochs $EP"
+            $PY $LOG $dataset $CNN --learnable 20 --hidden 256 $embed_cmd --supervised --tunable --seed $run --droptype learn --nepochs $EP
 
         done
 

@@ -33,13 +33,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-"""
-import torchtext
-torchtext.disable_torchtext_deprecation_warning()
-"""
-
-
-
 #
 # TODO: Set up logging
 #
@@ -50,9 +43,11 @@ logging.basicConfig(filename='../log/application.log', level=logging.DEBUG,
 """
 layer_cake.py:
 --------------------------------------------------------------------------------------------------------------------------------
-Driver code to test out pretrained embeddings (GloVe, Word2Vec, FastText, BERT, RoBERTa, XLNet, GPT2, or LlaMa) and word-class embeddings 
-as defined in the relevant paper (see README) into different neural network classifiers. 
-
+Driver code to test out pretrained embeddings (GloVe, Word2Vec, FastText, BERT, RoBERTa, DistilBERT, XLNet, GPT2, or LlaMa) and 
+word-class embeddings (WCEs) in a neural network classifier for text classification tasks. The script loads a dataset, preprocesses
+it, and trains a neural network model with the specified embeddings. It also evaluates the model on a test set and logs the 
+results. The script includes functions for loading pretrained embeddings, constructing the embedding matrix, initializing the neural 
+model, training the model, and evaluating its performance. It also handles logging, early stopping, and other system configurations.
 
 1. Model Structure and Embedding Types
 The python code first loads pretrained embeddings based on the specified type (GloVe, Word2Vec, FastText, BERT, RoBERTA, XLNet, GPT2, 
@@ -83,23 +78,8 @@ If a word in the dataset's vocabulary is not covered by pretrained embeddings, t
 assigning a zero vector or a default fallback vector.
 
 Dataset 
-from sklearn.preprocessing import LabelEncoder
-
-# Assuming this is defined globally or passed to the function
-label_encoder = LabelEncoder()
-
-
-def encode_labels(labels):
-    # Fit and transform labels using the encoder if it's not already fitted
-    return label_encoder.transform(labels)
-
-# Fit the LabelEncoder once on the entire labels if not already fitted
-    if not hasattr(label_encoder, 'classes_'):
-        label_encoder.fit(labels)
-        print("Label classes:", label_encoder.classes_)
-:
-The dataset is vectorized, and vocabulary indices (word2index) are created. Out-of-vocabulary (OOV) terms are managed using an OOV index. The 
-train-test split is performed with the help of train_test_split from sklearn.
+The dataset is vectorized, and vocabulary indices (word2index) are created. Out-of-vocabulary (OOV) terms are managed using an 
+OOV index. The train-test split is performed with the help of train_test_split from sklearn.
 
 
 3. Neural Model (Classifier) Architecture 
@@ -516,8 +496,8 @@ if __name__ == '__main__':
     parser.add_argument('--nepochs', type=int, default=100, metavar='int',
                         help='number of epochs (default: 100)')
     
-    parser.add_argument('--patience', type=int, default=10, metavar='int',
-                        help='patience for early-stop (default: 10)')
+    parser.add_argument('--patience', type=int, default=3, metavar='int',
+                        help='patience for early-stop (default: 3)')
     
     parser.add_argument('--plotmode', action='store_true', default=False,
                         help='in plot mode, executes a long run in order to generate enough data to produce trend plots'
@@ -631,8 +611,9 @@ if __name__ == '__main__':
                         metavar='PATH',
                         help=f'Directory to LLaMA pretrained vectors, defaults to {VECTOR_CACHE}/LlaMa. Used only with --pretrained llama')
     
-    parser.add_argument('--batch-file', type=str, default=None, metavar='str',
-                        help='path to the config file used for batch processing of multiple experiments')
+    parser.add_argument('--distilbert-path', type=str, default=VECTOR_CACHE+'/DistilBERT',
+                        metavar='PATH',
+                        help=f'Directory to DistilBERT pretrained vectors, defaults to {VECTOR_CACHE}/DistilBERT. Used only with --pretrained distilbert')
 
     opt = parser.parse_args()
     print("opt:", type(opt), opt)
@@ -675,7 +656,7 @@ if __name__ == '__main__':
         logging.warning(f'droptype="learn" but learnable=0; the droptype changed to "none"')
     
     # initialize logging and other system run variables
-    already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(opt)
+    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(opt)
 
     # check to see if model params have been computed already
     if (already_modelled and not opt.force):
@@ -684,7 +665,7 @@ if __name__ == '__main__':
 
     #pretrained, pretrained_vectors = load_pretrained_embeddings(opt.pretrained, opt)
 
-    embedding_type = get_embedding_type(opt)
+    #embedding_type = get_embedding_type(opt)
     print("embedding_type:", embedding_type)
     print("embeddings:", embeddings)    
     print("embedding_path:", emb_path)
@@ -710,7 +691,7 @@ if __name__ == '__main__':
     if (opt.pretrained is None):
         pretrained_vectors = None
 
-    if opt.pretrained in ['bert', 'roberta', 'xlnet', 'gpt2', 'llama']:
+    if opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']:
         toke = lcd.tokenizer
         transformer_model = True
     else:

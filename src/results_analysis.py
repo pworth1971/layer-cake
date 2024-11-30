@@ -26,6 +26,95 @@ Y_AXIS_THRESHOLD = 0.25                                     # when to start the 
 
 def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
     """
+    Generates combined bar charts for word-based, subword-based, and token-based models on the same chart.
+    """
+    print("Generating combined charts for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df shape after filtering for measures:", df_measures.shape)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Set colorblind-friendly style
+    sns.set(style="whitegrid")
+
+    # Get today's date for file naming
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            for model in df['model'].unique():
+                # Filter data for the current combination
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    continue
+
+                # Extract the base embeddings (everything before the colon)
+                if (neural):
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+                # Combine representation and dimensions into a single label for x-axis
+                df_subset['rep_dim'] = df_subset.apply(
+                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+                )
+
+                # Sort by dimensions in descending order
+                df_subset = df_subset.sort_values(by='dimensions', ascending=False)
+
+                # Create a color palette based on unique embedding types
+                unique_embeddings = df_subset['embedding_type'].nunique()
+                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
+                # Create the plot
+                plt.figure(figsize=(20, 12))
+                sns.barplot(
+                    data=df_subset,
+                    x='rep_dim',
+                    y='value',
+                    hue='embedding_type',
+                    palette=color_palette,
+                    order=df_subset['rep_dim']
+                )
+
+                # Customize the plot
+                plt.title(
+                    f"Dataset: {dataset}, Model: {model}, Measure: {measure}",
+                    fontsize=20, weight='bold'
+                )
+                plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)
+                plt.ylabel(measure, fontsize=14)
+                plt.ylim(y_axis_threshold, 1)
+                plt.xticks(rotation=45, ha='right', fontsize=9, fontweight='bold')
+                plt.yticks(fontsize=9, fontweight='bold')
+                plt.legend(title="Embedding Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=14)
+                plt.tight_layout()
+
+                # Save the plot
+                plot_file_name = f"{dataset}_{measure}_{model}_combined_{today}.png"
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
+                print(f"Saved plot to {output_path}/{plot_file_name}")
+
+                # Optionally show the plot
+                if show_charts:
+                    plt.show()
+
+
+
+
+def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+    """
     The generate_charts_matplotlib function generates bar charts for each combination of model, dataset, measure, and embedding type 
     from a given DataFrame. It uses Matplotlib and Seaborn to create plots that are colorblind-friendly, showing the performance of 
     models based on a specific measure for a given dataset and embedding type.

@@ -17,36 +17,30 @@ ATTN="--net attn"
 #LSTM="--net lstm --dropprob .2"
 #ATTN="--net attn --dropprob .2"
 
-EP="65"                # number of epochs
+EP="75"                # number of epochs
 NUM_RUNS=1
 
 
-# embedding config command arguments
-declare -a embeddings=(
-    ["GLOVE"]="--pretrained glove --glove-path ../.vector_cache/GloVe"
-    ["WORD2VEC"]="--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
-    #["FASTTEXT"]="--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
-    #["BERT"]="--pretrained bert --bert-path ../.vector_cache/BERT"
-    #["ROBERTA"]="--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
-    #["DISTILBERT"]="--pretrained distilbert --distilbert-path ../.vector_cache/DistilBERT"
-    #["XLNET"]="--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
-    #["GPT2"]="--pretrained gpt2 --gpt2-path ../.vector_cache/GPT2"
-    #["LLAMA"]="--pretrained llama --llama-path ../.vector_cache/LLaMa"
+# Embedding config command arguments
+embeddings=(
+    "--pretrained glove --glove-path ../.vector_cache/GloVe"
+    "--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
+    "--pretrained bert --bert-path ../.vector_cache/BERT"
+    "--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
+    "--pretrained distilbert --distilbert-path ../.vector_cache/DistilBERT"
 )
 
-#
-# dataset config (list of datasets)
-#
+# Dataset config (list of datasets)
 datasets=(
-    "--dataset 20newsgroups"        # 20newsgroups (single label, 20 classes)
-    "--dataset reuters21578"        # reuters21578 (multi-label, 115 classes)
-    "--dataset bbc-news"            # bbc-news (single label, 5 classes)
-    "--dataset ohsumed"             # ohsumed (multi-label, 23 classes)
-    "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
+    "--dataset 20newsgroups"
+    "--dataset reuters21578"
+    "--dataset bbc-news"
+    "--dataset ohsumed"
 )
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
+set -x  # Enable debugging
 
 for dataset in "${datasets[@]}"; do
     echo
@@ -54,7 +48,6 @@ for dataset in "${datasets[@]}"; do
     echo "---------- Processing dataset: $dataset ----------"
 
     for ((run=1; run<=NUM_RUNS; run++)); do
-    
         echo "RUN: $run"
 
         # Base configurations for training without embeddings
@@ -67,38 +60,39 @@ for dataset in "${datasets[@]}"; do
         #echo
         #$PY $LOG $dataset	$ATTN	--learnable 200	--hidden 256    --supervised   --seed $run    --nepochs $EP 
 
-        # Loop over ordered embeddings
         for embedding in "${embeddings[@]}"; do
+            echo
+            echo "-------- running language model via: $embedding --------"
+            echo
 
-            # Split the embedding name and command
-            embed_name=$(echo $embedding | awk '{print $2}')
-            embed_cmd=$(echo $embedding | cut -d' ' -f2-)
-            
-            echo
-            echo "-------- running $embed_name language model via $embedding --------"
-            echo
-            
             #
             # Command with embedding configurations
             #
             echo "$PY $LOG $dataset $ATTN --hidden 256 $embedding --seed $run --nepochs $EP"
             $PY $LOG $dataset $ATTN --hidden 256 $embedding --seed $run --nepochs $EP
+            echo
             
             #echo "$PY $LOG $dataset $ATTN --hidden 256 $embedding --tunable --seed $run --nepochs $EP"
             #$PY $LOG $dataset $ATTN --hidden 256 $embedding --tunable --seed $run --nepochs $EP
-            
+            #echo
+
             #echo "$PY $LOG $dataset $ATTN --learnable 20 --hidden 256 $embedding --tunable --seed $run --droptype learn --nepochs $EP"
             #$PY $LOG $dataset $ATTN --learnable 20 --hidden 256 $embedding --tunable --seed $run --droptype learn --nepochs $EP
-            
+            #echo
+
             echo "$PY $LOG $dataset $ATTN --hidden 2048 $embedding --supervised --seed $run --nepochs $EP"
             $PY $LOG $dataset $ATTN --hidden 2048 $embedding --supervised --seed $run --nepochs $EP
-            
+            echo
+
             #echo "$PY $LOG $dataset $ATTN --hidden 1024 $embedding --supervised --tunable --seed $run --nepochs $EP"
             #$PY $LOG $dataset $ATTN --hidden 1024 $embedding --supervised --tunable --seed $run --nepochs $EP
-            
+            #echo
+
             #echo "$PY $LOG $dataset $ATTN --learnable 20 --hidden 256 $embedding --supervised --tunable --seed $run --droptype learn --nepochs $EP"
             #$PY $LOG $dataset $ATTN --learnable 20 --hidden 256 $embedding --supervised --tunable --seed $run --droptype learn --nepochs $EP
+            #echo
         done
-
+    
     done
+
 done

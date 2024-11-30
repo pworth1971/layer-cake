@@ -476,7 +476,9 @@ def get_language_model_type(embeddings):
 
 def get_embedding_type(pretrained):
 
-    if (pretrained is not None and pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'gpt2', 'llama']):
+    print("get_embedding_type():", {pretrained})
+
+    if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']):
         embedding_type = 'token'
     elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
         embedding_type = 'word'
@@ -649,7 +651,7 @@ def initialize_testing(args):
 
     print("already_modelled:", already_modelled)
 
-    return already_modelled, logger, method_name, pretrained, embeddings, emb_path, lm_type, mode, system
+    return already_modelled, logger, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------

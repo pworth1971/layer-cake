@@ -16,24 +16,33 @@ datasets=(
     "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
 )
 
-# Pretrained embeddings array
-declare -A embeddings=(
-    ["BERT"]="--pretrained bert"
-    ["ROBERTA"]="--pretrained roberta"
-    ["DISTILBERT"]="--pretrained distilbert"
-    ["XLNET"]="--pretrained xlnet"
-    ["GPT2"]="--pretrained gpt2"
-    ["LLAMA"]="--pretrained llama"
+
+# Pretrained embeddings array (indexed to preserve order)
+embedding_names=(
+    "BERT"
+    "ROBERTA"
+    "DISTILBERT"
+    "XLNET"
+    "GPT2"
+)
+
+embedding_args=(
+    "--pretrained bert"
+    "--pretrained roberta"
+    "--pretrained distilbert"
+    "--pretrained xlnet"
+    "--pretrained gpt2"
 )
 
 # Iterate through datasets and embeddings
 for dataset in "${datasets[@]}"; do
-    for embedding_name in "${!embeddings[@]}"; do
-        embedding_args=${embedd ings[$embedding_name]}
+    for i in "${!embedding_names[@]}"; do
+        embed_name="${embedding_names[$i]}"
+        embed_arg="${embedding_args[$i]}"
         
-        echo "Running: $PROGRAM_NAME $dataset $embedding_args --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
         
         # Execute the Python program with the current arguments
-        python $PROGRAM_NAME $dataset $embedding_args --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
     done
 done

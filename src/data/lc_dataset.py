@@ -373,7 +373,7 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'roberta', 'xlnet', 'fasttext', 'llama']):      
+        if (self.pretrained in ['fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'llama']):      
 
             print("generating token / subword based dataset representations...")
 
@@ -449,7 +449,6 @@ class LCDataset:
             # word embedding models like word2vec, GloVe or fasTtext
             self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
             self.Xte_summary_embeddings = self.Xte_avg_embeddings
-
 
         print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
         print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
@@ -1556,6 +1555,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'fasttext': FASTTEXT_MODEL,
         'bert': BERT_MODEL,
         'roberta': ROBERTA_MODEL,
+        'distilbert': DISTILBERT_MODEL,
         'gpt2': GPT2_MODEL,
         'xlnet': XLNET_MODEL,
         'llama': LLAMA_MODEL

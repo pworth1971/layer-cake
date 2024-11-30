@@ -17,9 +17,11 @@ from transformers import  logging as transformers_logging
 
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'llama', 'xlnet', 'gpt2']
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+
 
 VECTOR_CACHE = '../.vector_cache'
+
 
 
 from huggingface_hub import login

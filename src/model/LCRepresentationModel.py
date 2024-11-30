@@ -163,6 +163,7 @@ class LCRepresentationModel(RepresentationModel, ABC):
         
         self.max_length = 512
 
+
     def _download_file(self, url, destination):
         """
         Helper function to download a file from a URL.
@@ -886,10 +887,12 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
 
 
 
+
 # -----------------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
-class TransformerLCRepresentationModel(LCRepresentationModel):
+
+class TransformerLCRepresentationModelOld(LCRepresentationModel):
     """
     Base class for Transformer based architcteure langugae models such as BERT, RoBERTa, XLNet and GPT2
     """
@@ -1172,6 +1175,349 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
 
 
 
+
+# -----------------------------------------------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------------------------
+
+
+class TransformerLCRepresentationModel(LCRepresentationModel):
+    """
+    Base class for Transformer based architcteure langugae models such as BERT, RoBERTa, XLNet and GPT2
+    """
+    
+    def __init__(self, model_name, model_dir, vtype='tfidf'):
+
+        super().__init__(model_name, model_dir)
+    
+
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
+        """
+        input_ids = []
+        attention_masks = []
+
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention mask
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,                                # Add special tokens like [CLS] and [SEP]
+                max_length=self.max_length,                             # Truncate sequences to this length
+                padding='max_length',                                   # Pad sequences to the max_length
+                return_attention_mask=True,                             # Generate attention mask
+                return_tensors='pt',                                    # Return PyTorch tensors
+                truncation=True                                         # Ensure truncation to max_length
+            )
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
+         
+
+    def _compute_mean_embedding(self):
+        """
+        Compute the mean embedding vector using all tokens in the model's vocabulary.
+        This vector will be used for handling OOV tokens.
+        """
+        vocab = list(self.tokenizer.get_vocab().keys())
+        batch_size = self.batch_size
+        total_embeddings = []
+
+        # Process the tokens in batches with a progress bar
+        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
+            for i in range(0, len(vocab), batch_size):
+                batch_tokens = vocab[i:i + batch_size]
+                
+                # Tokenize the batch of tokens, ensuring attention_mask is created
+                inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
+
+                # Pass through the model to get token embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                total_embeddings.append(token_embeddings)
+
+                # Update the progress bar with the actual batch size
+                pbar.update(len(batch_tokens))
+
+        # Concatenate all embeddings and compute the mean embedding
+        total_embeddings = np.concatenate(total_embeddings, axis=0)
+        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
+        print(f"Mean embedding shape: {mean_embedding.shape}")
+
+        return mean_embedding
+
+
+
+    def dim(self):
+        # Return the hidden size of the Transformer model
+        return self.model.config.hidden_size
+
+    
+    def extract(self, words, pooling='mean'):
+        """
+        Extract embeddings for a list of words using the Transformer model.
+        
+        Parameters:
+        ----------
+        words : list of str
+            List of words for which embeddings are to be extracted.
+        pooling : str, optional
+            Pooling strategy to aggregate subword embeddings. Choices: 'mean', 'max'. Defaults to 'mean'.
+            
+        Returns:
+        -------
+        torch.Tensor
+            Tensor of word embeddings where each row corresponds to a word.
+        """
+        if pooling not in ['mean', 'max']:
+            raise ValueError("Pooling must be 'mean' or 'max'.")
+
+        print(f"Extracting embeddings for words using {self.model_name} model with {pooling} pooling...")
+
+        # Initialize empty list to store embeddings
+        embeddings = []
+
+        # Process words in batches to avoid OOM
+        for batch in tqdm([words[i:i + self.batch_size] for i in range(0, len(words), self.batch_size)]):
+            # Tokenize each word in the batch and collect their input IDs and attention masks
+            inputs = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                return_tensors='pt',
+                max_length=self.max_length,
+                is_split_into_words=False  # Ensure tokens are processed as whole words
+            )
+            input_ids = inputs['input_ids'].to(self.device)
+            attention_mask = inputs['attention_mask'].to(self.device)
+
+            with torch.no_grad():  # No gradients needed during extraction
+                try:
+                    # Optionally enable mixed precision for memory optimization
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                    # Extract token embeddings (last hidden state of the model)
+                    token_embeddings = outputs.last_hidden_state  # Shape: [batch_size, seq_len, hidden_dim]
+
+                    # Aggregate subword embeddings for each word in the batch
+                    if pooling == 'mean':
+                        # Mean pooling: average over sequence length
+                        batch_embeddings = token_embeddings.mean(dim=1)
+                    elif pooling == 'max':
+                        # Max pooling: max over sequence length
+                        batch_embeddings = token_embeddings.max(dim=1).values
+                    
+                    embeddings.append(batch_embeddings.cpu().numpy())
+
+                except RuntimeError as e:
+                    print(f"RuntimeError during extraction: {e}")
+                    if 'out of memory' in str(e):
+                        print('Clearing CUDA cache to free memory.')
+                        torch.cuda.empty_cache()  # Clear the cache in case of memory issues
+                    else:
+                        raise e  # Re-raise if it's not a memory-related issue
+
+            # Free up memory after each batch
+            torch.cuda.empty_cache()
+
+        # Concatenate all embeddings together after processing batches
+        embeddings = np.concatenate(embeddings, axis=0)
+
+        # Convert to PyTorch tensor and return as a float tensor
+        extraction = torch.from_numpy(embeddings).float()
+
+        return extraction
+
+    
+    def vocabulary(self):
+        # Get the tokenizer vocabulary from the model
+        return set(self.tokenizer.get_vocab().keys())
+    
+
+    def build_embedding_vocab_matrix(self):
+        """
+        Build the embedding vocabulary matrix for Transformer model, as a function of the underlying
+        tokenizer and model architecture.
+        """
+        print("Building embedding vocab matrix for Transformer model...")
+
+        self.model.eval()
+        self.model = self.model.to(self.device)
+
+        embedding_dim = self.model.config.hidden_size
+        vocabulary = list(self.vectorizer.vocabulary_.keys())  # Tokens from the vectorizer
+
+        # Initialize an empty embedding matrix
+        self.embedding_vocab_matrix = np.zeros((len(vocabulary), embedding_dim))
+
+        # Precompute the mean embedding for OOV handling
+        self.mean_embedding = self._compute_mean_embedding()
+
+        oov_list = []  # Keep track of OOV tokens
+
+        # Helper function to process a batch of tokens
+        def process_batch(batch_tokens):
+            inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+            input_ids = inputs['input_ids'].to(self.device)
+            attention_mask = inputs['attention_mask'].to(self.device)
+
+            # Get token embeddings from model
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+            # Aggregate embeddings (mean pooling as default)
+            return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+        batch_size = self.batch_size
+
+        # Add a progress bar to track the processing of the vocabulary
+        with tqdm(total=len(vocabulary), desc="computing transformer embedding vocab matrix...", unit="token") as pbar:
+            for i in range(0, len(vocabulary), batch_size):
+                batch_tokens = vocabulary[i:i + batch_size]
+                embeddings = []
+
+                for token in batch_tokens:
+                    # Re-tokenize using the model tokenizer
+                    subwords = self.tokenizer.tokenize(token)
+
+                    if subwords:
+                        # Process subwords as a batch
+                        subword_embeddings = process_batch(subwords)
+                        # Pool subword embeddings (mean pooling as default)
+                        token_embedding = np.mean(subword_embeddings, axis=0)
+                        embeddings.append(token_embedding)
+                    else:
+                        # Handle OOV tokens
+                        oov_list.append(token)
+                        embeddings.append(self.mean_embedding)
+
+                # Assign embeddings to the embedding matrix
+                for j, embedding in enumerate(embeddings):
+                    self.embedding_vocab_matrix[i + j] = embedding
+
+                # Update the progress bar by the batch size
+                pbar.update(batch_size)
+
+        print("self.embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        print(f"OOV tokens: {len(oov_list)} encountered.")
+
+        return self.embedding_vocab_matrix
+
+
+
+    def encode_docs(self, text_list, pooling_strategy='mean'):
+        """
+        Encode documents using Transformer-based embeddings.
+
+        For each document:
+        - Use vectorizer tokens (already tokenized by `_custom_tokenizer`).
+        - For each token, compute its embedding using subwords via pooling (mean or max).
+        - Aggregate token embeddings to form the document embedding.
+
+        Parameters:
+        ----------
+        text_list : list of str
+            List of documents to encode.
+        pooling_strategy : str, optional
+            Pooling strategy for subwords ('mean' or 'max'), defaults to 'mean'.
+
+        Returns:
+        -------
+        doc_embeddings : np.ndarray
+            Array of document embeddings.
+        oov_tokens : list
+            List of OOV tokens encountered during processing.
+        """
+        print(f"Encoding documents using Transformer-based embeddings with {pooling_strategy} pooling...")
+
+        self.model.eval()
+        self.model = self.model.to(self.device)
+
+        doc_embeddings = []
+        oov_tokens = []
+        token_cache = {}
+
+        def process_batch(batch_tokens):
+            inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+            input_ids = inputs['input_ids'].to(self.device)
+            attention_mask = inputs['attention_mask'].to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+            token_vectors = outputs.last_hidden_state
+            if pooling_strategy == 'mean':
+                return token_vectors.mean(dim=1).cpu().numpy()
+            elif pooling_strategy == 'max':
+                return token_vectors.max(dim=1).values.cpu().numpy()
+
+        for doc in tqdm(text_list, desc="Processing documents"):
+            tokens = self.vectorizer.build_analyzer()(doc)
+            token_embeddings = []
+
+            for token in tokens:
+                if token in token_cache:
+                    token_embeddings.append(token_cache[token])
+                elif token in self.tokenizer.get_vocab():
+                    embedding = process_batch([token])[0]
+                    token_cache[token] = embedding
+                    token_embeddings.append(embedding)
+                else:
+                    oov_tokens.append(token)
+                    token_embeddings.append(self.mean_embedding)
+
+            if token_embeddings:
+                token_embeddings = np.stack(token_embeddings)
+                if pooling_strategy == 'mean':
+                    doc_embedding = np.mean(token_embeddings, axis=0)
+                elif pooling_strategy == 'max':
+                    doc_embedding = np.max(token_embeddings, axis=0)
+            else:
+                doc_embedding = self.mean_embedding
+
+            doc_embeddings.append(doc_embedding)
+
+        doc_embeddings = np.stack(doc_embeddings)
+        print(f"Document embeddings shape: {doc_embeddings.shape}")
+        print(f"Number of OOV tokens encountered: {len(oov_tokens)}")
+
+        return doc_embeddings, doc_embeddings
+
+
+
+
 class BERTLCRepresentationModel(TransformerLCRepresentationModel):
     """
     BERTRepresentation subclass implementing sentence encoding using BERT
@@ -1258,6 +1604,7 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
+
 
 
 class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
