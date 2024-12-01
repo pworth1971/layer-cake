@@ -104,7 +104,119 @@ def load_pretrained_embeddings(model, args):
 # ---------------------------------------------------------------------------------------------------------------------------------------
 
 
-def index_dataset(dataset, pretrained=None):
+def index_dataset(dataset, pretrained=None, tokenizer=None):
+    """
+    Index the dataset using the provided tokenizer and vocabulary.
+
+    Parameters:
+    ----------
+    dataset : object
+        The dataset object containing raw documents and a TF-IDF vectorizer vocabulary.
+    pretrained : object or None
+        Pretrained embedding model with a `vocabulary` method. Defaults to None.
+    tokenizer : object or None
+        HuggingFace tokenizer for Transformer models. If None, uses the analyzer from the dataset.
+
+    Returns:
+    -------
+    word2index : dict
+        Mapping of words to their indices in the vocabulary.
+    out_of_vocabulary : dict
+        Mapping of OOV words to their assigned indices.
+    unk_index : int
+        Index of the unknown token.
+    pad_index : int
+        Index of the padding token.
+    devel_index : list of lists
+        Indexed version of the development dataset.
+    test_index : list of lists
+        Indexed version of the test dataset.
+    """
+    print(f"\n\tIndexing dataset...")
+
+    # Retrieve the vocabulary from the dataset or pretrained embeddings
+    word2index = dict(dataset.vocabulary)
+    known_words = set(word2index.keys())
+    if pretrained is not None:
+        known_words.update(pretrained.vocabulary())
+
+    # Add special tokens to the vocabulary
+    word2index['UNKTOKEN'] = len(word2index)
+    word2index['PADTOKEN'] = len(word2index)
+    unk_index = word2index['UNKTOKEN']
+    pad_index = word2index['PADTOKEN']
+
+    # Analyzer or tokenizer
+    if tokenizer:
+        # HuggingFace tokenizer; assumes `tokenizer` is provided for Transformer models
+        print(f"Using Transformer tokenizer: {tokenizer.__class__.__name__}")
+        analyze_fn = lambda text: tokenizer.tokenize(text)
+    else:
+        # Default analyzer from the dataset
+        analyze_fn = dataset.analyzer()
+
+    # Index documents
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyze_fn, unk_index, {})
+    test_index = index(dataset.test_raw, word2index, known_words, analyze_fn, unk_index, {})
+
+    return word2index, {}, unk_index, pad_index, devel_index, test_index
+
+
+def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
+    """
+    Index a list of string documents.
+
+    Parameters:
+    ----------
+    data : list of str
+        List of documents to be indexed.
+    vocab : dict
+        Fixed mapping [str] -> [int] for words.
+    known_words : set
+        Set of known words (e.g., words in pretrained embeddings).
+    analyzer : callable
+        Function to tokenize the documents.
+    unk_index : int
+        Index of the unknown token.
+    out_of_vocabulary : dict
+        Mapping of OOV words to indices.
+
+    Returns:
+    -------
+    list of lists
+        Indexed version of the documents.
+    """
+    indexes = []
+    vocabsize = len(vocab)
+    unk_count = 0
+    knw_count = 0
+    out_count = 0
+
+    pbar = tqdm(data, desc=f'Indexing documents')
+    for text in pbar:
+        tokens = analyzer(text)
+        index = []
+        for token in tokens:
+            if token in vocab:
+                idx = vocab[token]
+            elif token in known_words:
+                if token not in out_of_vocabulary:
+                    out_of_vocabulary[token] = vocabsize + len(out_of_vocabulary)
+                idx = out_of_vocabulary[token]
+                out_count += 1
+            else:
+                idx = unk_index
+                unk_count += 1
+            index.append(idx)
+        indexes.append(index)
+        knw_count += len(index)
+        pbar.set_description(f'[UNK = {unk_count}/{knw_count} = {(100. * unk_count / knw_count):.2f}%]'
+                             f'[OOV = {out_count}/{knw_count} = {(100. * out_count / knw_count):.2f}%]')
+    return indexes
+
+
+
+def index_dataset_old(dataset, pretrained=None):
 
     print(f"\n\tindexing dataset...")
     
@@ -132,7 +244,7 @@ def index_dataset(dataset, pretrained=None):
 
 
 
-def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
+def index_old(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents
     
@@ -207,6 +319,21 @@ def get_word_list(word2index1, word2index2=None): #TODO: redo
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # ---------------------------------------------------------------------------------------------------------------------------------------
+
+
+def batchify_legacy(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):
+    nsamples = len(index_list)
+    nbatches = nsamples // batchsize + 1*(nsamples%batchsize>0)
+    for b in range(nbatches):
+        batch = index_list[b*batchsize:(b+1)*batchsize]
+        batch_labels = labels[b*batchsize:(b+1)*batchsize]
+        if issparse(batch_labels):
+            batch_labels = batch_labels.toarray()
+        batch = pad(batch, pad_index=pad_index, max_pad_length=max_pad_length)
+        batch = torch.LongTensor(batch)
+        totype = torch.LongTensor if target_long else torch.FloatTensor
+        target = totype(batch_labels)
+        yield batch.to(device), target.to(device)
 
 
 def batchify(index_list, labels, batchsize, pad_index, device, target_long=False, max_pad_length=500):

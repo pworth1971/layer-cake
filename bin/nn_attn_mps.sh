@@ -6,7 +6,7 @@
 
 
 PY="python ../src/layer_cake.py"                                        # source file
-LOG="--log-file ../log/nn_attn_mps.test"                                # output log file for metrics
+LOG="--log-file ../log/nn_attn_mps2.test"                                # output log file for metrics
 
 CNN="--net cnn"
 LSTM="--net lstm"
@@ -17,7 +17,7 @@ ATTN="--net attn"
 #LSTM="--net lstm --dropprob .2"
 #ATTN="--net attn --dropprob .2"
 
-EP="75"                # number of epochs
+EP="85"                # number of epochs
 NUM_RUNS=1
 
 
@@ -25,18 +25,23 @@ NUM_RUNS=1
 embeddings=(
     "--pretrained glove --glove-path ../.vector_cache/GloVe"
     "--pretrained word2vec --word2vec-path ../.vector_cache/Word2Vec"
-    "--pretrained bert --bert-path ../.vector_cache/BERT"
-    "--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
-    "--pretrained distilbert --distilbert-path ../.vector_cache/DistilBERT"
+    "--pretrained fasttext --fasttext-path ../.vector_cache/fastText"
+    #"--pretrained bert --bert-path ../.vector_cache/BERT"
+    #"--pretrained roberta --roberta-path ../.vector_cache/RoBERTa"
+    #"--pretrained distilbert --distilbert-path ../.vector_cache/DistilBERT"
+    #"--pretrained xlnet --xlnet-path ../.vector_cache/XLNet"
+    #"--pretrained gpt2 --distilbert-path ../.vector_cache/GPT2"
 )
 
 # Dataset config (list of datasets)
 datasets=(
-    "--dataset 20newsgroups"
     "--dataset reuters21578"
-    "--dataset bbc-news"
-    "--dataset ohsumed"
+    "--dataset 20newsgroups"
+    #"--dataset bbc-news"
+    #"--dataset ohsumed"
+    #"--dataset rcv1"
 )
+
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
 

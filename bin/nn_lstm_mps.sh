@@ -19,7 +19,6 @@ ATTN="--net attn"
 EP="85"                # number of epochs
 NUM_RUNS=1
 
-
 # Embedding config command arguments
 embeddings=(
     "--pretrained glove --glove-path ../.vector_cache/GloVe"

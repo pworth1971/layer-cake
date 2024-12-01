@@ -48,9 +48,9 @@ PICKLE_DIR = '../pickles/'                          # pickled data directory
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
-GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
 #GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
@@ -351,13 +351,13 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
             self.vectorizer = TfidfVectorizer(
                 min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 sublinear_tf=True,                              # use sublinear TF scaling
-                lowercase=False                                 # dont lowercase the tokens
+#                lowercase=False                                 # dont lowercase the tokens
             )              
         elif vtype == 'count':
             print("using Count vectorization...")
             self.vectorizer = CountVectorizer(
                 min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
-                lowercase=False                                 # dont lowercase the tokens
+#                lowercase=False                                 # dont lowercase the tokens
             )
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
@@ -424,7 +424,7 @@ class GloVeLCRepresentationModel(LCRepresentationModel):
 
         self.embedding_vocab_matrix = self.extract(vocabulary).numpy()
 
-        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+        #print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
 
         return self.embedding_vocab_matrix
 

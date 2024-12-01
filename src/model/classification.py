@@ -47,8 +47,8 @@ class NeuralClassifier(nn.Module):
         # This will combine pretrained and learnable embeddings.
         self.embed = EmbeddingCustom(vocab_size, learnable_length, pretrained, drop_embedding_range, drop_embedding_prop)
 
-        print("self.embed:", self.embed)
-        #print("self.embed.dim():", self.embed.dim())
+        print("self.embed:\n", self.embed)
+        print("self.embed.dim():", self.embed.dim())
         
         print("pt dimensions:", self.embed.get_pt_dimensions())
         print("lrn dimensions:", self.embed.get_lrn_dimensions())

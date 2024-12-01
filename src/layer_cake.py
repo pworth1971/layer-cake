@@ -290,8 +290,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
     #
     """
 
-    print(f'embedding_matrix(): dataset: {dataset.show()}, pretrained: {pretrained.show()}, vocabsize: {vocabsize}, \
-          word2index: {len(word2index)}, oov: {len(out_of_vocabulary)}, supervised: {opt.supervised}')
+    print(f'embedding_matrix(): dataset: {dataset.show()}, pretrained: {pretrained.show()}, vocabsize: {vocabsize}, word2index: {len(word2index)}, oov: {len(out_of_vocabulary)}, supervised: {opt.supervised}')
 
     print("word2index:", type(word2index), len(word2index))
     print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
