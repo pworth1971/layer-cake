@@ -22,24 +22,22 @@ import itertools
 
 from util.csv_log import CSVLog
 
-from embedding.pretrained import GloVe, BERT, Word2Vec, FastText, LLaMA
+from embedding.pretrained import GloVeEmbeddings, Word2VecEmbeddings, FastTextEmbeddings, BERTEmbeddings
+#from embedding.pretrained import RoBERTaEmbeddings, DistilBERTEmbeddings, XLNetEmbeddings, GPT2Embeddings, LLaMAEmbeddings
 
 
-
+OUT_DIR = '../out/'                                             # output directory
+LOG_DIR = '../log/'                                             # log directory
 
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff']
 ML_MODELS = ['svm', 'lr', 'nb']
 
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'xlnet', 'gpt2', 'llama']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'xlnet', 'llama', 'gpt2']
-
-
-OUT_DIR = '../out/'                                 # output directory
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'gpt2', 'xlnet', 'llama']
-
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
 
 
 def get_pretrained_embeddings(model, dataset):
@@ -60,7 +58,6 @@ def get_pretrained_embeddings(model, dataset):
 #
 # returns Boolean and then data structure with embeddings, None if 
 # emb_model is not one if the acceptable values
-#
 # ---------------------------------------------------------------------------------------------------------------------------------------
 def load_pretrained_embeddings(model, args):
 
@@ -69,34 +66,36 @@ def load_pretrained_embeddings(model, args):
     if model=='glove':
         print("path:", {args.glove_path})
         print("Loading GloVe pretrained embeddings...")
-        glv = GloVe(path=args.glove_path)
+        glv = GloVeEmbeddings(path=args.glove_path)
         return True, glv, glv.vocabulary
     
     elif model=='word2vec':
         print("path:", {args.word2vec_path})
         print("Loading Word2Vec pretrained embeddings...")
-        word2vec = Word2Vec(path=args.word2vec_path, limit=1000000)
+        word2vec = Word2VecEmbeddings(path=args.word2vec_path, limit=1000000)
         return True, word2vec, word2vec.vocabulary 
     
     elif model=='fasttext':
         print("path:", {args.fasttext_path})
         print("Loading fastText pretrained embeddings...")
-        fasttext = FastText(path=args.fasttext_path, limit=1000000)
+        fasttext = FastTextEmbeddings(path=args.fasttext_path, limit=1000000)
         return True, fasttext, fasttext.vocabulary
-    
-    """
+
     elif model=='bert':
         print("path:", {args.bert_path})
         print("Loading BERT pretrained embeddings...")
-        return True, BERT(model_name=DEFAULT_BERT_PRETRAINED_MODEL, emb_path=args.bert_path)
+        return True, BERTEmbeddings(emb_path=args.bert_path)
 
+    """"
     elif model=='llama':
         print("path:", {args.llama_path})
         print("Loading LLaMA pretrained embeddings...")
-        return True, LLaMA(model_name=DEFAULT_LLAMA_PRETRAINED_MODEL, emb_path=args.llama_path)
+        return True, LLaMAEmbeddings(model_name=DEFAULT_LLAMA_PRETRAINED_MODEL, emb_path=args.llama_path)
     """
-
+"""
     return False, None
+"""
+
 # ---------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -505,6 +504,7 @@ def get_sysinfo(debug=False):
     return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
 
 
+
 def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type='word', learner='???', mix=None):
 
     print("calculating model computation method...")
@@ -567,28 +567,27 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
 
 def get_embeddings_path(pretrained, args):
     
-    if (pretrained == 'bert'):
-        return args.bert_path
-    elif pretrained == 'roberta':
-        return args.roberta_path
-    elif pretrained == 'distilbert':
-        return args.distilbert_path
-    elif pretrained == 'glove':
+    if pretrained == 'glove':
         return args.glove_path
     elif pretrained == 'word2vec':
         return args.word2vec_path
     elif pretrained == 'fasttext':
         return args.fasttext_path
-    elif pretrained == 'llama':
-        return args.llama_path
+    elif (pretrained == 'bert'):
+        return args.bert_path
+    elif pretrained == 'roberta':
+        return args.roberta_path
+    elif pretrained == 'distilbert':
+        return args.distilbert_path
     elif pretrained == 'xlnet':
         return args.xlnet_path
     elif pretrained == 'gpt2':
         return args.gpt2_path
+    elif pretrained == 'llama':
+        return args.llama_path
     else:
         return args.glove_path          # default to GloVe embeddings
         
-
 
 def get_language_model_type(embeddings):
 

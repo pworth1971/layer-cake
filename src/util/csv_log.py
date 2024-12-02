@@ -12,6 +12,7 @@ pd.set_option('display.width', 1000)
 class CSVLog:
 
     def __init__(self, file, columns=None, autoflush=True, verbose=False, overwrite=False):
+
         self.file = file
         self.autoflush = autoflush
         self.verbose = verbose
@@ -139,18 +140,26 @@ class CSVLog:
             if key not in kwargs:
                 kwargs[key] = self.defaults[key]
         # Ensure the order of columns aligns with self.columns
-        columns = sorted(list(kwargs.keys()))
-        values = [kwargs[col_i] for col_i in columns]
-        s = pd.Series(values, index=self.columns)
+        values = [kwargs[col] for col in self.columns]
+        s = pd.DataFrame([values], columns=self.columns)
         # Use pd.concat instead of append
-        self.df = pd.concat([self.df, s.to_frame().T], ignore_index=True)
+        self.df = pd.concat([self.df, s], ignore_index=True)
         if self.autoflush:
             self.flush()
         self.tell(kwargs)
         
 
     def flush(self):
+        try:
+            self.df.to_csv(self.file, index=False, sep='\t')
+        except Exception as e:
+            print(f"Error saving to file {self.file}: {e}")
+            raise
+
+    """
+    def flush(self):
         self.df.to_csv(self.file, index=False, sep='\t')
+    """
 
     def tell(self, msg):
         if self.verbose: print(msg)
