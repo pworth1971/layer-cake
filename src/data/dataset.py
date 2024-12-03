@@ -71,6 +71,7 @@ def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
     vectorizer = None
 
     if custom_tokenizer is not None:                # if a custom tokenizer is provided (e.g. for transformer models)
+
         if vtype == 'tfidf':
             vectorizer = TfidfVectorizer(
                 min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
@@ -86,6 +87,7 @@ def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
                 lowercase=False,                                # dont lowercase the tokens
                 tokenizer=custom_tokenizer                      # use the custom tokenizer
             )
+        
     else:                                           # if no custom tokenizer is provided (e.g. for word based models like GloVe, Word2vec...)
         if vtype == 'tfidf':
             vectorizer = TfidfVectorizer(
@@ -136,7 +138,13 @@ class Dataset:
 
         self.nC = self.devel_labelmatrix.shape[1]
 
+        if (custom_tokenizer is not None):
+            self.custom_toke = True
+        else:
+            self.custom_toke = False
+
         self._vectorizer = init_vectorizer(vtype=vtype, custom_tokenizer=custom_tokenizer)
+        print("self.custom_toke:", self.custom_toke)
         print("vectorizer:\n", self._vectorizer)
 
         self._vectorizer.fit(self.devel_raw)
@@ -290,17 +298,75 @@ class Dataset:
         callable
             A tokenizer or analyzer function.
         """
-        if hasattr(self._vectorizer, 'tokenizer') and self._vectorizer.tokenizer is not None:
+        if (self.custom_toke):
             print("Using custom tokenizer from vectorizer.")
-            return self._vectorizer.tokenizer  # Use the custom tokenizer (e.g., for BERT)
+            return self._vectorizer.tokenizer                                   # Use the custom tokenizer (e.g., for BERT)
         else:
             print("Using default analyzer from vectorizer.")
-            return self._vectorizer.build_analyzer()  # Use the default word-based analyzer
+            return self._vectorizer.build_analyzer()                            # Use the default word-based analyzer
+
+
+    @classmethod
+    def load(cls, dataset_name, vtype='tfidf', pt_model=None, pickle_dir=None):
+        """
+        Load or create the dataset, and serialize it with a model-specific pickle file.
+
+        Parameters:
+        ----------
+        dataset_name : str
+            The name of the dataset to load.
+        vtype : str
+            The type of vectorizer to use ('tfidf' or 'count').
+        pt_model : PretrainedEmbeddings
+            The pretrained model object, providing the tokenizer and model name.
+        pickle_dir : str
+            Directory to store or retrieve the pickle file.
+
+        Returns:
+        -------
+        Dataset
+            The loaded or newly created Dataset object.
+        """
+        model_type = pt_model.get_type()
+        model_name = pt_model.get_model()
+        pickle_filename = f"{dataset_name}.{vtype}.{model_type}.{model_name}.pickle"
+        pickle_path = os.path.join(pickle_dir, pickle_filename) if pickle_dir else None
+
+        print(f'\n\tloading dataset: {dataset_name}, vtype: {vtype}, pt_type: {model_type}, pt_model: {model_name}, pickle_path: {pickle_path}')
+
+        # Get the tokenizer from the pretrained model
+        tokenizer = pt_model.get_tokenizer()
+        print("tokenizer:\n", tokenizer)
+
+        if pickle_path:
+            if os.path.exists(pickle_path):
+                print(f'loading pickled dataset from {pickle_path}')
+                with open(pickle_path, 'rb') as file:
+                    dataset = pickle.load(file)
+            else:
+                print(f'fetching dataset and dumping it into {pickle_path}')
+                dataset = Dataset(
+                    dataset=dataset_name,
+                    vtype=vtype,
+                    custom_tokenizer=tokenizer
+                )
+                print('dumping...')
+                with open(pickle_path, 'wb') as file:
+                    pickle.dump(dataset, file, pickle.HIGHEST_PROTOCOL)
+        else:
+            print(f'loading dataset {dataset_name}')
+            dataset = Dataset(
+                dataset=dataset_name,
+                vtype=vtype,
+                custom_tokenizer=tokenizer
+            )
+
+        return dataset
 
 
 
     @classmethod
-    def load(cls, dataset_name, vtype='tfidf', pt_model=None, pickle_path=None):
+    def load_old(cls, dataset_name, vtype='tfidf', pt_model=None, pickle_path=None):
 
         print(f'\n\tloading dataset: {dataset_name}, vtype: {vtype}, pt_type: {pt_model.get_type()}, pt_model: {pt_model.get_model()}, pickle_path: {pickle_path}')
 

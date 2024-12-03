@@ -54,8 +54,8 @@ WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, cas
 FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
 #BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
-#BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+#BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
+BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
 ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
 #ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive

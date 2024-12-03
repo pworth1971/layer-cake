@@ -1,4 +1,5 @@
 import argparse
+import os
 import numpy as np
 from time import time
 import scipy
@@ -96,7 +97,7 @@ def set_method_name(opt):
     return method_name
 
 
-def index_dataset_new(dataset, pretrained=None):
+def index_dataset_new(opt, dataset, pretrained=None, debug=False):
     """
     Indexes the dataset for use with word-based (e.g., GloVe, Word2Vec, FastText)
     and token-based (e.g., BERT, RoBERTa, DistilBERT) embeddings.
@@ -107,6 +108,7 @@ def index_dataset_new(dataset, pretrained=None):
         The dataset object containing raw text and a fitted vectorizer.
     pretrained : PretrainedEmbeddings, optional
         Pretrained embedding object to extend the known vocabulary.
+    debug : bool, optional
 
     Returns:
     -------
@@ -124,6 +126,7 @@ def index_dataset_new(dataset, pretrained=None):
     word2index = dict(dataset.vocabulary)
     known_words = set(word2index.keys())
     if pretrained is not None:
+        print(f'updating known_words with pretrained.vocabulary(): {type(pretrained.vocabulary())}; {len(pretrained.vocabulary())}')
         known_words.update(pretrained.vocabulary())
 
     # Add special tokens
@@ -134,19 +137,124 @@ def index_dataset_new(dataset, pretrained=None):
 
     # Prepare analyzer (handles both default and custom tokenizers)
     analyzer = dataset.analyzer()
-
+    print("analyzer:\n", analyzer)
+              
     # Index documents
     out_of_vocabulary = dict()
-    devel_index = index_new(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
-    test_index = index_new(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary)
+    devel_index = index_new(opt, dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, debug=debug)
+    test_index = index_new(opt, dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, debug=debug)
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
 
 
+def index_new(opt, data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, debug=False):
+    """
+    Indexes a list of string documents using the provided analyzer and logs tokens into files.
+
+    Parameters:
+    ----------
+    opt : Namespace
+        Contains configurations like `pretrained` and `dataset`.
+    data : list of str
+        List of documents to be indexed.
+    vocab : dict
+        Fixed mapping [str] -> [int] for tokens.
+    known_words : set
+        Set of known tokens (e.g., words or subwords in pretrained embeddings).
+    analyzer : callable
+        Function to tokenize the documents (default tokenizer or custom tokenizer for BERT-like models).
+    unk_index : int
+        Index of the unknown token.
+    out_of_vocabulary : dict
+        Mapping of OOV tokens to indices.
+    debug : bool, optional
+        Flag to enable detailed debugging.
+
+    Returns:
+    -------
+    list of lists
+        Indexed version of the documents.
+    """
+    print(f'\n\tindexing documents...')
+
+    # Paths for logging tokens
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+    in_vocab_file = os.path.join(LOG_DIR, f"{opt.pretrained}.{opt.dataset}.in_vocab")
+    oov_file = os.path.join(LOG_DIR, f"{opt.pretrained}.{opt.dataset}.oov")
+    unknown_file = os.path.join(LOG_DIR, f"{opt.pretrained}.{opt.dataset}.unknown")
+    parsed_text_file = os.path.join(LOG_DIR, f"{opt.pretrained}.{opt.dataset}.parsed_text")
+
+    with open(in_vocab_file, 'w') as in_vocab_log, \
+         open(oov_file, 'w') as oov_log, \
+         open(unknown_file, 'w') as unknown_log, \
+         open(parsed_text_file, 'w') as parsed_text_log:
+
+        indexes = []
+        vocabsize = len(vocab)
+        unk_count = 0
+        knw_count = 0
+        out_count = 0
+
+        # Set to keep track of unique tokens for in_vocab
+        unique_in_vocab_tokens = set()
+
+        pbar = tqdm(data, desc=f'indexing documents...')
+        for text in pbar:
+            if debug:
+                print("text:", text)
+            tokens = analyzer(text)  # Tokenize the text
+            index = []
+
+            # Log the text and tokens
+            parsed_text_log.write(f"Text: {text}\nTokens: {', '.join(tokens)}\n\n")
+
+            for token in tokens:
+                if token in vocab:
+                    if debug:
+                        print(f'token {token} in vocab...')
+                    idx = vocab[token]
+
+                    # Log only unique tokens
+                    if token not in unique_in_vocab_tokens:
+                        in_vocab_log.write(f"{token}\n")
+                        unique_in_vocab_tokens.add(token)
+                        
+                elif token in known_words:
+                    if debug:
+                        print(f'token {token} in known_words...')
+                    if token not in out_of_vocabulary:
+                        if debug:
+                            print(f'token {token} not in out_of_vocabulary...')
+                        out_of_vocabulary[token] = vocabsize + len(out_of_vocabulary)
+                    idx = out_of_vocabulary[token]
+                    out_count += 1
+                    oov_log.write(f"{token}\n")  # Log OOV token
+                else:
+                    if debug:
+                        print(f'token {token} not in vocab or known_words...')
+                    idx = unk_index
+                    unk_count += 1
+                    unknown_log.write(f"{token}\n")  # Log unknown token
+                index.append(idx)
+            indexes.append(index)
+            knw_count += len(index)
+
+            pbar.set_description(f'[UNK = {unk_count}/{knw_count} = {(100. * unk_count / knw_count):.2f}%]'
+                                 f'[OOV = {out_count}/{knw_count} = {(100. * out_count / knw_count):.2f}%]')
+
+    print(f"\nToken logging completed:")
+    print(f"- In vocabulary tokens: {in_vocab_file}")
+    print(f"- Out-of-vocabulary tokens: {oov_file}")
+    print(f"- Unknown tokens: {unknown_file}")
+    print(f"- Parsed text and tokens: {parsed_text_file}")
+    
+    return indexes
 
 
-def index_new(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
+
+def index_new_old(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, debug=False):
     """
     Indexes a list of string documents using the provided analyzer.
 
@@ -164,12 +272,16 @@ def index_new(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
         Index of the unknown token.
     out_of_vocabulary : dict
         Mapping of OOV tokens to indices.
+    debug : bool, optional
 
     Returns:
     -------
     list of lists
         Indexed version of the documents.
     """
+
+    print(f'\n\tindexing documents...')
+
     indexes = []
     vocabsize = len(vocab)
     unk_count = 0
@@ -178,24 +290,35 @@ def index_new(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
 
     pbar = tqdm(data, desc=f'indexing documents...')
     for text in pbar:
-        tokens = analyzer(text)  # Tokenize the text
+        if debug: 
+            print("text:", text)
+        tokens = analyzer(text)             # Tokenize the text
         index = []
         for token in tokens:
             if token in vocab:
+                if debug:
+                    print(f'token {token} in vocab...')
                 idx = vocab[token]
             elif token in known_words:
+                if debug:
+                    print(f'token {token} in known_words...')
                 if token not in out_of_vocabulary:
+                    print(f'token {token} not in out_of_vocabulary...')
                     out_of_vocabulary[token] = vocabsize + len(out_of_vocabulary)
                 idx = out_of_vocabulary[token]
                 out_count += 1
             else:
+                if debug:
+                    print(f'token {token} not in vocab or known_words...')
                 idx = unk_index
                 unk_count += 1
             index.append(idx)
         indexes.append(index)
         knw_count += len(index)
+
         pbar.set_description(f'[UNK = {unk_count}/{knw_count} = {(100. * unk_count / knw_count):.2f}%]'
                              f'[OOV = {out_count}/{knw_count} = {(100. * out_count / knw_count):.2f}%]')
+    
     return indexes
 
 
@@ -260,6 +383,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
     sup_range = None
     
     if opt.pretrained or opt.supervised:
+
         pretrained_embeddings = []
 
         if pretrained is not None:
@@ -287,8 +411,10 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             sup_range = [offset, offset + F.shape[1]]
             pretrained_embeddings.append(F)
 
+        # Step 3: Concatenate Pretrained and Supervised Embeddings
+        pretrained_embeddings = [tensor.to(opt.device) for tensor in pretrained_embeddings]  # Ensure all tensors are on the same device
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
-
+        
     #print('[embedding matrix done]')
     return pretrained_embeddings, sup_range
 
@@ -457,8 +583,7 @@ def main(opt):
 
     # check to see if model params have been computed already
     if (already_modelled and not opt.force):
-        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and \
-              wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
         exit(0)
 
     print("method_name:", method_name)
@@ -477,10 +602,10 @@ def main(opt):
         dataset_name=opt.dataset, 
         vtype=opt.vtype,
         pt_model=pt_model,
-        pickle_path=opt.pickle_path 
+        pickle_dir=opt.pickle_dir 
     ).show()
 
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset_new(dataset, pt_model)
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset_new(opt, dataset, pt_model)
     print("word2index", type(word2index), len(word2index))
     print("out_of_vocabulary", type(out_of_vocabulary), len(out_of_vocabulary))
     print("devel_index", type(devel_index), len(devel_index))
@@ -713,9 +838,6 @@ if __name__ == '__main__':
     if opt.droptype == 'learn' and opt.learnable==0:
         opt.droptype = 'none'
         print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-
-    if opt.pickle_dir:
-        opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
 
     print("opt:", opt)
 
