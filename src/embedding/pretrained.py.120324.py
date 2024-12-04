@@ -1,14 +1,21 @@
 from abc import ABC, abstractmethod
+
 import gensim
 import os
 import numpy as np
+import requests
+import zipfile
 from tqdm import tqdm
 
-import torch, torchtext
+import torch
 from torchtext.vocab import GloVe as TorchTextGloVe
 
+from transformers import BertModel, BertTokenizer
+from transformers import  logging as transformers_logging
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext']
+
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
 
 
 # batch sizes for pytorch encoding routines
@@ -16,9 +23,19 @@ DEFAULT_CPU_BATCH_SIZE = 8
 DEFAULT_GPU_BATCH_SIZE = 8
 DEFAULT_MPS_BATCH_SIZE = 8
 
-
 VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
 
+
+# Setup device prioritizing CUDA, then MPS, then CPU
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+    BATCH_SIZE = DEFAULT_GPU_BATCH_SIZE
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device("mps")
+    BATCH_SIZE = DEFAULT_MPS_BATCH_SIZE
+else:
+    DEVICE = torch.device("cpu")
+    BATCH_SIZE = DEFAULT_CPU_BATCH_SIZE
 
 
 
@@ -27,11 +44,14 @@ VECTOR_CACHE = "../.vector_cache"                               # cache director
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
-FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
+FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
 
 #BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
 #BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
@@ -134,32 +154,6 @@ class PretrainedEmbeddings(ABC):
    
 
 
-"""
-class GloVe(Vectors):
-    url = {
-        '42B': 'http://nlp.stanford.edu/data/glove.42B.300d.zip',
-        '840B': 'http://nlp.stanford.edu/data/glove.840B.300d.zip',
-        'twitter.27B': 'http://nlp.stanford.edu/data/glove.twitter.27B.zip',
-        '6B': 'http://nlp.stanford.edu/data/glove.6B.zip',
-    }
-
-    def __init__(self, name='840B', dim=300, **kwargs):
-        url = self.url[name]
-        name = 'glove.{}.{}d.txt'.format(name, str(dim))
-        super(GloVe, self).__init__(name, url=url, **kwargs)
-"""
-
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-#GLOVE_SET = '6B'                                          # GloVe set to use
-
-#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_SET = '42B'                                          # GloVe set to use
-
-GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
-GLOVE_SET = '840B'                                          # GloVe set to use
-
-
-
 class GloVeEmbeddings(PretrainedEmbeddings):
     """
     GloVeEmbeddings Class: Manages GloVe embeddings by loading them using torchtext.
@@ -172,17 +166,12 @@ class GloVeEmbeddings(PretrainedEmbeddings):
     to handle words not found in GloVe’s vocabulary and replacing them with zeros.
     """
 
-    def __init__(self, setname=GLOVE_SET, model_name=GLOVE_MODEL, path=VECTOR_CACHE, max_vectors=None):         # presumes running from bin directory
+    def __init__(self, setname='840B', path=VECTOR_CACHE, max_vectors=None):         # presumes running from bin directory
         
         super().__init__()
 
-        print(f'GloVeEmbeddings::__init__... path={path}, setname={setname}, max_vectors={max_vectors}')
-
         self.type = 'glove'
         self.tokenizer = None
-        dir = path
-        path = path + model_name
-        print(f'loading GloVe embeddings from {path}...')
 
         print(f'Initializing GloVe class, loading GloVe pretrained vectors...')
         try:    
@@ -190,8 +179,7 @@ class GloVeEmbeddings(PretrainedEmbeddings):
             if (embeddings_file):
                  # Initialize GloVe model from torchtext
                 print(f'embeddings file found at {embeddings_file}, loading embeddings using torchtext...')
-                #self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)    
-                self.embed = TorchTextGloVe(name=setname, cache=dir, max_vectors=max_vectors)     
+                self.embed = TorchTextGloVe(name=setname, cache=path, max_vectors=max_vectors)     
             else:
                 print(f'Error loading GloVe embeddings, cannot find embeddings file at {path}]')
                 return
@@ -204,10 +192,10 @@ class GloVeEmbeddings(PretrainedEmbeddings):
         
         print("GloVe::get_embeddings_file...")
 
-        #os.makedirs(target_dir, exist_ok=True)
+        os.makedirs(target_dir, exist_ok=True)
         
-        #local_filename = os.path.join(target_dir, glove_url.split('/')[-1])
-        local_filename = target_dir
+        local_filename = os.path.join(target_dir, glove_url.split('/')[-1])
+
         print("local_filename:", local_filename)
         
         if not os.path.exists(local_filename.replace('.zip', '.txt')):
@@ -239,8 +227,7 @@ class GloVeEmbeddings(PretrainedEmbeddings):
         else:
             print("GloVe embeddings (txt file) found locally.")
 
-        #return local_filename.replace('.zip', '.txt')           # return text file, unzipped embeddings
-        return local_filename
+        return local_filename.replace('.zip', '.txt')           # return text file, unzipped embeddings
 
     def get_model(self):
         return GLOVE_MODEL
@@ -294,6 +281,10 @@ class GloVeEmbeddings(PretrainedEmbeddings):
     
     
 
+    
+
+
+
 class Word2VecEmbeddings(PretrainedEmbeddings):
     """
     Word2VecEmbeddings Class: Handles Word2Vec embeddings, loading them using gensim.
@@ -309,20 +300,18 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         
         super().__init__()
         
-        print(f'Word2VecEmbeddings::__init__... path={path}, limit={limit}, binary={binary}')
-
         self.type = 'word2vec'
         self.tokenizer = None
 
-        print(f'loading embeddings from {path}...')
-
+        print(f'Loading word2vec format pretrained vectors from {path}')
+        
         assert os.path.exists(path), print(f'pre-trained keyed vectors not found in {path}')
         self.embed = gensim.models.KeyedVectors.load_word2vec_format(path, binary=binary, limit=limit)
         
         #self.word2index = {w: i for i,w in enumerate(self.embed.index2word)}
         self.word2index = {w: i for i,w in enumerate(self.embed.index_to_key)}      # gensim 4.0
         
-        #print('Done')
+        print('Done')
 
     def get_model(self):
         return WORD2VEC_MODEL
@@ -334,15 +323,7 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         return self.tokenizer
 
     def vocabulary(self):
-        """
-        Returns the vocabulary for the Word2Vec model.
-        """
-        return set(self.embed.index_to_key)  # Updated for gensim 4.x
-    
-    """
-    def vocabulary(self):
         return set(self.word2index.keys())
-    """
 
     def dim(self):
         return self.embed.vector_size
@@ -357,115 +338,15 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         return extraction
 
 
-"""
-class FastText(Vectors):
-
-    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-wiki/wiki.{}.vec'
-
-    def __init__(self, language="en", **kwargs):
-        url = self.url_base.format(language)
-        name = os.path.basename(url)
-        super(FastText, self).__init__(name, url=url, **kwargs)
-"""
-
 
 class FastTextEmbeddings(Word2VecEmbeddings):
 
     def __init__(self, path, limit=None):
 
         self.type = 'fasttext'
-
-        # Initialize the tokenizer with a subword tokenizer using a fixed n-gram size
-        n = 3  # Default n-gram size
-        self.tokenizer = lambda text: self._subword_tokenizer(text, n)
-
-        print(f'loading fastText embeddings from {path}...')
-
-        if path.endswith('.bin'):  # Check for binary format
-            print('Binary format detected. Loading using FastText binary loader.')
-            super().__init__(path, limit, binary=True)
-        else:
-            pathbin = path + '.bin'
-            if os.path.exists(pathbin):
-                print('open binary file')
-                super().__init__(pathbin, limit, binary=True)
-            else:
-                print('open textual file')
-                super().__init__(path, limit, binary=False)
-                print('saving as binary file')
-                self.save_binary(pathbin)
         
-
-    def _subword_tokenizer(self, text, n):
-        """
-        Tokenizes text into character n-grams for subword embeddings.
-
-        Parameters:
-        ----------
-        text : str
-            Input text to tokenize.
-        n : int
-            Length of character n-grams.
-
-        Returns:
-        -------
-        list of str
-            List of character n-grams.
-        """
-        tokens = []
-        words = text.split()
-        for word in words:
-            word = f"<{word}>"
-            tokens.extend([word[i:i+n] for i in range(len(word) - n + 1)])
-        return tokens
-
-    def get_tokenizer(self):
-        return self.tokenizer
-    
-
-    def get_model(self):
-        return FASTTEXT_MODEL
-    
-    def get_type(self):
-        return self.type
-
-    def vocabulary(self):
-        """
-        Returns the vocabulary for the FastText model.
-        """
-        return set(self.embed.key_to_index.keys())
-
-    def extract(self, words):
-        print("FastText::extract()...")
-
-        # Initialize an array for embeddings
-        extraction = np.zeros((len(words), self.dim()), dtype=np.float32)
-
-        for i, word in enumerate(words):
-            try:
-                # FastText handles subwords internally if the word is not directly in the vocabulary
-                extraction[i] = self.embed.get_vector(word)
-            except KeyError:
-                # This should not occur with FastText as it generates embeddings even for OOV words
-                print(f"FastText::extract()... word '{word}' not found in vocabulary")
-                continue
-
-        return torch.from_numpy(extraction).float()
-
-    def dim(self):
-        return self.embed.vector_size
-
-    def save_binary(self, path):
-        self.embed.save_word2vec_format(path, binary=True)
-
-
-
-
-class FastTextEmbeddingsOld(Word2VecEmbeddings):
-
-    def __init__(self, path, limit=None):
-
-        print(f'loading fastText embeddings from {path}...')
+        # Initialize the tokenizer with a subword tokenizer if needed
+        self.tokenizer = lambda text: self._subword_tokenizer(text, n=3)
 
         pathbin = path+'.bin'
         if os.path.exists(pathbin):
@@ -476,13 +357,7 @@ class FastTextEmbeddingsOld(Word2VecEmbeddings):
             super().__init__(path, limit, binary=False)
             print('saving as binary file')
             self.save_binary(pathbin)
-            #print('done')
-
-        self.type = 'fasttext'
-        
-        # Initialize the tokenizer with a subword tokenizer if needed
-        self.tokenizer = lambda text: self._subword_tokenizer(text, n=3)
-
+            print('done')
 
     def get_model(self):
         return FASTTEXT_MODEL
@@ -490,12 +365,6 @@ class FastTextEmbeddingsOld(Word2VecEmbeddings):
     def get_type(self):
         return self.type
 
-    def vocabulary(self):
-        """
-        Returns the vocabulary for the FastText model.
-        """
-        return set(self.embed.key_to_index.keys())
-    
     def _subword_tokenizer(text, n=3):
         """
         Tokenizes text into character n-grams for subword embeddings.
@@ -544,3 +413,286 @@ class FastTextEmbeddingsOld(Word2VecEmbeddings):
     def save_binary(self, path):
         self.embed.save_word2vec_format(path, binary=True)
         
+
+
+class BERTEmbeddings(PretrainedEmbeddings):
+
+    def __init__(self, path=None):
+
+        super().__init__()
+
+        print(f"Initializing BERTEmbeddings class with model {BERT_MODEL}, in path: {path}...")
+
+        self.device = DEVICE
+        self.batch_size = BATCH_SIZE
+        self.type = 'bert'
+
+        # instantiate model and tokenizer
+        self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=path).to(self.device)
+        
+        self.tokenizer = BertTokenizerFast.from_pretrained(
+            BERT_MODEL, 
+            cache_dir=path,
+            do_lower_case=False                 # keep tokenizer case sensitive
+        )
+
+        self.max_length = self.tokenizer.model_max_length
+        
+        self.mean_embedding = self._compute_mean_embedding()
+           
+
+    def get_model(self):
+        return BERT_MODEL
+    
+    def get_type(self):
+        return self.type
+
+    def get_tokenizer(self):
+        return self._custom_tokenizer
+    
+
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens                  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
+        """
+        input_ids = []
+        attention_masks = []
+
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention mask
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,                                # Add special tokens like [CLS] and [SEP]
+                max_length=self.max_length,                             # Truncate sequences to this length
+                padding='max_length',                                   # Pad sequences to the max_length
+                return_attention_mask=True,                             # Generate attention mask
+                return_tensors='pt',                                    # Return PyTorch tensors
+                truncation=True                                         # Ensure truncation to max_length
+            )
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
+         
+
+    def _compute_mean_embedding(self):
+        """
+        Compute the mean embedding vector using all tokens in the model's vocabulary.
+        This vector will be used for handling OOV tokens.
+        """
+        vocab = list(self.tokenizer.get_vocab().keys())
+        batch_size = self.batch_size
+        total_embeddings = []
+
+        # Process the tokens in batches with a progress bar
+        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
+            for i in range(0, len(vocab), batch_size):
+                batch_tokens = vocab[i:i + batch_size]
+                
+                # Tokenize the batch of tokens, ensuring attention_mask is created
+                inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
+
+                # Pass through the model to get token embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                total_embeddings.append(token_embeddings)
+
+                # Update the progress bar with the actual batch size
+                pbar.update(len(batch_tokens))
+
+        # Concatenate all embeddings and compute the mean embedding
+        total_embeddings = np.concatenate(total_embeddings, axis=0)
+        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
+        print(f"Mean embedding shape: {mean_embedding.shape}")
+
+        return mean_embedding
+
+    
+    def vocabulary(self):
+        return set(self.tokenizer.get_vocab().keys())
+
+    def dim(self):
+        return self.model.config.hidden_size
+
+
+    def extract(self, words):
+        """
+        Extracts embeddings for a list of words, aggregating subword embeddings if necessary.
+
+        Parameters:
+        ----------
+        words : list of str
+            List of words for which embeddings are to be extracted.
+        batch_size : int, optional, default=64
+            Number of words to process in a single batch for efficiency.
+
+        Returns:
+        -------
+        torch.Tensor
+            A tensor of shape (len(words), embedding_dim) containing the word embeddings.
+            Aggregates embeddings for multi-token words.
+        """
+        print("BERT::extract()...")
+        embeddings = []
+        
+        batch_size = BATCH_SIZE
+
+        # Process words in batches
+        with tqdm(total=len(words), desc="extracting word embeddings from BERT model", unit="word") as pbar:
+            for i in range(0, len(words), batch_size):
+                batch_words = words[i:i + batch_size]
+
+                # Tokenize batch into subwords
+                tokenized = self.tokenizer(
+                    batch_words,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length
+                )
+                input_ids = tokenized['input_ids'].to(self.device)
+                attention_mask = tokenized['attention_mask'].to(self.device)
+
+                # Pass through the model to get embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                # Get the embeddings for all subwords
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
+
+                # Aggregate subword embeddings for each word (e.g., mean pooling)
+                batch_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_size)
+
+                # Append to the results
+                embeddings.append(batch_embeddings)
+
+                # Update progress bar
+                pbar.update(len(batch_words))
+
+        # Concatenate all batch embeddings
+        embeddings = torch.cat(embeddings, dim=0)  # Shape: (len(words), hidden_size)
+
+        return embeddings
+
+
+    @staticmethod
+    def reindex(words, word2index):
+        source_idx, target_idx = [], []
+        for i, word in enumerate(words):
+            if word not in word2index:
+                continue
+            j = word2index[word]
+            source_idx.append(i)
+            target_idx.append(j)
+        source_idx = np.asarray(source_idx)
+        target_idx = np.asarray(target_idx)
+        return source_idx, target_idx
+    
+
+
+
+
+
+"""
+FastTextEmbeddings Class
+
+Inheritance: Inherits from Word2VecEmbeddings since FastText can be loaded in a similar way when the binary format is used.
+
+Purpose: Adjusts loading mechanisms based on whether the embeddings are stored in a binary format or not.
+
+Special Handling:
+If a binary version of the file exists, it uses that directly. If only a textual version is available, it 
+loads the text format and then saves it as a binary file for faster future loading.
+"""
+class FastText(Word2VecEmbeddings):
+
+    def __init__(self, path=VECTOR_CACHE, limit=None):
+
+        pathvec = path
+        pathbin = path+'.bin'
+        pathzip = pathvec+'.zip'
+
+        ft_emb_url = "https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip"
+
+        if os.path.exists(pathbin):
+            print('open binary file')
+            super().__init__(pathbin, limit, binary=True)
+        elif os.path.exists(pathvec):
+            print('open textual (.vec) file')
+            super().__init__(path, limit, binary=False)
+            print('saving as binary file')
+            self.save_binary(pathbin)
+            print('done')
+        else:
+            print("downlading embeddings from ", {ft_emb_url})
+            self.ensure_emb_binary_exists(pathvec, ft_emb_url, pathzip)
+            
+            # After ensuring the file exists, initialize the embeddings
+            if os.path.exists(pathbin):
+                super().__init__(pathbin, limit, binary=True)
+            else:
+                super().__init__(pathvec, limit, binary=False)
+
+
+    def ensure_emb_binary_exists(self, filename, url, zip_filename):
+        """
+        Checks if the specified .vec file exists.
+        If it doesn't exist, download a .zip file from the given URL and unzip it.
+        """
+        # Check if the .vec file exists
+        if not os.path.exists(filename):
+            # If the .vec file does not exist, check if the .zip file exists
+            if not os.path.exists(zip_filename):
+                print(f"{zip_filename} not found, downloading...")
+                # Download the .zip file
+                with requests.get(url, stream=True) as r:
+                    r.raise_for_status()
+                    with open(zip_filename, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                print("Download completed!")
+            
+            # Unzip the file in the directory of 'filename' without including the file name
+            emb_dir = os.path.dirname(filename)
+            print(f"Unzipping the file to {emb_dir}...")
+            with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+                zip_ref.extractall(path=emb_dir)
+            #print(f"{filename} is ready for use!")
+        else:
+            print(f"{filename} already exists!")
+
+
+    def save_binary(self, path):
+        self.embed.save_word2vec_format(path, binary=True)
+
