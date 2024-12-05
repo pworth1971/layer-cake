@@ -8,18 +8,14 @@ import torch, torchtext
 from torchtext.vocab import GloVe as TorchTextGloVe
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext']
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
 
 
-# batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 8
-DEFAULT_GPU_BATCH_SIZE = 8
-DEFAULT_MPS_BATCH_SIZE = 8
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
 
 
 VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
-
-
 
 
 # -------------------------------------------------------------------------------------------------------
@@ -33,9 +29,9 @@ WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, cas
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
 FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
 
-#BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
+BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
 #BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-BERT_MODEL = 'bert-large-uncased'                             # dimension = 1024, case insensitive
+#BERT_MODEL = 'bert-large-uncased'                             # dimension = 1024, case insensitive
 #BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
 
 ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
@@ -271,27 +267,6 @@ class GloVeEmbeddings(PretrainedEmbeddings):
         
         return extraction
 
-    def extract_old(self, words):
-        print("GloVe::extract()...")
-        
-        source_idx, target_idx = PretrainedEmbeddings.reindex(words, self.embed.stoi)
-        extraction = torch.zeros((len(words), self.dim()))
-        extraction[source_idx] = self.embed.vectors[target_idx]
-        return extraction
-
-    
-    """ @staticmethod
-    def reindex(words, word2index):
-        source_idx, target_idx = [], []
-        for i, word in enumerate(words):
-            if word not in word2index:
-                continue
-            j = word2index[word]
-            source_idx.append(i)
-            target_idx.append(j)
-        return source_idx, target_idx
-    """
-    
     
 
 class Word2VecEmbeddings(PretrainedEmbeddings):
@@ -339,11 +314,6 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         """
         return set(self.embed.index_to_key)  # Updated for gensim 4.x
     
-    """
-    def vocabulary(self):
-        return set(self.word2index.keys())
-    """
-
     def dim(self):
         return self.embed.vector_size
 
@@ -355,18 +325,6 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         extraction = torch.from_numpy(extraction).float()
 
         return extraction
-
-
-"""
-class FastText(Vectors):
-
-    url_base = 'https://dl.fbaipublicfiles.com/fasttext/vectors-wiki/wiki.{}.vec'
-
-    def __init__(self, language="en", **kwargs):
-        url = self.url_base.format(language)
-        name = os.path.basename(url)
-        super(FastText, self).__init__(name, url=url, **kwargs)
-"""
 
 
 class FastTextEmbeddings(Word2VecEmbeddings):
@@ -460,87 +418,218 @@ class FastTextEmbeddings(Word2VecEmbeddings):
 
 
 
+class BERTEmbeddings(PretrainedEmbeddings):
 
-class FastTextEmbeddingsOld(Word2VecEmbeddings):
+    def __init__(self, device, batch_size, path=None):
 
-    def __init__(self, path, limit=None):
+        super().__init__()
 
-        print(f'loading fastText embeddings from {path}...')
+        print(f"Initializing BERTEmbeddings class with model {BERT_MODEL}, in path: {path}...")
 
-        pathbin = path+'.bin'
-        if os.path.exists(pathbin):
-            print('open binary file')
-            super().__init__(pathbin, limit, binary=True)
-        else:
-            print('open textual file')
-            super().__init__(path, limit, binary=False)
-            print('saving as binary file')
-            self.save_binary(pathbin)
-            #print('done')
+        self.device = device
+        self.batch_size = batch_size
+        self.type = 'bert'
 
-        self.type = 'fasttext'
+        # instantiate model and tokenizer
+        self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=path).to(self.device)
         
-        # Initialize the tokenizer with a subword tokenizer if needed
-        self.tokenizer = lambda text: self._subword_tokenizer(text, n=3)
+        self.tokenizer = BertTokenizerFast.from_pretrained(
+            BERT_MODEL, 
+            cache_dir=path,
+            do_lower_case=True                 # keep tokenizer case sensitive
+        )
+
+        self.max_length = self.tokenizer.model_max_length
+        
+        self.mean_embedding = self._compute_mean_embedding()
+           
+
+    def _compute_mean_embedding(self):
+        """
+        Compute the mean embedding vector using all tokens in the model's vocabulary.
+        This vector will be used for handling OOV tokens.
+        """
+        vocab = list(self.tokenizer.get_vocab().keys())
+        batch_size = self.batch_size
+        total_embeddings = []
+
+        # Process the tokens in batches with a progress bar
+        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
+            for i in range(0, len(vocab), batch_size):
+                batch_tokens = vocab[i:i + batch_size]
+                
+                # Tokenize the batch of tokens, ensuring attention_mask is created
+                inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
+
+                # Pass through the model to get token embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                total_embeddings.append(token_embeddings)
+
+                # Update the progress bar with the actual batch size
+                pbar.update(len(batch_tokens))
+
+        # Concatenate all embeddings and compute the mean embedding
+        total_embeddings = np.concatenate(total_embeddings, axis=0)
+        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
+        print(f"Mean embedding shape: {mean_embedding.shape}")
+
+        return mean_embedding
 
 
     def get_model(self):
-        return FASTTEXT_MODEL
+        return BERT_MODEL
     
     def get_type(self):
         return self.type
 
+    def get_tokenizer(self):
+        return self._custom_tokenizer
+    
+
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
+        This tokenizer works for BERT, RoBERTa, and LLaMA models.
+        
+        Parameters:
+        - text: The input text to be tokenized.
+        
+        Returns:
+        - tokens: A list of tokens with special tokens removed based on the model in use.
+        """
+
+        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
+        
+        # Retrieve special tokens from the tokenizer object
+        special_tokens = self.tokenizer.all_special_tokens                  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
+        
+        # Optionally, remove special tokens
+        tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+    
+
+    def _tokenize(self, texts):
+        """
+        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
+        """
+        input_ids = []
+        attention_masks = []
+
+        for text in texts:
+            # Use encode_plus to handle truncation, padding, and return attention mask
+            encoded = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,                                # Add special tokens like [CLS] and [SEP]
+                max_length=self.max_length,                             # Truncate sequences to this length
+                padding='max_length',                                   # Pad sequences to the max_length
+                return_attention_mask=True,                             # Generate attention mask
+                return_tensors='pt',                                    # Return PyTorch tensors
+                truncation=True                                         # Ensure truncation to max_length
+            )
+            input_ids.append(encoded['input_ids'])
+            attention_masks.append(encoded['attention_mask'])
+
+        # Convert lists of tensors to a single tensor
+        input_ids = torch.cat(input_ids, dim=0)
+        attention_masks = torch.cat(attention_masks, dim=0)
+
+        return input_ids, attention_masks
+         
+
     def vocabulary(self):
         """
-        Returns the vocabulary for the FastText model.
-        """
-        return set(self.embed.key_to_index.keys())
-    
-    def _subword_tokenizer(text, n=3):
-        """
-        Tokenizes text into character n-grams for subword embeddings.
-
-        Parameters:
-        ----------
-        text : str
-            Input text to tokenize.
-        n : int, optional (default=3)
-            Length of character n-grams.
+        Retrieves the entire vocabulary of the BERT model, including special tokens.
 
         Returns:
         -------
-        list of str
-            List of character n-grams.
+        set:
+            A set containing all tokens in the BERT model's vocabulary.
         """
-        tokens = []
-        words = text.split()
-        for word in words:
-            word = f"<{word}>"
-            tokens.extend([word[i:i+n] for i in range(len(word)-n+1)])
-        return tokens
-
-    def get_tokenizer(self):
-        return self.tokenizer
-        
-    def extract(self, words):
-        print("FastText::extract()...")
-
-        # Initialize an array for embeddings
-        extraction = np.zeros((len(words), self.dim()), dtype=np.float32)
-
-        for i, word in enumerate(words):
-            try:
-                # FastText handles subwords internally if the word is not directly in the vocabulary
-                extraction[i] = self.embed.get_vector(word)
-            except KeyError:
-                # This should not occur with FastText as it generates embeddings even for OOV words
-                continue
-
-        return torch.from_numpy(extraction).float()
-
+        vocab = self.tokenizer.get_vocab()
+        #print(f"Vocabulary size: {len(vocab)}")
+        return set(vocab.keys())
+    
+    
     def dim(self):
-        return self.embed.vector_size
+        return self.model.config.hidden_size
 
-    def save_binary(self, path):
-        self.embed.save_word2vec_format(path, binary=True)
+
+    def extract(self, words):
+        """
+        Extracts embeddings for a list of words, aggregating subword embeddings if necessary.
+
+        Parameters:
+        ----------
+        words : list of str
+            List of words for which embeddings are to be extracted.
+        batch_size : int, optional, default=64
+            Number of words to process in a single batch for efficiency.
+
+        Returns:
+        -------
+        torch.Tensor
+            A tensor of shape (len(words), embedding_dim) containing the word embeddings.
+            Aggregates embeddings for multi-token words.
+        """
+        print("BERT::extract()...")
+        embeddings = []
         
+        # Process words in batches
+        with tqdm(total=len(words), desc="extracting word embeddings from BERT model", unit="word") as pbar:
+            for i in range(0, len(words), self.batch_size):
+                batch_words = words[i:i + self.batch_size]
+
+                # Tokenize batch into subwords
+                tokenized = self.tokenizer(
+                    batch_words,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length
+                )
+                input_ids = tokenized['input_ids'].to(self.device)
+                attention_mask = tokenized['attention_mask'].to(self.device)
+
+                # Pass through the model to get embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                # Get the embeddings for all subwords
+                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
+
+                # Aggregate subword embeddings for each word (e.g., mean pooling)
+                batch_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_size)
+
+                # Append to the results
+                embeddings.append(batch_embeddings)
+
+                # Update progress bar
+                pbar.update(len(batch_words))
+
+        # Concatenate all batch embeddings
+        embeddings = torch.cat(embeddings, dim=0)  # Shape: (len(words), hidden_size)
+
+        return embeddings
+
+
+    @staticmethod
+    def reindex(words, word2index):
+        source_idx, target_idx = [], []
+        for i, word in enumerate(words):
+            if word not in word2index:
+                continue
+            j = word2index[word]
+            source_idx.append(i)
+            target_idx.append(j)
+        source_idx = np.asarray(source_idx)
+        target_idx = np.asarray(target_idx)
+        return source_idx, target_idx
+    
+
+

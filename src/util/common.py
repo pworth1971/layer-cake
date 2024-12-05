@@ -45,7 +45,6 @@ TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
 
 
 
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def initialize_testing(args):
@@ -238,7 +237,7 @@ def get_language_model_type(embeddings, model_name=None):
         return 'static:word:co-occurrence:global'  # Default to word embeddings
 
 
-def set_method_name(opt):
+def set_method_name(opt, add_model=False):
     
     method_name = opt.net
     
@@ -246,25 +245,27 @@ def set_method_name(opt):
 
         method_name += f'-{opt.pretrained}'
 
-        # Add model type and specific model name for supported pretrained models
-        pretrained_model_details = {
-            'glove': ('static', GLOVE_MODEL),
-            'word2vec': ('static', WORD2VEC_MODEL),
-            'fasttext': ('subword', FASTTEXT_MODEL),
-            'bert': ('transformer', BERT_MODEL),
-            'roberta': ('transformer', ROBERTA_MODEL),
-            'distilbert': ('transformer', DISTILBERT_MODEL),
-            'xlnet': ('transformer', XLNET_MODEL),
-            'gpt2': ('transformer', GPT2_MODEL),
-            'llama': ('transformer', LLAMA_MODEL)
-        }
-        
-        # Extract the model type and specific model name
-        model_details = pretrained_model_details.get(opt.pretrained.lower(), ('unknown', 'unknown'))
-        model_type, model_name = model_details
-        
-        # Append to the method name
-        method_name += f':{model_name}'
+        if (add_model):
+
+            # Add model type and specific model name for supported pretrained models
+            pretrained_model_details = {
+                'glove': ('static', GLOVE_MODEL),
+                'word2vec': ('static', WORD2VEC_MODEL),
+                'fasttext': ('subword', FASTTEXT_MODEL),
+                'bert': ('transformer', BERT_MODEL),
+                'roberta': ('transformer', ROBERTA_MODEL),
+                'distilbert': ('transformer', DISTILBERT_MODEL),
+                'xlnet': ('transformer', XLNET_MODEL),
+                'gpt2': ('transformer', GPT2_MODEL),
+                'llama': ('transformer', LLAMA_MODEL)
+            }
+            
+            # Extract the model type and specific model name
+            model_details = pretrained_model_details.get(opt.pretrained.lower(), ('unknown', 'unknown'))
+            model_type, model_name = model_details
+            
+            # Append to the method name
+            method_name += f':{model_name}'
     
     if opt.learnable is not None and opt.learnable > 0:
         method_name += f'-learn{opt.learnable}'

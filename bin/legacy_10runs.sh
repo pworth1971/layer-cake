@@ -121,4 +121,7 @@ do
     #$PY $LOG $dataset	$ATTN	--sup-drop 0.2	--hidden 256	--pretrained glove	--supervised --seed $run
     #$PY $LOG $dataset	$ATTN	--hidden 256	--pretrained glove	--supervised	--tunable --seed $run
 
+
+
+
 done

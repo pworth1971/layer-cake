@@ -1,22 +1,34 @@
 import argparse
+
+from time import time
+
+import scipy
 from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
-import scipy
+
+from data.dataset import *
+
+from embedding.pretrained import *
 from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
-from model.classification import NeuralClassifier
+
+from model.classification import NeuralClassifier, BertWCEClassifier
+from model.classification import Token2BertEmbeddings, Token2WCEmbeddings
+
 from util.early_stop import EarlyStopping
 from util.common import *
-from data.dataset import *
 from util.csv_log import CSVLog
 from util.file import create_if_not_exist
 from util.metrics import *
-from time import time
-from embedding.pretrained import *
+
 
 
 
 VECTOR_CACHE = '../.vector_cache'
 
+# batch sizes for pytorch encoding routines
+DEFAULT_CPU_BATCH_SIZE = 8
+DEFAULT_GPU_BATCH_SIZE = 8
+DEFAULT_MPS_BATCH_SIZE = 8
 
 
 
@@ -65,7 +77,95 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, opt):
     return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
 
 
+def init_Net_Bert(nC, vocabsize, WCE, sup_range, opt):
+    """
+    Initializes the BertWCEClassifier model with BERT embeddings and optional WCE embeddings.
+
+    Parameters:
+    ----------
+    nC : int
+        Number of output classes.
+    vocabsize : int
+        Size of the vocabulary.
+    WCE : Word-Class Embeddings matrix or None.
+    sup_range : list or None
+        Range of supervised embeddings.
+    opt : argparse.Namespace
+        Command-line options/configuration.
+
+    Returns:
+    -------
+    tuple : (model, embsizeX, embsizeY, lrnsizeX, lrnsizeY)
+        - model: The initialized BertWCEClassifier instance.
+        - embsizeX: Embedding size X (BERT embedding dimension).
+        - embsizeY: Embedding size Y (WCE embedding dimension or 0).
+        - lrnsizeX, lrnsizeY: Learnable embedding sizes (if applicable, otherwise 0).
+    """
+    print("Initializing BERT-based neural model...")
+
+    # Determine model type
+    net_type = opt.net
+    hidden = opt.channels if net_type == 'cnn' else opt.hidden
+
+    # Determine model name
+    if opt.pretrained == 'bert':
+        model_name = BERT_MODEL
+    elif opt.pretrained == 'roberta':
+        model_name = ROBERTA_MODEL
+    elif opt.pretrained == 'distilbert':
+        model_name = DISTILBERT_MODEL
+    else:
+        raise ValueError(f"Unsupported pretrained model type: {opt.pretrained}")
+
+    # Initialize token-based BERT embeddings
+    token2bert_embeddings = Token2BertEmbeddings(
+        pretrained_model_name=model_name,
+        device=opt.device
+    )
+
+    # Allow fine-tuning of BERT embeddings if tunable
+    if opt.tunable:
+        print("Setting BERT embeddings to tunable mode...")
+        token2bert_embeddings.model.train()
+
+    # Initialize optional Word-Class Embeddings (WCE)
+    token2wce_embeddings = None
+    if opt.supervised and WCE is not None:
+        WCE_vocab = {key: idx for idx, key in enumerate(range(vocabsize))}
+        token2wce_embeddings = Token2WCEmbeddings(
+            WCE=WCE,
+            WCE_range=sup_range,
+            WCE_vocab=WCE_vocab,
+            drop_embedding_prop=opt.dropprob,
+            max_length=token2bert_embeddings.max_length,
+            device=opt.device
+        )
+
+    # Initialize BertWCEClassifier
+    model = BertWCEClassifier(
+        net_type=net_type,
+        output_size=nC,
+        hidden_size=hidden,
+        token2bert_embeddings=token2bert_embeddings,
+        token2wce_embeddings=token2wce_embeddings
+    )
+
+    # Apply Xavier initialization if required
+    model.xavier_uniform()
+
+    # Return embedding sizes for logging
+    embsizeX = token2bert_embeddings.dim()
+    embsizeY = token2wce_embeddings.dim() if token2wce_embeddings else 0
+    lrnsizeX, lrnsizeY = 0, 0  # No learnable embeddings for BertWCEClassifier
+
+    return model.to(opt.device), embsizeX, embsizeY, lrnsizeX, lrnsizeY
+
+
+
+
+
 def set_method_name():
+
     method_name = opt.net
 
     if opt.pretrained:
@@ -101,7 +201,7 @@ def index_dataset(dataset, opt, pt_model=None):
     opt : argparse.Namespace
     pt_model : PretrainedEmbeddings class (instantiated) optional
         Pretrained embedding object to extend the known vocabulary.
-    
+
     Returns:
     -------
     tuple : (word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index)
@@ -131,20 +231,217 @@ def index_dataset(dataset, opt, pt_model=None):
     # development vocabulary that are in pretrained model (if available)
     out_of_vocabulary = dict()
     analyzer = dataset.analyzer()
+    print("analyzer:", type(analyzer), analyzer)
+
     devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
     test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
 
     return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
 
 
+
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
-    print('[embedding matrix]')
+    """
+    Constructs an embedding matrix using pretrained embeddings (e.g., BERT) 
+    and optionally supervised embeddings derived from the dataset.
+
+    Parameters:
+    ----------
+    dataset : Dataset
+        The dataset object containing raw text, label matrices, and vectorized data.
+    pretrained : PretrainedEmbeddings
+        The pretrained embedding object (e.g., BERTEmbeddings).
+    vocabsize : int
+        Size of the vocabulary, including special tokens (e.g., UNK and PAD).
+    word2index : dict
+        Mapping of words or tokens to their respective indices.
+    out_of_vocabulary : dict
+        Mapping of out-of-vocabulary tokens to indices beyond the standard vocabulary.
+    opt : argparse.Namespace
+        Configuration object containing options for:
+        - pretrained embeddings (`opt.pretrained`).
+        - supervised embeddings (`opt.supervised`).
+        - supervised method (`opt.supervised_method`).
+        - maximum label space (`opt.max_label_space`).
+        - whether to z-score normalize (`opt.nozscore`).
+
+    Returns:
+    -------
+    tuple:
+        - pretrained_embeddings (torch.Tensor or None): 
+            The final embedding matrix of shape (vocabsize, embedding_dim), 
+            combining pretrained and supervised embeddings if applicable.
+        - WCE (torch.Tensor or None):
+            The supervised embeddings matrix of shape (vocabsize, num_labels),
+        - sup_range (list or None): 
+            A list indicating the range of supervised embeddings in the final matrix, 
+            or `None` if no supervised embeddings are included.
+        - dynamic_vocabsize (int): Vocabulary size matching the dynamic embeddings.
+
+    
+    Notes:
+    -----
+    - Pretrained embeddings are extracted using the `extract` method of the `pretrained` object.
+    - Supervised embeddings are calculated using `get_supervised_embeddings`.
+    - Tokens not found in the pretrained vocabulary are handled as OOV.
+    """
+
+    print(f'[embedding_matrix]: pretrained={opt.pretrained}, supervised={opt.supervised}, vocabsize={vocabsize}')
+
     pretrained_embeddings = None
+    WCE = None
     sup_range = None
+    dynamic_vocabsize = vocabsize  # Default to input vocabsize unless adjusted dynamically
+
     if opt.pretrained or opt.supervised:
         pretrained_embeddings = []
 
+        # Handle pretrained embeddings
         if pretrained is not None:
+            if opt.pretrained in ['glove', 'word2vec', 'fasttext']:
+                # Static word-based embeddings
+                print("Extracting embeddings using the static method for word-based embeddings...")
+                word_list = get_word_list(word2index, out_of_vocabulary)
+                weights = pretrained.extract(word_list)
+                pretrained_embeddings.append(weights)
+                print('\t[pretrained-matrix]', weights.shape)
+
+            elif opt.pretrained in ['bert', 'roberta', 'distilbert']:
+                # Dynamic token-based embeddings
+                print("Extracting embeddings dynamically for dataset text with attention...")
+                max_length = pretrained.tokenizer.model_max_length  # Ensure proper padding
+                batch_size = opt.batch_size
+                all_embeddings = []
+                
+                # Process dataset text in batches with a progress bar
+                dataset_texts = dataset.devel_raw + dataset.test_raw  # Combine development and test set
+
+                # Initialize the progress bar
+                pbar = tqdm(total=len(dataset_texts), desc="Computing dynamic embeddings from transformer model...", unit="docs")
+                with torch.no_grad():
+                    for i in range(0, len(dataset_texts), batch_size):
+                        batch_texts = dataset_texts[i:i + batch_size]
+                        tokens = pretrained.tokenizer(
+                            batch_texts,
+                            return_tensors="pt",
+                            padding=True,
+                            truncation=True,
+                            max_length=max_length
+                        ).to(opt.device)
+
+                        outputs = pretrained.model(
+                            input_ids=tokens["input_ids"],
+                            attention_mask=tokens["attention_mask"]
+                        )
+                        embeddings = outputs.last_hidden_state.mean(dim=1)  # Mean pooling
+                        all_embeddings.append(embeddings)
+
+                        # Update progress bar
+                        pbar.update(len(batch_texts))
+                
+                # Close the progress bar
+                pbar.close()
+
+                # Concatenate all embeddings
+                all_embeddings = torch.cat(all_embeddings, dim=0)
+
+                # Adjust `final_vocabsize` to match the number of embeddings
+                dynamic_vocabsize = all_embeddings.shape[0]
+                print(f"Dynamic vocabulary size computed: {dynamic_vocabsize}")
+
+                pretrained_embeddings.append(all_embeddings)
+                print('\t[pretrained-matrix]', all_embeddings.shape)
+
+            else:
+                raise ValueError(f"Unsupported embedding type: {opt.pretrained}")
+
+        # Handle supervised embeddings (WCE)
+        if opt.supervised:
+            print("Generating supervised embeddings (WCE)...")
+            Xtr, _ = dataset.vectorize()
+            Ytr = dataset.devel_labelmatrix
+            WCE = get_supervised_embeddings(
+                Xtr,
+                Ytr,
+                method=opt.supervised_method,
+                max_label_space=opt.max_label_space,
+                dozscore=(not opt.nozscore),
+            )
+            num_missing_rows = vocabsize - WCE.shape[0]
+            WCE = np.vstack((WCE, np.zeros(shape=(num_missing_rows, WCE.shape[1]))))
+            WCE = torch.from_numpy(WCE).float()
+            print('\t[supervised-matrix]', WCE.shape)
+
+            # Adjust the supervised range
+            offset = 0
+            if pretrained_embeddings:
+                offset = pretrained_embeddings[0].shape[1]
+            sup_range = [offset, offset + WCE.shape[1]]
+            pretrained_embeddings.append(WCE)
+
+        # Concatenate all embeddings
+        pretrained_embeddings = [emb.to(opt.device) for emb in pretrained_embeddings]
+        pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
+
+    return pretrained_embeddings, WCE, sup_range, dynamic_vocabsize
+
+
+
+def embedding_matrix_old(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
+    """
+    Constructs an embedding matrix using pretrained embeddings (e.g., BERT) 
+    and optionally supervised embeddings derived from the dataset.
+
+    Parameters:
+    ----------
+    dataset : Dataset
+        The dataset object containing raw text, label matrices, and vectorized data.
+    pretrained : PretrainedEmbeddings
+        The pretrained embedding object (e.g., BERTEmbeddings).
+    vocabsize : int
+        Size of the vocabulary, including special tokens (e.g., UNK and PAD).
+    word2index : dict
+        Mapping of words or tokens to their respective indices.
+    out_of_vocabulary : dict
+        Mapping of out-of-vocabulary tokens to indices beyond the standard vocabulary.
+    opt : argparse.Namespace
+        Configuration object containing options for:
+        - pretrained embeddings (`opt.pretrained`).
+        - supervised embeddings (`opt.supervised`).
+        - supervised method (`opt.supervised_method`).
+        - maximum label space (`opt.max_label_space`).
+        - whether to z-score normalize (`opt.nozscore`).
+
+    Returns:
+    -------
+    tuple:
+        - pretrained_embeddings (torch.Tensor or None): 
+            The final embedding matrix of shape (vocabsize, embedding_dim), 
+            combining pretrained and supervised embeddings if applicable.
+        - WCE (torch.Tensor or None):
+            The supervised embeddings matrix of shape (vocabsize, num_labels),
+        - sup_range (list or None): 
+            A list indicating the range of supervised embeddings in the final matrix, 
+            or `None` if no supervised embeddings are included.
+
+    Notes:
+    -----
+    - Pretrained embeddings are extracted using the `extract` method of the `pretrained` object.
+    - Supervised embeddings are calculated using `get_supervised_embeddings`.
+    - Tokens not found in the pretrained vocabulary are handled as OOV.
+    """
+
+    print('[embedding_matrix]')
+
+    pretrained_embeddings = None
+    WCE = None
+    sup_range = None
+    
+    if opt.pretrained or opt.supervised:
+
+        pretrained_embeddings = []
+
+        if (pretrained is not None):
             word_list = get_word_list(word2index, out_of_vocabulary)
             weights = pretrained.extract(word_list)
             pretrained_embeddings.append(weights)
@@ -154,31 +451,37 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
         if opt.supervised:
             Xtr, _ = dataset.vectorize()
             Ytr = dataset.devel_labelmatrix
-            F = get_supervised_embeddings(Xtr, Ytr,
+            WCE = get_supervised_embeddings(Xtr, Ytr,
                                           method=opt.supervised_method,
                                           max_label_space=opt.max_label_space,
                                           dozscore=(not opt.nozscore))
-            num_missing_rows = vocabsize - F.shape[0]
-            F = np.vstack((F, np.zeros(shape=(num_missing_rows, F.shape[1]))))
-            F = torch.from_numpy(F).float()
-            print('\t[supervised-matrix]', F.shape)
+            num_missing_rows = vocabsize - WCE.shape[0]
+            WCE = np.vstack((WCE, np.zeros(shape=(num_missing_rows, WCE.shape[1]))))
+            WCE = torch.from_numpy(WCE).float()
+            print('\t[supervised-matrix]', WCE.shape)
 
             offset = 0
             if pretrained_embeddings:
                 offset = pretrained_embeddings[0].shape[1]
-            sup_range = [offset, offset + F.shape[1]]
-            pretrained_embeddings.append(F)
-
+            sup_range = [offset, offset + WCE.shape[1]]
+            pretrained_embeddings.append(WCE)
+        
+        pretrained_embeddings = [emb.to(opt.device) for emb in pretrained_embeddings]
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
 
-    print('[embedding matrix done]')
-    return pretrained_embeddings, sup_range
+    return pretrained_embeddings, WCE, sup_range
 
 
 def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
 
+def init_loss(classification_type):
+    assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
+    L = torch.nn.BCEWithLogitsLoss() if classification_type == 'multilabel' else torch.nn.CrossEntropyLoss()
+    return L.cuda()
 
+
+"""
 def init_logfile(method_name, opt):
     logfile = CSVLog(opt.log_file, ['dataset', 'method', 'epoch', 'measure', 'value', 'run', 'timelapse'])
     logfile.set_default('dataset', opt.dataset)
@@ -186,6 +489,7 @@ def init_logfile(method_name, opt):
     logfile.set_default('method', method_name)
     assert opt.force or not logfile.already_calculated(), f'results for dataset {opt.dataset} method {method_name} and run {opt.seed} already calculated'
     return logfile
+"""
 
 
 def load_pt_model(opt):
@@ -198,18 +502,29 @@ def load_pt_model(opt):
         return Word2VecEmbeddings(path=opt.word2vec_path+WORD2VEC_MODEL, limit=1000000)
     elif opt.pretrained == 'fasttext':
         return FastTextEmbeddings(path=opt.fasttext_path+FASTTEXT_MODEL, limit=1000000)
+    
+    elif opt.pretrained == 'bert':
+        return BERTEmbeddings(device=opt.device, batch_size=opt.batch_size, path=opt.bert_path)
+    elif opt.pretrained == 'roberta':
+        return RoBERTaEmbeddings(path=opt.roberta_path)
+    elif opt.pretrained == 'distilbert':
+        return DistilBERTEmbeddings(path=opt.distilbert_path)
+    elif opt.pretrained == 'xlnet':
+        return XLNetEmbeddings(path=opt.xlnet_path)
+    elif opt.pretrained == 'gpt2':
+        return GPT2Embeddings(path=opt.gpt2_path)
+    elif opt.pretrained == 'llama':
+        return LlamaEmbeddings(path=opt.llama_path)
+    
     return None
-
-
-def init_loss(classification_type):
-    assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
-    L = torch.nn.BCEWithLogitsLoss() if classification_type == 'multilabel' else torch.nn.CrossEntropyLoss()
-    return L.cuda()
 
 
 
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name):
+
+    print("training model...")
+
     as_long = isinstance(criterion, torch.nn.CrossEntropyLoss)
     loss_history = []
     if opt.max_epoch_length is not None: # consider an epoch over after max_epoch_length
@@ -247,7 +562,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
 
 def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, opt, embedding_size):
 
-    print("testing...")
+    print("testing model...")
 
     model.eval()
     predictions = []
@@ -312,8 +627,6 @@ def main(opt):
     pt_model = load_pt_model(opt)
     print("pt_model:", pt_model)
 
-    #dataset = Dataset.load(dataset_name=opt.dataset, pickle_path=opt.pickle_path).show()
-    
     dataset = Dataset.load(
         name=opt.dataset, 
         vtype=opt.vtype,
@@ -334,11 +647,20 @@ def main(opt):
     )
     yte = dataset.test_target
 
-    pretrained_embeddings, sup_range = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
-    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    pretrained_embeddings, WCE, sup_range, vocabsize = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
 
-    #model = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt.device)
-    lc_model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt)
+    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
+    if (WCE is not None):
+        print("WCE:", type(WCE), WCE.shape)
+    else:
+        print("WCE: None")
+    print("sup_range:", sup_range)
+    print("vocabsize:", vocabsize)
+
+    # Initialize the model
+    lc_model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(
+        dataset.nC, vocabsize, pretrained_embeddings, sup_range, opt
+        )
     print("lc_model:\n", lc_model)
 
     optim = init_optimizer(lc_model, lr=opt.lr, weight_decay=opt.weight_decay)
@@ -501,13 +823,15 @@ if __name__ == '__main__':
     # Setup device prioritizing CUDA, then MPS, then CPU
     if torch.cuda.is_available():
         opt.device = torch.device("cuda")
+        opt.batch_size = DEFAULT_GPU_BATCH_SIZE
     elif torch.backends.mps.is_available():
         opt.device = torch.device("mps")
+        opt.batch_size = DEFAULT_MPS_BATCH_SIZE
     else:
         opt.device = torch.device("cpu")
+        opt.batch_size = DEFAULT_CPU_BATCH_SIZE
     print(f'running on {opt.device}')
-
-    torch.manual_seed(opt.seed)
+    print("batch_size:", opt.batch_size)
 
     torch.manual_seed(opt.seed)
 
@@ -527,9 +851,6 @@ if __name__ == '__main__':
     if opt.droptype == 'learn' and opt.learnable==0:
         opt.droptype = 'none'
         print('warning: droptype="learn" but learnable=0; the droptype changed to "none"')
-
-
-    
 
     if opt.pickle_dir:
         opt.pickle_path = join(opt.pickle_dir, f'{opt.dataset}.pickle')
