@@ -97,8 +97,8 @@ def supervised_embeddings_tfidf(X, Y):
     """
     
     tfidf_norm = X.sum(axis=0)
-    print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
-    print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
+    #print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
+    #print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
 
     """
     first_part = (X.T).dot(Y)

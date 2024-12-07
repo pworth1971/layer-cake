@@ -496,6 +496,57 @@ def get_system_resources():
 
 
 
+def index_dataset(dataset, opt, pt_model=None):
+    """
+    Indexes the dataset for use with word-based (e.g., GloVe, Word2Vec, FastText)
+    and token-based (e.g., BERT, RoBERTa, DistilBERT) embeddings.
+
+    Parameters:
+    ----------
+    dataset : Dataset
+        The dataset object containing raw text and a fitted vectorizer.
+    opt : argparse.Namespace
+    pt_model : PretrainedEmbeddings class (instantiated) optional
+        Pretrained embedding object to extend the known vocabulary.
+
+    Returns:
+    -------
+    tuple : (word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index)
+        - word2index: Mapping of tokens to indices.
+        - out_of_vocabulary: Mapping of OOV tokens to indices.
+        - unk_index: Index for unknown tokens.
+        - pad_index: Index for padding tokens.
+        - devel_index: Indexed representation of the development dataset.
+        - test_index: Indexed representation of the test dataset.
+    """
+    print('indexing dataset...')
+
+    # build the vocabulary
+    word2index = dict(dataset.vocabulary)
+    known_words = set(word2index.keys())
+    if pt_model is not None:
+        print(f'updating known_words with pretrained.vocabulary(): {type(pt_model.vocabulary())}; {len(pt_model.vocabulary())}')
+        known_words.update(pt_model.vocabulary())
+    print("known_words:", type(known_words), len(known_words))
+
+    word2index['UNKTOKEN'] = len(word2index)
+    word2index['PADTOKEN'] = len(word2index)
+    unk_index = word2index['UNKTOKEN']
+    pad_index = word2index['PADTOKEN']
+
+    # index documents and keep track of test terms outside the 
+    # development vocabulary that are in pretrained model (if available)
+    out_of_vocabulary = dict()
+    analyzer = dataset.analyzer()
+    print("analyzer:", type(analyzer), analyzer)
+
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
+    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
+
+    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+
+
+
 def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, opt):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents and log outputs to files.

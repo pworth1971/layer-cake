@@ -18,7 +18,6 @@ from os.path import join
 import re
 
 
-
 TEST_SIZE = 0.2
 VAL_SIZE = 0.2
 
@@ -165,7 +164,7 @@ class Dataset:
         print("vectorizer:\n", self._vectorizer)
 
         self._vectorizer.fit(self.devel_raw)
-        
+
         self.vocabulary = self._vectorizer.vocabulary_
         print("vocabulary:", type(self.vocabulary), len(self.vocabulary))
 

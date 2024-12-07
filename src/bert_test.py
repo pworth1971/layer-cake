@@ -22,7 +22,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import f1_score
 
 from data.lc_dataset import LCDataset, loadpt_data
-from model.classification import run_svm_model, run_lr_model, run_nb_model
+#from model.classification import run_svm_model, run_lr_model, run_nb_model
 from util.metrics import evaluation_nn, evaluation_ml
 from util.common import get_embedding_type, index_dataset, initialize_testing
 
