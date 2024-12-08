@@ -266,6 +266,8 @@ class TransformerWCEClassifier(nn.Module):
         print(f'TransformerWCEClassifier:__init__...num_classes: {num_classes}, use_supervised: {use_supervised}, combination: {combination}, device: {device}')
 
         self.transformer = transformer_model
+        self.transformer.to(device)
+
         self.hidden_size = self.transformer.config.hidden_size
         self.num_classes = num_classes
         self.use_supervised = use_supervised
@@ -275,9 +277,12 @@ class TransformerWCEClassifier(nn.Module):
 
         # Store WCE matrix for lookup if provided
         self.wce_matrix = wce_matrix            # [vocab_size, num_classes] (or None)
-        if (wce_matrix is not None):
-            wce_matrix.to(self.device)
-        print("self.wce_matrix:", type(self.wce_matrix), wce_matrix.shape)
+        # Store WCE matrix for lookup if provided
+        if wce_matrix is not None:
+            self.wce_matrix = wce_matrix.to(self.device) 
+            print("self.wce_matrix:", type(self.wce_matrix), wce_matrix.shape)
+        else:
+            print("self.wce_matrix: None")
 
         # Dynamically calculate input size for classifier
         if self.use_supervised and self.combination == "concat":
@@ -286,6 +291,9 @@ class TransformerWCEClassifier(nn.Module):
             classifier_input_size = self.hidden_size
         print("classifier_input_size:", classifier_input_size)
 
+        if self.use_supervised and combination == "add":
+            self.wce_projection = nn.Linear(num_classes, self.hidden_size)
+
         # Classification head
         self.classifier = nn.Sequential(
             nn.Linear(classifier_input_size, 256),
@@ -293,9 +301,6 @@ class TransformerWCEClassifier(nn.Module):
             nn.Dropout(0.3),
             nn.Linear(256, self.num_classes)
         )
-
-        self.to(self.device)  # Move the entire model to the specified device
-
 
     def forward(self, input_ids, attention_mask, token_ids=None):
         """
@@ -309,15 +314,8 @@ class TransformerWCEClassifier(nn.Module):
         Returns:
             logits: Classification logits (batch_size, num_classes).
         """
-
-        # Move all inputs to the model's device
-        input_ids = input_ids.to(self.device)
-        attention_mask = attention_mask.to(self.device)
-        if token_ids is not None:
-            token_ids = token_ids.to(self.device)
-            print("token_ids:", type(token_ids), token_ids.shape)
-        else:
-            print("** warning: token_ids is None **")
+        if token_ids is None:
+            print("*** WARNING: token_ids is None ***")
 
         # Transformer forward pass
         transformer_output = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
@@ -327,7 +325,7 @@ class TransformerWCEClassifier(nn.Module):
         attention_mask_expanded = attention_mask.unsqueeze(-1)
         token_embeddings = token_embeddings * attention_mask_expanded
         pooled_token_output = token_embeddings.sum(dim=1) / attention_mask_expanded.sum(dim=1)
-        print("pooled_token_output:", type(pooled_token_output), pooled_token_output.shape)
+        #print("pooled_token_output:", type(pooled_token_output), pooled_token_output.shape)
 
         # Integrate WCE embeddings
         if self.use_supervised and self.wce_matrix is not None and token_ids is not None:
@@ -340,19 +338,24 @@ class TransformerWCEClassifier(nn.Module):
 
             # Mean pooling for WCE embeddings
             pooled_wce_output = wce_embeddings.sum(dim=1) / attention_mask_expanded.sum(dim=1)  # [batch_size, num_classes]
-            print("pooled_wce_output:", type(pooled_wce_output), pooled_wce_output.shape)
+            #print("pooled_wce_output:", type(pooled_wce_output), pooled_wce_output.shape)
             
             if self.combination == "concat":
                 # Concatenate token embeddings with WCE embeddings
                 pooled_output = torch.cat((pooled_token_output, pooled_wce_output), dim=1)  # [batch_size, hidden_size + num_classes]
             elif self.combination == "add":
+                
+                # Project WCE output to match hidden size
+                pooled_wce_output = self.wce_projection(pooled_wce_output)  # [batch_size, hidden_size]
+                
                 # Add token embeddings and WCE embeddings
-                pooled_output = pooled_token_output + pooled_wce_output  # [batch_size, hidden_size]
+                pooled_output = pooled_token_output + pooled_wce_output  # Add token and WCE embeddings
+
             else:
                 raise ValueError(f"Invalid combination method: {self.combination}")
         else:
             pooled_output = pooled_token_output  # No WCE integration
-        print("pooled_output:", type(pooled_output), pooled_output.shape)
+        #print("pooled_output:", type(pooled_output), pooled_output.shape)
 
         # Classification
         logits = self.classifier(pooled_output)  # Shape: [batch_size, num_classes]
@@ -601,8 +604,9 @@ def validate(model, val_loader, device):
     - device: Device to run the model on (CPU/GPU).
 
     Returns:
-    float: Macro F1 score on validation data.
+    tuple: Macro F1 score, Micro F1 score, and Accuracy on validation data.
     """
+    
     #print("\n\tvalidating...")
 
     model.eval()
@@ -627,7 +631,10 @@ def validate(model, val_loader, device):
 
     # Calculate macro F1 score
     macro_f1 = f1_score(all_labels, all_preds, average='macro')
-    return macro_f1
+    micro_f1 = f1_score(all_labels, all_preds, average='micro')
+    accuracy = accuracy_score(all_labels, all_preds)
+    
+    return macro_f1, micro_f1, accuracy
 
 
 def train(model, train_loader, val_loader, device, epochs=3, learning_rate=2e-5, patience=3):
@@ -647,13 +654,13 @@ def train(model, train_loader, val_loader, device, epochs=3, learning_rate=2e-5,
     None
     """
 
-    print("\n\ttraining...")
+    print(f'training model...epochs: {epochs}, learning_rate: {learning_rate}, patience: {patience}, device: {device}')
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
     model.to(device)
 
-    best_val_f1 = 0.0
+    best_macro_val_f1 = 0.0
     patience_counter = 0
 
     for epoch in range(epochs):
@@ -685,12 +692,12 @@ def train(model, train_loader, val_loader, device, epochs=3, learning_rate=2e-5,
         print(f"Epoch {epoch + 1} Loss: {total_loss / len(train_loader)}")
 
         # Validate after each epoch
-        val_f1 = validate(model, val_loader, device)
-        print(f"Validation F1 Score: {val_f1:.4f}")
+        val_macro_f1, val_micro_f1, acc = validate(model, val_loader, device)
+        print(f"Validation Macro F1: {val_macro_f1:.4f}, Validation Micro F1: {val_micro_f1:.4f}, accuracy: {acc:.4f}")
 
         # Early stopping
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
+        if val_macro_f1 > best_macro_val_f1:
+            best_macro_val_f1 = val_macro_f1
             patience_counter = 0
             torch.save(model.state_dict(), "../out/best_model.pth")
             print("saved model to ../out/best_model.pth...")
@@ -1410,7 +1417,7 @@ def classify(opt, device, batch_size=MPS_BATCH_SIZE, epochs=EPOCHS, max_length=M
         device=device,
         wce_matrix=wce_train,
         use_supervised=opt.supervised,
-        combination='concat'
+        combination='add'
     ).to(device)
     print("TransformerWCEModel:\n", model)
 
