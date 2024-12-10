@@ -700,18 +700,21 @@ if __name__ == "__main__":
     print("args:", args)    
 
     # initialize logging and other system run variables
-    already_modelled, logfile, method_name, pretrained, embeddings, emb_path, lm_type, mode, system = initialize_testing(args)
+    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(args)
 
     # check to see if model params have been computed already
     if (already_modelled and not args.force):
         print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, and wc_supervised == {args.supervised} for {args.dataset} already calculated, run with --force option to override. ---')
         exit(0)
 
-    embedding_type = get_embedding_type(args)
+    #embedding_type = get_embedding_type(args)
     print("embedding_type:", embedding_type)
     print("embeddings:", embeddings)    
     print("embedding_path:", emb_path)
-
+    print("lm_type:", lm_type)
+    print("mode:", mode)
+    print("system:", system)
+    
     device = get_device()
     print("device:", device)
     

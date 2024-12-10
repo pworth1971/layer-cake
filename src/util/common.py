@@ -30,9 +30,8 @@ from embedding.pretrained import XLNET_MODEL, GPT2_MODEL, LLAMA_MODEL
 OUT_DIR = '../out/'                                             # output directory
 LOG_DIR = '../log/'                                             # log directory
 
-NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff']
+NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff', 'hf.sc.ff', 'hf.class.ff']
 ML_MODELS = ['svm', 'lr', 'nb']
-
 
 SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
 SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
