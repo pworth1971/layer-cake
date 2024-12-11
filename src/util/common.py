@@ -188,6 +188,8 @@ def get_embeddings_path(pretrained, args):
         return args.roberta_path
     elif pretrained == 'distilbert':
         return args.distilbert_path
+    elif pretrained == 'albert':
+        return args.albert_path
     elif pretrained == 'xlnet':
         return args.xlnet_path
     elif pretrained == 'gpt2':
@@ -224,14 +226,16 @@ def get_language_model_type(embeddings, model_name=None):
             return 'static:subword:co-occurrence:local'
         else:
             return 'static:word:co-occurrence:local'
-    elif embeddings in ['llama', 'gpt2']:
-        return 'transformer:token:autoregressive:unidirectional:causal'
     elif embeddings in ['bert', 'roberta']:
         return 'transformer:token:autoregressive:bidirectional:masked'
     elif embeddings in ['distilbert']:
         return 'transformer:token:bidirectional:masked'
+    elif embeddings in ['albert']:
+        return 'transformer:token:bidirectional:sop:masked'
     elif embeddings in ['xlnet']:
         return 'transformer:token:autoregressive:bidirectional:permutated'
+    elif embeddings in ['llama', 'gpt2']:
+        return 'transformer:token:autoregressive:unidirectional:causal'
     else:
         return 'static:word:co-occurrence:global'  # Default to word embeddings
 
@@ -253,6 +257,7 @@ def set_method_name(opt, add_model=False):
                 'fasttext': ('subword', FASTTEXT_MODEL),
                 'bert': ('transformer', BERT_MODEL),
                 'roberta': ('transformer', ROBERTA_MODEL),
+                'albert': ('transformer', ALBERT_MODEL),
                 'distilbert': ('transformer', DISTILBERT_MODEL),
                 'xlnet': ('transformer', XLNET_MODEL),
                 'gpt2': ('transformer', GPT2_MODEL),

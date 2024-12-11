@@ -44,22 +44,14 @@ from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import get_supervised_embeddings
 
+from embedding.pretrained import MODEL_MAP
+
 from scipy.sparse import csr_matrix
 
 
 
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed"]
 
-
-# Define a default model mapping (optional) to avoid invalid identifiers
-MODEL_MAP = {
-    "bert": "bert-base-uncased",
-    "roberta": "roberta-base",
-    "distilbert": "distilbert-base-uncased",
-    "xlnet": "xlnet-base-cased",
-    "gpt2": "gpt2",
-    "llama": "meta-llama/Llama-2-7b-chat-hf"  # Example for a possible LLaMA identifier
-}
 
 TEST_SIZE = 0.2
 VAL_SIZE = 0.2
@@ -721,7 +713,7 @@ def parse_args():
     parser.add_argument('--dataset', required=True, type=str, choices=SUPPORTED_DATASETS, help='Dataset to use')
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
-    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
+    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings')
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
@@ -768,18 +760,20 @@ if __name__ == "__main__":
     print("model_name:", model_name)
     print("model_path:", model_path)
 
-    if (args.pretrained == 'llama'):
-        args.llama_path = model_path
-    elif (args.pretrained == 'gpt2'):
-        args.gpt2_path = model_path
-    elif (args.pretrained == 'bert'):
+    if (args.pretrained == 'bert'):
         args.bert_path = model_path
     elif (args.pretrained == 'roberta'):
         args.roberta_path = model_path
     elif (args.pretrained == 'distilbert'):
         args.distilbert_path = model_path
+    elif (args.pretrained == 'albert'):
+        args.albert_path = model_path
     elif (args.pretrained == 'xlnet'):
         args.xlnet_path = model_path
+    elif (args.pretrained == 'gpt2'):
+        args.gpt2_path = model_path
+    elif (args.pretrained == 'llama'):
+        args.llama_path = model_path
     else:
         raise ValueError("Unsupported pretrained model:", args.pretrained)
     

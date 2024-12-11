@@ -12,7 +12,7 @@ from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilB
 from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']
 
 
 VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
@@ -24,6 +24,7 @@ VECTOR_CACHE = "../.vector_cache"                               # cache director
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
 
+GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
@@ -39,8 +40,9 @@ ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, ca
 
 DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
 
-#XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
-XLNET_MODEL = 'xlnet-base-uncased'                            # dimension = 768, case insensitive
+ALBERT_MODEL = 'albert-base-v2'                              # dimension = 768, case insensitive
+
+XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
 #XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
 GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
@@ -51,22 +53,22 @@ LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096,
 # -------------------------------------------------------------------------------------------------------
 
 
+
 # Define a default model mapping (optional) to avoid invalid identifiers
 MODEL_MAP = {
-    "glove": "glove.840B.300d",
-    "word2vec": "GoogleNews-vectors-negative300",
-    "fasttext": "crawl-300d-2M.vec",
-    "bert": "bert-base-uncased",
-    "roberta": "roberta-base",
-    "distilbert": "distilbert-base-uncased",
-    "xlnet": "xlnet-base-uncased",
-    "gpt2": "gpt2",
-    "llama": "meta-llama/Llama-2-7b-chat-hf"  # Example for a possible LLaMA identifier
+    "glove": GLOVE_MODEL,
+    "word2vec": WORD2VEC_MODEL,
+    "fasttext": FASTTEXT_MODEL,
+    "bert": BERT_MODEL,
+    "roberta": ROBERTA_MODEL,
+    "distilbert": DISTILBERT_MODEL,
+    "albert": ALBERT_MODEL,                           
+    "xlnet": XLNET_MODEL,
+    "gpt2": GPT2_MODEL,
+    "llama": LLAMA_MODEL  
 }
 
-
 MAX_LENGTH = 512  # Max sequence length for the transformer models
-
 
 from huggingface_hub import login
 
