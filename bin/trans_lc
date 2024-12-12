@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Static configurable variables
-PROGRAM_NAME="../src/trans_layer_cake_v17.py"
-EPOCHS=14
+PROGRAM_NAME="../src/trans_layer_cake_v3.0.py"
+EPOCHS=23
 PATIENCE=2
-LOG_FILE="../log/trans_lc_test17.test"
+LOG_FILE="../log/lc_nn_test.test"
 SEED=27
 
 # Datasets array
@@ -16,12 +16,12 @@ datasets=(
     "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
 )
 
-
 # Pretrained embeddings array (indexed to preserve order)
 embedding_names=(
     "BERT"
     "ROBERTA"
     "DISTILBERT"
+    "ALBERT"
     "XLNET"
     "GPT2"
 )
@@ -30,6 +30,7 @@ embedding_args=(
     "--pretrained bert"
     "--pretrained roberta"
     "--pretrained distilbert"
+    "--pretrained albert"
     "--pretrained xlnet"
     "--pretrained gpt2"
 )
@@ -40,9 +41,15 @@ for dataset in "${datasets[@]}"; do
         embed_name="${embedding_names[$i]}"
         embed_arg="${embedding_args[$i]}"
         
+        echo
         echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-        
-        # Execute the Python program with the current arguments
         python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+        echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised"
+        echo
+        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised
+        echo
+
     done
 done

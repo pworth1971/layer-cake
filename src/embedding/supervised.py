@@ -13,7 +13,7 @@ from data.tsr_function__ import  STWFUNCTIONS
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True, transformers=False):
+def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True):
     """
     General function to compute supervised embeddings using different methods (e.g., TF-IDF, 
     PPMI, various TSR functions).
@@ -23,7 +23,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     label space exceeds a defined limit.
     """
 
-    print(f'\tget_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
+    print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
 
     """
     if isinstance(X, csr_matrix):
@@ -37,7 +37,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     """
     
     nC = y.shape[1]
-    #print("nC:", {nC})
+    print("nC:", {nC})
 
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')

@@ -35,6 +35,10 @@ from transformers import AutoModelForSequenceClassification, AutoModel, AutoToke
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
 
+
+from transformers import PreTrainedModel
+from transformers import AutoConfig, AutoModelForSequenceClassification, PreTrainedModel
+
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
@@ -305,7 +309,107 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
 
 
-def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
+def compute_supervised_embeddings(Xtr, Ytr, Xval, Yval, Xte, Yte, opt):
+    """
+    Compute supervised embeddings for a given vectorized datasets - include training, validation
+    and test dataset output.
+
+    Parameters:
+    - vocabsize: Size of the (tokenizer and vectorizer) vocabulary.
+    - Xtr: Vectorized training data (e.g., TF-IDF, count vectors).
+    - Ytr: Multi-label binary matrix for training labels.
+    - Xval: Vectorized validation data.
+    - Yval: Multi-label binary matrix for validation labels.
+    - Xte: Vectorized test data.
+    - Yte: Multi-label binary matrix for test labels.
+    - opt: Options object with configuration (e.g., supervised method, max label space).
+
+    Returns:
+    - training_tces: Supervised embeddings for the training data.
+    - val_tces: Supervised embeddings for the validation data.
+    - test_tces: Supervised embeddings for the test data.
+    """
+
+    print(f'compute_supervised_embeddings(), opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
+
+    training_tces = get_supervised_embeddings(
+        Xtr, 
+        Ytr, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore)
+    )
+    print("training_tces:", type(training_tces), training_tces.shape)
+
+    val_tces = get_supervised_embeddings(
+        Xval, 
+        Yval, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore)
+    )
+    print("val_tces:", type(val_tces), val_tces.shape)
+
+    test_tces = get_supervised_embeddings(
+        Xte, 
+        Yte, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore)
+    )
+    print("test_tces:", type(test_tces), test_tces.shape)
+
+    return training_tces, val_tces, test_tces
+
+
+
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt):
+    """
+    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
+
+    Parameters:
+    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
+    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
+    - vocabsize: Size of the vocabulary.
+    - word2index: Dictionary mapping words to their index.
+    - out_of_vocabulary: List of words not found in the pretrained model.
+    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
+    - training_label_matrix: Multi-label binary matrix for training labels.
+    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+
+    Returns:
+    - pretrained_embeddings: A tensor containing pretrained embeddings for the text at hand
+    - wce_matrix: computed supervised (Word-Class) embeddings, aka WCEs
+    - sup_range: Range in the embedding matrix where supervised embeddings are located.
+    """
+
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
+    
+    Xtr = vectorized_training_data
+    Ytr = training_label_matrix
+    #print("\tXtr:", type(Xtr), Xtr.shape)
+    #print("\tYtr:", type(Ytr), Ytr.shape)
+
+    TCE = get_supervised_embeddings(
+        Xtr, 
+        Ytr, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore)
+    )
+
+    # Adjust TCE matrix size
+    num_missing_rows = vocabsize - TCE.shape[0]
+    print("num_missing_rows:", num_missing_rows)
+
+    TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
+    tce_matrix = torch.from_numpy(TCE).float()
+
+    return tce_matrix
+
+
+
+def embedding_matrices(embedding_layer, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
     """
     Creates an embedding matrix that includes both pretrained and supervised embeddings.
 
@@ -326,10 +430,10 @@ def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabular
     """
 
     print(f'embedding_matrices(): opt.pretrained: {opt.pretrained}, vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
-          
+
     pretrained_embeddings = []
-    sup_range = None
-    embedding_layer = model.get_input_embeddings()
+
+    #embedding_layer = model.get_input_embeddings()
     embedding_dim = embedding_layer.embedding_dim
     embedding_matrix = torch.zeros((vocabsize, embedding_dim))
 
@@ -346,7 +450,7 @@ def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabular
 
         pretrained_embeddings.append(embedding_matrix)
         print(f'\t[pretrained-matrix] {embedding_matrix.shape}')
-
+    
     # Supervised embeddings (WCEs)
     wce_matrix = None
     if opt.supervised:
@@ -367,11 +471,7 @@ def embedding_matrices(model, tokenizer, vocabsize, word2index, out_of_vocabular
         wce_matrix = torch.from_numpy(WCE).float()
         print('\t[supervised-matrix]', wce_matrix.shape)
 
-        offset = pretrained_embeddings[0].shape[1] if pretrained_embeddings else 0
-        sup_range = [offset, offset + F.shape[1]]
-        print("supervised range: ", sup_range)
-
-    return embedding_matrix, wce_matrix, sup_range
+    return embedding_matrix, wce_matrix
 
 
 
@@ -459,49 +559,271 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
+class LCHFTCESequenceClassifier(nn.Module):
+
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat"):
+        """
+        A Transformer-based classifier with optional TCE integration.
+
+        Args:
+            hf_model: A Hugging Face Sequence Classification model (e.g., BertForSequenceClassification).
+            num_classes: Number of classes for classification.
+            class_type: 'single-label' or 'multi-label'.
+            supervised: Boolean indicating if supervised embeddings are used.
+            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
+            comb_method: Method to integrate TCE embeddings ("add" or "concat").
+        """
+        super(LCHFTCESequenceClassifier, self).__init__()
+
+        print(f"LCTCEClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}")
+
+        self.transformer = hf_model
+
+        for param in self.transformer.parameters():
+            param.data = param.data.contiguous()
+        
+        self.num_classes = num_classes
+        self.class_type = class_type
+        self.supervised = supervised
+        self.comb_method = comb_method
+
+        self.tce_matrix = tce_matrix
+        if self.tce_matrix is not None:
+            print("self.tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
+        else:
+            print("self.tce_matrix: None")
+
+        # Extract the hidden size from the model configuration
+        self.hidden_size = self.transformer.config.hidden_size
+        print("self.hidden_size:", self.hidden_size)
+
+        # Adapt the classifier head to include TCEs if necessary
+        if self.supervised and comb_method == "concat":
+            self.classifier = nn.Linear(self.hidden_size + self.tce_matrix.size(1), self.num_classes)
+        else:
+            self.classifier = nn.Linear(self.hidden_size, self.num_classes)
+
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        """
+        Forward pass with optional supervised embeddings (TCEs).
+        """
+        # Pass inputs through the transformer model
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+
+        # Access the pooled output or the CLS token representation
+        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            pooled_output = outputs.pooler_output                                               # Use pooled output if available
+        else:
+            pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
+
+        # Integrate TCEs if supervised
+        if (self.supervised and self.tce_matrix is not None):
+            # Lookup TCEs for the input tokens
+            tces = self.tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
+    
+            if self.comb_method == "concat":
+                pooled_output = torch.cat([pooled_output, tces], dim=1)                         # Concatenate TCEs
+            elif self.comb_method == "add":
+                pooled_output += tces                                                           # Add TCEs
+            else:
+                raise ValueError(f"Unsupported combination method: {self.comb_method}")
+
+        # Pass the combined representation through the classifier
+        logits = self.classifier(pooled_output)
+
+        # Compute loss if labels are provided
+        loss = None
+        if labels is not None:
+            if self.class_type in ["single-label", "singlelabel"]:
+                loss_fn = nn.CrossEntropyLoss()
+            else:
+                loss_fn = nn.BCEWithLogitsLoss()
+            loss = loss_fn(logits, labels)
+
+        return {"loss": loss, "logits": logits}
+
+
+
+class LCHFTCEClassifier(nn.Module):
+
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat"):
+        """
+        A Transformer-based classifier with optional TCE integration.
+        
+        Args:
+            hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
+            num_classes: Number of classes for classification.
+            supervised: Boolean indicating if supervised embeddings are used.
+            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
+            comb-method: Method to integrate WCE embeddings ("add" or "concat").
+        """
+        super(LCHFTCEClassifier, self).__init__()
+
+        print(f'LCHFTCEClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}')
+
+        self.transformer = hf_model
+        self.hidden_size = self.transformer.config.hidden_size
+        print("self.hidden_size:", self.hidden_size)
+
+        self.num_classes = num_classes
+        self.class_type = class_type
+        self.supervised = supervised
+        self.comb_method = comb_method
+
+        self.tce_matrix = tce_matrix
+        if (self.tce_matrix is not None):
+            print("self.tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
+        else:
+            print("self.tce_matrix: None")
+
+        # Adjust classifier input size if TCEs are used
+        if self.supervised and self.comb_method == "concat":
+            self.classifier_input_size = self.hidden_size + self.num_classes
+        elif self.supervised and self.comb_method == "add":
+            self.classifier_input_size = self.hidden_size
+        else:
+            print("WARNING: unknown combination method for TCEs, using default add method...")
+            self.classifier_input_size = self.hidden_size
+
+        self.classifier = nn.Linear(self.classifier_input_size, self.num_classes)
+
+        """
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Linear(self.classifier_input_size, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, self.num_classes)
+        )
+        """
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None, tces=None):
+        """
+        Forward pass with optional supervised embeddings (TCEs).
+        """
+
+        # Move TCE matrix to the same device as input_ids if necessary
+        if self.tce_matrix is not None:
+            self.tce_matrix = self.tce_matrix.to(input_ids.device)
+
+
+        # Base model forward pass
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = outputs.last_hidden_state[:, 0]             # Use CLS token embedding
+
+        if self.supervised and self.tce_matrix is not None:
+                
+            # Map input_ids to TCE embeddings
+            tces = self.tce_matrix[input_ids]  # Shape: (batch_size, seq_len, tce_dim)
+
+            if self.comb_method == "concat":
+                pooled_output = torch.cat([pooled_output, tces.mean(dim=1)], dim=1)  # Concatenate TCEs
+            elif self.comb_method == "add":
+                pooled_output = pooled_output + tces.mean(dim=1)  # Add TCEs
+            else:
+                raise ValueError(f"Unsupported comb_method: {self.comb_method}")            
+
+        # Classification head
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            #if labels.dtype == torch.long:                         
+            if class_type in ['single-label', 'singlelabel']:       # Single-label classification
+                loss_fn = nn.CrossEntropyLoss()
+            else:                                                   # Multi-label classification
+                loss_fn = nn.BCEWithLogitsLoss()
+
+            loss = loss_fn(logits, labels)
+
+        else:
+            print("WARNINMG: No labels provided for loss calculation.")
+
+        return {"loss": loss, "logits": logits}
+
+
+
+
+def get_embedding_dims(hf_model):
+    """
+    Retrieve the embedding dimensions from the Hugging Face model.
+
+    Parameters:
+    - hf_model: A Hugging Face model instance.
+
+    Returns:
+    - Tuple[int]: The shape of the embedding layer (vocab_size, embedding_dim).
+    """
+    print("get_embedding_dims()...")
+    print("hf_model:\n", type(hf_model), hf_model)
+
+    # Find the embedding layer dynamically
+    if hasattr(hf_model, "embeddings"):                                             # BERT, RoBERTa, DistilBERT, ALBERT
+        embedding_layer = hf_model.embeddings.word_embeddings
+    elif hasattr(hf_model, "wte"):                                                  # GPT-2
+        embedding_layer = hf_model.wte    
+    elif hasattr(hf_model, "word_embedding"):                                       # XLNet        
+        embedding_layer = hf_model.word_embedding
+    elif hasattr(hf_model, "llama"):
+        embedding_layer = hf_model.model.embed_tokens
+    else:
+        raise ValueError("Model not supported for automatic embedding extraction")
+
+    print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+    model_size = embedding_layer.weight.shape
+    embedding_size = hf_model.config.hidden_size
+    
+    return model_size, embedding_size
+    
+
+
 class LCDataset(Dataset):
+    """
+    Dataset class for handling both input text and labels for LCHFTCEClassifier
+
+    Parameters:
+    - texts: List of input text samples.
+    - labels: Multi-label binary vectors or single-label indices.
+    - tokenizer: Hugging Face tokenizer for text tokenization.
+    - max_length: Maximum length of tokenized sequences.
+    - class_type: 'multi-label' or 'single-label' classification type.
+    """
 
     def __init__(self, texts, labels, tokenizer, max_length=512, class_type='multi-label'):
-        """
-        Dataset class for handling both input text and labels, with optional support for 
-        pretrained embeddings and supervised ranges.
-
-        Parameters:
-        - texts: List of input text samples.
-        - labels: Multi-label binary vectors or single-label indices.
-        - tokenizer: Hugging Face tokenizer for text tokenization.
-        - max_length: Maximum length of tokenized sequences.
-        - class_type: 'multi-label' or 'single-label' classification type.
-        - sup_range: Range of supervised embeddings within the concatenated embeddings.
-        """
-
+        
         print(f'LCDataset() class_type: {class_type}, len(texts): {len(texts)}, len(labels): {len(labels)}, max_length: {max_length}')
 
+        assert len(texts) == len(labels), "Mismatch between texts and labels lengths."
+
         self.texts = texts
-        self.labels = labels                                    # Binary vectors (multi-label format) or indices (single-label)
+        self.labels = labels
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.class_type = class_type
-        self.sup_range = sup_range
+
 
     def __len__(self):
         return len(self.texts)
 
+        
+    def shape(self):
+        """
+        Returns the shape of the dataset as a tuple: (number of texts, number of labels).
+        """
+        return len(self.texts), len(self.labels) if self.labels is not None else 0
+    
 
     def __getitem__(self, idx):
         """
         Get an individual sample from the dataset.
 
         Returns:
-        - item: Dictionary containing tokenized inputs and labels.
+        - item: Dictionary containing tokenized inputs, labels, and optionally supervised embeddings.
         """
         text = self.texts[idx]
-        
-        if self.labels is not None:
-            labels = self.labels[idx]
-        else:
-            [0]           # Default label if labels are missing
-            print("WARNIG: Missing labels for item", idx)
+        labels = self.labels[idx] if self.labels is not None else 0  # Default label is 0 if missing
 
         # Tokenize the text
         encoding = self.tokenizer(
@@ -520,26 +842,19 @@ class LCDataset(Dataset):
             item["labels"] = torch.tensor(labels, dtype=torch.float)
 
         return item
-    
-    def shape(self):
-        """
-        Returns the shape of the dataset as a tuple: (number of texts, number of labels).
-        """
-        return len(self.texts), len(self.labels)
 
 
 
 def custom_data_collator(batch):
     """
-    Custom data collator for handling variable-length sequences and labels.
+    Custom data collator for handling variable-length sequences and TCEs.
 
     Parameters:
     - batch: List of individual samples from the dataset.
 
     Returns:
-    - collated: Dictionary containing collated inputs and labels.
+    - collated: Dictionary containing collated inputs, labels, and optionally TCEs.
     """
-
     collated = {
         "input_ids": torch.stack([f["input_ids"] for f in batch]),
         "attention_mask": torch.stack([f["attention_mask"] for f in batch]),
@@ -547,16 +862,9 @@ def custom_data_collator(batch):
 
     if "labels" in batch[0]:
         collated["labels"] = torch.stack([f["labels"] for f in batch])
-    else:
-        print("Missing 'labels' key in batch!")  # Debugging missing labels
-        collated["labels"] = torch.zeros(len(batch), dtype=torch.long)
-
-    if "pretrained_embeddings" in batch[0]:
-        collated["pretrained_embeddings"] = torch.stack([f["pretrained_embeddings"] for f in batch])
-
-    #print(f"Batch sizes - input_ids: {collated['input_ids'].size()}, labels: {collated['labels'].size()}")
 
     return collated
+
 
 
 def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
@@ -601,40 +909,22 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     }
 
 
-def get_embedding_dims(hf_model):
+    
+def get_hf_models(model_name, model_path, num_classes):
 
-    # Find the embedding layer dynamically
-    if hasattr(hf_model, "bert"):
-        embedding_layer = hf_model.bert.embeddings.word_embeddings
-    
-    elif hasattr(hf_model, "roberta"):
-        embedding_layer = hf_model.roberta.embeddings.word_embeddings
-    
-    elif hasattr(hf_model, "distilbert"):
-        embedding_layer = hf_model.distilbert.embeddings.word_embeddings
-    
-    elif hasattr(hf_model, "albert"):
-        embedding_layer = hf_model.albert.embeddings.word_embeddings
-    
-    elif hasattr(hf_model, "llama"):
-        embedding_layer = hf_model.model.embed_tokens
+    print(f'get_hf_models(): model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}')
 
-    # For XLNet, GPT-2, and similar transformer models
-    elif hasattr(hf_model, "transformer"):
-        # Handle transformer-based models
-        transformer = hf_model.transformer
-        if hasattr(transformer, "wte"):  # GPT-2
-            embedding_layer = transformer.wte
-        elif hasattr(transformer, "word_embedding"):  # XLNet
-            embedding_layer = transformer.word_embedding
-        else:
-            raise ValueError("Embedding layer not found in the transformer model.")
-        
-    else:
-        raise ValueError("Model not supported for automatic embedding extraction")
-
-    return embedding_layer.weight.shape 
+    # Initialize Hugging Face Transfromer model
+    hf_trans_model = AutoModel.from_pretrained(model_name, cache_dir=model_path)
     
+    # Initialize Hugging Face Transformer model for sequence classification
+    hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        cache_dir=model_path,
+        num_labels=num_classes  # Specify the number of classes for classification
+    )
+    
+    return hf_trans_model, hf_trans_class_model
 
 
 # Parse arguments
@@ -763,6 +1053,9 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
+    #
+    # check set up the tokenizer
+    #    
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
     # Add padding token if it doesn't exist
     if tokenizer.pad_token is None:
@@ -774,18 +1067,6 @@ if __name__ == "__main__":
 
     tok_vocab_size = len(tokenizer)
     print("tok_vocab_size:", tok_vocab_size)
-
-    hf_model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(target_names))
-    # Set the pad_token_id in the model configuration
-    hf_model.config.pad_token_id = tokenizer.pad_token_id
-    hf_model.to(device)
-    print("hf_model:\n", hf_model)
-
-    #
-    # get the embedding layer dimensions for logging
-    #
-    dimensions = get_embedding_dims(hf_model)
-    print("dimensions:", dimensions)
 
     # Compute max_length from tokenizer
     max_length = tokenizer.model_max_length
@@ -800,7 +1081,9 @@ if __name__ == "__main__":
     print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
     print(f"  Max length: {max_length}")
 
+    #
     # Split train into train and validation
+    #
     texts_train, texts_val, labels_train, labels_val = train_test_split(train_data, train_target, test_size=VAL_SIZE, random_state=RANDOM_SEED)
 
     print("texts_train:", type(texts_train), len(texts_train))
@@ -818,6 +1101,9 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
+    #
+    # Vectorize the text data
+    #
     vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
     print("vectorizer:\n", vectorizer)
 
@@ -834,39 +1120,53 @@ if __name__ == "__main__":
     print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
     vec_vocab_size = len(vectorizer.vocabulary_)
     print("vec_vocab_size:", vec_vocab_size)
+    tok_vocab_size = len(tokenizer.get_vocab())
+    print("tok_vocab_size:", tok_vocab_size)
 
-    """
-    if (class_type in ['single-label', 'singlelabel']):
+    assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
 
-        print("single label, converting target labels to to one-hot")
+    # 
+    # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
+    # then instantiate the LCSequenceClassifier model)
+    #
+    if (args.supervised):
 
-        label_binarizer = LabelBinarizer()        
-        labels_train = label_binarizer.fit_transform(labels_train)
-        labels_val = label_binarizer.transform(labels_val)
-        labels_test = label_binarizer.transform(labels_test)
+        tce_matrix = compute_tces(
+            vocabsize=vec_vocab_size,
+            vectorized_training_data=Xtr,
+            training_label_matrix=labels_train,
+            opt=args
+        )
 
-        print("labels_train:", type(labels_train), labels_train.shape)
-        print("labels_train[0]:", type(labels_train[0]), labels_train[0])
-        print("labels_val:", type(labels_val), labels_val.shape)
-        print("labels_val[0]:", type(labels_val[0]), labels_val[0])
-        print("labels_test:", type(labels_test), labels_test.shape)
-        print("labels_test[0]:", type(labels_test[0]), labels_test[0])
-    """
+        print("tce_matrix:", type(tce_matrix), tce_matrix.shape)
 
-    # Call `embedding_matrix` with the loaded model and tokenizer
-    pretrained_embeddings, sup_range, num_dimensions = embedding_matrix(
-        model=hf_model,
-        tokenizer=tokenizer,
-        vocabsize=vec_vocab_size,
-        word2index=vectorizer.vocabulary_,
-        out_of_vocabulary=[],
-        vectorized_training_data=Xtr,
-        training_label_matrix=labels_train,
-        opt=args
-    )
+        tce_matrix.to(device)           # must move the TCE embeddings to same device as model
+    else:
+        tce_matrix = None
 
-    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
-    print("supervised range: ", sup_range)
+    hf_trans_model, hf_trans_class_model = get_hf_models(model_name, model_path, num_classes=num_classes)
+    
+    print("\n\thf_trans_model:\n", hf_trans_model)
+    print("\n\thf_trans_class_model:\n", hf_trans_class_model)
+
+    hf_trans_model.to(device)
+    hf_trans_class_model.to(device)
+
+    # Get embedding size from the model
+    dimensions, vec_size = get_embedding_dims(hf_trans_model)
+    print(f'model size: {dimensions}, embedding dimension: {vec_size}')
+
+    hf_trans_model = hf_trans_class_model
+
+    lc_model = LCHFTCESequenceClassifier(
+        hf_model=hf_trans_model,
+        num_classes=num_classes,
+        class_type=class_type,
+        supervised=args.supervised,
+        tce_matrix=tce_matrix,
+        comb_method="concat"
+    ).to(device)
+    print("lc_model:\n", lc_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
@@ -874,26 +1174,17 @@ if __name__ == "__main__":
         labels_train, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings, 
-        #sup_range=sup_range
+        class_type=class_type,
+        #supervised_embeddings=train_tces 
     )
-
-    """
-    for i in range(len(train_dataset)):
-        sample = train_dataset[i]
-        assert "labels" in sample, f"Missing 'labels' in sample {i}"
-        print(f"Sample {i} is valid.")
-    """
 
     val_dataset = LCDataset(
         texts_val, 
         labels_val, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type, 
-        #pretrained_embeddings=pretrained_embeddings, 
-        #sup_range=sup_range
+        class_type=class_type,
+        #supervised_embeddings=val_tces
     )
 
     test_dataset = LCDataset(
@@ -901,9 +1192,8 @@ if __name__ == "__main__":
         labels_test, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type, 
-        #retrained_embeddings=pretrained_embeddings, 
-        #sup_range=sup_range
+        class_type=class_type,
+        #supervised_embeddings=test_tces 
     )
 
     tinit = time()
@@ -929,7 +1219,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=hf_model,
+        model=lc_model,                                     # be sure to use LC_Model
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
@@ -978,11 +1268,9 @@ if __name__ == "__main__":
     tend = time() - tinit
 
     measure_prefix = 'final'
-    epoch = trainer.state.epoch
+    #epoch = trainer.state.epoch
+    epoch = int(round(trainer.state.epoch))
     print("epoch:", epoch)
-
-    dimensions = dimensions + train_dataset.shape()
-    print("dimensions:", dimensions)
 
     logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
     logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)

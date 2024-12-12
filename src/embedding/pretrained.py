@@ -7,22 +7,28 @@ from tqdm import tqdm
 import torch, torchtext
 from torchtext.vocab import GloVe as TorchTextGloVe
 
-
-from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel
-from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
+from transformers import BertModel, BertTokenizerFast
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']
 
+
+
+
+#
+# pretrained models supported by custom CNN, LSTM and ATTN neural models
+# NB issues with BERT model support in this context although we 
+# leave config here
+#   
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
 
 VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
 
-
 # -------------------------------------------------------------------------------------------------------
-# default pretrained models.
 #
-# NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
+# default pretrained models we are using
 #
+
+GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 
 GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
@@ -40,7 +46,7 @@ ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, ca
 
 DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
 
-ALBERT_MODEL = 'albert-base-v2'                              # dimension = 768, case insensitive
+ALBERT_MODEL = 'albert-base-v2'                              # dimension = 128, case insensitive
 
 XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
 #XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
@@ -53,12 +59,10 @@ LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096,
 # -------------------------------------------------------------------------------------------------------
 
 
-
-# Define a default model mapping (optional) to avoid invalid identifiers
+# 
+# Model Map for transformer based models
+#
 MODEL_MAP = {
-    "glove": GLOVE_MODEL,
-    "word2vec": WORD2VEC_MODEL,
-    "fasttext": FASTTEXT_MODEL,
     "bert": BERT_MODEL,
     "roberta": ROBERTA_MODEL,
     "distilbert": DISTILBERT_MODEL,
@@ -68,15 +72,16 @@ MODEL_MAP = {
     "llama": LLAMA_MODEL  
 }
 
-MAX_LENGTH = 512  # Max sequence length for the transformer models
+MAX_LENGTH = 512  # default max sequence length for the transformer models
 
+#
+# Hugging Face Login info for gated models (eg LlaMa)
+#
 from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
-
-GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 
 
 

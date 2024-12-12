@@ -20,31 +20,31 @@ import GPUtil
 from util.csv_log import CSVLog
 
 from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
-from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
+from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, ALBERT_MODEL
 from embedding.pretrained import XLNET_MODEL, GPT2_MODEL, LLAMA_MODEL
 
 
 
 
-# --------------------------------------------------------------------------------------------------------------
 OUT_DIR = '../out/'                                             # output directory
 LOG_DIR = '../log/'                                             # log directory
 
+
+# --------------------------------------------------------------------------------------------------------------
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff', 'hf.sc.ff', 'hf.class.ff']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'albert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'albert', 'distilbert', 'xlnet', 'gpt2', 'llama']
 # --------------------------------------------------------------------------------------------------------------
 
 
 
 
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def initialize_testing(args):
 
