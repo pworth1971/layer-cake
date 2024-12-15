@@ -560,93 +560,11 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
-class LCHFTCESequenceClassifier(nn.Module):
-
-    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat"):
-        """
-        A Transformer-based classifier with optional TCE integration.
-
-        Args:
-            hf_model: A Hugging Face Sequence Classification model (e.g., BertForSequenceClassification).
-            num_classes: Number of classes for classification.
-            class_type: 'single-label' or 'multi-label'.
-            supervised: Boolean indicating if supervised embeddings are used.
-            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            comb_method: Method to integrate TCE embeddings ("add" or "concat").
-        """
-        super(LCHFTCESequenceClassifier, self).__init__()
-
-        print(f"LCTCEClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}")
-
-        self.transformer = hf_model
-
-        for param in self.transformer.parameters():
-            param.data = param.data.contiguous()
-        
-        self.num_classes = num_classes
-        self.class_type = class_type
-        self.supervised = supervised
-        self.comb_method = comb_method
-
-        self.tce_matrix = tce_matrix
-        if self.tce_matrix is not None:
-            print("self.tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
-        else:
-            print("self.tce_matrix: None")
-
-        # Extract the hidden size from the model configuration
-        self.hidden_size = self.transformer.config.hidden_size
-        print("self.hidden_size:", self.hidden_size)
-
-        # Adapt the classifier head to include TCEs if necessary
-        if self.supervised and comb_method == "concat":
-            self.classifier = nn.Linear(self.hidden_size + self.tce_matrix.size(1), self.num_classes)
-        else:
-            self.classifier = nn.Linear(self.hidden_size, self.num_classes)
-
-
-    def forward(self, input_ids=None, attention_mask=None, labels=None):
-        """
-        Forward pass with optional supervised embeddings (TCEs).
-        """
-        # Pass inputs through the transformer model
-        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-
-        # Access the pooled output or the CLS token representation
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            pooled_output = outputs.pooler_output                                               # Use pooled output if available
-        else:
-            pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
-
-        # Integrate TCEs if supervised
-        if (self.supervised and self.tce_matrix is not None):
-            # Lookup TCEs for the input tokens
-            tces = self.tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
-    
-            if self.comb_method == "concat":
-                pooled_output = torch.cat([pooled_output, tces], dim=1)                         # Concatenate TCEs
-            elif self.comb_method == "add":
-                pooled_output += tces                                                           # Add TCEs
-            else:
-                raise ValueError(f"Unsupported combination method: {self.comb_method}")
-
-        # Pass the combined representation through the classifier
-        logits = self.classifier(pooled_output)
-
-        # Compute loss if labels are provided
-        loss = None
-        if labels is not None:
-            if self.class_type in ["single-label", "singlelabel"]:
-                loss_fn = nn.CrossEntropyLoss()
-            else:
-                loss_fn = nn.BCEWithLogitsLoss()
-            loss = loss_fn(logits, labels)
-
-        return {"loss": loss, "logits": logits}
+SUPPORTED_OPS = ["concat", "add", "dot"]
 
 
 
-class LCHFTCEClassifier(nn.Module):
+class LCHFTCEClassifier2(nn.Module):
 
     def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat"):
         """
@@ -659,9 +577,9 @@ class LCHFTCEClassifier(nn.Module):
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
             comb-method: Method to integrate WCE embeddings ("add" or "concat").
         """
-        super(LCHFTCEClassifier, self).__init__()
+        super(LCHFTCEClassifier2, self).__init__()
 
-        print(f'LCHFTCEClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}')
+        print(f'LCHFTCEClassifier2:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}')
 
         self.transformer = hf_model
         self.hidden_size = self.transformer.config.hidden_size
@@ -742,7 +660,185 @@ class LCHFTCEClassifier(nn.Module):
             print("WARNINMG: No labels provided for loss calculation.")
 
         return {"loss": loss, "logits": logits}
+    
 
+
+
+
+class LCClassifier3(nn.Module):
+
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="dot", debug=False):
+        """
+        A Transformer-based classifier with optional TCE integration.
+
+        Args:
+            hf_model: A Hugging Face Sequence Classification model (e.g., BertForSequenceClassification).
+            num_classes: Number of classes for classification.
+            class_type: 'single-label' or 'multi-label'.
+            supervised: Boolean indicating if supervised embeddings are used.
+            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
+            comb_method: Method to integrate TCE embeddings ("add" or "concat" or "dot").
+            debug: Boolean flag for debug mode.
+        """
+        super(LCClassifier3, self).__init__()
+
+        print(f"LCClassifier3:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}, debug: {debug}")
+
+        self.transformer = hf_model
+
+        # all the tensors need to be stored contiguously in memory
+        for param in self.transformer.parameters():
+            param.data = param.data.contiguous()
+        
+        self.num_classes = num_classes
+        self.class_type = class_type
+        self.supervised = supervised
+        self.comb_method = comb_method
+        self.debug = debug  
+        self.tce_matrix = tce_matrix
+
+        if self.tce_matrix is not None:
+            print("-- original tce matrix --:", type(self.tce_matrix), self.tce_matrix.shape)
+
+            # Normalize the TCE matrix using transformer embedding stats
+            embedding_layer = self.transformer.get_input_embeddings()
+            embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
+            embedding_std = embedding_layer.weight.std(dim=0).to(device)
+            print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
+
+            self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
+            print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+
+            # Ensure the TCE matrix is normalized to the same distribution as the transformer embeddings
+            self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+            print(f"TCE embedding layer created with shape: {self.tce_layer.weight.shape}")
+        else:
+            print("self.tce_matrix: None")
+
+        # Extract the hidden size from the model configuration
+        self.hidden_size = self.transformer.config.hidden_size
+        print("self.hidden_size:", self.hidden_size)
+
+        # Add a projection layer for `dot` operation to ensure hidden_size compatibility
+        if self.supervised and comb_method == "dot":
+            self.projection_layer = nn.Linear(self.tce_matrix.size(1), self.hidden_size)
+
+        if self.supervised is None and self.tce_matrix is None:
+            combined_size = self.hidden_size
+        else:
+            # Adapt classifier head based on combination method
+            combined_size = self.hidden_size if comb_method in ["dot", "add"] else self.hidden_size + self.tce_matrix.size(1)
+            
+        self.classifier = nn.Linear(self.hidden_size, self.num_classes)
+        
+        
+    def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
+        """
+        Normalize the TCE matrix to align with the transformer's embedding space.
+
+        Args:
+        - tce_matrix: TCE matrix (vocab_size x num_classes).
+        - embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
+        - embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
+
+        Returns:
+        - Normalized TCE matrix (vocab_size x model_dim).
+        """
+        device = embedding_mean.device  # Ensure all tensors are on the same device
+        tce_matrix = tce_matrix.to(device)
+
+        tce_mean = tce_matrix.mean(dim=1, keepdim=True).to(device)
+        tce_std = tce_matrix.std(dim=1, keepdim=True).to(device)
+        tce_std[tce_std == 0] = 1  # Avoid division by zero
+
+        # Expand TCE dimensions and normalize
+        tce_matrix_expanded = tce_matrix.unsqueeze(-1).expand(-1, -1, embedding_mean.size(0)).mean(dim=1).to(device)
+        normalized_tce = (tce_matrix_expanded - tce_mean) / tce_std  # Normalize
+        normalized_tce = normalized_tce * embedding_std + embedding_mean  # Scale to transformer embedding stats
+
+        return normalized_tce
+
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        """
+        Forward pass with optional supervised embeddings (TCEs).
+        """
+        # Pass inputs through the transformer model
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+
+        # Access the pooled output or the CLS token representation
+        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            pooled_output = outputs.pooler_output                                               # Use pooled output if available
+            if (self.debug):
+                print(f"[DEBUG] outputs.pooler_output.shape: {pooled_output.shape}")
+        else:
+            pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
+            if (self.debug):
+                print(f"[DEBUG] outputs.hiudden_states[-1][:, 0].shape: {pooled_output.shape}")
+
+        #
+        # Integrate TCEs if supervised is True
+        #
+        if (self.supervised and self.tce_matrix is not None):
+
+            print("integrating TCEs into the model...")
+
+            self.tce_matrix = self.tce_matrix.to(input_ids.device)                              # Ensure `self.tce_matrix` is on the same device as `input_ids`
+
+            # Debug info: Check for out-of-range indices
+            vocab_size = self.tce_matrix.size(0)
+            invalid_indices = input_ids[input_ids >= vocab_size]
+            if invalid_indices.numel() > 0:
+                print(f"[WARNING] Found invalid indices in input_ids: {invalid_indices.tolist()} (max valid index: {vocab_size - 1})")
+
+            # Lookup TCEs for the input tokens
+            tces = self.tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
+            
+            # Debug info: TCEs shape and match checks    
+            if (self.debug):
+                print(f"[DEBUG] tces.shape: {tces.shape}")
+                print(f"[DEBUG] pooled_output.shape: {pooled_output.shape}")
+            
+            if self.comb_method == "concat":    
+                print("concatenating two matrices...")                                                
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                assert pooled_output.size(1) + tces.size(1) == self.hidden_size + self.tce_matrix.size(1), \
+                    f"Concat dimension mismatch: {pooled_output.size(1) + tces.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
+                combined_output = torch.cat([pooled_output, tces], dim=1)                         
+            elif self.comb_method == "add":                                                  
+                print("adding two matricses...")
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                assert pooled_output.size(1) == tces.size(1), \
+                    f"Add dimension mismatch: {pooled_output.size(1)} != {tces.size(1)}"
+                combined_output = pooled_output + tces   
+            elif self.comb_method == "dot":
+                print("multiplying two matricses...")
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                tces_projected = self.projection_layer(tces)                            # Project TCEs to hidden_size
+                combined_output = pooled_output * tces_projected                        # Element-wise multiplication
+            else:
+                raise ValueError(f"Unsupported combination method: {self.comb_method}")    
+        
+            pooled_output = combined_output                                             # Update pooled output with combined representation
+
+        if (self.debug):
+            print(f'pooled_output: type: {type(pooled_output)}, shape: {pooled_output.shape}')
+        
+        # Pass the combined representation through the classifier
+        logits = self.classifier(pooled_output)
+
+        if labels is None:
+            print("WARNING: labels are None, cant compuet lose, returning logits only...")
+            return {"logits": logits}
+        
+        # Compute loss if labels are provided
+        if self.class_type in ["single-label", "singlelabel"]:
+            loss_fn = nn.CrossEntropyLoss()
+        else:
+            loss_fn = nn.BCEWithLogitsLoss()
+        loss = loss_fn(logits, labels)
+
+        return {"loss": loss, "logits": logits}
 
 
 
@@ -938,6 +1034,36 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
     return hf_trans_model, hf_trans_class_model
 
 
+
+class CustomTrainer(Trainer):
+    
+    def training_step(self, model, inputs):
+        """
+        Perform a training step on the model using inputs.
+
+        Args:
+            model: The model to train.
+            inputs: The inputs and targets of the model.
+
+        Returns:
+            torch.Tensor: The training loss on this batch.
+        """
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        # Forward pass
+        outputs = model(**inputs)
+        loss = outputs["loss"]
+
+        if self.args.gradient_accumulation_steps > 1:
+            loss = loss / self.args.gradient_accumulation_steps
+
+        # Backward pass with retain_graph=True
+        loss.backward(retain_graph=True)  # Adjust based on need
+        return loss.detach()
+    
+
+
 # Parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
@@ -951,7 +1077,7 @@ def parse_args():
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
-    parser.add_argument('--log_file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
+    parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
     parser.add_argument('--dropprob', type=float, default=0.1, metavar='[0.0, 1.0]', help='dropout probability (default: 0.1)')
     parser.add_argument('--net', type=str, default='hf.sc.ff', metavar='str', help=f'net, defaults to hf.sc (only supported option)')
@@ -982,7 +1108,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\ttrans layer cake2")
+    print("\n\t--- TRANS_LAYER_CAKE 3.0 ---")
 
     args = parse_args()
     print("args:", args)
@@ -1142,10 +1268,17 @@ if __name__ == "__main__":
     #
     if (args.supervised):
 
+        if (class_type in ['single-label', 'singlelabel']):
+
+            print("single label, converting target labels to to one-hot for tce computation...")
+
+            label_binarizer = LabelBinarizer()        
+            one_hot_labels_train = label_binarizer.fit_transform(labels_train)
+
         tce_matrix = compute_tces(
             vocabsize=vec_vocab_size,
             vectorized_training_data=Xtr,
-            training_label_matrix=labels_train,
+            training_label_matrix=one_hot_labels_train,
             opt=args
         )
 
@@ -1173,13 +1306,13 @@ if __name__ == "__main__":
 
     hf_trans_model = hf_trans_class_model
 
-    lc_model = LCHFTCESequenceClassifier(
+    lc_model = LCClassifier(
         hf_model=hf_trans_model,
         num_classes=num_classes,
         class_type=class_type,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        comb_method="concat"
+        comb_method="dot"
     ).to(device)
     print("lc_model:\n", lc_model)
 
@@ -1232,6 +1365,7 @@ if __name__ == "__main__":
         report_to="none"
     )
 
+    """
     # Trainer with custom data collator
     trainer = Trainer(
         model=lc_model,                                     # be sure to use LC_Model
@@ -1242,13 +1376,29 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
+    """
 
+    trainer = CustomTrainer(
+        model=lc_model,  # Use LCClassifier
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        data_collator=custom_data_collator,
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
+    )
+
+    
     print("\n\t--- model training and evaluation ---\n")
 
-    # Train and evaluate
-    model_deets = trainer.train()
-    print("model_deets\n:", model_deets)
-
+    # Enable anomaly detection during training
+    with torch.autograd.set_detect_anomaly(True):
+        try:
+            model_deets = trainer.train()
+            print("model_deets\n:", model_deets)
+        except RuntimeError as e:
+            print(f"An error occurred during training: {e}")
+            
     final_loss = model_deets.training_loss
     print("final_loss:", final_loss)
 
@@ -1262,12 +1412,6 @@ if __name__ == "__main__":
         y_pred = np.argmax(preds.predictions, axis=1)
     else:
         y_pred = (preds.predictions > 0.5).astype(int)
-
-    """
-    if (class_type in ['single-label', 'singlelabel']):
-        # Convert one-hot encoded labels and predictions to class indices
-        labels_test = np.argmax(labels_test, axis=1)  # Convert one-hot to class indices
-    """
     
     print("labels_test:", type(labels_test), labels_test.shape)
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
