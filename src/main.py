@@ -316,6 +316,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
                 method=opt.supervised_method,
                 max_label_space=opt.max_label_space,
                 dozscore=(not opt.nozscore),
+                debug=True
             )
             num_missing_rows = vocabsize - WCE.shape[0]
             WCE = np.vstack((WCE, np.zeros(shape=(num_missing_rows, WCE.shape[1]))))
@@ -741,10 +742,11 @@ if __name__ == '__main__':
                         metavar='PATH',
                         help=f'path to glove.840B.300d pretrained vectors (used only with --pretrained glove)')
     parser.add_argument('--word2vec-path', type=str, default=VECTOR_CACHE+'/Word2Vec/',
-                        metavar='str',
+                        metavar='PATH',
                         help=f'path to GoogleNews-vectors-negative300.bin pretrained vectors (used only '
                              f'with --pretrained word2vec)')
     parser.add_argument('--fasttext-path', type=str, default=VECTOR_CACHE+'/fastText/',
+                        metavar='PATH',
                         help=f'path to crawl-300d-2M.vec pretrained vectors (used only with --pretrained fasttext)')
     parser.add_argument('--bert-path', type=str, default=VECTOR_CACHE+'/BERT',
                         metavar='PATH',

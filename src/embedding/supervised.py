@@ -9,11 +9,11 @@ from sklearn.decomposition import PCA
 from data.tsr_function__ import  STWFUNCTIONS
 
 
-
+from scipy.sparse import csr_matrix
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True):
+def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True, debug=False):
     """
     General function to compute supervised embeddings using different methods (e.g., TF-IDF, 
     PPMI, various TSR functions).
@@ -23,21 +23,23 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     label space exceeds a defined limit.
     """
 
-    print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}')
+    print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}, max_label_space: {max_label_space}')
 
     """
     if isinstance(X, csr_matrix):
         X = X.toarray()
-        
-    print("X:", type(X), X.shape)
-    print("X[0]:", type(X[0]), X[0])
-
-    print("Y:", type(y), y.shape)
-    print("Y[0]:", type(y[0]), y[0])
     """
-    
+
     nC = y.shape[1]
-    print("nC:", {nC})
+ 
+    if (debug):
+        print("X:", type(X), X.shape)
+        print("X[0]:", type(X[0]), X[0])
+
+        print("Y:", type(y), y.shape)
+        print("Y[0]:", type(y[0]), y[0])
+        
+        print("nC:", {nC})
 
     if nC==2 and binary_structural_problems > nC:
         raise ValueError('not implemented in this branch')
@@ -45,7 +47,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     if method=='ppmi':
         F = supervised_embeddings_ppmi(X, y)
     elif method == 'dotn':
-        F = supervised_embeddings_tfidf(X, y)
+        F = supervised_embeddings_tfidf(X, y, debug=debug)
     elif method == 'ig':
         F = supervised_embeddings_tsr(X, y, information_gain)
     elif method == 'chi2':
@@ -55,16 +57,20 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, y, word_prob)
 
-    #F = F.toarray()
     """
-    print("\tF:", type(F), {F.shape})
-    print("\tF[0]:", type(F[0]), F[0])
+    F = F.toarray()
+    
+    if (debug):
+        print("F:", type(F), {F.shape})
+        print("F[0]:", type(F[0]), F[0])
     """
-
+        
     if dozscore:
         #F = zscores(F, axis=0)
         F = normalize_zscores(F)
-        #print("after zscore normalization:", {F.shape})
+        if (debug):
+            print("after zscore normalization:", {type(F)}, {F.shape})
+            print("F[0]:", type(F[0]), F[0])
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -78,7 +84,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_tfidf(X, Y):
+def supervised_embeddings_tfidf(X, Y, debug=False):
     """
     Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with 
     label information Y.
@@ -87,31 +93,34 @@ def supervised_embeddings_tfidf(X, Y):
     the term frequencies by how
     """
 
-    """
     print("supervised_embeddings_tfidf()")
 
-    print("X:", type(X), {X.shape})
-    print("X[0]:", type(X[0]), X[0])
-    print("Y:", type(Y), {Y.shape})
-    print("Y[0]:", type(Y[0]), Y[0])
-    """
+    if (debug):
+        print("X:", type(X), {X.shape})
+        print("X[0]:", type(X[0]), X[0])
+        print("Y:", type(Y), {Y.shape})
+        print("Y[0]:", type(Y[0]), Y[0])
     
-    tfidf_norm = X.sum(axis=0)
-    #print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
-    #print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
+    # Compute tf-idf normalization
+    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
+    #tfidf_norm = np.asarray(tfidf_norm).flatten()  # Ensure it's a 1D array
+    #tfidf_norm = tfidf_norm[:, None]  # Reshape to (30000, 1) for broadcasting
 
-    """
-    first_part = (X.T).dot(Y)
-    print("first_part:", type(first_part), {first_part.shape})
-    print("first_part[0]:", type(first_part[0]), first_part[0])
+    if (debug):
+        print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
+        print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
 
-    second_part = tfidf_norm.T
-    print("second_part:", type(second_part), {second_part.shape})
-    print("second_part[0]:", type(second_part[0]), second_part[0])
-    """
+        numerator = (X.T).dot(Y)
+        print("numerator:", type(numerator), {numerator.shape})
+        print("numerator[0]:", type(numerator[0]), numerator[0])
+
+        #denominator = tfidf_norm.T
+        denominator = tfidf_norm
+        print("denominator:", type(denominator), {denominator.shape})
+        print("denominator[0]:", type(denominator[0]), denominator[0])
 
     F = (X.T).dot(Y) / tfidf_norm.T
-    #print("F:", type(F), {F.shape})
+    #F = (X.T).dot(Y) / tfidf_norm
     
     return F
 # ----------------------------------------------------------------------------------------------------------------------

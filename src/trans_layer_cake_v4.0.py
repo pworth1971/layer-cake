@@ -20,6 +20,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelBinarizer
 
+
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
@@ -54,7 +55,7 @@ from scipy.sparse import csr_matrix
 
 
 
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed"]
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
 
 
 DATASET_DIR = "../datasets/"
@@ -79,6 +80,8 @@ DEFAULT_MPS_BATCH_SIZE = 16
 
 TEST_SIZE = 0.15
 VAL_SIZE = 0.15
+
+SUPPORTED_OPS = ["cat", "add", "dot"]
 
 
 
@@ -222,7 +225,109 @@ def load_dataset(name):
         num_classes = len(target_names)
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+    
 
+    elif name == 'imdb':
+
+
+        from datasets import load_dataset
+
+        data_path = os.path.join(DATASET_DIR, 'imdb')
+
+        # Load IMDB dataset using the Hugging Face Datasets library
+        imdb_dataset = load_dataset('imdb', cache_dir=data_path)
+
+        # Split dataset into training and test data
+
+        # Split dataset into training and test data
+        train_data = imdb_dataset['train']['text']
+        train_target = np.array(imdb_dataset['train']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        test_data = imdb_dataset['test']['text']
+        test_target = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        # Set class_type to single-label classification
+        class_type = 'single-label'
+
+        # Define target names
+        target_names = ['negative', 'positive']
+        num_classes = len(target_names)
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+
+
+    elif name == 'cmu_movie_corpus':
+        """
+        Load and process the CMU Movie Corpus for multi-label classification.
+
+        Returns:
+            train_data (list): List of movie plots (text) for training.
+            train_target (numpy.ndarray): Multi-label binary matrix for training labels.
+            test_data (list): List of movie plots (text) for testing.
+            test_target (numpy.ndarray): Multi-label binary matrix for testing labels.
+            num_classes (int): Number of unique genres (classes).
+            target_names (list): List of genre names.
+            class_type (str): Classification type ('multi-label').
+        """
+
+        print("Loading CMU Movie Corpus dataset...")
+
+        data_path = os.path.join(DATASET_DIR, 'cmu_movie_corpus')
+        print("data_path:", data_path)
+
+        # Ensure the dataset files exist
+        tsv_file = os.path.join(data_path, "movie.metadata.tsv")
+        if not os.path.exists(tsv_file):
+            raise FileNotFoundError(f"Dataset file not found at {tsv_file}. Please download the dataset as per the article instructions.")
+
+        # Load the dataset
+        df = pd.read_csv(tsv_file, sep="\t", header=None, names=[
+            "Wikipedia_movie_ID", "Freebase_movie_ID", "Movie_name", "Movie_release_date",
+            "Movie_box_office_revenue", "Movie_runtime", "Movie_languages", "Movie_countries", "Movie_genres"
+        ])
+        print(f"Dataset loaded. Total records: {df.shape[0]}")
+
+        # Drop rows with missing movie names or genres
+        df = df.dropna(subset=["Movie_name", "Movie_genres"])
+        print(f"Dataset size after dropping missing values: {df.shape}")
+
+        # Process genres (multi-label field)
+        df["Movie_genres"] = df["Movie_genres"].apply(
+            lambda x: [genre.split(":")[1] for genre in x.split(",")]  # Extract genre names from Freebase tuples
+        )
+
+        # Split dataset into training and testing sets
+        train_df = df.sample(frac=0.8, random_state=42)  # 80% training
+        test_df = df.drop(train_df.index)  # Remaining 20% for testing
+
+        # Prepare data and labels
+        train_data = train_df["Movie_name"].tolist()
+        test_data = test_df["Movie_name"].tolist()
+
+        # Fit MultiLabelBinarizer on training genres and transform genres into binary arrays
+        mlb = MultiLabelBinarizer()
+        train_target = mlb.fit_transform(train_df["Movie_genres"])
+        test_target = mlb.transform(test_df["Movie_genres"])
+
+        # Retrieve target names and number of classes
+        target_names = mlb.classes_
+        num_classes = len(target_names)
+
+        print(f"Number of genres (classes): {num_classes}")
+        print("Genres:", target_names)
+
+        # Debug output
+        print(f"train_data: {type(train_data)}, {len(train_data)}")
+        print(f"train_target: {type(train_target)}, {train_target.shape}")
+        print(f"train_target[0]: {type(train_target[0])}, {train_target[0]}")
+        print(f"test_data: {type(test_data)}, {len(test_data)}")
+        print(f"test_target: {type(test_target)}, {test_target.shape}")
+
+        # Classification type
+        class_type = "multi-label"
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+    
     else:
         raise ValueError("Unsupported dataset:", name)
 
@@ -364,7 +469,7 @@ def compute_supervised_embeddings(Xtr, Ytr, Xval, Yval, Xte, Yte, opt):
 
 
 
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt):
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
     """
     Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
 
@@ -384,7 +489,7 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     - sup_range: Range in the embedding matrix where supervised embeddings are located.
     """
 
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
     
     Xtr = vectorized_training_data
     Ytr = training_label_matrix
@@ -396,14 +501,20 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         Ytr, 
         method=opt.supervised_method,
         max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore)
+        dozscore=(not opt.nozscore),
+        debug=debug
     )
-
+    
     # Adjust TCE matrix size
     num_missing_rows = vocabsize - TCE.shape[0]
-    print("num_missing_rows:", num_missing_rows)
+    if (debug):
+        print("TCE:", type(TCE), TCE.shape)
+        print("TCE[0]:", type(TCE[0]), TCE[0])
+        print("num_missing_rows:", num_missing_rows)
 
-    TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
+    if (num_missing_rows > 0):
+        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
+    
     tce_matrix = torch.from_numpy(TCE).float()
 
     return tce_matrix
@@ -559,14 +670,9 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
+class LCSequenceClassifier(nn.Module):
 
-SUPPORTED_OPS = ["concat", "add", "dot"]
-
-
-
-class LCHFTCEClassifier3(nn.Module):
-
-    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat", debug=False):
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="cat", debug=False):
         """
         A Transformer-based classifier with optional TCE integration.
         
@@ -575,15 +681,23 @@ class LCHFTCEClassifier3(nn.Module):
             num_classes: Number of classes for classification.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            comb-method: Method to integrate WCE embeddings ("add" or "concat").
+            comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").
+            debug: Debug mode flag.
         """
-        super(LCHFTCEClassifier3, self).__init__()
+        super(LCSequenceClassifier, self).__init__()
 
-        print(f'LCHFTCEClassifier3:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}')
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}, debug: {debug}')
 
+        # Assert that tce_matrix is provided if supervised is True
+        if supervised:
+            assert tce_matrix is not None, "tce_matrix must be provided when supervised is True."
+            
         self.transformer = hf_model
         self.hidden_size = self.transformer.config.hidden_size
-        print("self.hidden_size:", self.hidden_size)
+        self.debug = debug
+
+        if (self.debug):    
+            print("self.hidden_size:", self.hidden_size)
 
         self.num_classes = num_classes
         self.class_type = class_type
@@ -591,37 +705,52 @@ class LCHFTCEClassifier3(nn.Module):
         self.comb_method = comb_method
 
         self.tce_matrix = tce_matrix
+        
+        if (self.supervised and self.tce_matrix is not None):
 
-        self.debug = debug
+            if torch.isnan(self.tce_matrix).any() or torch.isinf(self.tce_matrix).any():
+                raise ValueError("[ERROR] self.tce_matrix contains NaN or Inf values during initialization.")
 
-        if (self.tce_matrix is not None):
-            print("-- original tce matrix --:", type(self.tce_matrix), self.tce_matrix.shape)
+            if (self.debug):
+                print("-- original tce matrix --:", type(self.tce_matrix), self.tce_matrix.shape)
+
+            # Store a detached, immutable version of the TCE matrix
+            self.tce_matrix = tce_matrix.detach().clone() if tce_matrix is not None else None
 
             # Normalize the TCE matrix using transformer embedding stats
             embedding_layer = self.transformer.get_input_embeddings()
             embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
             embedding_std = embedding_layer.weight.std(dim=0).to(device)
-            print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
+            if (self.debug):
+                print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
 
             self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
-            print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+            if (self.debug):
+                print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
 
+            if torch.isnan(self.tce_matrix).any() or torch.isinf(self.tce_matrix).any():
+                raise ValueError("[ERROR] self.tce_matrix contains NaN or Inf values after normalization.")
+            
             # Ensure the TCE matrix is normalized to the same distribution as the transformer embeddings
             self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-            print(f"TCE embedding layer created with shape: {self.tce_layer.weight.shape}")
-        else:
-            print("self.tce_matrix: None")
+            if (self.debug):
+                print(f"TCE embedding layer created with shape: {self.tce_layer.weight.shape}")
 
-        # Add a projection layer for `dot` operation to ensure hidden_size compatibility
-        if self.supervised and comb_method == "dot":
-            self.projection_layer = nn.Linear(self.tce_matrix.size(1), self.hidden_size)
-
-        if self.supervised is None and self.tce_matrix is None:
-            combined_size = self.hidden_size
-        else:
+            # Add a projection layer for `dot` operation to ensure hidden_size compatibility
+            if comb_method == "dot":
+                self.projection_layer = nn.Linear(self.tce_matrix.size(1), self.hidden_size)
+                if (self.debug):
+                    print(f"tce projection layer: {self.projection_layer}")
+            
             # Adapt classifier head based on combination method
-            # 'concat' method is dimension_size + num_classes basically
+            # 'concat' method is dimension_size + num_classes
             combined_size = self.hidden_size if comb_method in ["dot", "add"] else self.hidden_size + self.tce_matrix.size(1)
+
+        else:
+            combined_size = self.hidden_size
+            
+            if (self.debug):
+                print("self.tce_matrix: None")
 
         """
         # Classification head
@@ -634,13 +763,15 @@ class LCHFTCEClassifier3(nn.Module):
         """
 
         self.classifier = nn.Linear(combined_size, self.num_classes)
+        if (self.debug):
+            print("combined_size:", combined_size)
+            print("self.classifier:", self.classifier)
 
         #
         # force all of the tensors to be stored contiguously in memory
         #
         for param in self.transformer.parameters():
             param.data = param.data.contiguous()
-
     
     
     def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
@@ -655,13 +786,30 @@ class LCHFTCEClassifier3(nn.Module):
         Returns:
         - Normalized TCE matrix (vocab_size x model_dim).
         """
+
+        print(f"tce_matrix: {tce_matrix.shape}, {tce_matrix.dtype}")
+        print("first row:", tce_matrix[0])
+
+        print(f"embedding_mean: {embedding_mean.shape}, {embedding_mean.dtype}")
+        print(f'embedding_mean: {embedding_mean}')
+        print(f"embedding_std: {embedding_std.shape}, {embedding_std.dtype}")
+        print(f'embedding_std: {embedding_std}')
+
         device = embedding_mean.device  # Ensure all tensors are on the same device
         tce_matrix = tce_matrix.to(device)
+
+        print(f"tce_matrix: {tce_matrix.shape}, min: {tce_matrix.min()}, max: {tce_matrix.max()}")
+        print(f"tce_matrix contains NaN: {torch.isnan(tce_matrix).any()}, Inf: {torch.isinf(tce_matrix).any()}")
 
         tce_mean = tce_matrix.mean(dim=1, keepdim=True).to(device)
         tce_std = tce_matrix.std(dim=1, keepdim=True).to(device)
         tce_std[tce_std == 0] = 1  # Avoid division by zero
 
+        print(f"tce_mean: {tce_mean.shape}, {tce_mean.dtype}")
+        print(f'tce_mean: {tce_mean}')
+        print(f"tce_std: {tce_std.shape}, {tce_std.dtype}")
+        print(f'tce_std: {tce_std}')
+        
         # Expand TCE dimensions and normalize
         tce_matrix_expanded = tce_matrix.unsqueeze(-1).expand(-1, -1, embedding_mean.size(0)).mean(dim=1).to(device)
         normalized_tce = (tce_matrix_expanded - tce_mean) / tce_std  # Normalize
@@ -670,11 +818,15 @@ class LCHFTCEClassifier3(nn.Module):
         return normalized_tce
     
 
-
-    def forward(self, input_ids=None, attention_mask=None, labels=None, tces=None):
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
         """
         Forward pass with optional supervised embeddings (TCEs).
         """
+        if (self.debug):
+            print("LCSequenceClassifier:forward()...")
+            print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
+            print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
+            print(f"\tlabels: {type(labels)}, {labels.shape}")
 
         # Pass inputs through the transformer model
         # Base model forward pass
@@ -683,65 +835,58 @@ class LCHFTCEClassifier3(nn.Module):
         # Access the pooled output or the CLS token representation
         if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
             pooled_output = outputs.pooler_output                                               # Use pooled output if available
-            if (self.debug):
-                print(f"[DEBUG] outputs.pooler_output.shape: {pooled_output.shape}")
         else:
             pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
-            if (self.debug):
-                print(f"[DEBUG] outputs.hiudden_states[-1][:, 0].shape: {pooled_output.shape}")
-
-        # Move TCE matrix to the same device as input_ids if necessary
-        if self.tce_matrix is not None:
-            self.tce_matrix = self.tce_matrix.to(input_ids.device)
-
-
-        # Access the pooled output or the CLS token representation
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            pooled_output = outputs.pooler_output                                               # Use pooled output if available
-            if (self.debug):
-                print(f"[DEBUG] outputs.pooler_output.shape: {pooled_output.shape}")
-        else:
-            pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
-            if (self.debug):
-                print(f"[DEBUG] outputs.hiudden_states[-1][:, 0].shape: {pooled_output.shape}")
-
+            
         #
         # Integrate TCEs if supervised is True
         #
-        if (self.supervised and self.tce_matrix is not None):
+        if (self.supervised and (self.tce_matrix is not None)):
 
-            print("integrating TCEs into the model...")
+            if (self.debug):
+                print("integrating TCEs into the model...")
 
-            self.tce_matrix = self.tce_matrix.to(input_ids.device)                              # Ensure `self.tce_matrix` is on the same device as `input_ids`
-
+            # Create local copy and ensure it's on the correct device
+            # NB: we create a local copy of tce_matrix so we avoid modifying 
+            # the original object which the HF library does not like
+            local_tce_matrix = self.tce_matrix.clone().detach()  # Clone and detach to prevent gradient tracking
+            local_tce_matrix = local_tce_matrix.to(input_ids.device)  # Explicitly move to the same device as input_ids
+            
             # Debug info: Check for out-of-range indices
-            vocab_size = self.tce_matrix.size(0)
+            vocab_size = local_tce_matrix.size(0)
             invalid_indices = input_ids[input_ids >= vocab_size]
             if invalid_indices.numel() > 0:
                 print(f"[WARNING] Found invalid indices in input_ids: {invalid_indices.tolist()} (max valid index: {vocab_size - 1})")
 
             # Lookup TCEs for the input tokens
-            tces = self.tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
-            
-            # Debug info: TCEs shape and match checks    
+            tces = local_tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
             if (self.debug):
-                print(f"[DEBUG] tces.shape: {tces.shape}")
-                print(f"[DEBUG] pooled_output.shape: {pooled_output.shape}")
+                print("tces:", type(tces), tces.shape)
+                print("tces[0]:", type(tces[0]), tces[0])
+                print(f"local_tce_matrix version: {local_tce_matrix._version}, requires_grad: {local_tce_matrix.requires_grad}")
             
-            if self.comb_method == "concat":    
-                print("concatenating two matrices...")                                                
+            if torch.isnan(pooled_output).any() or torch.isinf(pooled_output).any():
+                print("[ERROR] pooled_output contains NaN or Inf values")
+            if torch.isnan(tces).any() or torch.isinf(tces).any():
+                print("[ERROR] tces contains NaN or Inf values")
+
+            if self.comb_method == "cat":    
+                if (self.debug):
+                    print("concatenating two matrices...")                                                
                 assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
                 assert pooled_output.size(1) + tces.size(1) == self.hidden_size + self.tce_matrix.size(1), \
                     f"Concat dimension mismatch: {pooled_output.size(1) + tces.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
                 combined_output = torch.cat([pooled_output, tces], dim=1)                         
             elif self.comb_method == "add":                                                  
-                print("adding two matricses...")
+                if (self.debug):
+                    print("adding two matricses...")
                 assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
                 assert pooled_output.size(1) == tces.size(1), \
                     f"Add dimension mismatch: {pooled_output.size(1)} != {tces.size(1)}"
                 combined_output = pooled_output + tces   
             elif self.comb_method == "dot":
-                print("multiplying two matricses...")
+                if (self.debug):
+                    print("multiplying two matricses...")
                 assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
                 tces_projected = self.projection_layer(tces)                            # Project TCEs to hidden_size
                 combined_output = pooled_output * tces_projected                        # Element-wise multiplication
@@ -749,12 +894,14 @@ class LCHFTCEClassifier3(nn.Module):
                 raise ValueError(f"Unsupported combination method: {self.comb_method}")    
         
             pooled_output = combined_output                                             # Update pooled output with combined representation
-
-        if (self.debug):
-            print(f'pooled_output: type: {type(pooled_output)}, shape: {pooled_output.shape}')
+            
+        if (self.debug):    
+            print(f'pooled_output: {type(pooled_output)}, {pooled_output.shape}')
 
         # Classification head
         logits = self.classifier(pooled_output)
+        if (self.debug):
+            print(f'logits: {type(logits)}, {logits.shape}, {logits}')
 
         loss = None
         if labels is not None:
@@ -1036,6 +1183,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
     
     parser.add_argument('--dataset', required=True, type=str, choices=SUPPORTED_DATASETS, help='Dataset to use')
+
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
@@ -1235,23 +1383,47 @@ if __name__ == "__main__":
     #
     if (args.supervised):
 
+
         if (class_type in ['single-label', 'singlelabel']):
 
             print("single label, converting target labels to to one-hot for tce computation...")
 
+            """
             label_binarizer = LabelBinarizer()        
             one_hot_labels_train = label_binarizer.fit_transform(labels_train)
+            """
+            from sklearn.preprocessing import OneHotEncoder
+            
+            # Assuming labels are a numpy array of shape (num_samples,)
+            def to_one_hot(labels, num_classes):
+                encoder = OneHotEncoder(categories='auto', sparse_output=True, dtype=np.float32)
+                labels = labels.reshape(-1, 1)
+                one_hot = encoder.fit_transform(labels)  # Result is a sparse matrix
+                return one_hot
+
+            one_hot_labels_train = to_one_hot(labels_train, num_classes=num_classes)
+
         else:
             one_hot_labels_train = labels_train
 
+        # Ensure one_hot_labels_train is a csr_matrix
+        if not isinstance(one_hot_labels_train, csr_matrix):
+            print("Converting one_hot_labels_train to csr_matrix...")
+            one_hot_labels_train = csr_matrix(one_hot_labels_train)
+            
         tce_matrix = compute_tces(
             vocabsize=vec_vocab_size,
             vectorized_training_data=Xtr,
             training_label_matrix=one_hot_labels_train,
-            opt=args
+            opt=args,
+            debug=True
         )
 
         print("tce_matrix:", type(tce_matrix), tce_matrix.shape)
+        print("tce_matrix[0]:", type(tce_matrix[0]), tce_matrix[0].shape, tce_matrix[0])
+
+        if torch.isnan(tce_matrix).any() or torch.isinf(tce_matrix).any():
+            raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
 
         tce_matrix.to(device)           # must move the TCE embeddings to same device as model
     else:
@@ -1275,13 +1447,14 @@ if __name__ == "__main__":
 
     hf_trans_model = hf_trans_class_model
 
-    lc_model = LCHFTCEClassifier3(
+    lc_model = LCSequenceClassifier(
         hf_model=hf_trans_model,
         num_classes=num_classes,
         class_type=class_type,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        comb_method="dot",
+        comb_method="cat",
+        #comb_method="dot",
         #debug=True
     ).to(device)
     print("lc_model:\n", lc_model)
@@ -1292,8 +1465,7 @@ if __name__ == "__main__":
         labels_train, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type,
-        #supervised_embeddings=train_tces 
+        class_type=class_type 
     )
 
     val_dataset = LCDataset(
@@ -1301,8 +1473,7 @@ if __name__ == "__main__":
         labels_val, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type,
-        #supervised_embeddings=val_tces
+        class_type=class_type
     )
 
     test_dataset = LCDataset(
@@ -1310,8 +1481,7 @@ if __name__ == "__main__":
         labels_test, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type,
-        #supervised_embeddings=test_tces 
+        class_type=class_type
     )
 
     tinit = time()
@@ -1335,7 +1505,7 @@ if __name__ == "__main__":
         report_to="none"
     )
 
-
+    """
     # Trainer with custom data collator
     trainer = Trainer(
         model=lc_model,                                     # be sure to use LC_Model
@@ -1346,8 +1516,8 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
-
     """
+
     trainer = CustomTrainer(
         model=lc_model,                                 # Use LCClassifier
         args=training_args,
@@ -1357,8 +1527,7 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
     )
-    """
-
+    
     print("\n\t--- model training and evaluation ---\n")
 
     # Enable anomaly detection during training

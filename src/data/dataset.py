@@ -14,6 +14,7 @@ from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
 import pickle
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 from os.path import join
 import re
 
