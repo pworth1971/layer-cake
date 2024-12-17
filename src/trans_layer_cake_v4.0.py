@@ -19,7 +19,7 @@ from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_scor
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelBinarizer
-
+from sklearn.utils.class_weight import compute_class_weight
 
 import torch
 import torch.nn as nn
@@ -54,6 +54,11 @@ from embedding.pretrained import MODEL_MAP
 from scipy.sparse import csr_matrix
 
 
+from typing import Dict, Union, Any
+
+
+
+
 
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
 
@@ -75,8 +80,10 @@ MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models model
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
-DEFAULT_GPU_BATCH_SIZE = 64
+#DEFAULT_GPU_BATCH_SIZE = 64
 DEFAULT_MPS_BATCH_SIZE = 16
+DEFAULT_CUDA_BATCH_SIZE = 16
+
 
 TEST_SIZE = 0.15
 VAL_SIZE = 0.15
@@ -89,7 +96,7 @@ SUPPORTED_OPS = ["cat", "add", "dot"]
 # Load dataset
 def load_dataset(name):
 
-    print("Loading dataset:", name)
+    print("\n\tLoading dataset:", name)
 
     if name == "20newsgroups":
 
@@ -672,16 +679,19 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 class LCSequenceClassifier(nn.Module):
 
-    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="cat", debug=False):
+    def __init__(self, hf_model, num_classes, vocab_size, class_type='single-label', supervised=False, tce_matrix=None, comb_method="cat", class_weights=None, debug=False):
         """
         A Transformer-based classifier with optional TCE integration.
         
         Args:
             hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
             num_classes: Number of classes for classification.
+            vocab_size: size of (tokenizer) vocabulary, for assertions
+            class_type: type of classification problem, either 'single-label' or 'multi-label'
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
             comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").
+            class_weights: Class weights for loss function.
             debug: Debug mode flag.
         """
         super(LCSequenceClassifier, self).__init__()
@@ -706,6 +716,23 @@ class LCSequenceClassifier(nn.Module):
 
         self.tce_matrix = tce_matrix
         
+        if (self.debug and class_weights is not None):
+            print("self.class_weights.shape:", self.class_weights.shape)
+            print("self.class_weights:", self.class_weights)
+
+        self.vocab_size = vocab_size
+        if (self.debug):
+            print("self.vocab_size:", self.vocab_size)
+
+        # Loss functions
+        if class_type == 'multi-label':
+            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
+        elif class_type == 'single-label':
+            self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+        else:
+            raise ValueError("class_type must be 'single-label' or 'multi-label'")
+
+
         if (self.supervised and self.tce_matrix is not None):
 
             if torch.isnan(self.tce_matrix).any() or torch.isinf(self.tce_matrix).any():
@@ -825,8 +852,12 @@ class LCSequenceClassifier(nn.Module):
         if (self.debug):
             print("LCSequenceClassifier:forward()...")
             print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
+            print("inout_ids:", input_ids)
             print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
             print(f"\tlabels: {type(labels)}, {labels.shape}")
+
+        assert input_ids.max() < self.vocab_size, f"Invalid token index: {input_ids.max()} >= {self.vocab_size}"
+        assert input_ids.min() >= 0, f"Invalid token index: {input_ids.min()} < 0"
 
         # Pass inputs through the transformer model
         # Base model forward pass
@@ -905,18 +936,67 @@ class LCSequenceClassifier(nn.Module):
 
         loss = None
         if labels is not None:
-            #if labels.dtype == torch.long:                         
-            if class_type in ['single-label', 'singlelabel']:       # Single-label classification
-                loss_fn = nn.CrossEntropyLoss()
-            else:                                                   # Multi-label classification
-                loss_fn = nn.BCEWithLogitsLoss()
-
-            loss = loss_fn(logits, labels)
+            if self.class_type == 'multi-label':
+                # BCEWithLogitsLoss requires float labels for multi-label classification
+                loss = self.loss_fn(logits, labels.float())
+            elif self.class_type == 'single-label':
+                # CrossEntropyLoss expects long/int labels for single-label classification
+                loss = self.loss_fn(logits, labels.long())
         else:
             print("WARNINMG: No labels provided for loss calculation.")
 
         return {"loss": loss, "logits": logits}
     
+
+
+
+
+def lc_class_weights(labels, task_type="single-label"):
+    """
+    Compute class weights for single-label or multi-label classification.
+
+    Args:
+        labels: List or numpy array.
+                - Single-label: List of class indices (e.g., [0, 1, 2]).
+                - Multi-label: Binary array of shape (num_samples, num_classes).
+        task_type: "single-label" or "multi-label".
+
+    Returns:
+        Torch tensor of class weights.
+    """
+
+    print(f'Computing class weights for {task_type} task...')
+    #print("labels:", labels)
+
+    if task_type == "single-label":
+        # Compute class weights using sklearn
+        num_classes = len(np.unique(labels))
+        class_weights = compute_class_weight(
+            class_weight="balanced",
+            classes=np.arange(num_classes),
+            y=labels
+        )
+        return torch.tensor(class_weights, dtype=torch.float)
+
+    elif task_type == "multi-label":
+        # Compute pos_weights for BCEWithLogitsLoss
+        labels = torch.tensor(labels, dtype=torch.float)
+        num_samples = labels.shape[0]
+        pos_counts = labels.sum(dim=0)  # Number of positive samples per class
+        neg_counts = num_samples - pos_counts  # Number of negative samples per class
+
+        pos_counts = torch.clamp(pos_counts, min=1.0)  # Avoid division by zero
+        pos_weights = neg_counts / pos_counts
+        return pos_weights
+
+    else:
+        raise ValueError("Invalid task_type. Use 'single-label' or 'multi-label'.")
+
+
+
+
+
+
 
 
 def get_embedding_dims(hf_model):
@@ -1097,26 +1177,38 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
     hf_trans_model.config.output_hidden_states = True
 
     # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
+    """
     if hf_trans_model.config.pad_token_id is None:
         print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_model.config.pad_token_id = tokenizer.pad_token_id
-        
+    """
+
+    if hf_trans_model.config.pad_token_id is None:
+        print("hf_trans_model padding token ID is None, setting to tokenizer.eos_token id...")
+        hf_trans_model.config.pad_token_id = tokenizer.eos_token  # Set PAD to end-of-sequence token    
 
     # Initialize Hugging Face Transformer model for sequence classification
     hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         cache_dir=model_path,
-        num_labels=num_classes  # Specify the number of classes for classification
+        num_labels=num_classes,                         # Specify the number of classes for classification
+        pad_token_id=tokenizer.pad_token_id             # Set PAD to end-of-sequence token
     )
 
     # Ensure hidden states are enabled for the classification model
     hf_trans_class_model.config.output_hidden_states = True
 
     # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
+    """
     if hf_trans_class_model.config.pad_token_id is None:
         print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_class_model.config.pad_token_id = tokenizer.pad_token_id
-    
+    """
+
+    if hf_trans_class_model.config.pad_token_id is None:
+        print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
+        hf_trans_class_model.config.pad_token_id = tokenizer.eos_token
+
     return hf_trans_model, hf_trans_class_model
 
 
@@ -1132,7 +1224,7 @@ def get_hf_models_old(model_name, model_path, num_classes, tokenizer):
     if (hf_trans_model.config.pad_token_id is None):
         print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_model.config.pad_token_id = tokenizer.pad_token_id
-        
+
     # Initialize Hugging Face Transformer model for sequence classification
     hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
@@ -1144,8 +1236,65 @@ def get_hf_models_old(model_name, model_path, num_classes, tokenizer):
     if (hf_trans_class_model.config.pad_token_id is None):
         print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_class_model.config.pad_token_id = tokenizer.pad_token_id
-    
+
     return hf_trans_model, hf_trans_class_model
+
+
+
+
+
+class LCTrainer(Trainer):
+
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        """
+        Perform a training step on a batch of inputs.
+
+        Subclass and override to inject custom behavior.
+
+        Args:
+            model (:obj:`nn.Module`):
+                The model to train.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+
+        Return:
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+        """
+
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        if self.use_amp:
+            with autocast():
+                loss = self.compute_loss(model, inputs)
+        else:
+            loss = self.compute_loss(model, inputs)
+
+        if self.args.n_gpu > 1:
+            if model.module.config.ctc_loss_reduction == "mean":
+                loss = loss.mean()
+            elif model.module.config.ctc_loss_reduction == "sum":
+                loss = loss.sum() / (inputs["labels"] >= 0).sum()
+            else:
+                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
+
+        if self.args.gradient_accumulation_steps > 1:
+            loss = loss / self.args.gradient_accumulation_steps
+
+        if self.use_amp:
+            self.scaler.scale(loss).backward(retain_graph=True)
+        elif self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward(retain_graph=True)
+        elif self.deepspeed:
+            self.deepspeed.backward(loss, retain_graph=True)
+        else:
+            loss.backward(retain_graph=True)
+
+        return loss.detach()
 
 
 
@@ -1173,7 +1322,9 @@ class CustomTrainer(Trainer):
             loss = loss / self.args.gradient_accumulation_steps
 
         # Backward pass with retain_graph=True
-        loss.backward(retain_graph=True)  # Adjust based on need
+        #loss.backward(retain_graph=True)  # Adjust based on need
+        self.accelerator.backward(loss, retain_graph=True)
+        
         return loss.detach()
     
 
@@ -1273,7 +1424,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         print("CUDA is available")
         device = torch.device("cuda")
-        DEFAULT_GPU_BATCH_SIZE
+        batch_size = DEFAULT_CUDA_BATCH_SIZE
     elif torch.backends.mps.is_available():
         print("MPS is available")
         device = torch.device("mps")
@@ -1305,13 +1456,17 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
+    print("\n\tinitializing tokienizer, vectorizer and dataset...")
+    
     #
     # check set up the tokenizer
     #    
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
+    
     # Add padding token if it doesn't exist
     if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        tokenizer.pad_token = tokenizer.eos_token               # Align pad token to eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id         # set pad_token_id
     print("tokenizer:\n", tokenizer)
 
     # Get the pad_token_id
@@ -1377,12 +1532,15 @@ if __name__ == "__main__":
 
     assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
 
+    # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
+    assert vec_vocab_size == tok_vocab_size, \
+        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
     # then instantiate the LCSequenceClassifier model)
     #
     if (args.supervised):
-
 
         if (class_type in ['single-label', 'singlelabel']):
 
@@ -1447,13 +1605,24 @@ if __name__ == "__main__":
 
     hf_trans_model = hf_trans_class_model
 
+    class_weights = None
+
+    if args.dataset == 'reuters21578':
+        print("computing class weights for reuters21578 dataset...")
+        class_weights = lc_class_weights(labels_train, task_type=class_type)
+        print("class weights:", class_weights)
+    else:
+        print("no class weights computed for this dataset")
+
     lc_model = LCSequenceClassifier(
         hf_model=hf_trans_model,
         num_classes=num_classes,
+        vocab_size=tok_vocab_size,
         class_type=class_type,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
         comb_method="cat",
+        class_weights=class_weights,
         #comb_method="dot",
         #debug=True
     ).to(device)
@@ -1505,7 +1674,6 @@ if __name__ == "__main__":
         report_to="none"
     )
 
-    """
     # Trainer with custom data collator
     trainer = Trainer(
         model=lc_model,                                     # be sure to use LC_Model
@@ -1516,9 +1684,9 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
+    
     """
-
-    trainer = CustomTrainer(
+    trainer = LCTrainer(
         model=lc_model,                                 # Use LCClassifier
         args=training_args,
         train_dataset=train_dataset,
@@ -1527,7 +1695,8 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
     )
-    
+    """
+
     print("\n\t--- model training and evaluation ---\n")
 
     # Enable anomaly detection during training

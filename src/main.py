@@ -427,8 +427,8 @@ def init_optimizer(model, lr, weight_decay):
     return torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr, weight_decay=weight_decay)
 
 def init_loss(classification_type):
-    assert classification_type in ['multilabel','singlelabel'], 'unknown classification mode'
-    L = torch.nn.BCEWithLogitsLoss() if classification_type == 'multilabel' else torch.nn.CrossEntropyLoss()
+    assert classification_type in ['multilabel','multi-label','singlelabel', 'single-label'], 'unknown classification mode'
+    L = torch.nn.BCEWithLogitsLoss() if classification_type in ['multilabel', 'multi-label'] else torch.nn.CrossEntropyLoss()
     return L.cuda()
 
 
