@@ -267,6 +267,9 @@ def load_dataset(name):
         """
         Load and process the CMU Movie Corpus for multi-label classification.
 
+        from 
+        https://github.com/prateekjoshi565/movie_genre_prediction/blob/master/Movie_Genre_Prediction.ipynb
+
         Returns:
             train_data (list): List of movie plots (text) for training.
             train_target (numpy.ndarray): Multi-label binary matrix for training labels.
@@ -276,6 +279,10 @@ def load_dataset(name):
             target_names (list): List of genre names.
             class_type (str): Classification type ('multi-label').
         """
+
+        import csv
+        import json
+        import re
 
         print("Loading CMU Movie Corpus dataset...")
 
@@ -287,54 +294,105 @@ def load_dataset(name):
         if not os.path.exists(tsv_file):
             raise FileNotFoundError(f"Dataset file not found at {tsv_file}. Please download the dataset as per the article instructions.")
 
-        # Load the dataset
-        df = pd.read_csv(tsv_file, sep="\t", header=None, names=[
-            "Wikipedia_movie_ID", "Freebase_movie_ID", "Movie_name", "Movie_release_date",
-            "Movie_box_office_revenue", "Movie_runtime", "Movie_languages", "Movie_countries", "Movie_genres"
-        ])
-        print(f"Dataset loaded. Total records: {df.shape[0]}")
+        meta = pd.read_csv(tsv_file, sep = '\t', header = None)
+        meta.columns = ["movie_id",1,"movie_name",3,4,5,6,7,"genre"]        # rename columns
 
-        # Drop rows with missing movie names or genres
-        df = df.dropna(subset=["Movie_name", "Movie_genres"])
-        print(f"Dataset size after dropping missing values: {df.shape}")
+        print("meta:\n", meta.head())
 
-        # Process genres (multi-label field)
-        df["Movie_genres"] = df["Movie_genres"].apply(
-            lambda x: [genre.split(":")[1] for genre in x.split(",")]  # Extract genre names from Freebase tuples
-        )
+        file_path_2 = data_path + '/plot_summaries.txt'
+        plots = []
+        with open(file_path_2, 'r') as f:
+            reader = csv.reader(f, dialect='excel-tab') 
+            for row in tqdm(reader):
+                plots.append(row)
 
-        # Split dataset into training and testing sets
-        train_df = df.sample(frac=0.8, random_state=42)  # 80% training
-        test_df = df.drop(train_df.index)  # Remaining 20% for testing
 
-        # Prepare data and labels
-        train_data = train_df["Movie_name"].tolist()
-        test_data = test_df["Movie_name"].tolist()
+        movie_id = []
+        plot = []
 
-        # Fit MultiLabelBinarizer on training genres and transform genres into binary arrays
+        for i in tqdm(plots):
+            movie_id.append(i[0])
+            plot.append(i[1])
+
+        movies = pd.DataFrame({'movie_id': movie_id, 'plot': plot})
+
+        print("movies:\n", movies.head())
+
+        # change datatype of 'movie_id'
+        meta['movie_id'] = meta['movie_id'].astype(str)
+
+        # merge meta with movies
+        movies = pd.merge(movies, meta[['movie_id', 'movie_name', 'genre']], on = 'movie_id')
+
+        print("movies:\n", movies.head())
+
+        # get genre data
+        genres = []
+        for i in movies['genre']:
+            genres.append(list(json.loads(i).values()))
+        movies['genre_new'] = genres
+
+        # remove samples with 0 genre tags
+        movies_new = movies[~(movies['genre_new'].str.len() == 0)]
+
+        print("movies:", movies.shape)
+        print("movies_new:", movies_new.shape)
+        
+        print("movies_new:\n", movies_new.head())
+
+        # get all genre tags in a list
+        all_genres = sum(genres,[])
+        len(set(all_genres))
+        print("all_genres:", all_genres)
+
+        # function for text cleaning
+        def clean_text(text):
+            # remove backslash-apostrophe
+            text = re.sub("\'", "", text)
+            # remove everything alphabets
+            text = re.sub("[^a-zA-Z]"," ",text)
+            # remove whitespaces
+            text = ' '.join(text.split())
+            # convert text to lowercase
+            text = text.lower()
+            
+            return text
+
+        movies_new['clean_plot'] = movies_new['plot'].apply(lambda x: clean_text(x))
+        print("movies_new:", movies_new.head())
+        
+        nltk.download('stopwords')
+
+        from nltk.corpus import stopwords
+        stop_words = set(stopwords.words('english'))
+
+        # function to remove stopwords
+        def remove_stopwords(text):
+            no_stopword_text = [w for w in text.split() if not w in stop_words]
+            return ' '.join(no_stopword_text)
+        
+        movies_new['clean_plot'] = movies_new['clean_plot'].apply(lambda x: remove_stopwords(x))
+
+
+        from sklearn.preprocessing import MultiLabelBinarizer
+
         mlb = MultiLabelBinarizer()
-        train_target = mlb.fit_transform(train_df["Movie_genres"])
-        test_target = mlb.transform(test_df["Movie_genres"])
+        mlb.fit(movies_new['genre_new'])
+
+        # transform target variable
+        y = mlb.transform(movies_new['genre_new'])
 
         # Retrieve target names and number of classes
         target_names = mlb.classes_
         num_classes = len(target_names)
 
-        print(f"Number of genres (classes): {num_classes}")
-        print("Genres:", target_names)
-
-        # Debug output
-        print(f"train_data: {type(train_data)}, {len(train_data)}")
-        print(f"train_target: {type(train_target)}, {train_target.shape}")
-        print(f"train_target[0]: {type(train_target[0])}, {train_target[0]}")
-        print(f"test_data: {type(test_data)}, {len(test_data)}")
-        print(f"test_target: {type(test_target)}, {test_target.shape}")
+        # split dataset into training and validation set
+        xtrain, xtest, ytrain, ytest = train_test_split(movies_new['clean_plot'], y, test_size=TEST_SIZE, random_state=RANDOM_SEED)
 
         # Classification type
         class_type = "multi-label"
 
-        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
-    
+        return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
     else:
         raise ValueError("Unsupported dataset:", name)
 
