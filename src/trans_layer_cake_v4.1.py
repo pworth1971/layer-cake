@@ -280,31 +280,6 @@ def load_dataset(name):
 
         import os, json, re
 
-        #
-        # code from
-        # https://www.kaggle.com/code/jampaniramprasad/arxiv-abstract-classification-using-roberta
-        #
-        data_path = os.path.join(DATASET_DIR, 'arxiv')
-
-        file_path = data_path + '/arxiv-metadata-oai-snapshot.json'
-        print("file_path:", file_path)
-
-        # Using `yield` to load the JSON file in a loop to prevent 
-        # Python memory issues if JSON is loaded directly
-        def get_data():
-            with open(file_path, 'r') as f:
-                for thing in f:
-                    yield thing
-
-        paper_metadata = get_data()
-
-        """
-        for paper in paper_metadata:
-            for k, v in json.loads(paper).items():
-                print(f'{k}: {v} \n')
-            break
-        """
-
         sci_field_map = {'astro-ph': 'Astrophysics',
                 'astro-ph.CO': 'Cosmology and Nongalactic Astrophysics',
                 'astro-ph.EP': 'Earth and Planetary Astrophysics',
@@ -458,7 +433,63 @@ def load_dataset(name):
                 'stat.ML': 'Machine Learning',
                 'stat.OT': 'Other Statistics',
                 'stat.TH': 'Statistics Theory'}
+        #
+        # code from
+        # https://www.kaggle.com/code/jampaniramprasad/arxiv-abstract-classification-using-roberta
+        #
+        data_path = os.path.join(DATASET_DIR, 'arxiv')
 
+        file_path = data_path + '/arxiv-metadata-oai-snapshot.json'
+        #print("file_path:", file_path)
+
+        # Preprocessing function for text cleaning
+        def clean_text(text):
+            text = re.sub(r'\d+', '<NUM>', text)  # Mask numbers
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)  # Remove LaTeX-like symbols
+            text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
+            return text
+
+        # Generator function with progress bar
+        def get_data(file_path, preprocess=False):
+            with open(file_path, 'r') as f:
+                # Use tqdm to wrap the file iterator
+                for line in tqdm(f, desc="Loading dataset", unit="line"):
+                    paper = json.loads(line)
+                    if preprocess:
+                        # Apply text cleaning to relevant fields
+                        paper['title'] = clean_text(paper.get('title', ''))
+                        paper['abstract'] = clean_text(paper.get('abstract', ''))
+                    yield paper
+
+        paper_metadata = get_data(file_path, preprocess=True)
+        #print("paper_metadata:", type(paper_metadata))
+
+        """
+        def load_dataset(file_path):
+            data = []
+            with open(file_path, 'r') as f:
+                for line in tqdm(f, desc="Loading dataset", unit="line", total=2626136):            # Approximate total
+                    data.append(json.loads(line))
+            return data
+
+        dataset = load_dataset(file_path)
+        """
+
+        # Using `yield` to load the JSON file in a loop to prevent 
+        # Python memory issues if JSON is loaded directly
+        def get_raw_data():
+            with open(file_path, 'r') as f:
+                for thing in f:
+                    yield thing
+
+        #paper_metadata = get_data()
+
+        """
+        for paper in paper_metadata:
+            for k, v in json.loads(paper).items():
+                print(f'{k}: {v} \n')
+            break
+        """
 
         paper_titles = []
         paper_intro = []
@@ -466,7 +497,7 @@ def load_dataset(name):
 
         paper_categories = np.array(list(sci_field_map.keys())).flatten()
 
-        metadata_of_paper = get_data()
+        metadata_of_paper = get_raw_data()
         for paper in tqdm(metadata_of_paper):
             papers_dict = json.loads(paper)
             category = papers_dict.get('categories')
@@ -501,18 +532,17 @@ def load_dataset(name):
         papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
 
         papers_dataframe['categories'] = papers_dataframe['categories'].apply(lambda x: tuple(x.split()))
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
+        """
 
         # Ensure the 'categories' column value counts are calculated and indexed properly
         categories_counts = papers_dataframe['categories'].value_counts().reset_index(name="count")
+        """
         print("categories_counts:", categories_counts.shape)
         print(categories_counts.head())
-
-        # The 'index' column holds the categories after reset_index
-        #categories_counts.rename(columns={'index': 'category'}, inplace=True)
-        #print("categories_counts:", categories_counts.shape)
-        #print(categories_counts.head())
+        """
 
         # Filter for categories with a count greater than 250
         shortlisted_categories = categories_counts.query("count > 250")["categories"].tolist()
@@ -521,8 +551,27 @@ def load_dataset(name):
         # Choosing paper categories based on their frequency & eliminating categories with very few papers
         #shortlisted_categories = papers_dataframe['categories'].value_counts().reset_index(name="count").query("count > 250")["index"].tolist()
         papers_dataframe = papers_dataframe[papers_dataframe["categories"].isin(shortlisted_categories)].reset_index(drop=True)
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
+        """
+
+        """
+        # clean the text, remove special chracters, etc
+        def clean_text(text):
+            # Mask numbers
+            text = re.sub(r'\d+', '<NUM>', text)
+            # Remove special LaTeX-like symbols and tags
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)
+            # Remove extra whitespace
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+
+        # Apply cleaning to dataset texts
+        papers_dataframe['text'] = papers_dataframe['text'].apply(clean_text)
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+        """
 
         # Shuffle DataFrame
         papers_dataframe = papers_dataframe.sample(frac=1).reset_index(drop=True)
@@ -1082,13 +1131,14 @@ class LCSequenceClassifier(nn.Module):
         self.comb_method = comb_method
         self.normalize_tces = normalize_tces
         self.trainable_tces = trainable_tces
+        self.class_weights = class_weights
 
-        if (class_weights is not None):
+        if (self.class_weights is not None):
             print("self.class_weights.shape:", self.class_weights.shape)
             if (self.debug):
                 print("self.class_weights:", self.class_weights)
         else:
-            print("class_weights is None")
+            print("self.class_weights is None")
 
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
