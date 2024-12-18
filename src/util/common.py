@@ -384,7 +384,7 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
     else:
         pt_type = 'pretrained-'
 
-        if (pretrained in ['bert', 'roberta', 'llama', 'xlnet', 'distilbert', 'gpt2']):
+        if (pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']):
             pt_type += 'attention:tokenized'
 
         elif (pretrained in ['glove', 'word2vec']):
