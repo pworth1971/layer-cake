@@ -43,9 +43,6 @@ TOKEN_BASED_MODELS = ['bert', 'roberta', 'albert', 'distilbert', 'xlnet', 'gpt2'
 
 
 
-
-
-
 def initialize_testing(args):
 
     print("\n\tinitializing...")
@@ -120,7 +117,7 @@ def initialize_testing(args):
     system = SystemResources()
     print("system:\n", system)
 
-    if (args.dataset in ['bbc-news', '20newsgroups']):
+    if (args.dataset in ['bbc-news', '20newsgroups', 'imdb']):
         logger.set_default('class_type', 'single-label')
     else:
         logger.set_default('class_type', 'multi-label')
