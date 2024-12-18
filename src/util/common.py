@@ -305,7 +305,7 @@ def get_embedding_type(pretrained):
 
     print("get_embedding_type():", {pretrained})
 
-    if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']):
+    if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']):
         embedding_type = 'token'
     elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
         embedding_type = 'word'

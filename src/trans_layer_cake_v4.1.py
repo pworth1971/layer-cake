@@ -121,6 +121,8 @@ def load_dataset(name):
     
     elif name == "bbc-news":
 
+        import os
+
         for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
             for filename in filenames:
                 print(os.path.join(dirname, filename))
@@ -196,6 +198,8 @@ def load_dataset(name):
     
 
     elif name == "ohsumed":
+
+        import os
         
         data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
@@ -221,6 +225,8 @@ def load_dataset(name):
 
     elif name == "rcv1":
 
+        import os
+
         data_path = os.path.join(DATASET_DIR, 'rcv1')
         
         devel = fetch_RCV1(subset='train', data_path=data_path)
@@ -245,6 +251,7 @@ def load_dataset(name):
     elif name == 'imdb':
 
         from datasets import load_dataset
+        import os
 
         data_path = os.path.join(DATASET_DIR, 'imdb')
 
@@ -1065,9 +1072,8 @@ class LCSequenceClassifier(nn.Module):
         self.transformer = hf_model
         #transformer_output_dim = self.transformer.config.hidden_size  # e.g., 768
 
-        self.hidden_size = self.transformer.config.hidden_size        
-        if (self.debug):    
-            print("self.hidden_size:", self.hidden_size)
+        self.hidden_size = self.transformer.config.hidden_size          
+        print("self.hidden_size:", self.hidden_size)
 
         self.num_classes = num_classes
         self.class_type = class_type
@@ -1077,13 +1083,15 @@ class LCSequenceClassifier(nn.Module):
         self.normalize_tces = normalize_tces
         self.trainable_tces = trainable_tces
 
-        if (self.debug and class_weights is not None):
+        if (class_weights is not None):
             print("self.class_weights.shape:", self.class_weights.shape)
-            print("self.class_weights:", self.class_weights)
+            if (self.debug):
+                print("self.class_weights:", self.class_weights)
+        else:
+            print("class_weights is None")
 
         self.vocab_size = vocab_size
-        if (self.debug):
-            print("self.vocab_size:", self.vocab_size)
+        print("self.vocab_size:", self.vocab_size)
 
         # Loss functions
         if class_type == 'multi-label':
@@ -1092,13 +1100,13 @@ class LCSequenceClassifier(nn.Module):
             self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
         else:
             raise ValueError("class_type must be 'single-label' or 'multi-label'")
+        print("loss_fn:", self.loss_fn)
 
         # Assert that tce_matrix is provided if supervised is True
         if self.supervised:
             assert tce_matrix is not None, "tce_matrix must be provided when supervised is True."
 
         self.tce_matrix = tce_matrix
-
         self.tce_layer = None               # we initialize this only if we are using TCEs 
 
         # initialize embedding dimensions to model embedding dimension
@@ -1107,8 +1115,7 @@ class LCSequenceClassifier(nn.Module):
 
         if (self.supervised and self.tce_matrix is not None):
 
-            if (self.debug):       
-                print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
+            print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
  
             with torch.no_grad():
 
@@ -1124,8 +1131,7 @@ class LCSequenceClassifier(nn.Module):
 
                     # normalize the TCE matrix
                     self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
-                    if (self.debug):
-                        print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+                    print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
 
                     # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
                     if (trainable_tces):
@@ -1146,12 +1152,10 @@ class LCSequenceClassifier(nn.Module):
             nn.Linear(combined_size, 256),                  # First linear layer
             nn.ReLU(),                                      # non-linear activation function
             nn.Dropout(dropout_rate),                       # regularization
-            nn.Linear(256, self.num_classes)      # FInal Linear layer
+            nn.Linear(256, self.num_classes)                # FInal Linear layer
         )
-
-        if (self.debug):
-            print("combined_size:", combined_size)
-            print("self.classifier:", self.classifier)
+        print("combined_size:", combined_size)
+        print("self.classifier:", self.classifier)
 
         #
         # force all of the tensors to be stored contiguously in memory
@@ -1908,7 +1912,7 @@ if __name__ == "__main__":
     #
     if (args.supervised):
 
-        print("\n\\tcomputing tces...")
+        print("\n\tcomputing tces...")
 
         if (class_type in ['single-label', 'singlelabel']):
 
@@ -1969,19 +1973,22 @@ if __name__ == "__main__":
     print("\n\thf_trans_model:\n", hf_trans_model)
     print("\n\thf_trans_class_model:\n", hf_trans_class_model)
     """
-    
+
     # Get embedding size from the model
     dimensions, vec_size = get_embedding_dims(hf_trans_model)
-    #print(f'model size: {dimensions}, embedding dimension: {vec_size}')
-    if (args.supervised):
-        dimensions = dimensions + ':' + tce_matrix.shape
+    # Print for debugging
+    print(f'model size: {dimensions}, embedding dimension: {vec_size}')
+    # Concatenate supervised-specific dimensions if args.supervised is True
+    if args.supervised:
+        # Convert tce_matrix.shape to string before concatenating
+        dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
+    # Log the dimensions
     print("dimensions (for logger):", dimensions)
 
     hf_trans_model = hf_trans_class_model
     #print("LC HF Sequence Classfier (hf_trans_model):\n", hf_trans_model)
 
     class_weights = None
-
     if (class_type in ['multi-label', 'multilabel']):
         print("computing class weights...")
         class_weights = lc_class_weights(labels_train, task_type=class_type)
