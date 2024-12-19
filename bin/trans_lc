@@ -1,17 +1,18 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="../src/trans_layer_cake_v4.2.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v4.3.py"
+LOG_FILE="--log-file ../log/lc_nn_cuda_test.test"
+
 EPOCHS=23
 PATIENCE=2
-LOG_FILE="../log/lc_nn_cuda_test.test"
 SEED=27
 
 # Datasets array
 datasets=(
-    "--dataset 20newsgroups"        # 20newsgroups (single label, 20 classes)
     "--dataset reuters21578"        # reuters21578 (multi-label, 115 classes)
     "--dataset bbc-news"            # bbc-news (single label, 5 classes)
+    "--dataset 20newsgroups"        # 20newsgroups (single label, 20 classes)
     "--dataset ohsumed"             # ohsumed (multi-label, 23 classes)
     "--dataset imdb"                # imdb (single-label, 2 classes)
     "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
@@ -44,23 +45,23 @@ for dataset in "${datasets[@]}"; do
         embed_arg="${embedding_args[$i]}"
         
         echo
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
         echo
 
         echo
         echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable"
-        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised"
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised"
         echo
-        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable"
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable"
         echo
-        python $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable
         echo
 
     done

@@ -64,13 +64,13 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
 
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
 
-RANDOM_SEED = 42
+TEST_SIZE = 0.15
+VAL_SIZE = 0.15
 
 #
 # hyper parameters
@@ -78,18 +78,18 @@ RANDOM_SEED = 42
 MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
-EPOCHS = 10
+EPOCHS = 25
+RANDOM_SEED = 33
+
 
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
 # batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 8
-DEFAULT_MPS_BATCH_SIZE = 8
-DEFAULT_CUDA_BATCH_SIZE = 8
+DEFAULT_CPU_BATCH_SIZE = 16
+DEFAULT_MPS_BATCH_SIZE = 16
+DEFAULT_CUDA_BATCH_SIZE = 16
 
 
-TEST_SIZE = 0.15
-VAL_SIZE = 0.15
 
 #
 # supported operations for transformer classifier
@@ -400,6 +400,8 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
 
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 class LCSequenceClassifier(nn.Module):
 
     def __init__(self, 
@@ -416,7 +418,8 @@ class LCSequenceClassifier(nn.Module):
                 comb_method: str = "cat", 
                 debug: bool = False):
         """
-        A Transformer-based classifier with optional TCE integration.
+        A Transformer-based Sequence Classifier with optional TCE integration and parameters for Layer Cake Text
+        Classification testing. Supports both single label and multi-label classification.
         
         Args:
             hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
@@ -465,16 +468,16 @@ class LCSequenceClassifier(nn.Module):
 
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
-        
-        # Freeze all parameters
-        for param in self.transformer.parameters():
-            param.requires_grad = False
 
         #
         # Optionally unfreeze the embedding layer if finetune is True
         #
         if self.finetune:
-            print("finetuning: retraining model embedding layer...")    
+            print("finetuning == True, making the embedding layer (only) trainable")    
+
+            # Freeze gradient computation for all transformer parameters
+            for param in self.transformer.parameters():
+                param.requires_grad = False
 
             # Enable training of only the embedding layer
             if hasattr(self.transformer, 'bert'):
@@ -490,7 +493,7 @@ class LCSequenceClassifier(nn.Module):
             for param in embedding_layer.parameters():
                 param.requires_grad = True
         else:            
-            print("All transformer layers are frozen.")
+            print("finetune == False, default model configuration ...")
 
         # Loss functions
         if class_type == 'multi-label':
@@ -532,24 +535,26 @@ class LCSequenceClassifier(nn.Module):
                     self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
                     print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
             
-            # Adapt classifier head based on combination method
-            # 'concat' method is dimension_size + num_classes
-            if (self.comb_method == 'cat'):
-                combined_size = self.hidden_size + self.tce_matrix.size(1)
-            else:
-                combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
+                # Adapt classifier head based on combination method
+                # 'concat' method is dimension_size + num_classes
+                if (self.comb_method == 'cat'):
+                    combined_size = self.hidden_size + self.tce_matrix.size(1)
+                else:
+                    combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
 
-            #
-            # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
-            # otherwise let the model train the tce embedding layer
-            #
-            if (finetune):
-                print("finetuning, retraining tce embedding layer...")
-                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
-            else:
-                print("not finetuning, not retraining tce embedding layer...")
-                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-
+                """
+                #
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                # otherwise let the model train the tce embedding layer
+                #
+                if (finetune):
+                    print("finetuning, retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    print("not finetuning, not retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+                
         # Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
         # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
         self.classifier = nn.Sequential(
@@ -781,7 +786,7 @@ class LCSequenceClassifier(nn.Module):
 
         return {"loss": loss, "logits": logits}
     
-
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 def lc_class_weights(labels, task_type="single-label"):
@@ -1174,7 +1179,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.1 ---")
+    print("\n\t--- TRANS_LAYER_CAKE Version 4.3 ---")
     print()
 
     args = parse_args()
@@ -1415,7 +1420,6 @@ if __name__ == "__main__":
     print("dimensions (for logger):", dimensions)
 
     hf_trans_model = hf_trans_class_model
-    #print("LC HF Sequence Classfier (hf_trans_model):\n", hf_trans_model)
 
     class_weights = None
     if (class_type in ['multi-label', 'multilabel']):
@@ -1439,7 +1443,7 @@ if __name__ == "__main__":
         comb_method=args.sup_mode,
         #debug=True
     ).to(device)
-    print("lc_model:\n", lc_model)
+    print("-- FINAL MODEL --:\n", lc_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
@@ -1489,7 +1493,7 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=lc_model,                                     # be sure to use LC_Model
+        model=lc_model,                                     # use LCSequenceClassifier model
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
@@ -1499,8 +1503,9 @@ if __name__ == "__main__":
     )
     
     """
+    # with custom trainer, LCTrainer...
     trainer = LCTrainer(
-        model=lc_model,                                 # Use LCClassifier
+        model=lc_model,                                     # Use LCClassifier
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,

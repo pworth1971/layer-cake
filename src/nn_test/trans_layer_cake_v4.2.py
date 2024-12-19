@@ -64,8 +64,6 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-
-
 #SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
@@ -85,19 +83,26 @@ EPOCHS = 10
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
 # batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 16
-#DEFAULT_GPU_BATCH_SIZE = 64
-DEFAULT_MPS_BATCH_SIZE = 16
-DEFAULT_CUDA_BATCH_SIZE = 16
+DEFAULT_CPU_BATCH_SIZE = 8
+DEFAULT_MPS_BATCH_SIZE = 8
+DEFAULT_CUDA_BATCH_SIZE = 8
 
 
 TEST_SIZE = 0.15
 VAL_SIZE = 0.15
 
-#SUPPORTED_OPS = ["cat", "add", "dot"]
+#
+# supported operations for transformer classifier
+# combination method with TCEs
+#
+SUPPORTED_OPS = ["cat", "add", "dot"]
 
-SUPPORTED_OPS = ["cat", "add`"]
 
+#
+# whether or not to use mean_pooling in the
+# forward method of the Classifier for all models
+#
+USE_MEAN_POOLING = False
 
 
 # Get the full model identifier and load from local directory
@@ -395,8 +400,7 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
 
-
-
+# --------------------------------------------------------------------------------------------------------------------------
 
 class LCSequenceClassifier(nn.Module):
 
@@ -414,7 +418,8 @@ class LCSequenceClassifier(nn.Module):
                 comb_method: str = "cat", 
                 debug: bool = False):
         """
-        A Transformer-based classifier with optional TCE integration.
+        A Transformer-based Sequence Classifier with optional TCE integration and parameters for Layer Cake Text
+        Classification testing. Supports both single label and multi-label classification.
         
         Args:
             hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
@@ -424,7 +429,7 @@ class LCSequenceClassifier(nn.Module):
             class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            finetune: Boolean indicating if word embeddings are to be finetunes, ie trainable.
+            finetune: Boolean indicating whether or not to make the model embedding layer, and the TCE matrix, trainable.
             normalize_tce: Boolean indicating if TCE matrix is normalized.
             dropout: Dropout rate for TCE matrix.
             comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
@@ -432,10 +437,10 @@ class LCSequenceClassifier(nn.Module):
         """
         super(LCSequenceClassifier, self).__init__()
 
-        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetuned: {finetune}, supervised: {supervised}, debug: {debug}')
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
 
         if (supervised):
-            print(f'normalize_tces: {normalize_tces}, trainable_tces: {trainable_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
+            print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
 
         self.debug = debug
 
@@ -451,7 +456,7 @@ class LCSequenceClassifier(nn.Module):
         self.supervised = supervised
         self.comb_method = comb_method
         self.normalize_tces = normalize_tces
-        self.trainable_tces = trainable_tces
+        self.finetune = finetune
         self.class_weights = class_weights
 
         if (self.class_weights is not None):
@@ -463,6 +468,10 @@ class LCSequenceClassifier(nn.Module):
 
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
+        
+        # Freeze all parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
 
         #
         # Optionally unfreeze the embedding layer if finetune is True
@@ -485,6 +494,7 @@ class LCSequenceClassifier(nn.Module):
                 param.requires_grad = True
         else:            
             print("All transformer layers are frozen.")
+
         # Loss functions
         if class_type == 'multi-label':
             self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
@@ -509,7 +519,7 @@ class LCSequenceClassifier(nn.Module):
 
             print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
  
-            with torch.no_grad():
+            with torch.no_grad():                           # normalization code should be in this block
 
                 # Normalize TCE matrix if required
                 if self.normalize_tces:
@@ -524,20 +534,27 @@ class LCSequenceClassifier(nn.Module):
                     # normalize the TCE matrix
                     self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
                     print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
-
-                    # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
-                    if (trainable_tces):
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
-                    else:
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-                
+            
                 # Adapt classifier head based on combination method
                 # 'concat' method is dimension_size + num_classes
                 if (self.comb_method == 'cat'):
                     combined_size = self.hidden_size + self.tce_matrix.size(1)
                 else:
                     combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
-        
+
+                """
+                #
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                # otherwise let the model train the tce embedding layer
+                #
+                if (finetune):
+                    print("finetuning, retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    print("not finetuning, not retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+                
         # Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
         # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
         self.classifier = nn.Sequential(
@@ -643,30 +660,47 @@ class LCSequenceClassifier(nn.Module):
         # Pass inputs through the transformer model, ie Base model forward pass
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
 
-        #
-        # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
-        # Use pooled output if available, if not and we are using a BERT based model, we get the
-        # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
-        #
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            pooled_output = outputs.pooler_output       
-        elif isinstance(self.transformer, (BertForSequenceClassification, 
-                                        RobertaForSequenceClassification, 
-                                        DistilBertForSequenceClassification, 
-                                        AlbertForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
-        elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
-                                        LlamaForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
-        elif isinstance(self.transformer, XLNetForSequenceClassification):
-            # XLNet-specific pooling logic
-            #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+        if (USE_MEAN_POOLING):
+            # Extract the last hidden state (batch_size, seq_length, hidden_size)
+            last_hidden_state = outputs.hidden_states[-1]
 
-            # Use mean pooling over the last hidden layer
-            last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
-            pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+            # Apply mean pooling across the sequence dimension
+            # Mask the padded tokens during mean pooling to avoid including their embeddings
+            if attention_mask is not None:
+                # Expand attention mask for the hidden size dimension
+                mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size())
+                masked_hidden_state = last_hidden_state * mask_expanded
+                sum_hidden_state = torch.sum(masked_hidden_state, dim=1)
+                sum_mask = torch.sum(mask_expanded, dim=1)
+                pooled_output = sum_hidden_state / sum_mask.clamp(min=1e-9)  # Avoid division by zero
+            else:
+                # Simple mean pooling when no attention mask is provided
+                pooled_output = torch.mean(last_hidden_state, dim=1)
         else:
-            raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
+            #
+            # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
+            # Use pooled output if available, if not and we are using a BERT based model, we get the
+            # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
+            #
+            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                pooled_output = outputs.pooler_output       
+            elif isinstance(self.transformer, (BertForSequenceClassification, 
+                                            RobertaForSequenceClassification, 
+                                            DistilBertForSequenceClassification, 
+                                            AlbertForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
+            elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
+                                            LlamaForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
+            elif isinstance(self.transformer, XLNetForSequenceClassification):
+                # XLNet-specific pooling logic
+                #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+
+                # Use mean pooling over the last hidden layer
+                last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
+                pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+            else:
+                raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
 
         if (self.debug):    
             print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')
@@ -1126,7 +1160,7 @@ def parse_args():
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
-                        help='TCEs are tunable, ie unfrozen from the beginning (default False, i.e., static)')
+                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
@@ -1145,7 +1179,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.1 ---")
+    print("\n\t--- TRANS_LAYER_CAKE Version 4.2 ---")
     print()
 
     args = parse_args()
@@ -1370,11 +1404,10 @@ if __name__ == "__main__":
     
     hf_trans_model.to(device)
     hf_trans_class_model.to(device)
-    """
-    print("\n\thf_trans_model:\n", hf_trans_model)
-    print("\n\thf_trans_class_model:\n", hf_trans_class_model)
-    """
-
+    
+    print("\nhf_trans_model:\n", hf_trans_model)
+    print("\nhf_trans_class_model:\n", hf_trans_class_model)
+    
     # Get embedding size from the model
     dimensions, vec_size = get_embedding_dims(hf_trans_model)
     # Print for debugging
@@ -1405,7 +1438,7 @@ if __name__ == "__main__":
         class_weights=class_weights,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        trainable_tces=args.tunable,
+        finetune=args.tunable,
         normalize_tces=True,
         dropout_rate=args.dropprob,
         comb_method=args.sup_mode,
