@@ -64,8 +64,6 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-
-
 #SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
@@ -85,19 +83,26 @@ EPOCHS = 10
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
 # batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 16
-#DEFAULT_GPU_BATCH_SIZE = 64
-DEFAULT_MPS_BATCH_SIZE = 16
-DEFAULT_CUDA_BATCH_SIZE = 16
+DEFAULT_CPU_BATCH_SIZE = 8
+DEFAULT_MPS_BATCH_SIZE = 8
+DEFAULT_CUDA_BATCH_SIZE = 8
 
 
 TEST_SIZE = 0.15
 VAL_SIZE = 0.15
 
-#SUPPORTED_OPS = ["cat", "add", "dot"]
+#
+# supported operations for transformer classifier
+# combination method with TCEs
+#
+SUPPORTED_OPS = ["cat", "add", "dot"]
 
-SUPPORTED_OPS = ["cat", "add`"]
 
+#
+# whether or not to use mean_pooling in the
+# forward method of the Classifier for all models
+#
+USE_MEAN_POOLING = False
 
 
 # Get the full model identifier and load from local directory
@@ -622,30 +627,47 @@ class LCSequenceClassifier(nn.Module):
         # Pass inputs through the transformer model, ie Base model forward pass
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
 
-        #
-        # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
-        # Use pooled output if available, if not and we are using a BERT based model, we get the
-        # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
-        #
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            pooled_output = outputs.pooler_output       
-        elif isinstance(self.transformer, (BertForSequenceClassification, 
-                                        RobertaForSequenceClassification, 
-                                        DistilBertForSequenceClassification, 
-                                        AlbertForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
-        elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
-                                        LlamaForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
-        elif isinstance(self.transformer, XLNetForSequenceClassification):
-            # XLNet-specific pooling logic
-            #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+        if (USE_MEAN_POOLING):
+            # Extract the last hidden state (batch_size, seq_length, hidden_size)
+            last_hidden_state = outputs.hidden_states[-1]
 
-            # Use mean pooling over the last hidden layer
-            last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
-            pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+            # Apply mean pooling across the sequence dimension
+            # Mask the padded tokens during mean pooling to avoid including their embeddings
+            if attention_mask is not None:
+                # Expand attention mask for the hidden size dimension
+                mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size())
+                masked_hidden_state = last_hidden_state * mask_expanded
+                sum_hidden_state = torch.sum(masked_hidden_state, dim=1)
+                sum_mask = torch.sum(mask_expanded, dim=1)
+                pooled_output = sum_hidden_state / sum_mask.clamp(min=1e-9)  # Avoid division by zero
+            else:
+                # Simple mean pooling when no attention mask is provided
+                pooled_output = torch.mean(last_hidden_state, dim=1)
         else:
-            raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
+            #
+            # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
+            # Use pooled output if available, if not and we are using a BERT based model, we get the
+            # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
+            #
+            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                pooled_output = outputs.pooler_output       
+            elif isinstance(self.transformer, (BertForSequenceClassification, 
+                                            RobertaForSequenceClassification, 
+                                            DistilBertForSequenceClassification, 
+                                            AlbertForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
+            elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
+                                            LlamaForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
+            elif isinstance(self.transformer, XLNetForSequenceClassification):
+                # XLNet-specific pooling logic
+                #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+
+                # Use mean pooling over the last hidden layer
+                last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
+                pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+            else:
+                raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
 
         if (self.debug):    
             print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')

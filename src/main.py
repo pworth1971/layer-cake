@@ -729,6 +729,7 @@ if __name__ == '__main__':
                         help='pretrained embeddings, use "glove", "word2vec", or "fasttext" (default None)')
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
+    parser.add_argument('--sup-mode', type=str, default='cat', help='How WCEs are combined with model embeddings (cat)')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
