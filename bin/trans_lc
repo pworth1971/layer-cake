@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Static configurable variables
-PROGRAM_NAME="../src/trans_layer_cake_v4.1.py"
+PROGRAM_NAME="../src/trans_layer_cake_v4.2.py"
 EPOCHS=23
 PATIENCE=2
 LOG_FILE="../log/lc_nn_cuda_test.test"
