@@ -400,9 +400,6 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
 
-
-
-
 class LCSequenceClassifier(nn.Module):
 
     def __init__(self, 
@@ -413,7 +410,7 @@ class LCSequenceClassifier(nn.Module):
                 class_weights: torch.Tensor = None, 
                 supervised: bool = False, 
                 tce_matrix: torch.Tensor = None, 
-                trainable_tces: bool = False, 
+                finetune: bool = False, 
                 normalize_tces: bool = True,
                 dropout_rate: float = 0.3, 
                 comb_method: str = "cat", 
@@ -429,7 +426,7 @@ class LCSequenceClassifier(nn.Module):
             class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            trainable_tce: Boolean indicating if TCE matrix is trainable.
+            finetune: Boolean indicating whether or not to make the model embedding layer, and the TCE matrix, trainable.
             normalize_tce: Boolean indicating if TCE matrix is normalized.
             dropout: Dropout rate for TCE matrix.
             comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
@@ -437,10 +434,10 @@ class LCSequenceClassifier(nn.Module):
         """
         super(LCSequenceClassifier, self).__init__()
 
-        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, debug: {debug}')
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
 
         if (supervised):
-            print(f'normalize_tces: {normalize_tces}, trainable_tces: {trainable_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
+            print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
 
         self.debug = debug
 
@@ -456,7 +453,7 @@ class LCSequenceClassifier(nn.Module):
         self.supervised = supervised
         self.comb_method = comb_method
         self.normalize_tces = normalize_tces
-        self.trainable_tces = trainable_tces
+        self.finetune = finetune
         self.class_weights = class_weights
 
         if (self.class_weights is not None):
@@ -468,6 +465,32 @@ class LCSequenceClassifier(nn.Module):
 
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
+        
+        # Freeze all parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
+
+        #
+        # Optionally unfreeze the embedding layer if finetune is True
+        #
+        if self.finetune:
+            print("finetuning: retraining model embedding layer...")    
+
+            # Enable training of only the embedding layer
+            if hasattr(self.transformer, 'bert'):
+                embedding_layer = self.transformer.bert.embeddings
+            elif hasattr(self.transformer, 'roberta'):
+                embedding_layer = self.transformer.roberta.embeddings
+            elif hasattr(self.transformer, 'transformer'):
+                embedding_layer = self.transformer.transformer.wte  # GPT-2
+            else:
+                raise AttributeError(f"Embeddings not found for the given model: {type(self.transformer)}")
+            print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+            for param in embedding_layer.parameters():
+                param.requires_grad = True
+        else:            
+            print("All transformer layers are frozen.")
 
         # Loss functions
         if class_type == 'multi-label':
@@ -493,7 +516,7 @@ class LCSequenceClassifier(nn.Module):
 
             print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
  
-            with torch.no_grad():
+            with torch.no_grad():                           # normalization code should be in this block
 
                 # Normalize TCE matrix if required
                 if self.normalize_tces:
@@ -508,20 +531,25 @@ class LCSequenceClassifier(nn.Module):
                     # normalize the TCE matrix
                     self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
                     print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+            
+            # Adapt classifier head based on combination method
+            # 'concat' method is dimension_size + num_classes
+            if (self.comb_method == 'cat'):
+                combined_size = self.hidden_size + self.tce_matrix.size(1)
+            else:
+                combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
 
-                    # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
-                    if (trainable_tces):
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
-                    else:
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-                
-                # Adapt classifier head based on combination method
-                # 'concat' method is dimension_size + num_classes
-                if (self.comb_method == 'cat'):
-                    combined_size = self.hidden_size + self.tce_matrix.size(1)
-                else:
-                    combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
-        
+            #
+            # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+            # otherwise let the model train the tce embedding layer
+            #
+            if (finetune):
+                print("finetuning, retraining tce embedding layer...")
+                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+            else:
+                print("not finetuning, not retraining tce embedding layer...")
+                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+
         # Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
         # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
         self.classifier = nn.Sequential(
@@ -1127,7 +1155,7 @@ def parse_args():
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
-                        help='TCEs are tunable, ie unfrozen from the beginning (default False, i.e., static)')
+                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
@@ -1371,11 +1399,10 @@ if __name__ == "__main__":
     
     hf_trans_model.to(device)
     hf_trans_class_model.to(device)
-    """
-    print("\n\thf_trans_model:\n", hf_trans_model)
-    print("\n\thf_trans_class_model:\n", hf_trans_class_model)
-    """
-
+    
+    print("\nhf_trans_model:\n", hf_trans_model)
+    print("\nhf_trans_class_model:\n", hf_trans_class_model)
+    
     # Get embedding size from the model
     dimensions, vec_size = get_embedding_dims(hf_trans_model)
     # Print for debugging
@@ -1406,7 +1433,7 @@ if __name__ == "__main__":
         class_weights=class_weights,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        trainable_tces=args.tunable,
+        finetune=args.tunable,
         normalize_tces=True,
         dropout_rate=args.dropprob,
         comb_method=args.sup_mode,
