@@ -672,8 +672,8 @@ class LCSequenceClassifier(nn.Module):
             tce_embeddings = self.tce_layer(tce_indices)                # (batch_size, seq_length, tce_dim)
 
             # Apply pooling to TCE embeddings to obtain a single vector per example
-            pooled_tce_embeddings = tce_embeddings.mean(dim=1)                          # mean pooling, output (batch_size, tce_dim)
-            #pooled_tce_embeddings, _ = tce_embeddings.max(dim=1)                    # max pooling, output (batch_size, tce_dim)
+            pooled_tce_embeddings = tce_embeddings.mean(dim=1)                                  # mean pooling, output (batch_size, tce_dim)
+            #pooled_tce_embeddings, _ = tce_embeddings.max(dim=1)                               # max pooling, output (batch_size, tce_dim)
             
             if (self.debug):
                 print("pooled_tce_embeddings:", type(pooled_tce_embeddings), pooled_tce_embeddings.shape)
@@ -696,7 +696,15 @@ class LCSequenceClassifier(nn.Module):
                 assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
                 assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
                     f"Add dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
-                pooled_output = pooled_output + pooled_tce_embeddings                           # (batch_size, hidden_size) 
+                pooled_output = pooled_output + pooled_tce_embeddings                               # (batch_size, hidden_size) 
+            elif self.comb_method == 'dot':
+                if self.debug:
+                    print("computing dot product between embeddings...")
+                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), \
+                    "Batch size mismatch between pooled output and pooled TCE matrix"
+                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
+                    f"Dot dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
+                pooled_output = (pooled_output * pooled_tce_embeddings)                             # Shape (batch_size, hidden_size)
             else:
                 raise ValueError(f"Unsupported combination method: {self.comb_method}")    
             
@@ -1080,7 +1088,8 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
-    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings')
+    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
+    parser.add_argument('--sup-mode', type=str, default='add', help='How to combine TCEs with model embeddings (add, dot, cat)')
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
@@ -1378,8 +1387,7 @@ if __name__ == "__main__":
         trainable_tces=args.tunable,
         normalize_tces=True,
         dropout_rate=args.dropprob,
-        #comb_method="cat",
-        comb_method="add",
+        comb_method=args.sup_mode,
         #debug=True
     ).to(device)
     print("lc_model:\n", lc_model)

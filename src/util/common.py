@@ -103,12 +103,21 @@ def initialize_testing(args):
     lm_type = get_language_model_type(embeddings)
     print("lm_type:", {lm_type})
 
+    """
     if (args.supervised):
         supervised = True
         mode = 'supervised'
     else:
         supervised = False
         mode = 'unsupervised'
+    """
+
+    if (args.supervised):
+        supervised = True
+        mode = f'supervised:{args.sup_mode}'
+    else:
+        supervised = False
+        mode = f'unsupervised'
 
     # get the path to the embeddings
     emb_path = get_embeddings_path(embeddings, args)
@@ -274,7 +283,7 @@ def set_method_name(opt, add_model=False):
     if opt.supervised:
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
-        method_name += f'-wce-d{sup_drop}-{opt.supervised_method}'
+        method_name += f'-tce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
     
     if opt.dropprob > 0:
         if opt.droptype != 'sup':
