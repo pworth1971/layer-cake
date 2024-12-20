@@ -21,14 +21,57 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     Implementation: Depending on the method chosen and the structure of the label space, 
     applies z-score normalization and possibly PCA for dimensionality reduction if the 
     label space exceeds a defined limit.
+    
+    Args:
+        X: Feature matrix (sparse or dense).
+        y: Label matrix (sparse or dense).
+        max_label_space: Maximum dimensions for label space (applies PCA if exceeded).
+        binary_structural_problems: Threshold for binary problems (not used here).
+        method: Supervised embedding method ('dotn', 'ppmi', etc.).
+        dozscore: Whether to apply z-score normalization.
+        debug: Debug flag for verbose output.
+
+    Returns:
+        F: Supervised embedding matrix.
     """
 
     print(f'get_supervised_embeddings(), method: {method}, dozscore: {dozscore}, max_label_space: {max_label_space}')
 
-    """
-    if isinstance(X, csr_matrix):
-        X = X.toarray()
-    """
+    # Validate sparse or dense matrix types
+    is_sparse_X = isinstance(X, csr_matrix)
+    is_sparse_y = isinstance(y, csr_matrix)
+
+    # Check for empty rows or invalid values
+    if is_sparse_X:
+        if np.isnan(X.data).any() or np.isinf(X.data).any():
+            raise ValueError("[ERROR] X contains NaN or Inf values.")
+        """
+        if X.getnnz(axis=1).min() == 0:
+            print("[WARNING] X contains rows with no nonzero entries. Filtering them...")
+            if (debug):
+                nonzero_indices = X.getnnz(axis=1) > 0
+                X = X[nonzero_indices]
+                y = y[nonzero_indices]
+                print(f"X.shape: {X.shape}, y.shape: {y.shape}")
+                print("X:", X)
+                print("y:", y)
+            raise ValueError("[ERROR] X contains rows with no nonzero entries.")
+        """
+    else:
+        raise ValueError("[ERROR] X is not a csr_matrix.")
+        return None
+
+    if is_sparse_y:
+        if np.isnan(y.data).any() or np.isinf(y.data).any():
+            raise ValueError("[ERROR] y contains NaN or Inf values.")
+        """
+        if y.getnnz(axis=1).min() == 0:
+            raise ValueError("[ERROR] y contains rows with no nonzero entries.")
+        """
+    else:
+        raise ValueError("[ERROR] y is not a csr_matrix.")
+        return None
+
 
     nC = y.shape[1]
  
@@ -56,21 +99,10 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         F = supervised_embeddings_tsr(X, y, conf_weight)
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, y, word_prob)
-
-    """
-    F = F.toarray()
-    
-    if (debug):
-        print("F:", type(F), {F.shape})
-        print("F[0]:", type(F[0]), F[0])
-    """
         
     if dozscore:
         #F = zscores(F, axis=0)
         F = normalize_zscores(F)
-        if (debug):
-            print("after zscore normalization:", {type(F)}, {F.shape})
-            print("F[0]:", type(F[0]), F[0])
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -102,7 +134,11 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
         print("Y[0]:", type(Y[0]), Y[0])
     
     # Compute tf-idf normalization
-    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
+    tfidf_norm = X.sum(axis=0)                  # Sum of term frequencies
+
+    epsilon = 1e-6                              # Small constant to prevent division by zero
+    tfidf_norm = tfidf_norm + epsilon
+
     #tfidf_norm = np.asarray(tfidf_norm).flatten()  # Ensure it's a 1D array
     #tfidf_norm = tfidf_norm[:, None]  # Reshape to (30000, 1) for broadcasting
 

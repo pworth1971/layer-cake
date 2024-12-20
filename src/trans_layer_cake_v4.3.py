@@ -105,44 +105,333 @@ SUPPORTED_OPS = ["cat", "add", "dot"]
 USE_MEAN_POOLING = False
 
 
-# Get the full model identifier and load from local directory
-def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
+from sklearn.base import BaseEstimator, TransformerMixin
+from collections import defaultdict
 
-    model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, pretrained)
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.sparse import csr_matrix
+from collections import defaultdict
+import numpy as np
 
-    return model_name, model_path
+
+
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.sparse import csr_matrix
+from collections import defaultdict
+import numpy as np
 
 
 
-def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
-    print(f'vectorize(), vtype: {vtype}')
+class CustomTokenizer:
+    def __init__(self, tokenizer, max_length, lowercase=False, remove_special_tokens=False):
+        """
+        Wrapper around Hugging Face tokenizer for custom tokenization.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            max_length: Maximum token length for truncation.
+            lowercase: Whether to convert text to lowercase.
+            remove_special_tokens: Whether to remove special tokens from tokenized output.
+        """
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.lowercase = lowercase
+        self.remove_special_tokens = remove_special_tokens
+
+    def tokenize(self, text):
+        """
+        Tokenize input text using the Hugging Face tokenizer.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        if self.lowercase:
+            text = text.lower()
+
+        tokens = self.tokenizer.tokenize(
+            text,
+            max_length=self.max_length,
+            truncation=True
+        )
+
+        if self.remove_special_tokens:
+            special_tokens = self.tokenizer.all_special_tokens
+            tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+
+    def get_vocab(self):
+        """
+        Return the vocabulary of the Hugging Face tokenizer.
+
+        Returns:
+            Dict of token-to-index mappings.
+        """
+        return self.tokenizer.get_vocab()
+
+    def __call__(self, text):
+        """
+        Enable the object to be called as a function for tokenization.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        return self.tokenize(text)
+
+
+
+
+class CustomTFIDFVectorizer(BaseEstimator, TransformerMixin):
+    def __init__(self, tokenizer, lowercase=False, debug=False):
+        """
+        Custom TF-IDF Vectorizer that aligns its vocabulary with the Hugging Face tokenizer.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            lowercase: Whether to convert text to lowercase.
+            debug: Whether to enable debugging messages.
+        """
+        self.tokenizer = tokenizer
+        self.lowercase = lowercase
+        self.debug = debug
+        self.vocabulary_ = {token: idx for token, idx in tokenizer.get_vocab().items()}
+        self.idf_ = None
+
+    def fit(self, tokenized_documents, y=None):
+        """
+        Fit the vectorizer to the tokenized documents.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens).
+            y: Ignored, present for compatibility with sklearn pipelines.
+        """
+        print("Fitting CustomTFIDFVectorizer to tokenized docs...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        term_doc_counts = defaultdict(int)
+        for tokens in tokenized_documents:
+
+            # Filter out blank tokens
+            tokens = [token for token in tokens if token.strip()]
+            unique_tokens = set(tokens)
+            for token in unique_tokens:
+                if token in self.vocabulary_:
+                    term_doc_counts[token] += 1
+                else:
+                    if self.debug:
+                        print(f"[DEBUG] Token '{token}' not in vocabulary (fit).")
+
+        num_documents = len(tokenized_documents)
+        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
+        for token, idx in self.vocabulary_.items():
+            doc_count = term_doc_counts.get(token, 0)
+            self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
+
+            if self.debug and self.idf_[idx] == 0:
+                print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                      f"Document count: {doc_count}, Total docs: {num_documents}.")
+
+        return self
+
+
+
+    def transform(self, tokenized_documents):
+        """
+        Transform the tokenized documents to TF-IDF features.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Transforming tokenized docs with fitted CustomTFIDFVectorizer...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        if tokenized_documents:
+            print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        rows, cols, data = [], [], []
+        for row_idx, doc in enumerate(tokenized_documents):
+            # If the document is a string, split it into tokens
+            if isinstance(doc, str):
+                tokens = doc.split()
+            else:
+                tokens = doc
+
+            # Filter out blank tokens
+            tokens = [token for token in tokens if token.strip()]
+            term_freq = defaultdict(int)
+            unmatched_tokens = []
+
+            for token in tokens:
+                if token in self.vocabulary_:
+                    term_freq[token] += 1
+                else:
+                    unmatched_tokens.append(token)
+
+            if self.debug and unmatched_tokens:
+                print(f"[DEBUG] Document {row_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}...")
+
+            for token, freq in term_freq.items():
+                col_idx = self.vocabulary_[token]
+                tf = freq / len(tokens)
+                tfidf = tf * self.idf_[col_idx]
+
+                """
+                if self.debug:
+                    print(f"[INFO] Document {row_idx}, Token '{token}': Frequency: {freq}, TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
+                """
+                
+                rows.append(row_idx)
+                cols.append(col_idx)
+                data.append(tfidf)
+
+        matrix = csr_matrix((data, (rows, cols)), shape=(len(tokenized_documents), len(self.vocabulary_)))
+
+        if self.debug:
+            for row_idx in range(matrix.shape[0]):
+                if matrix[row_idx].sum() == 0:
+                    print(f"[WARNING] Row {row_idx} in TF-IDF matrix is empty.")
+
+        return matrix
+
+
+
+
+
+
+
+
+    def fit_transform(self, tokenized_documents, y=None):
+        """
+        Fit to data, then transform it.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens).
+            y: Ignored, present for compatibility with sklearn pipelines.
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Fit-transforming CustomTFIDFVectorizer to tokenized docs...")
+
+        """
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+        """
+
+        self.fit(tokenized_documents, y)
+        return self.transform(tokenized_documents)
+
+
+
+
+
+
+def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype, max_length, assert_check=True):
+
+    print(f'\n\tvectorize(), vtype: {vtype}, max_length: {max_length}')
+
+    custom_tokenizer = CustomTokenizer(tokenizer, max_length)
+    preprocessed_train = [" ".join(custom_tokenizer(text)) for text in texts_train]
+    preprocessed_val = [" ".join(custom_tokenizer(text)) for text in texts_val]
+    preprocessed_test = [" ".join(custom_tokenizer(text)) for text in texts_test]
+
+    # Debugging: Preprocessed data
+    print(f"preprocessed_train[0]: {preprocessed_train[0]}")
+    print(f"preprocessed_train length: {len(preprocessed_train)}")
+
+    tokenizer_vocab = custom_tokenizer.get_vocab()
 
     if vtype == 'tfidf':
-        vectorizer = TfidfVectorizer(min_df=5, lowercase=False, sublinear_tf=True, vocabulary=tokenizer.get_vocab())
+        vectorizer = CustomTFIDFVectorizer(tokenizer=custom_tokenizer, debug=True)
     elif vtype == 'count':
-        vectorizer = CountVectorizer(min_df=5, lowercase=False, vocabulary=tokenizer.get_vocab())
+        vectorizer = CountVectorizer(tokenizer=custom_tokenizer)
+    else:
+        raise ValueError(f"Unsupported vectorizer type: {vtype}")
 
-    Xtr = vectorizer.fit_transform(texts_train)
-    Xval = vectorizer.transform(texts_val)
-    Xte = vectorizer.transform(texts_test)
+    Xtr = vectorizer.fit_transform(preprocessed_train)
+    Xval = vectorizer.transform(preprocessed_val)
+    Xte = vectorizer.transform(preprocessed_test)
 
-    Xtr.sort_indices()
-    Xval.sort_indices()
-    Xte.sort_indices()
+    def check_empty_rows(matrix, name, original_texts):
+        empty_rows = matrix.sum(axis=1).A1 == 0
+        if empty_rows.any():
+            print(f"[WARNING] {name} contains {empty_rows.sum()} empty rows.")
+            for i in range(len(empty_rows)):
+                if empty_rows[i]:
+                    print(f"Empty row {i}: Original text: '{original_texts[i]}'")
 
-    # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
-    if not isinstance(Xtr, csr_matrix):
-        Xtr = csr_matrix(Xtr)
+    check_empty_rows(Xtr, "Xtr", texts_train)
+    check_empty_rows(Xval, "Xval", texts_val)
+    check_empty_rows(Xte, "Xte", texts_test)
 
-    if not isinstance(Xval, csr_matrix):
-        Xval = csr_matrix(Xval)
+    vec_vocab_size = len(vectorizer.vocabulary_)
+    tok_vocab_size = len(tokenizer_vocab)
+    if assert_check:
+        assert vec_vocab_size == tok_vocab_size, \
+            f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
 
-    if not isinstance(Xte, csr_matrix):
-        Xte = csr_matrix(Xte)
+    return vectorizer, custom_tokenizer, Xtr, Xval, Xte
 
-    return vectorizer, Xtr, Xval, Xte
+
+def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5):
+
+    vocab = vectorizer.vocabulary_
+    idf_values = vectorizer.idf_
+    reverse_vocab = {idx: token for token, idx in vocab.items()}
+    
+    print("[INFO] Spot-checking documents...\n")
+    
+    print("documents:", type(documents), len(documents))
+    print("documents[0]:", type(documents[0]), documents[0])
+
+    print("vectorized_data:", type(vectorized_data))
+    # Assuming vectorized_data is a sparse matrix (e.g., scipy.sparse.csr_matrix)
+    
+    print("vectorized_data[0]:", vectorized_data[0].toarray().flatten())
+
+    print(f"[DEBUG] Vocabulary size: {len(vocab)}, IDF array size: {len(idf_values)}\n")
+
+    for doc_id, doc in enumerate(documents[:num_docs]):
+        print(f"[DEBUG] Document {doc_id}:")
+        print(f"Original Text: {doc}\n")
+
+        tokens = tokenizer(doc)
+        print(f"Tokens: {tokens}\n")
+
+        vectorized_row = vectorized_data[doc_id]
+        mismatches = []
+
+        for token in tokens:
+            if token in vocab:
+                idx = vocab[token]
+                if idx < len(idf_values):
+                    tfidf_value = vectorized_row[0, idx]
+                    expected_idf = idf_values[idx]
+                    if tfidf_value == 0:
+                        print(f"[DEBUG] Token 'sey' in tokenizer vocabulary: {'sey' in tokenizer.get_vocab()}")
+                        print(f"[ERROR] Token '{token}' has IDF {expected_idf} but TF-IDF is 0.")
+                else:
+                    print(f"[WARNING] Token '{token}' has out-of-bounds index {idx}.")
+            else:
+                print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
+
+        print("[ALL CLEAR] No mismatches found for this document.\n")
+
+
+
+
 
 
 
@@ -832,6 +1121,15 @@ def lc_class_weights(labels, task_type="single-label"):
 
 
 
+# Get the full model identifier and load from local directory
+def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
+
+    model_name = MODEL_MAP.get(pretrained, pretrained)
+    model_path = os.path.join(cache_dir, pretrained)
+
+    return model_name, model_path
+
+
 
 def get_embedding_dims(hf_model):
     """
@@ -1265,13 +1563,17 @@ if __name__ == "__main__":
     print("\n\tinitializing tokenizer, vectorizer and dataset...")
     
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-    
+    #
     # Add padding token if it doesn't exist
     # NB: it is necessary to stay within the 
     # boundaries of the model vocabulary size
+    # and we want to add a new token rather than re-use
+    # a token so as to not confuse the tokenizer or vectorizer
+    # both of which use the tokenizer for parsing and vocab initialization
+    #
     if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token               # Align pad token to eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id         # set pad_token_id
+        tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        tokenizer.pad_token = '<pad>'
     print("tokenizer:\n", tokenizer)
 
     # Get the pad_token_id
@@ -1316,17 +1618,27 @@ if __name__ == "__main__":
     #
     # Vectorize the text data
     #
-    vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
+    vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
+        texts_train, 
+        texts_val, 
+        test_data, 
+        tokenizer, 
+        vtype=args.vtype, 
+        max_length=max_length
+    )
     print("vectorizer:\n", vectorizer)
+    print("lc_tokenizer:\n", lc_tokenizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
-    #print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0])
-    
+    print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
+    #print("Xtr[1]:", type(Xtr[1]), Xtr[1].shape, Xtr[1])
+    #print("Xtr[1]:", type(Xtr[2]), Xtr[2].shape, Xtr[2])
+
     print("Xval:", type(Xval), Xval.shape)
-    #print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
+    print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
     
     print("Xte:", type(Xte), Xte.shape)
-    #print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
+    print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
 
     # convert single label y values from array of scalaers to one hot encoded
     print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
@@ -1335,11 +1647,31 @@ if __name__ == "__main__":
     tok_vocab_size = len(tokenizer.get_vocab())
     print("tok_vocab_size:", tok_vocab_size)
 
+    #
+    # validate that the vectorize and tokenizer vocabularies are mirrors of each other
+    # this is imperative for the TCE matrix computation alignment with the (pretrained) 
+    # model embeddings
+    #
     assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
 
     # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
     assert vec_vocab_size == tok_vocab_size, \
         f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
+    tok_vocab = set(tokenizer.get_vocab().keys())
+    vec_vocab = set(vectorizer.vocabulary_.keys())
+    print(f"Tokenizer vocab size: {len(tok_vocab)}, Vectorizer vocab size: {len(vec_vocab)}")
+    print(f"Vocabulary intersection size: {len(tok_vocab & vec_vocab)}")
+
+    result = spot_check_documents(
+        documents=texts_train,
+        vectorizer=vectorizer,
+        tokenizer=lc_tokenizer, 
+        vectorized_data=Xtr,       
+        num_docs=2,
+    )
+
+    print("spot_check_documents():", result)
 
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
@@ -1381,7 +1713,7 @@ if __name__ == "__main__":
             vectorized_training_data=Xtr,
             training_label_matrix=one_hot_labels_train,
             opt=args,
-            #debug=True
+            debug=True
         )
 
         print("tce_matrix:", type(tce_matrix), tce_matrix.shape)

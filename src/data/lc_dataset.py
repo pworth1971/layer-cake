@@ -1603,13 +1603,64 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         return lcd
 
 
-
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # Load dataset method for transformer based neural models
 #
 def trans_lc_load_dataset(name):
 
     print("\n\tLoading dataset:", name)
+
+    import re
+    from nltk.corpus import stopwords
+
+    # Ensure you download the stopwords corpus if not already downloaded:
+    # import nltk
+    # nltk.download('stopwords')
+
+    def preprocess_text(data):
+        """
+        Preprocess the text data by converting to lowercase, masking numbers, 
+        removing punctuation, and removing stopwords.
+        """
+        import re
+        from nltk.corpus import stopwords
+        from string import punctuation
+
+        stop_words = set(stopwords.words('english'))
+        punct_table = str.maketrans("", "", punctuation)
+
+        def _mask_numbers(data, number_mask='NUM'):
+            """
+            Masks numbers in the given text data with a placeholder.
+            """
+            mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+            return [mask.sub(number_mask, text) for text in data]
+
+        def _remove_punctuation_and_stopwords(data):
+            """
+            Removes punctuation and stopwords from the text data.
+            """
+            cleaned = []
+            for text in data:
+                # Remove punctuation and lowercase text
+                text = text.translate(punct_table).lower()
+                # Remove stopwords
+                tokens = text.split()
+                tokens = [word for word in tokens if word not in stop_words]
+                cleaned.append(" ".join(tokens))
+            return cleaned
+
+        # Apply preprocessing steps
+        masked = _mask_numbers(data)
+        cleaned = _remove_punctuation_and_stopwords(masked)
+        return cleaned
+
+
+
+
+
+
 
     if name == "20newsgroups":
 
@@ -1623,7 +1674,11 @@ def trans_lc_load_dataset(name):
 
         class_type = 'single-label'
 
-        return (train_data.data, train_data.target), (test_data.data, test_data.target), num_classes, target_names, class_type
+        # Preprocess text data
+        train_data_processed = preprocess_text(train_data.data)
+        test_data_processed = preprocess_text(test_data.data)
+
+        return (train_data_processed, train_data.target), (test_data_processed, test_data.target), num_classes, target_names, class_type
     
     elif name == "bbc-news":
 
@@ -1653,6 +1708,9 @@ def trans_lc_load_dataset(name):
             random_state = RANDOM_SEED,
         )
 
+        train_data = preprocess_text(train_data.tolist())
+        test_data = preprocess_text(test_data.tolist())
+
         # reset indeces
         train_data = train_data.reset_index(drop=True)
         test_data = test_data.reset_index(drop=True)
@@ -1671,7 +1729,7 @@ def trans_lc_load_dataset(name):
         train_target_encoded = label_encoder.transform(train_target_arr)
         test_target_encoded = label_encoder.transform(test_target_arr)
 
-        return (train_data.tolist(), train_target_encoded), (test_data.tolist(), test_target_encoded), num_classes, target_names, class_type
+        return (train_data, train_target_encoded), (test_data, test_target_encoded), num_classes, target_names, class_type
     
     elif name == "reuters21578":
         
@@ -1683,11 +1741,12 @@ def trans_lc_load_dataset(name):
         train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
         test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
 
-        train_data = train_labelled_docs.data
-        train_target = train_labelled_docs.target
-        test_data = list(test_labelled_docs.data)
-        test_target = test_labelled_docs.target
+        train_data = preprocess_text(train_labelled_docs.data)
+        test_data = preprocess_text(list(test_labelled_docs.data))
 
+        train_target = train_labelled_docs.target
+        test_target = test_labelled_docs.target
+        
         class_type = 'multi-label'
 
         train_target, test_target, target_names = _label_matrix(train_target, test_target)
@@ -1695,7 +1754,7 @@ def trans_lc_load_dataset(name):
         train_target = train_target.toarray()                                     # Convert to dense
         test_target = test_target.toarray()                                       # Convert to dense
 
-        target_names = train_labelled_docs.target_names
+        #target_names = train_labelled_docs.target_names
         num_classes = len(target_names)
         #print(f"num_classes: {len(target_names)}")
         #print("class_names:", target_names)
@@ -1711,10 +1770,17 @@ def trans_lc_load_dataset(name):
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
         test = fetch_ohsumed50k(subset='test', data_path=data_path)
 
+        train_data = preprocess_text(devel.data)
+        test_data = preprocess_text(test.data)
+
+        """
         train_data, train_target = devel.data, devel.target
         test_data, test_target = test.data, test.target
-
+        """
+        
+        train_target, test_target = devel.target, test.target
         class_type = 'multi-label'
+
         #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         #self.devel_raw, self.test_raw = devel.data, test.data
         
@@ -1738,10 +1804,17 @@ def trans_lc_load_dataset(name):
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
+        train_data = preprocess_text(devel.data)
+        test_data = preprocess_text(test.data)
+
+        """
         train_data, train_target = devel.data, devel.target
         test_data, test_target = test.data, test.target
+        """
 
+        train_target, test_target = devel.target, test.target
         class_type = 'multi-label'
+
         #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         #self.devel_raw, self.test_raw = devel.data, test.data
         
@@ -1764,13 +1837,14 @@ def trans_lc_load_dataset(name):
         # Load IMDB dataset using the Hugging Face Datasets library
         imdb_dataset = load_dataset('imdb', cache_dir=data_path)
 
-        # Split dataset into training and test data
+        train_data = preprocess_text(imdb_dataset['train']['text'])
 
         # Split dataset into training and test data
-        train_data = imdb_dataset['train']['text']
+        #train_data = imdb_dataset['train']['text']
         train_target = np.array(imdb_dataset['train']['label'], dtype=np.int64)  # Convert to numpy array of type int64
 
-        test_data = imdb_dataset['test']['text']
+        #test_data = imdb_dataset['test']['text']
+        test_data = preprocess_text(imdb_dataset['test']['text'])
         test_target = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
 
         # Set class_type to single-label classification
@@ -1950,9 +2024,10 @@ def trans_lc_load_dataset(name):
 
         # Preprocessing function for text cleaning
         def clean_text(text):
-            text = re.sub(r'\d+', '<NUM>', text)  # Mask numbers
-            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)  # Remove LaTeX-like symbols
-            text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
+            text = text.lower()                                                       # Convert text to lowercase
+            text = re.sub(r'\d+', '<NUM>', text)                                      # Mask numbers
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)                  # Remove LaTeX-like symbols
+            text = re.sub(r'\s+', ' ', text).strip()                                  # Remove extra spaces
             return text
 
         # Generator function with progress bar
@@ -2301,13 +2376,6 @@ def load_fasttext_format(path):
     return docs,labels
 
 
-def _mask_numbers(data, number_mask='numbermask'):
-    """
-    Masks numbers in the given text data with a placeholder.
-    """
-    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
-    masked = [mask.sub(number_mask, text) for text in data]
 
-    return masked
 
     
