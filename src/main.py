@@ -255,7 +255,10 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
                 weights = pretrained.extract(word_list)
                 pretrained_embeddings.append(weights)
                 print('\t[pretrained-matrix]', weights.shape)
+            else:
+                raise ValueError(f"Unsupported embedding type: {opt.pretrained}")
 
+            """
             elif opt.pretrained in ['bert', 'roberta', 'distilbert']:
                 # Dynamic token-based embeddings
                 print("Extracting embeddings dynamically for dataset text with attention...")
@@ -301,12 +304,11 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
 
                 pretrained_embeddings.append(all_embeddings)
                 print('\t[pretrained-matrix]', all_embeddings.shape)
-
-            else:
-                raise ValueError(f"Unsupported embedding type: {opt.pretrained}")
+            """
 
         # Handle supervised embeddings (WCE)
         if opt.supervised:
+            
             print("Generating supervised embeddings (WCE)...")
             Xtr, _ = dataset.vectorize()
             Ytr = dataset.devel_labelmatrix
@@ -321,6 +323,10 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             num_missing_rows = vocabsize - WCE.shape[0]
             WCE = np.vstack((WCE, np.zeros(shape=(num_missing_rows, WCE.shape[1]))))
             WCE = torch.from_numpy(WCE).float()
+
+            if torch.isnan(WCE).any() or torch.isinf(WCE).any():
+                raise ValueError("[ERROR] WCE contains NaN or Inf values during initialization.")
+
             print('\t[supervised-matrix]', WCE.shape)
 
             # Adjust the supervised range
@@ -730,7 +736,7 @@ if __name__ == '__main__':
     parser.add_argument('--supervised', action='store_true', default=False,
                         help='use supervised embeddings')
     parser.add_argument('--sup-mode', type=str, default='cat', help='How WCEs are combined with model embeddings (cat)')
-    parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
+    parser.add_argument('--supervised-method', type=str, default='ig', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
     parser.add_argument('--learnable', type=int, default=0, metavar='int',

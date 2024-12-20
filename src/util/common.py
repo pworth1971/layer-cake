@@ -283,8 +283,12 @@ def set_method_name(opt, add_model=False):
     if opt.supervised:
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
-        method_name += f'-tce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
-    
+
+        if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2']):
+            method_name += f'-tce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
+        else:
+            method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
+
     if opt.dropprob > 0:
         if opt.droptype != 'sup':
             method_name += f'-drop{opt.droptype}{opt.dropprob}'

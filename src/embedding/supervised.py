@@ -114,9 +114,71 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 # ----------------------------------------------------------------------------------------------------------------------
 
 
+def supervised_embeddings_tfidf(X, Y, debug=False):
+    """
+    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label information Y.
+    """
+    print("supervised_embeddings_tfidf()")
+
+    # Convert sparse matrices to dense arrays for debugging
+    if debug:
+        X_dense = X.toarray()
+        Y_dense = Y.toarray()
+        
+        print("\nDense Representation of X (Feature Matrix):")
+        print(f"X shape: {X_dense.shape}")
+        print(f"X[0]: {X_dense[0]}")
+        
+        print("\nDense Representation of Y (Label Matrix):")
+        print(f"Y shape: {Y_dense.shape}")
+        print(f"Y[0]: {Y_dense[0]}")
+
+        # Print non-zero elements of X and Y
+        """
+        print("\nNon-zero elements of X[0]:")
+        for index, value in enumerate(X_dense[0]):
+            if value != 0:
+                print(f"Index: {index}, Value: {value}")
+
+        print("\nNon-zero elements of Y[0]:")
+        for index, value in enumerate(Y_dense[0]):
+            if value != 0:
+                print(f"Index: {index}, Value: {value}")
+        """
+        
+    # Compute tf-idf normalization
+    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
+    epsilon = 1e-6  # Small constant to prevent division by zero
+    tfidf_norm = tfidf_norm + epsilon
+
+    if debug:
+        print("\nTF-IDF Normalization Vector (tfidf_norm):")
+        print(f"tfidf_norm shape: {tfidf_norm.shape}")
+        print(tfidf_norm)
+
+    # Compute numerator
+    numerator = X.T.dot(Y)
+
+    if debug:
+        print("\nNumerator (X.T.dot(Y)):")
+        print(f"Numerator shape: {numerator.shape}")
+        #print(numerator.toarray()[:5])  # Print first 5 rows for inspection
+
+    # Compute supervised TF-IDF matrix
+    F = numerator / tfidf_norm.T
+
+    """
+    if debug:
+        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
+        print(F)
+    """
+
+    return F
+
+
 
 # ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_tfidf(X, Y, debug=False):
+def supervised_embeddings_tfidf_old(X, Y, debug=False):
     """
     Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with 
     label information Y.
@@ -127,36 +189,74 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
 
     print("supervised_embeddings_tfidf()")
 
-    if (debug):
-        print("X:", type(X), {X.shape})
-        print("X[0]:", type(X[0]), X[0])
-        print("Y:", type(Y), {Y.shape})
-        print("Y[0]:", type(Y[0]), Y[0])
-    
+    if debug:
+        print("X:", type(X), X.shape)
+        print("Y:", type(Y), Y.shape)
+
+        """
+        # Print non-zero elements of X[0]
+        print("\nNon-zero elements of X[0]:")
+        X_row = X[0]
+        for idx, value in zip(X_row.indices, X_row.data):
+            print(f"Index: {idx}, Value: {value}")
+
+        # Print non-zero elements of Y[0]
+        print("\nNon-zero elements of Y[0]:")
+        Y_row = Y[0]
+        for idx, value in zip(Y_row.indices, Y_row.data):
+            print(f"Index: {idx}, Value: {value}")
+        """
+
     # Compute tf-idf normalization
     tfidf_norm = X.sum(axis=0)                  # Sum of term frequencies
-
     epsilon = 1e-6                              # Small constant to prevent division by zero
     tfidf_norm = tfidf_norm + epsilon
 
-    #tfidf_norm = np.asarray(tfidf_norm).flatten()  # Ensure it's a 1D array
-    #tfidf_norm = tfidf_norm[:, None]  # Reshape to (30000, 1) for broadcasting
+    if debug:
+        print("\nTF-IDF Normalization Vector (tfidf_norm):")
+        print("tfidf_norm shape:", tfidf_norm.shape)
+        print(tfidf_norm)
 
-    if (debug):
-        print("tfidf_norm:", type(tfidf_norm), tfidf_norm.shape)
-        print("tfidf_norm[0]:", type(tfidf_norm[0]), tfidf_norm[0])
+    # Check for near-zero or invalid values in tfidf_norm
+    invalid_norms = np.where(tfidf_norm < 1e-5)[1]
+    if len(invalid_norms) > 0:
+        print(f"[DEBUG] Found {len(invalid_norms)} near-zero tfidf_norm entries:")
+        print(invalid_norms)
 
-        numerator = (X.T).dot(Y)
-        print("numerator:", type(numerator), {numerator.shape})
-        print("numerator[0]:", type(numerator[0]), numerator[0])
+    # Compute supervised embeddings
+    numerator = X.T.dot(Y)
 
-        #denominator = tfidf_norm.T
-        denominator = tfidf_norm
-        print("denominator:", type(denominator), {denominator.shape})
-        print("denominator[0]:", type(denominator[0]), denominator[0])
+    if debug:
+        print("\nNumerator (X.T.dot(Y)):")
+        for idx in range(numerator.shape[0]):
+            row = numerator.getrow(idx)
+            """
+            if row.nnz > 0:
+                print(f"Numerator Row {idx}: {row.toarray()}")
+            """
 
+    # Check for all-zero rows in numerator
+    all_zero_rows = np.where(numerator.sum(axis=1) == 0)[0]
+    if len(all_zero_rows) > 0:
+        print(f"[DEBUG] Found {len(all_zero_rows)} all-zero rows in numerator:")
+        print(all_zero_rows)
+    
+    # Debug for invalid values
+    if debug:
+        print("\nChecking for invalid values...")
+        if np.isnan(numerator.data).any() or np.isinf(numerator.data).any():
+            print("[ERROR] Numerator contains NaN or Inf values.")
+        if np.isnan(tfidf_norm).any() or np.isinf(tfidf_norm).any():
+            print("[ERROR] Denominator (tfidf_norm) contains NaN or Inf values.")
+        
     F = (X.T).dot(Y) / tfidf_norm.T
-    #F = (X.T).dot(Y) / tfidf_norm
+
+    # Check the result for NaN or Inf
+    F = np.nan_to_num(F, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if debug:
+        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
+        print(F)
     
     return F
 # ----------------------------------------------------------------------------------------------------------------------

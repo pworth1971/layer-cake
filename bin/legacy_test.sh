@@ -19,11 +19,11 @@ do
 
     #$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run
 
-    $PY $LOG $dataset	$CNN	--channels 256	--pretrained glove --seed $run
-    $PY $LOG $dataset	$CNN	--channels 256	--pretrained glove	--tunable --seed $run
-    $PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained glove	--tunable --seed $run --droptype learn
+    #$PY $LOG $dataset	$CNN	--channels 256	--pretrained glove --seed $run
+    #$PY $LOG $dataset	$CNN	--channels 256	--pretrained glove	--tunable --seed $run
+    #$PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained glove	--tunable --seed $run --droptype learn
     $PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised --seed $run
-    $PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised	--tunable --seed $run
+    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised	--tunable --seed $run
     
     $PY $LOG $dataset	$CNN	--channels 256	--pretrained word2vec --seed $run
     $PY $LOG $dataset	$CNN	--channels 256	--pretrained word2vec	--tunable --seed $run

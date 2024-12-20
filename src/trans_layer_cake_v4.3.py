@@ -291,7 +291,7 @@ class CustomTFIDFVectorizer(BaseEstimator, TransformerMixin):
                 if self.debug:
                     print(f"[INFO] Document {row_idx}, Token '{token}': Frequency: {freq}, TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
                 """
-                
+
                 rows.append(row_idx)
                 cols.append(col_idx)
                 data.append(tfidf)
@@ -385,30 +385,47 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype, max_length, 
     return vectorizer, custom_tokenizer, Xtr, Xval, Xte
 
 
-def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5):
 
+
+import random
+
+def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5):
+    """
+    Spot-check random documents in the dataset for their TF-IDF calculations.
+
+    Args:
+        documents: List of original documents (strings).
+        vectorizer: Fitted CustomTFIDFVectorizer object.
+        tokenizer: Custom tokenizer object.
+        vectorized_data: Sparse matrix of TF-IDF features.
+        num_docs: Number of random documents to check.
+    """
     vocab = vectorizer.vocabulary_
     idf_values = vectorizer.idf_
     reverse_vocab = {idx: token for token, idx in vocab.items()}
     
-    print("[INFO] Spot-checking documents...\n")
+    print("[INFO] Spot-checking random documents...\n")
     
+    """
     print("documents:", type(documents), len(documents))
     print("documents[0]:", type(documents[0]), documents[0])
 
     print("vectorized_data:", type(vectorized_data))
-    # Assuming vectorized_data is a sparse matrix (e.g., scipy.sparse.csr_matrix)
-    
-    print("vectorized_data[0]:", vectorized_data[0].toarray().flatten())
-
     print(f"[DEBUG] Vocabulary size: {len(vocab)}, IDF array size: {len(idf_values)}\n")
+    """
 
-    for doc_id, doc in enumerate(documents[:num_docs]):
-        print(f"[DEBUG] Document {doc_id}:")
+    # Randomly select `num_docs` indices from the document list
+    doc_indices = random.sample(range(len(documents)), min(num_docs, len(documents)))
+
+    for doc_id in doc_indices:
+        doc = documents[doc_id]
+        """
+        print(f"[INFO] Document {doc_id}:")
         print(f"Original Text: {doc}\n")
+        """
 
         tokens = tokenizer(doc)
-        print(f"Tokens: {tokens}\n")
+        #print(f"Tokens: {tokens}\n")
 
         vectorized_row = vectorized_data[doc_id]
         mismatches = []
@@ -420,14 +437,14 @@ def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_
                     tfidf_value = vectorized_row[0, idx]
                     expected_idf = idf_values[idx]
                     if tfidf_value == 0:
-                        print(f"[DEBUG] Token 'sey' in tokenizer vocabulary: {'sey' in tokenizer.get_vocab()}")
+                        print(f"[DEBUG] Token '{token}' in tokenizer vocabulary: {token in tokenizer.get_vocab()}")
                         print(f"[ERROR] Token '{token}' has IDF {expected_idf} but TF-IDF is 0.")
                 else:
                     print(f"[WARNING] Token '{token}' has out-of-bounds index {idx}.")
             else:
                 print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
 
-        print("[ALL CLEAR] No mismatches found for this document.\n")
+    print("\n--- finished spot checking docs ---\n")
 
 
 
