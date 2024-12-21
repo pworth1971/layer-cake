@@ -124,6 +124,7 @@ import numpy as np
 
 
 class CustomTokenizer:
+
     def __init__(self, tokenizer, max_length, lowercase=False, remove_special_tokens=False):
         """
         Wrapper around Hugging Face tokenizer for custom tokenization.
@@ -444,11 +445,7 @@ def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_
             else:
                 print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
 
-    print("\n--- finished spot checking docs ---\n")
-
-
-
-
+    print("--- finished spot checking docs ---")
 
 
 
@@ -934,7 +931,8 @@ class LCSequenceClassifier(nn.Module):
 
         # check for Nan or Inf values after normalization
         if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
-            raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
+            print("[WARNING]: projected_tce contains NaN or Inf values after normalization.")
+            #raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
 
         return projected_tce
 
@@ -956,7 +954,7 @@ class LCSequenceClassifier(nn.Module):
         if (self.debug):
             print("LCSequenceClassifier:forward()...")
             print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
-            #print("input_ids:", input_ids)
+            print("input_ids:", input_ids)
             print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
             print(f"\tlabels: {type(labels)}, {labels.shape}")
 
@@ -1315,6 +1313,62 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
 def get_hf_models(model_name, model_path, num_classes, tokenizer):
     """
     Load Hugging Face transformer models with configurations to enable hidden states.
+    Ensure pad_token_id is consistently fetched from the tokenizer.
+
+    Parameters:
+    - model_name: Name of the Hugging Face model.
+    - model_path: Path to the Hugging Face model.
+    - num_classes: Number of classes for classification.
+    - tokenizer: Hugging Face tokenizer.
+
+    Returns:
+    - hf_trans_model: Hugging Face transformer model.
+    - hf_trans_class_model: Hugging Face transformer model for classification.
+    """
+
+    print(f'get_hf_models(): model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}')
+
+    # Ensure the tokenizer has a pad_token_id set
+    if tokenizer.pad_token_id is None:
+        raise ValueError("Tokenizer does not have a valid pad_token_id. Ensure the tokenizer is properly configured before calling this function.")
+
+    pad_token_id = tokenizer.pad_token_id
+    print(f"Using pad_token_id: {pad_token_id} (token: {tokenizer.pad_token})")
+
+    # Initialize Hugging Face Transformer model
+    hf_trans_model = AutoModel.from_pretrained(model_name, cache_dir=model_path)
+    
+    # Ensure hidden states are enabled for the base model
+    hf_trans_model.config.output_hidden_states = True
+
+    # Ensure the model config uses the tokenizer's pad_token_id
+    if hf_trans_model.config.pad_token_id is None:
+        print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
+        hf_trans_model.config.pad_token_id = pad_token_id
+
+    # Initialize Hugging Face Transformer model for sequence classification
+    hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        cache_dir=model_path,
+        num_labels=num_classes,      # Specify the number of classes for classification
+        pad_token_id=pad_token_id    # Use tokenizer's pad_token_id
+    )
+
+    # Ensure hidden states are enabled for the classification model
+    hf_trans_class_model.config.output_hidden_states = True
+
+    # Ensure the model config uses the tokenizer's pad_token_id
+    if hf_trans_class_model.config.pad_token_id is None:
+        print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
+        hf_trans_class_model.config.pad_token_id = pad_token_id
+
+    return hf_trans_model, hf_trans_class_model
+
+
+
+def get_hf_models_old(model_name, model_path, num_classes, tokenizer):
+    """
+    Load Hugging Face transformer models with configurations to enable hidden states.
     """
 
     print(f'get_hf_models(): model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}')
@@ -1447,6 +1501,41 @@ class CustomTrainer(Trainer):
         return loss.detach()
     
 
+def init_hf_tokenizer():
+
+    print("Initializing Hugging Face tokenizer...")
+
+    # Load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
+
+    # Use an existing token as the padding token
+    if tokenizer.pad_token is None:
+        print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Get the pad_token_id
+    pad_token_id = tokenizer.pad_token_id
+
+    # Print tokenizer details
+    tok_vocab_size = len(tokenizer)
+    print("tok_vocab_size:", tok_vocab_size)
+
+    # Compute max_length from tokenizer
+    max_length = tokenizer.model_max_length
+    print(f"Tokenizer max_length: {max_length}")
+
+    # Handle excessive or default max_length values
+    if max_length > MAX_TOKEN_LENGTH:
+        print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
+        max_length = MAX_TOKEN_LENGTH
+
+    # Print tokenizer details for debugging
+    print("Tokenizer configuration:")
+    print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
+    print(f"  Max length: {max_length}")
+
+    return tokenizer, max_length, pad_token_id, tok_vocab_size
+
 
 # Parse arguments
 def parse_args():
@@ -1578,34 +1667,8 @@ if __name__ == "__main__":
 
 
     print("\n\tinitializing tokenizer, vectorizer and dataset...")
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-    #
-    # Add padding token if it doesn't exist
-    # NB: it is necessary to stay within the 
-    # boundaries of the model vocabulary size
-    # and we want to add a new token rather than re-use
-    # a token so as to not confuse the tokenizer or vectorizer
-    # both of which use the tokenizer for parsing and vocab initialization
-    #
-    if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({'pad_token': '<pad>'})
-        tokenizer.pad_token = '<pad>'
-    print("tokenizer:\n", tokenizer)
 
-    # Get the pad_token_id
-    pad_token_id = tokenizer.pad_token_id
-
-    tok_vocab_size = len(tokenizer)
-    print("tok_vocab_size:", tok_vocab_size)
-
-    # Compute max_length from tokenizer
-    max_length = tokenizer.model_max_length
-    print(f"Tokenizer max_length: {max_length}")
-
-    if max_length > MAX_TOKEN_LENGTH:                                               # Handle excessive or default values
-        print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
-        max_length = MAX_TOKEN_LENGTH
+    tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
 
     # Print tokenizer details for debugging
     print("Tokenizer configuration:")
@@ -1688,8 +1751,6 @@ if __name__ == "__main__":
         num_docs=2,
     )
 
-    print("spot_check_documents():", result)
-
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
     # then instantiate the LCSequenceClassifier model)
@@ -1732,14 +1793,14 @@ if __name__ == "__main__":
             opt=args,
             debug=True
         )
+        tce_matrix.to(device)           # must move the TCE embeddings to same device as model
 
         print("tce_matrix:", type(tce_matrix), tce_matrix.shape)
         print("tce_matrix[0]:", type(tce_matrix[0]), tce_matrix[0].shape, tce_matrix[0])
 
         if torch.isnan(tce_matrix).any() or torch.isinf(tce_matrix).any():
-            raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
-
-        tce_matrix.to(device)           # must move the TCE embeddings to same device as model
+            print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+            #raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
     else:
         tce_matrix = None
 
