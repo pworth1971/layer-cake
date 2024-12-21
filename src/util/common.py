@@ -115,6 +115,9 @@ def initialize_testing(args):
     if (args.supervised):
         supervised = True
         mode = f'supervised:{args.sup_mode}'
+
+        if not args.nozscore:
+            mode += '-zscore'
     else:
         supervised = False
         mode = f'unsupervised'
@@ -288,6 +291,9 @@ def set_method_name(opt, add_model=False):
             method_name += f'-tce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
         else:
             method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
+
+        if not opt.nozscore:
+            method_name += '-zscore'
 
     if opt.dropprob > 0:
         if opt.droptype != 'sup':
