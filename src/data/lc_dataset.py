@@ -1618,6 +1618,14 @@ def trans_lc_load_dataset(name):
     # import nltk
     # nltk.download('stopwords')
 
+    def _mask_numbers(data, number_mask='NUM'):
+        """
+        Masks numbers in the given text data with a placeholder.
+        """
+        mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+        return [mask.sub(number_mask, text) for text in data]
+
+
     def preprocess_text(data):
         """
         Preprocess the text data by converting to lowercase, masking numbers, 
@@ -1629,13 +1637,6 @@ def trans_lc_load_dataset(name):
 
         stop_words = set(stopwords.words('english'))
         punct_table = str.maketrans("", "", punctuation)
-
-        def _mask_numbers(data, number_mask='NUM'):
-            """
-            Masks numbers in the given text data with a placeholder.
-            """
-            mask = re.compile(r'\b[0-9][0-9.,-]*\b')
-            return [mask.sub(number_mask, text) for text in data]
 
         def _remove_punctuation_and_stopwords(data):
             """
@@ -1657,9 +1658,44 @@ def trans_lc_load_dataset(name):
         return cleaned
 
 
+    def _preprocess(text_series: pd.Series, remove_punctuation=True):
+        """
+        Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
+        We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
 
+        Parameters:
+        - text_series: A pandas Series containing text data (strings).
 
+        Returns:
+        - processed_texts: A NumPy array containing processed text strings.
+        """
 
+        print("_preprocessing...")
+        print("text_series:", type(text_series), text_series.shape)
+
+        # Load stop words once outside the loop
+        stop_words = set(stopwords.words('english'))
+        punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+        # Function to process each text (masking numbers, removing punctuation, and stopwords)
+        def process_text(text):
+
+            # Remove punctuation
+            if (remove_punctuation):
+                text = text.translate(punctuation_table)
+
+            # Remove stopwords without tokenizing or lowercasing
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+            # Ensure extra spaces are removed after stopwords are deleted
+            return ' '.join(text.split())
+
+        # Use Parallel processing with multiple cores
+        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+        # Return as NumPy array
+        return np.array(processed_texts)
 
 
     if name == "20newsgroups":
@@ -1675,11 +1711,44 @@ def trans_lc_load_dataset(name):
         class_type = 'single-label'
 
         # Preprocess text data
-        train_data_processed = preprocess_text(train_data.data)
-        test_data_processed = preprocess_text(test_data.data)
+        #train_data_processed = preprocess_text(train_data.data)
+        #test_data_processed = preprocess_text(test_data.data)
 
-        return (train_data_processed, train_data.target), (test_data_processed, test_data.target), num_classes, target_names, class_type
+        train_data_processed = _preprocess(pd.Series(train_data.data))
+        test_data_processed = _preprocess(pd.Series(test_data.data))
+
+        return (train_data_processed.tolist(), train_data.target), (test_data_processed.tolist(), test_data.target), num_classes, target_names, class_type
+
+
+    elif name == "reuters21578":
+        
+        import os
+
+        data_path = os.path.join(DATASET_DIR, 'reuters21578')    
+        print("data_path:", data_path)  
+
+        train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
+        test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
+
+        train_data = preprocess_text(train_labelled_docs.data)
+        test_data = preprocess_text(list(test_labelled_docs.data))
+
+        train_target = train_labelled_docs.target
+        test_target = test_labelled_docs.target
+        
+        class_type = 'multi-label'
+
+        train_target, test_target, labels = _label_matrix(train_target, test_target)
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        target_names = train_labelled_docs.target_names
+        num_classes = len(target_names)
+        
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
+
     elif name == "bbc-news":
 
         import os
@@ -1730,36 +1799,6 @@ def trans_lc_load_dataset(name):
         test_target_encoded = label_encoder.transform(test_target_arr)
 
         return (train_data, train_target_encoded), (test_data, test_target_encoded), num_classes, target_names, class_type
-    
-    elif name == "reuters21578":
-        
-        import os
-
-        data_path = os.path.join(DATASET_DIR, 'reuters21578')    
-        print("data_path:", data_path)  
-
-        train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
-        test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
-
-        train_data = preprocess_text(train_labelled_docs.data)
-        test_data = preprocess_text(list(test_labelled_docs.data))
-
-        train_target = train_labelled_docs.target
-        test_target = test_labelled_docs.target
-        
-        class_type = 'multi-label'
-
-        train_target, test_target, target_names = _label_matrix(train_target, test_target)
-
-        train_target = train_target.toarray()                                     # Convert to dense
-        test_target = test_target.toarray()                                       # Convert to dense
-
-        #target_names = train_labelled_docs.target_names
-        num_classes = len(target_names)
-        #print(f"num_classes: {len(target_names)}")
-        #print("class_names:", target_names)
-
-        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
 
     elif name == "ohsumed":
