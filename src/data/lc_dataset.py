@@ -37,6 +37,9 @@ from data.rcv_reader import fetch_RCV1
 from model.LCRepresentationModel import *
 
 
+
+
+
 DATASET_DIR = '../datasets/'                        # dataset directory
 
 
@@ -658,7 +661,7 @@ class LCDataset:
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = 1
+            random_state = seed
         )
 
         # reset indeces
@@ -1607,96 +1610,10 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 #
 # Load dataset method for transformer based neural models
 #
-def trans_lc_load_dataset(name):
+def trans_lc_load_dataset(name, seed):
 
     print("\n\tLoading dataset:", name)
-
-    import re
-    from nltk.corpus import stopwords
-
-    # Ensure you download the stopwords corpus if not already downloaded:
-    # import nltk
-    # nltk.download('stopwords')
-
-    def _mask_numbers(data, number_mask='NUM'):
-        """
-        Masks numbers in the given text data with a placeholder.
-        """
-        mask = re.compile(r'\b[0-9][0-9.,-]*\b')
-        return [mask.sub(number_mask, text) for text in data]
-
-
-    def preprocess_text(data):
-        """
-        Preprocess the text data by converting to lowercase, masking numbers, 
-        removing punctuation, and removing stopwords.
-        """
-        import re
-        from nltk.corpus import stopwords
-        from string import punctuation
-
-        stop_words = set(stopwords.words('english'))
-        punct_table = str.maketrans("", "", punctuation)
-
-        def _remove_punctuation_and_stopwords(data):
-            """
-            Removes punctuation and stopwords from the text data.
-            """
-            cleaned = []
-            for text in data:
-                # Remove punctuation and lowercase text
-                text = text.translate(punct_table).lower()
-                # Remove stopwords
-                tokens = text.split()
-                tokens = [word for word in tokens if word not in stop_words]
-                cleaned.append(" ".join(tokens))
-            return cleaned
-
-        # Apply preprocessing steps
-        masked = _mask_numbers(data)
-        cleaned = _remove_punctuation_and_stopwords(masked)
-        return cleaned
-
-
-    def _preprocess(text_series: pd.Series, remove_punctuation=True):
-        """
-        Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
-        We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
-
-        Parameters:
-        - text_series: A pandas Series containing text data (strings).
-
-        Returns:
-        - processed_texts: A NumPy array containing processed text strings.
-        """
-
-        print("_preprocessing...")
-        print("text_series:", type(text_series), text_series.shape)
-
-        # Load stop words once outside the loop
-        stop_words = set(stopwords.words('english'))
-        punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
-
-        # Function to process each text (masking numbers, removing punctuation, and stopwords)
-        def process_text(text):
-
-            # Remove punctuation
-            if (remove_punctuation):
-                text = text.translate(punctuation_table)
-
-            # Remove stopwords without tokenizing or lowercasing
-            for stopword in stop_words:
-                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
-
-            # Ensure extra spaces are removed after stopwords are deleted
-            return ' '.join(text.split())
-
-        # Use Parallel processing with multiple cores
-        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
-
-        # Return as NumPy array
-        return np.array(processed_texts)
-
+    print("seed:", seed)
 
     if name == "20newsgroups":
 
@@ -1774,16 +1691,18 @@ def trans_lc_load_dataset(name):
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = RANDOM_SEED,
+            random_state = seed,
         )
 
         train_data = preprocess_text(train_data.tolist())
         test_data = preprocess_text(test_data.tolist())
 
         # reset indeces
+        """
         train_data = train_data.reset_index(drop=True)
         test_data = test_data.reset_index(drop=True)
-
+        """
+        
         #
         # set up label targets
         # Convert target labels to 1D arrays
@@ -2217,7 +2136,7 @@ def trans_lc_load_dataset(name):
         num_classes = len(target_names)
 
         # split dataset into training and validation set
-        xtrain, xtest, ytrain, ytest = train_test_split(papers_dataframe['text'], y, test_size=TEST_SIZE, random_state=RANDOM_SEED)
+        xtrain, xtest, ytrain, ytest = train_test_split(papers_dataframe['text'], y, test_size=TEST_SIZE, random_state=seed)
 
         # Classification type
         class_type = "multi-label"
@@ -2347,7 +2266,7 @@ def trans_lc_load_dataset(name):
         num_classes = len(target_names)
 
         # split dataset into training and validation set
-        xtrain, xtest, ytrain, ytest = train_test_split(movies_new['clean_plot'], y, test_size=TEST_SIZE, random_state=RANDOM_SEED)
+        xtrain, xtest, ytrain, ytest = train_test_split(movies_new['clean_plot'], y, test_size=TEST_SIZE, random_state=seed)
 
         # Classification type
         class_type = "multi-label"
@@ -2356,6 +2275,88 @@ def trans_lc_load_dataset(name):
     else:
         raise ValueError("Unsupported dataset:", name)
 
+
+
+
+def _mask_numbers(data, number_mask='NUM'):
+    """
+    Masks numbers in the given text data with a placeholder.
+    """
+    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+    return [mask.sub(number_mask, text) for text in data]
+
+
+def preprocess_text(data):
+    """
+    Preprocess the text data by converting to lowercase, masking numbers, 
+    removing punctuation, and removing stopwords.
+    """
+    import re
+    from nltk.corpus import stopwords
+    from string import punctuation
+
+    stop_words = set(stopwords.words('english'))
+    punct_table = str.maketrans("", "", punctuation)
+
+    def _remove_punctuation_and_stopwords(data):
+        """
+        Removes punctuation and stopwords from the text data.
+        """
+        cleaned = []
+        for text in data:
+            # Remove punctuation and lowercase text
+            text = text.translate(punct_table).lower()
+            # Remove stopwords
+            tokens = text.split()
+            tokens = [word for word in tokens if word not in stop_words]
+            cleaned.append(" ".join(tokens))
+        return cleaned
+
+    # Apply preprocessing steps
+    masked = _mask_numbers(data)
+    cleaned = _remove_punctuation_and_stopwords(masked)
+    return cleaned
+
+
+
+def _preprocess(text_series: pd.Series, remove_punctuation=True):
+    """
+    Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
+    We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
+
+    Parameters:
+    - text_series: A pandas Series containing text data (strings).
+
+    Returns:
+    - processed_texts: A NumPy array containing processed text strings.
+    """
+
+    print("_preprocessing...")
+    print("text_series:", type(text_series), text_series.shape)
+
+    # Load stop words once outside the loop
+    stop_words = set(stopwords.words('english'))
+    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+    # Function to process each text (masking numbers, removing punctuation, and stopwords)
+    def process_text(text):
+
+        # Remove punctuation
+        if (remove_punctuation):
+            text = text.translate(punctuation_table)
+
+        # Remove stopwords without tokenizing or lowercasing
+        for stopword in stop_words:
+            text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+        # Ensure extra spaces are removed after stopwords are deleted
+        return ' '.join(text.split())
+
+    # Use Parallel processing with multiple cores
+    processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+    # Return as NumPy array
+    return np.array(processed_texts)
 
 
 

@@ -82,7 +82,7 @@ MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
 EPOCHS = 25
-RANDOM_SEED = 33
+
 
 
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
@@ -92,7 +92,7 @@ DEFAULT_CPU_BATCH_SIZE = 16
 DEFAULT_MPS_BATCH_SIZE = 16
 DEFAULT_CUDA_BATCH_SIZE = 16
 
-
+RANDOM_SEED = 33
 
 #
 # supported operations for transformer classifier
@@ -126,7 +126,7 @@ import numpy as np
 
 
 
-class CustomTokenizer:
+class LCTokenizer:
 
     def __init__(self, tokenizer, max_length, lowercase=False, remove_special_tokens=False):
         """
@@ -351,7 +351,7 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
         Returns:
             Sparse matrix of TF-IDF features.
         """
-        print("Fit-transforming CustomTFIDFVectorizer to tokenized docs...")
+        print("Fit-transforming LCTFIDFVectorizer to tokenized docs...")
 
         self.fit(X, y)
         return self.transform(X, original_documents=original_documents)
@@ -364,12 +364,12 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, max_length):
 
     print("tokenizer:\n", tokenizer)
 
-    custom_tokenizer = CustomTokenizer(tokenizer, max_length)
+    custom_tokenizer = LCTokenizer(tokenizer, max_length)
     preprocessed_train = [" ".join(custom_tokenizer(text)) for text in texts_train]
     preprocessed_val = [" ".join(custom_tokenizer(text)) for text in texts_val]
     preprocessed_test = [" ".join(custom_tokenizer(text)) for text in texts_test]
 
-    print("custom_tokenizer:\n", custom_tokenizer)
+    print("lc_tokenizer:\n", custom_tokenizer)
 
     # Debugging: Preprocessed data
     print("preprocessed_train:", type(preprocessed_train), len(preprocessed_train))
@@ -431,7 +431,7 @@ def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_
     idf_values = vectorizer.idf_
     reverse_vocab = {idx: token for token, idx in vocab.items()}
     
-    print("[INFO] Spot-checking random documents...\n")
+    print("[INFO] Spot-checking random documents...")
     
     """
     print("documents:", type(documents), len(documents))
@@ -1576,15 +1576,13 @@ def check_empty_docs(data, name):
         data: List of strings (e.g., train_data or test_data).
         name: Name of the dataset (e.g., "Train", "Test").
     """
-    print(f"[INFO] Checking for empty strings in {name} dataset...")
     empty_indices = [i for i, doc in enumerate(data) if not doc.strip()]
-
     if empty_indices:
-        print(f"[WARNING] {name} dataset contains {len(empty_indices)} empty strings.")
+        print(f"[WARNING] {name} dataset contains {len(empty_indices)} empty strings (docs).")
         for idx in empty_indices[:10]:  # Print details for up to 10 empty rows
             print(f"Empty String at Index {idx}: Original Document: '{data[idx]}'")
     else:
-        print(f"[INFO] No empty strings found in {name} dataset.")
+        print(f"[INFO] No empty strings (docs) found in {name} dataset.")
 
 
 
@@ -1617,7 +1615,7 @@ def parse_args():
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--nozscore', action='store_true', default=False,
-                        help='disables z-scoring form the computation of WCE')
+                        help='disables z-scoring form the computation of TCE')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
@@ -1700,7 +1698,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Load dataset and print class information
-    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset)
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset, args.seed)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)
@@ -1898,7 +1896,8 @@ if __name__ == "__main__":
         supervised=args.supervised,
         tce_matrix=tce_matrix,
         finetune=args.tunable,
-        normalize_tces=True,
+        #normalize_tces=True,
+        normalize_tces=False,
         dropout_rate=args.dropprob,
         comb_method=args.sup_mode,
         #debug=True

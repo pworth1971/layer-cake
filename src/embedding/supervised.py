@@ -100,9 +100,26 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     elif method == 'wp':
         F = supervised_embeddings_tsr(X, y, word_prob)
         
+    if (debug):
+        print("F pre conversion:", type(F), F.shape)
+
+    if isinstance(F, np.matrix):
+        F = np.asarray(data)
+    elif isinstance(F, np.ndarray):
+        pass
+    else:
+        F = F.toarray()
+    
+    if (debug):
+        print("F post conversion:", type(F), {F.shape})
+
     if dozscore:
+        print("zscoring...")
         #F = zscores(F, axis=0)
-        F = normalize_zscores(F)
+        F = normalize_zscores(F, debug=debug)
+
+        if (debug):
+            print("F post zscoring:", type(F), {F.shape})
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -323,16 +340,6 @@ def normalize_zscores(data, debug=False):
     if (debug):
         print("--- normalize_zscores() ---")
         print("data:", type(data), {data.shape})
-
-    if isinstance(data, np.matrix):
-        arrData = np.asarray(data)
-    elif isinstance(data, np.ndarray):
-        arrData = data
-    else:
-        arrData = data.toarray()
-    
-    if (debug):
-        print("arrData:", type(arrData), {arrData.shape})
 
     """
     means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
