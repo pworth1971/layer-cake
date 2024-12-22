@@ -109,17 +109,21 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         pass
     else:
         F = F.toarray()
-    
+
     if (debug):
         print("F post conversion:", type(F), {F.shape})
 
     if dozscore:
         print("zscoring...")
-        #F = zscores(F, axis=0)
-        F = normalize_zscores(F, debug=debug)
+        F = zscores(F, axis=0, debug=debug)
+        #F = normalize_zscores(F, debug=debug)
 
         if (debug):
             print("F post zscoring:", type(F), {F.shape})
+
+    if np.isnan(F).any() or np.isinf(F).any():
+        #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+        raise ValueError("[ERROR] F (supervised_embeddings) contain NaN or Inf values.")
 
     if max_label_space!=-1 and nC > max_label_space:
         print(f'supervised matrix has more dimensions ({nC}) than the allowed limit {max_label_space}. '
@@ -340,17 +344,41 @@ def normalize_zscores(data, debug=False):
     if (debug):
         print("--- normalize_zscores() ---")
         print("data:", type(data), {data.shape})
+        print("data[0]:", type(data[0]), data[0].shape, data[0])
 
     means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
     stds = np.std(data, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
     z_scores = (data - means) / stds    # Compute the z-scores: (x - mean) / std
     
+    if np.isnan(z_scores).any() or np.isinf(z_scores).any():
+        #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+        raise ValueError("[ERROR] z_scores (normalized TCEs) contain NaN or Inf values.")
+
+
     return z_scores
 # ----------------------------------------------------------------------------------------------------------------------
 
 
+def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does not avoid division by 0, which can indeed occur
+    
+    if (debug):
+        print("x:", type(x), {x.shape})
+        print("x[0]:", x[0])
+        print("x dtype:", x.dtype)                  # Check data type
+        print("axis: ", {axis})
+                                                 
+    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
+    mean = np.mean(x, axis=axis)
+
+    if (debug):
+        print("std:", type(std), {std.shape})
+        print("mean:", type(mean), {mean.shape})
+
+    return (x - mean) / std
+
+
 # ----------------------------------------------------------------------------------------------------------------------
-def zscores_deprecated(x, axis=0):                             #scipy.stats.zscores does not avoid division by 0
+def zscores_old(x, axis=0, debug=False):                             #scipy.stats.zscores does not avoid division by 0
     """
     Normalizes an array X using z-score normalization.
 
@@ -358,15 +386,17 @@ def zscores_deprecated(x, axis=0):                             #scipy.stats.zsco
     prevent division by zero. This normalized form ensures each feature (column if axis=0) 
     has zero mean and unit variance.
     """    
-    print("\t--- zscores() ---")
-    print("x:", type(x), {x.shape})
-    #print("x[0]:", x[0])
-    print("x dtype:", x.dtype)                  # Check data type
-    print("axis: ", {axis})
+    if (debug):
+        print("\t--- zscores() ---")
+        print("x:", type(x), {x.shape})
+        #print("x[0]:", x[0])
+        print("x dtype:", x.dtype)                  # Check data type
+        print("axis: ", {axis})
 
     #arrX = x.todense(x)
     arrX = x.todense()                          # coo_matrix -> dense matrix
-    print("arrX shape:", {arrX.shape})
+    if (debug):
+        print("arrX shape:", {arrX.shape})
     
     np_std = np.std(arrX, ddof=1, axis=axis)
     std = np.clip(np_std, 1e-5, None)

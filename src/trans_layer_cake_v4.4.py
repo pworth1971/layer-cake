@@ -556,8 +556,9 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     
     Xtr = vectorized_training_data
     Ytr = training_label_matrix
-    #print("\tXtr:", type(Xtr), Xtr.shape)
-    #print("\tYtr:", type(Ytr), Ytr.shape)
+    if (debug):
+        print("\tXtr:", type(Xtr), Xtr.shape)
+        print("\tYtr:", type(Ytr), Ytr.shape)
 
     TCE = get_supervised_embeddings(
         Xtr, 
@@ -567,7 +568,14 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         dozscore=(not opt.nozscore),
         debug=debug
     )
-    
+    if (debug):
+        print("TCEs:", type(TCE), TCE.shape)
+        print("TCEs[0]:", type(TCE[0]), TCE[0].shape, TCE[0])
+
+    if np.isnan(TCE).any() or np.isinf(TCE).any():
+        #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+        raise ValueError("[ERROR] TCEs contain NaN or Inf values.")
+
     # Adjust TCE matrix size
     num_missing_rows = vocabsize - TCE.shape[0]
     if (debug):
@@ -1082,7 +1090,7 @@ class LCSequenceClassifier(nn.Module):
                 print("pooled_tce_embeddings[0]:", type(pooled_tce_embeddings[0]), pooled_tce_embeddings[0])
             
             if torch.isnan(pooled_tce_embeddings).any() or torch.isinf(pooled_tce_embeddings).any():
-                #print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+                #print("[WARNING] pooled_tce_embeddings contains NaN or Inf values")
                 raise ValueError("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
 
             # Combine transformer output and TCE embeddings
