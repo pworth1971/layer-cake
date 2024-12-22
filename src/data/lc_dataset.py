@@ -2164,6 +2164,7 @@ def trans_lc_load_dataset(name, seed):
 
         import csv
         import json
+        import os
         import re
 
         #print("Loading CMU Movie Corpus dataset...")

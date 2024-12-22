@@ -11,7 +11,6 @@ ATTN="--net attn"
 for run in {1..1}                   # 0 is for plots, 1 is already performed in hyper parameter search
 do
 
-
     dataset="--dataset bbc-news"
     #$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run
 

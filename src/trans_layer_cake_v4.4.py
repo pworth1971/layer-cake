@@ -1339,8 +1339,14 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     else:
         raise ValueError(f"Unsupported class_type: {class_type}")
 
-    #print("preds:", type(preds), preds.shape)
-    #print("labels:", type(labels), labels.shape)
+    """
+    print("preds:", type(preds), preds.shape)
+    print("labels:", type(labels), labels.shape)
+    
+    macrof1, microf1, acc, h_loss, precision, recall, j_index = evaluation_nn(labels, preds, classification_type=class_type)
+    print("\n--Layer Cake Metrics--")
+    print(f"Macro-F1 = {macrof1:.4f}, Micro-F1 = {microf1:.4f}, Accuracy = {acc:.4f}, H-loss = {h_loss:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, Jaccard = {j_index:.4f}")
+    """
 
     # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
@@ -1599,7 +1605,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.3 ---")
+    print("\n\t--- TRANS_LAYER_CAKE Version 4.4 ---")
     print()
 
     args = parse_args()
@@ -1867,7 +1873,7 @@ if __name__ == "__main__":
         normalize_tces=False,
         dropout_rate=args.dropprob,
         comb_method=args.sup_mode,
-        debug=True
+        #debug=True
     ).to(device)
 
     print("\n\t-- FINAL MODEL --:\n", lc_model)
@@ -1918,10 +1924,13 @@ if __name__ == "__main__":
         report_to="none"
     )
 
-    if (dataset == 'cmu_movie_corpus'):
+    """
+    if (args.dataset == 'cmu_movie_corpus'):
         threshold = 0.3
-    else;
+    else:
         threshold = 0.5
+    print("multi-label threshold:", threshold)
+    """
 
     # Trainer with custom data collator
     trainer = Trainer(
@@ -1931,7 +1940,7 @@ if __name__ == "__main__":
         eval_dataset=val_dataset,
         data_collator=custom_data_collator,
         #compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type, threshold=threshold),
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type, threshold=MC_THRESHOLD),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
     
