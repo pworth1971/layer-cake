@@ -19,41 +19,52 @@ from transformers import BertModel, BertTokenizerFast
 # NB issues with BERT model support in this context although we 
 # leave config here
 #   
+
+GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
+
+
+GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
+
+WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
+
+#FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
+FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
+
+
+
 AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
 
 VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
 
 # -------------------------------------------------------------------------------------------------------
 #
-# default pretrained models we are using
+# default pretrained models we are using - Hugging Face Library for Transformer models
 #
 
-GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
+#BERT_MODEL = 'bert-base-uncased'                                                   # dimension = 1024, case insensitive
+#BERT_MODEL = 'bert-base-cased'                                                     # dimension = 768, case sensitive
+BERT_MODEL = 'bert-large-uncased'                                                   # dimension = 1024, case insensitive
+#BERT_MODEL = 'bert-large-cased'                                                    # dimension = 1024, case sensitive
 
-GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
-WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
+#ROBERTA_MODEL = 'roberta-base'                                                     # dimension = 768, case sensitive
+ROBERTA_MODEL = 'roberta-large'                                                     # dimension = 1024, case sensitive                 
 
-#FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
-FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
+#DISTILBERT_MODEL = 'distilbert-base-cased'                                         # dimension = 768, case sensitive
+DISTILBERT_MODEL = 'distilbert-base-uncased'                                       # dimension = 768, case insensitive
 
-BERT_MODEL = 'bert-base-uncased'                             # dimension = 1024, case insensitive
-#BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
-#BERT_MODEL = 'bert-large-uncased'                             # dimension = 1024, case insensitive
-#BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+#ALBERT_MODEL = 'albert-base-v2'                                                    # dimension = 128, case insensitive
+#ALBERT_MODE = 'albert-large-v2'                                                    # dimension = 128, case insensitive (uncased)  
+ALBERT_MODEL = 'albert-xlarge-v2'                                                   # dimension = 128, case insensitive (uncased)      
+#ALBERT_MODE = 'albert-xxlarge-v2'                                                  # dimension = 128, case insensitive (uncased)      
 
-ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
-#ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
+#XLNET_MODEL = 'xlnet-base-cased'                                                   # dimension = 768, case sensitive
+XLNET_MODEL = 'xlnet-large-cased'                                                   # dimension = 1024, case sensitive
 
-DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
+#GPT2_MODEL = 'gpt2'                                                                # dimension = 768, case sensitive
+#GPT2_MODEL = 'gpt2-medium'                                                         # dimension = 1024, case sensitive
+#GPT2_MODEL = 'gpt2-large'                                                          # dimension = 1280, case sensitive
+GPT2_MODEL = 'gpt2-xl'                                                              # dimension = 1280, case sensitive
 
-ALBERT_MODEL = 'albert-base-v2'                              # dimension = 128, case insensitive
-
-XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
-#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
-
-GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
-#GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
-#GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
 
 LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 # -------------------------------------------------------------------------------------------------------

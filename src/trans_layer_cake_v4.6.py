@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from time import time
+import random
 
 import matplotlib.pyplot as plt
 
@@ -28,6 +29,8 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.preprocessing import OneHotEncoder
+
 
 # PyTorch
 import torch
@@ -64,13 +67,13 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
 
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
 
-RANDOM_SEED = 42
+TEST_SIZE = 0.15
+VAL_SIZE = 0.15
 
 #
 # hyper parameters
@@ -78,7 +81,9 @@ RANDOM_SEED = 42
 MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
-EPOCHS = 10
+EPOCHS = 25
+
+
 
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
@@ -87,9 +92,7 @@ DEFAULT_CPU_BATCH_SIZE = 8
 DEFAULT_MPS_BATCH_SIZE = 8
 DEFAULT_CUDA_BATCH_SIZE = 8
 
-
-TEST_SIZE = 0.15
-VAL_SIZE = 0.15
+RANDOM_SEED = 29
 
 #
 # supported operations for transformer classifier
@@ -105,44 +108,372 @@ SUPPORTED_OPS = ["cat", "add", "dot"]
 USE_MEAN_POOLING = False
 
 
-# Get the full model identifier and load from local directory
-def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
+from sklearn.base import BaseEstimator, TransformerMixin
+from collections import defaultdict
 
-    model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, pretrained)
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.sparse import csr_matrix
+from collections import defaultdict
+import numpy as np
 
-    return model_name, model_path
+
+
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.sparse import csr_matrix
+from collections import defaultdict
+import numpy as np
 
 
 
-def vectorize(texts_train, texts_val, texts_test, tokenizer, vtype):
 
-    print(f'vectorize(), vtype: {vtype}')
+class LCTokenizer:
 
-    if vtype == 'tfidf':
-        vectorizer = TfidfVectorizer(min_df=5, lowercase=False, sublinear_tf=True, vocabulary=tokenizer.get_vocab())
-    elif vtype == 'count':
-        vectorizer = CountVectorizer(min_df=5, lowercase=False, vocabulary=tokenizer.get_vocab())
+    def __init__(self, tokenizer, max_length, lowercase=False, remove_special_tokens=False):
+        """
+        Wrapper around Hugging Face tokenizer for custom tokenization.
 
-    Xtr = vectorizer.fit_transform(texts_train)
-    Xval = vectorizer.transform(texts_val)
-    Xte = vectorizer.transform(texts_test)
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            max_length: Maximum token length for truncation.
+            lowercase: Whether to convert text to lowercase.
+            remove_special_tokens: Whether to remove special tokens from tokenized output.
+        """
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.lowercase = lowercase
+        self.remove_special_tokens = remove_special_tokens
 
-    Xtr.sort_indices()
-    Xval.sort_indices()
-    Xte.sort_indices()
+    def tokenize(self, text):
+        """
+        Tokenize input text using the Hugging Face tokenizer.
+        
+        Args:
+            text: Input string to tokenize.
 
-    # Ensure X_vectorized is a sparse matrix (in case of word-based embeddings)
-    if not isinstance(Xtr, csr_matrix):
-        Xtr = csr_matrix(Xtr)
+        Returns:
+            List of tokens.
+        """
+        if self.lowercase:
+            text = text.lower()
 
-    if not isinstance(Xval, csr_matrix):
-        Xval = csr_matrix(Xval)
+        tokens = self.tokenizer.tokenize(
+            text,
+            max_length=self.max_length,
+            truncation=True
+        )
 
-    if not isinstance(Xte, csr_matrix):
-        Xte = csr_matrix(Xte)
+        if self.remove_special_tokens:
+            special_tokens = self.tokenizer.all_special_tokens
+            tokens = [token for token in tokens if token not in special_tokens]
 
-    return vectorizer, Xtr, Xval, Xte
+        return tokens
+
+    def normalize_text(self, text):
+        """Normalize text to handle special characters and encodings."""
+        return unicodedata.normalize('NFKC', text)
+
+    def get_vocab(self):
+        """
+        Return the vocabulary of the Hugging Face tokenizer.
+
+        Returns:
+            Dict of token-to-index mappings.
+        """
+        return self.tokenizer.get_vocab()
+
+    def __call__(self, text):
+        """
+        Enable the object to be called as a function for tokenization.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        return self.tokenize(text)
+
+
+
+
+class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, tokenizer, lowercase=False, debug=False):
+        """
+        Custom TF-IDF Vectorizer that aligns its vocabulary with the Hugging Face tokenizer.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            lowercase: Whether to convert text to lowercase.
+            debug: Whether to enable debugging messages.
+        """
+        self.tokenizer = tokenizer
+        self.lowercase = lowercase
+        self.debug = debug
+        self.vocabulary_ = {token: idx for token, idx in tokenizer.get_vocab().items()}
+        self.idf_ = None
+
+
+    def fit(self, tokenized_documents, y=None):
+        """
+        Fit the vectorizer to the tokenized documents.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens).
+            y: Ignored, present for compatibility with sklearn pipelines.
+        """
+        print("Fitting LCTFIDFVectorizer to tokenized docs...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        term_doc_counts = defaultdict(int)
+        for tokens in tokenized_documents:
+            # Filter out blank tokens
+            tokens = [token for token in tokens if token.strip()]
+            unique_tokens = set(tokens)
+            for token in unique_tokens:
+                if token in self.vocabulary_:
+                    term_doc_counts[token] += 1
+                else:
+                    if self.debug:
+                        print(f"[DEBUG] Token '{token}' not in vocabulary (fit).")
+
+        num_documents = len(tokenized_documents)
+        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
+        for token, idx in self.vocabulary_.items():
+            doc_count = term_doc_counts.get(token, 0)
+            self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
+
+            if self.debug and self.idf_[idx] == 0:
+                print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                      f"Document count: {doc_count}, Total docs: {num_documents}.")
+
+        return self
+
+
+    def transform(self, tokenized_documents, original_documents=None):
+        """
+        Transform the tokenized documents to TF-IDF features.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
+            original_documents: List of original documents (strings).
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Transforming tokenized docs with fitted LCTFIDFVectorizer...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        rows, cols, data = [], [], []
+        empty_rows_details = []  # To collect details of empty rows
+
+        for row_idx, doc in enumerate(tokenized_documents):
+
+            # If the document is a string, split it into tokens
+            if isinstance(doc, str):
+                tokens = doc.split()
+            else:
+                raise ValueError("row in tokenized doc is not a 'str'")
+                #tokens = doc
+
+            # Save the original document tokens for debugging
+            original_tokens = doc.split()
+
+            # Filter out blank tokens
+            tokens = [token for token in tokens if token.strip()]
+            term_freq = defaultdict(int)
+            unmatched_tokens = []
+
+            for token in tokens:
+                if token in self.vocabulary_:
+                    term_freq[token] += 1
+                else:
+                    unmatched_tokens.append(token)
+            
+            if self.debug and unmatched_tokens:
+                print(f"[WARNING] Document {row_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}...")
+            
+            # Collect unmatched tokens for empty rows
+            if not term_freq:  # No matched tokens
+                if original_documents is not None:
+                    empty_rows_details.append((row_idx, original_documents[row_idx], original_tokens, unmatched_tokens))
+                else:
+                    empty_rows_details.append((row_idx, None, original_tokens, unmatched_tokens))
+
+            # Calculate TF-IDF
+            for token, freq in term_freq.items():
+                col_idx = self.vocabulary_[token]
+                tf = freq / len(tokens)
+                tfidf = tf * self.idf_[col_idx]
+
+                """
+                if self.debug:
+                    print(f"[INFO] Document {row_idx}, Token '{token}': Frequency: {freq}, TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
+                """
+
+                rows.append(row_idx)
+                cols.append(col_idx)
+                data.append(tfidf)
+
+        # construct sparse matrix
+        matrix = csr_matrix((data, (rows, cols)), shape=(len(tokenized_documents), len(self.vocabulary_)))
+
+        if self.debug:
+            empty_rows = matrix.sum(axis=1).A1 == 0
+            for row_idx, original_doc, original_tokens, unmatched_tokens in empty_rows_details:
+                if empty_rows[row_idx]:
+                    print(f"[WARNING] Row {row_idx} in TF-IDF matrix is empty.")
+                    print(f"[INFO] Original document: {original_doc}")
+                    print(f"[INFO] Original tokens: {original_tokens}")
+                    print(f"[INFO] Unmatched tokens (not in vocab): {unmatched_tokens}")
+                    # Manually tokenize with the custom tokenizer
+                    if original_doc:
+                        custom_tokens = self.tokenizer.tokenize(original_doc)
+                        print(f"[DEBUG] Custom tokenizer tokens: {custom_tokens}")
+                    
+        return matrix
+
+
+    def fit_transform(self, X, y=None, original_documents=None):
+        """
+        Fit to data, then transform it.
+
+        Args:
+            X: List of tokenized documents (lists of tokens or strings of tokenized text).
+            y: Ignored, present for compatibility with sklearn pipelines.
+            original_documents: List of original documents before tokenization, for debugging.
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Fit-transforming LCTFIDFVectorizer to tokenized docs...")
+
+        self.fit(X, y)
+        return self.transform(X, original_documents=original_documents)
+
+
+
+def vectorize(texts_train, texts_val, texts_test, tokenizer, max_length):
+
+    print(f'vectorize(), max_length: {max_length}')
+
+    print("tokenizer:\n", tokenizer)
+
+    custom_tokenizer = LCTokenizer(tokenizer, max_length)
+    preprocessed_train = [" ".join(custom_tokenizer(text)) for text in texts_train]
+    preprocessed_val = [" ".join(custom_tokenizer(text)) for text in texts_val]
+    preprocessed_test = [" ".join(custom_tokenizer(text)) for text in texts_test]
+
+    print("lc_tokenizer:\n", custom_tokenizer)
+
+    # Debugging: Preprocessed data
+    print("preprocessed_train:", type(preprocessed_train), len(preprocessed_train))
+    print(f"preprocessed_train[0]: {preprocessed_train[0]}")
+    
+    tokenizer_vocab = custom_tokenizer.get_vocab()
+
+    vectorizer = LCTFIDFVectorizer(tokenizer=custom_tokenizer, debug=True)
+
+    Xtr = vectorizer.fit_transform(
+        X=preprocessed_train,
+        original_documents=texts_train
+        )
+    
+    Xval = vectorizer.transform(
+        X=preprocessed_val,
+        original_documents=texts_val
+        )
+    
+    Xte = vectorizer.transform(
+        X=preprocessed_test,
+        original_documents=texts_test
+        )
+
+    def check_empty_rows(matrix, name, original_texts):
+        empty_rows = matrix.sum(axis=1).A1 == 0
+        if empty_rows.any():
+            print(f"[WARNING] {name} contains {empty_rows.sum()} empty rows.")
+            for i in range(len(empty_rows)):
+                if empty_rows[i]:
+                    print(f"Empty row {i}: Original text: '{original_texts[i]}'")
+
+    check_empty_rows(Xtr, "Xtr", texts_train)
+    check_empty_rows(Xval, "Xval", texts_val)
+    check_empty_rows(Xte, "Xte", texts_test)
+
+    vec_vocab_size = len(vectorizer.vocabulary_)
+    tok_vocab_size = len(tokenizer_vocab)
+
+    assert vec_vocab_size == tok_vocab_size, \
+        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
+    return vectorizer, custom_tokenizer, Xtr, Xval, Xte
+
+
+
+def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5):
+    """
+    Spot-check random documents in the dataset for their TF-IDF calculations.
+
+    Args:
+        documents: List of original documents (strings).
+        vectorizer: Fitted LCTFIDFVectorizer object.
+        tokenizer: Custom tokenizer object.
+        vectorized_data: Sparse matrix of TF-IDF features.
+        num_docs: Number of random documents to check.
+    """
+    vocab = vectorizer.vocabulary_
+    idf_values = vectorizer.idf_
+    reverse_vocab = {idx: token for token, idx in vocab.items()}
+    
+    print("[INFO] Spot-checking random documents...")
+    
+    """
+    print("documents:", type(documents), len(documents))
+    print("documents[0]:", type(documents[0]), documents[0])
+
+    print("vectorized_data:", type(vectorized_data))
+    print(f"[DEBUG] Vocabulary size: {len(vocab)}, IDF array size: {len(idf_values)}\n")
+    """
+
+    # Randomly select `num_docs` indices from the document list
+    doc_indices = random.sample(range(len(documents)), min(num_docs, len(documents)))
+
+    for doc_id in doc_indices:
+        doc = documents[doc_id]
+        """
+        print(f"[INFO] Document {doc_id}:")
+        print(f"Original Text: {doc}\n")
+        """
+
+        tokens = tokenizer(doc)
+        #print(f"Tokens: {tokens}\n")
+
+        vectorized_row = vectorized_data[doc_id]
+        mismatches = []
+
+        for token in tokens:
+            if token in vocab:
+                idx = vocab[token]
+                if idx < len(idf_values):
+                    tfidf_value = vectorized_row[0, idx]
+                    expected_idf = idf_values[idx]
+                    if tfidf_value == 0:
+                        print(f"[DEBUG] Token '{token}' in tokenizer vocabulary: {token in tokenizer.get_vocab()}")
+                        print(f"[ERROR] Token '{token}' has IDF {expected_idf} but TF-IDF is 0.")
+                else:
+                    print(f"[WARNING] Token '{token}' has out-of-bounds index {idx}.")
+            else:
+                print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
+
+    print("--- finished spot checking docs ---")
+
+
+
 
 
 
@@ -232,7 +563,8 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         Ytr, 
         method=opt.supervised_method,
         max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore),
+        #dozscore=(not opt.nozscore),
+        dozscore=False,                                 # normalize in the Classifier
         debug=debug
     )
     
@@ -400,7 +732,7 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
     return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
 
-# --------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 class LCSequenceClassifier(nn.Module):
 
@@ -468,16 +800,16 @@ class LCSequenceClassifier(nn.Module):
 
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
-        
-        # Freeze all parameters
-        for param in self.transformer.parameters():
-            param.requires_grad = False
 
         #
         # Optionally unfreeze the embedding layer if finetune is True
         #
         if self.finetune:
-            print("finetuning: retraining model embedding layer...")    
+            print("finetuning == True, making the embedding layer (only) trainable")    
+
+            # Freeze gradient computation for all transformer parameters
+            for param in self.transformer.parameters():
+                param.requires_grad = False
 
             # Enable training of only the embedding layer
             if hasattr(self.transformer, 'bert'):
@@ -493,7 +825,7 @@ class LCSequenceClassifier(nn.Module):
             for param in embedding_layer.parameters():
                 param.requires_grad = True
         else:            
-            print("All transformer layers are frozen.")
+            print("finetune == False, default model configuration ...")
 
         # Loss functions
         if class_type == 'multi-label':
@@ -535,6 +867,16 @@ class LCSequenceClassifier(nn.Module):
                     self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
                     print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
             
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                """
+                if (trainable_tces):
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+
+                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                
                 # Adapt classifier head based on combination method
                 # 'concat' method is dimension_size + num_classes
                 if (self.comb_method == 'cat'):
@@ -628,7 +970,8 @@ class LCSequenceClassifier(nn.Module):
 
         # check for Nan or Inf values after normalization
         if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
-            raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
+            print("[WARNING]: projected_tce contains NaN or Inf values after normalization.")
+            #raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
 
         return projected_tce
 
@@ -650,7 +993,7 @@ class LCSequenceClassifier(nn.Module):
         if (self.debug):
             print("LCSequenceClassifier:forward()...")
             print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
-            #print("input_ids:", input_ids)
+            print("input_ids:", input_ids)
             print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
             print(f"\tlabels: {type(labels)}, {labels.shape}")
 
@@ -706,13 +1049,17 @@ class LCSequenceClassifier(nn.Module):
             print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')
 
         if torch.isnan(pooled_output).any() or torch.isinf(pooled_output).any():
-            print("[ERROR] pooled_output contains NaN or Inf values")
+            #print("[ERROR] pooled_output contains NaN or Inf values")
+            raise ValueError("[ERROR] pooled_output contains NaN or Inf values")
 
         #
         # Integrate TCEs if supervised is True
         #
         #if (self.supervised and (self.tce_matrix is not None)):
-        if self.tce_layer is not None:
+        if self.supervised:
+            
+            if self.tce_layer is None:
+                raise ValueError("[ERROR]:supervised is True but tce_layer embedding layer is None.")
             
             if (self.debug):
                 print("integrating TCEs into the model...")
@@ -735,7 +1082,8 @@ class LCSequenceClassifier(nn.Module):
                 print("pooled_tce_embeddings[0]:", type(pooled_tce_embeddings[0]), pooled_tce_embeddings[0])
             
             if torch.isnan(pooled_tce_embeddings).any() or torch.isinf(pooled_tce_embeddings).any():
-                print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+                #print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+                raise ValueError("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
 
             # Combine transformer output and TCE embeddings
             if self.comb_method == 'cat':
@@ -786,7 +1134,7 @@ class LCSequenceClassifier(nn.Module):
 
         return {"loss": loss, "logits": logits}
     
-
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 def lc_class_weights(labels, task_type="single-label"):
@@ -830,6 +1178,15 @@ def lc_class_weights(labels, task_type="single-label"):
     else:
         raise ValueError("Invalid task_type. Use 'single-label' or 'multi-label'.")
 
+
+
+# Get the full model identifier and load from local directory
+def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
+
+    model_name = MODEL_MAP.get(pretrained, pretrained)
+    model_path = os.path.join(cache_dir, pretrained)
+
+    return model_name, model_path
 
 
 
@@ -967,6 +1324,8 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     Returns:
     - Dictionary of computed metrics.
     """
+    print(f'compute_metrics()... class_type: {class_type}, threshold: {threshold}')
+    
     predictions, labels = eval_pred.predictions, eval_pred.label_ids
 
     if class_type == 'single-label':
@@ -980,8 +1339,8 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     else:
         raise ValueError(f"Unsupported class_type: {class_type}")
 
-    print("preds:", type(preds), preds.shape)
-    print("labels:", type(labels), labels.shape)
+    #print("preds:", type(preds), preds.shape)
+    #print("labels:", type(labels), labels.shape)
 
     # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
@@ -1000,9 +1359,27 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
 def get_hf_models(model_name, model_path, num_classes, tokenizer):
     """
     Load Hugging Face transformer models with configurations to enable hidden states.
+    Ensure pad_token_id is consistently fetched from the tokenizer.
+
+    Parameters:
+    - model_name: Name of the Hugging Face model.
+    - model_path: Path to the Hugging Face model.
+    - num_classes: Number of classes for classification.
+    - tokenizer: Hugging Face tokenizer.
+
+    Returns:
+    - hf_trans_model: Hugging Face transformer model.
+    - hf_trans_class_model: Hugging Face transformer model for classification.
     """
 
     print(f'get_hf_models(): model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}')
+
+    # Ensure the tokenizer has a pad_token_id set
+    if tokenizer.pad_token_id is None:
+        raise ValueError("Tokenizer does not have a valid pad_token_id. Ensure the tokenizer is properly configured before calling this function.")
+
+    pad_token_id = tokenizer.pad_token_id
+    print(f"Using pad_token_id: {pad_token_id} (token: {tokenizer.pad_token})")
 
     # Initialize Hugging Face Transformer model
     hf_trans_model = AutoModel.from_pretrained(model_name, cache_dir=model_path)
@@ -1010,38 +1387,26 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
     # Ensure hidden states are enabled for the base model
     hf_trans_model.config.output_hidden_states = True
 
-    # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
-    """
+    # Ensure the model config uses the tokenizer's pad_token_id
     if hf_trans_model.config.pad_token_id is None:
         print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
-        hf_trans_model.config.pad_token_id = tokenizer.pad_token_id
-    """
-
-    if hf_trans_model.config.pad_token_id is None:
-        print("hf_trans_model padding token ID is None, setting to tokenizer.eos_token id...")
-        hf_trans_model.config.pad_token_id = tokenizer.eos_token  # Set PAD to end-of-sequence token    
+        hf_trans_model.config.pad_token_id = pad_token_id
 
     # Initialize Hugging Face Transformer model for sequence classification
     hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         cache_dir=model_path,
-        num_labels=num_classes,                         # Specify the number of classes for classification
-        pad_token_id=tokenizer.pad_token_id             # Set PAD to end-of-sequence token
+        num_labels=num_classes,      # Specify the number of classes for classification
+        pad_token_id=pad_token_id    # Use tokenizer's pad_token_id
     )
 
     # Ensure hidden states are enabled for the classification model
     hf_trans_class_model.config.output_hidden_states = True
 
-    # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
-    """
+    # Ensure the model config uses the tokenizer's pad_token_id
     if hf_trans_class_model.config.pad_token_id is None:
         print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
-        hf_trans_class_model.config.pad_token_id = tokenizer.pad_token_id
-    """
-
-    if hf_trans_class_model.config.pad_token_id is None:
-        print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
-        hf_trans_class_model.config.pad_token_id = tokenizer.eos_token
+        hf_trans_class_model.config.pad_token_id = pad_token_id
 
     return hf_trans_model, hf_trans_class_model
 
@@ -1132,6 +1497,61 @@ class CustomTrainer(Trainer):
         return loss.detach()
     
 
+def init_hf_tokenizer():
+
+    print("Initializing Hugging Face tokenizer...")
+
+    # Load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
+
+    # Use an existing token as the padding token
+    if tokenizer.pad_token is None:
+        print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Get the pad_token_id
+    pad_token_id = tokenizer.pad_token_id
+
+    # Print tokenizer details
+    tok_vocab_size = len(tokenizer)
+    print("tok_vocab_size:", tok_vocab_size)
+
+    # Compute max_length from tokenizer
+    max_length = tokenizer.model_max_length
+    print(f"Tokenizer max_length: {max_length}")
+
+    # Handle excessive or default max_length values
+    if max_length > MAX_TOKEN_LENGTH:
+        print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
+        max_length = MAX_TOKEN_LENGTH
+
+    # Print tokenizer details for debugging
+    print("Tokenizer configuration:")
+    print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
+    print(f"  Max length: {max_length}")
+
+    return tokenizer, max_length, pad_token_id, tok_vocab_size
+
+
+
+
+def check_empty_docs(data, name):
+    """
+    Check for empty docs (strings) in a list of data and print details for debugging.
+
+    Args:
+        data: List of strings (e.g., train_data or test_data).
+        name: Name of the dataset (e.g., "Train", "Test").
+    """
+    empty_indices = [i for i, doc in enumerate(data) if not doc.strip()]
+    if empty_indices:
+        print(f"[WARNING] {name} dataset contains {len(empty_indices)} empty strings (docs).")
+        for idx in empty_indices[:10]:  # Print details for up to 10 empty rows
+            print(f"Empty String at Index {idx}: Original Document: '{data[idx]}'")
+    else:
+        print(f"[INFO] No empty strings (docs) found in {name} dataset.")
+
+
 
 # Parse arguments
 def parse_args():
@@ -1144,7 +1564,7 @@ def parse_args():
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
-    parser.add_argument('--sup-mode', type=str, default='add', help='How to combine TCEs with model embeddings (add, dot, cat)')
+    parser.add_argument('--sup-mode', type=str, default='cat', help='How to combine TCEs with model embeddings (add, dot, cat)')
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
@@ -1162,7 +1582,7 @@ def parse_args():
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--nozscore', action='store_true', default=False,
-                        help='disables z-scoring form the computation of WCE')
+                        help='disables z-scoring form the computation of TCE')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
@@ -1179,7 +1599,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.2 ---")
+    print("\n\t--- TRANS_LAYER_CAKE Version 4.3 ---")
     print()
 
     args = parse_args()
@@ -1245,7 +1665,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Load dataset and print class information
-    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset)
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset, args.seed)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)
@@ -1261,32 +1681,13 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
+    # Check for empty strings in train_data and test_data
+    check_empty_docs(train_data, "Train")
+    check_empty_docs(test_data, "Test")
 
     print("\n\tinitializing tokenizer, vectorizer and dataset...")
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-    
-    # Add padding token if it doesn't exist
-    # NB: it is necessary to stay within the 
-    # boundaries of the model vocabulary size
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token               # Align pad token to eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id         # set pad_token_id
-    print("tokenizer:\n", tokenizer)
 
-    # Get the pad_token_id
-    pad_token_id = tokenizer.pad_token_id
-
-    tok_vocab_size = len(tokenizer)
-    print("tok_vocab_size:", tok_vocab_size)
-
-    # Compute max_length from tokenizer
-    max_length = tokenizer.model_max_length
-    print(f"Tokenizer max_length: {max_length}")
-
-    if max_length > MAX_TOKEN_LENGTH:                                               # Handle excessive or default values
-        print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
-        max_length = MAX_TOKEN_LENGTH
+    tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
 
     # Print tokenizer details for debugging
     print("Tokenizer configuration:")
@@ -1313,51 +1714,75 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
-    #
-    # Vectorize the text data
-    #
-    vectorizer, Xtr, Xval, Xte = vectorize(texts_train, texts_val, test_data, tokenizer, vtype=args.vtype)
-    print("vectorizer:\n", vectorizer)
-
-    print("Xtr:", type(Xtr), Xtr.shape)
-    #print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0])
-    
-    print("Xval:", type(Xval), Xval.shape)
-    #print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
-    
-    print("Xte:", type(Xte), Xte.shape)
-    #print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
-
-    # convert single label y values from array of scalaers to one hot encoded
-    print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
-    vec_vocab_size = len(vectorizer.vocabulary_)
-    print("vec_vocab_size:", vec_vocab_size)
-    tok_vocab_size = len(tokenizer.get_vocab())
-    print("tok_vocab_size:", tok_vocab_size)
-
-    assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
-
-    # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
-    assert vec_vocab_size == tok_vocab_size, \
-        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
-
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
     # then instantiate the LCSequenceClassifier model)
+    #
+    # NB we need to vectorize the text first (after loading/preprocessing) to prep the 
+    # matrix for TCE matrix computation 
     #
     if (args.supervised):
 
         print("\n\tcomputing tces...")
 
+        #
+        # Vectorize the text data
+        #
+        vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
+            texts_train, 
+            texts_val, 
+            test_data, 
+            tokenizer, 
+            max_length=max_length
+        )
+        print("vectorizer:\n", vectorizer)
+        print("lc_tokenizer:\n", lc_tokenizer)
+
+        print("Xtr:", type(Xtr), Xtr.shape)
+        print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
+        #print("Xtr[1]:", type(Xtr[1]), Xtr[1].shape, Xtr[1])
+        #print("Xtr[1]:", type(Xtr[2]), Xtr[2].shape, Xtr[2])
+
+        print("Xval:", type(Xval), Xval.shape)
+        print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
+        
+        print("Xte:", type(Xte), Xte.shape)
+        print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
+
+        # convert single label y values from array of scalaers to one hot encoded
+        print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
+        vec_vocab_size = len(vectorizer.vocabulary_)
+        print("vec_vocab_size:", vec_vocab_size)
+        tok_vocab_size = len(tokenizer.get_vocab())
+        print("tok_vocab_size:", tok_vocab_size)
+
+        #
+        # validate that the vectorize and tokenizer vocabularies are mirrors of each other
+        # this is imperative for the TCE matrix computation alignment with the (pretrained) 
+        # model embeddings
+        #
+        assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
+
+        # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
+        assert vec_vocab_size == tok_vocab_size, \
+            f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
+        tok_vocab = set(tokenizer.get_vocab().keys())
+        vec_vocab = set(vectorizer.vocabulary_.keys())
+        print(f"Tokenizer vocab size: {len(tok_vocab)}, Vectorizer vocab size: {len(vec_vocab)}")
+        print(f"Vocabulary intersection size: {len(tok_vocab & vec_vocab)}")
+
+        spot_check_documents(
+            documents=texts_train,
+            vectorizer=vectorizer,
+            tokenizer=lc_tokenizer, 
+            vectorized_data=Xtr,       
+            num_docs=2,
+        )
+
         if (class_type in ['single-label', 'singlelabel']):
 
             print("single label, converting target labels to to one-hot for tce computation...")
-
-            """
-            label_binarizer = LabelBinarizer()        
-            one_hot_labels_train = label_binarizer.fit_transform(labels_train)
-            """
-            from sklearn.preprocessing import OneHotEncoder
             
             # Assuming labels are a numpy array of shape (num_samples,)
             def to_one_hot(labels, num_classes):
@@ -1381,16 +1806,16 @@ if __name__ == "__main__":
             vectorized_training_data=Xtr,
             training_label_matrix=one_hot_labels_train,
             opt=args,
-            #debug=True
+            debug=True
         )
+        tce_matrix.to(device)           # must move the TCE embeddings to same device as model
 
         print("tce_matrix:", type(tce_matrix), tce_matrix.shape)
         print("tce_matrix[0]:", type(tce_matrix[0]), tce_matrix[0].shape, tce_matrix[0])
 
         if torch.isnan(tce_matrix).any() or torch.isinf(tce_matrix).any():
-            raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
-
-        tce_matrix.to(device)           # must move the TCE embeddings to same device as model
+            print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+            #raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
     else:
         tce_matrix = None
 
@@ -1420,7 +1845,6 @@ if __name__ == "__main__":
     print("dimensions (for logger):", dimensions)
 
     hf_trans_model = hf_trans_class_model
-    #print("LC HF Sequence Classfier (hf_trans_model):\n", hf_trans_model)
 
     class_weights = None
     if (class_type in ['multi-label', 'multilabel']):
@@ -1440,11 +1864,13 @@ if __name__ == "__main__":
         tce_matrix=tce_matrix,
         finetune=args.tunable,
         normalize_tces=True,
+        #normalize_tces=False,
         dropout_rate=args.dropprob,
         comb_method=args.sup_mode,
         #debug=True
     ).to(device)
-    print("lc_model:\n", lc_model)
+
+    print("\n\t-- FINAL MODEL --:\n", lc_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
@@ -1494,18 +1920,20 @@ if __name__ == "__main__":
 
     # Trainer with custom data collator
     trainer = Trainer(
-        model=lc_model,                                     # be sure to use LC_Model
+        model=lc_model,                                     # use LCSequenceClassifier model
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=custom_data_collator,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
+        #compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type, threshold=MC_THRESHOLD),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
     
     """
+    # with custom trainer, LCTrainer...
     trainer = LCTrainer(
-        model=lc_model,                                 # Use LCClassifier
+        model=lc_model,                                     # Use LCClassifier
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,

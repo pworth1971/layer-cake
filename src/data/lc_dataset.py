@@ -1622,19 +1622,50 @@ def trans_lc_load_dataset(name, seed):
 
         target_names = list(set(train_data.target_names))  # Ensures unique class names
         num_classes = len(target_names)
-        #print(f"num_classes: {len(target_names)}")
-        #print("class_names:", target_names)
-
-        class_type = 'single-label'
-
+  
         # Preprocess text data
-        #train_data_processed = preprocess_text(train_data.data)
-        #test_data_processed = preprocess_text(test_data.data)
+        """
+        train_data_processed = preprocess_text(train_data.data)
+        test_data_processed = preprocess_text(test_data.data)
+        """
 
         train_data_processed = _preprocess(pd.Series(train_data.data))
         test_data_processed = _preprocess(pd.Series(test_data.data))
 
-        return (train_data_processed.tolist(), train_data.target), (test_data_processed.tolist(), test_data.target), num_classes, target_names, class_type
+        class_type = 'single-label'
+
+        return (train_data_processed, train_data.target), (test_data_processed, test_data.target), num_classes, target_names, class_type
+
+
+    elif name == "ohsumed":
+
+        import os
+        
+        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
+        devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        train_data = preprocess_text(devel.data)
+        test_data = preprocess_text(test.data)
+
+        """
+        train_data = _preprocess(pd.Series(devel.data))
+        test_data = _preprocess(pd.Series(test.data))
+        """
+
+        train_target, test_target = devel.target, test.target
+        class_type = 'multi-label'
+        
+        train_target, test_target, target_names = _label_matrix(train_target, test_target)
+
+        target_names = devel.target_names
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        num_classes = len(target_names)
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
 
 
     elif name == "reuters21578":
@@ -1647,8 +1678,13 @@ def trans_lc_load_dataset(name, seed):
         train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
         test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
 
+        """
         train_data = preprocess_text(train_labelled_docs.data)
         test_data = preprocess_text(list(test_labelled_docs.data))
+        """
+
+        train_data = _preprocess(pd.Series(train_labelled_docs.data))
+        test_data = _preprocess(pd.Series(test_labelled_docs.data))
 
         train_target = train_labelled_docs.target
         test_target = test_labelled_docs.target
@@ -1718,40 +1754,6 @@ def trans_lc_load_dataset(name, seed):
         test_target_encoded = label_encoder.transform(test_target_arr)
 
         return (train_data, train_target_encoded), (test_data, test_target_encoded), num_classes, target_names, class_type
-    
-
-    elif name == "ohsumed":
-
-        import os
-        
-        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
-        devel = fetch_ohsumed50k(subset='train', data_path=data_path)
-        test = fetch_ohsumed50k(subset='test', data_path=data_path)
-
-        train_data = preprocess_text(devel.data)
-        test_data = preprocess_text(test.data)
-
-        """
-        train_data, train_target = devel.data, devel.target
-        test_data, test_target = test.data, test.target
-        """
-        
-        train_target, test_target = devel.target, test.target
-        class_type = 'multi-label'
-
-        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        #self.devel_raw, self.test_raw = devel.data, test.data
-        
-        train_target, test_target, target_names = _label_matrix(train_target, test_target)
-
-        target_names = devel.target_names
-
-        train_target = train_target.toarray()                                     # Convert to dense
-        test_target = test_target.toarray()                                       # Convert to dense
-
-        num_classes = len(target_names)
-
-        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
 
     elif name == "rcv1":
 
@@ -2138,12 +2140,14 @@ def trans_lc_load_dataset(name, seed):
         # split dataset into training and validation set
         xtrain, xtest, ytrain, ytest = train_test_split(papers_dataframe['text'], y, test_size=TEST_SIZE, random_state=seed)
 
+        xtrain = preprocess_text(xtrain)
+        xtest = preprocess_text(xtest)  
+
         # Classification type
         class_type = "multi-label"
 
         return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
     
-
 
     elif name == 'cmu_movie_corpus':                # TODO, not working with model, need to fix
         """
@@ -2279,7 +2283,7 @@ def trans_lc_load_dataset(name, seed):
 
 
 
-def _mask_numbers(data, number_mask='NUM'):
+def _mask_numbers(data, number_mask='[NUM]'):
     """
     Masks numbers in the given text data with a placeholder.
     """

@@ -5,18 +5,11 @@ import pandas as pd
 from time import time
 
 import matplotlib.pyplot as plt
-
 from tqdm import tqdm
-
-from scipy.sparse import csr_matrix
-
-from typing import Dict, Union, Any
 
 import nltk
 from nltk.corpus import reuters
-from nltk.corpus import stopwords
 
-# sklearn
 from sklearn.datasets import fetch_20newsgroups, fetch_rcv1
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
@@ -26,10 +19,7 @@ from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_scor
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelBinarizer
-from sklearn.utils.class_weight import compute_class_weight
-from sklearn.preprocessing import MultiLabelBinarizer
 
-# PyTorch
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
@@ -40,20 +30,18 @@ from torch.optim import Adam
 import torch.nn.init as init
 from torch.optim.lr_scheduler import StepLR
 
-# HuggingFace Transformers library
-import transformers     
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import transformers     # Hugging Face transformers
 from transformers import AutoModelForSequenceClassification, AutoModel, AutoTokenizer
-from transformers import BertForSequenceClassification, RobertaForSequenceClassification, DistilBertForSequenceClassification, AlbertForSequenceClassification
-from transformers import XLNetForSequenceClassification, GPT2ForSequenceClassification, LlamaForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
-from transformers import AutoConfig, PreTrainedModel
 
-# Custom
+
+from transformers import PreTrainedModel
+from transformers import AutoConfig, AutoModelForSequenceClassification, PreTrainedModel
+
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
-from data.lc_dataset import trans_lc_load_dataset
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
@@ -62,12 +50,12 @@ from embedding.supervised import get_supervised_embeddings
 
 from embedding.pretrained import MODEL_MAP
 
+from scipy.sparse import csr_matrix
 
 
 
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed"]
 
-#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "cmu_movie_corpus"]
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
@@ -86,18 +74,199 @@ MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models model
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 16
-#DEFAULT_GPU_BATCH_SIZE = 64
+DEFAULT_GPU_BATCH_SIZE = 64
 DEFAULT_MPS_BATCH_SIZE = 16
-DEFAULT_CUDA_BATCH_SIZE = 16
-
 
 TEST_SIZE = 0.15
 VAL_SIZE = 0.15
 
-#SUPPORTED_OPS = ["cat", "add", "dot"]
 
-SUPPORTED_OPS = ["cat", "add`"]
 
+
+# Load dataset
+def load_dataset(name):
+
+    print("Loading dataset:", name)
+
+    if name == "20newsgroups":
+
+        train_data = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'))
+        test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
+
+        target_names = list(set(train_data.target_names))  # Ensures unique class names
+        num_classes = len(target_names)
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
+
+        class_type = 'single-label'
+
+        return (train_data.data, train_data.target), (test_data.data, test_data.target), num_classes, target_names, class_type
+    
+    elif name == "bbc-news":
+
+        for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
+            for filename in filenames:
+                print(os.path.join(dirname, filename))
+
+        class_type = 'single-label'
+
+        # Load datasets
+        train_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Train.csv')
+        #test_set = pd.read_csv(DATASET_DIR + 'bbc-news/BBC News Test.csv')
+        
+        target_names = train_set['Category'].unique()
+        num_classes = len(train_set['Category'].unique())
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
+        
+        # we split the train data into train and test here because that is
+        # not done for us with the BBC News dataset (Test data is not labeled)
+        train_data, test_data, train_target, test_target = train_test_split(
+            train_set['Text'], 
+            train_set['Category'], 
+            train_size = 1-TEST_SIZE, 
+            random_state = RANDOM_SEED,
+        )
+
+        # reset indeces
+        train_data = train_data.reset_index(drop=True)
+        test_data = test_data.reset_index(drop=True)
+
+        #
+        # set up label targets
+        # Convert target labels to 1D arrays
+        train_target_arr = np.array(train_target)  # Flattening the training labels into a 1D array
+        test_target_arr = np.array(test_target)    # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(train_target_arr)  # Fit on training labels
+
+        # Transform labels to numeric IDs
+        train_target_encoded = label_encoder.transform(train_target_arr)
+        test_target_encoded = label_encoder.transform(test_target_arr)
+
+        return (train_data.tolist(), train_target_encoded), (test_data.tolist(), test_target_encoded), num_classes, target_names, class_type
+    
+    elif name == "reuters21578":
+        
+        data_path = os.path.join(DATASET_DIR, 'reuters21578')    
+        print("data_path:", data_path)  
+
+        train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
+        test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
+
+        train_data = train_labelled_docs.data
+        train_target = train_labelled_docs.target
+        test_data = list(test_labelled_docs.data)
+        test_target = test_labelled_docs.target
+
+        class_type = 'multi-label'
+
+        train_target, test_target, target_names = _label_matrix(train_target, test_target)
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        target_names = train_labelled_docs.target_names
+        num_classes = len(target_names)
+        #print(f"num_classes: {len(target_names)}")
+        #print("class_names:", target_names)
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+    
+
+    elif name == "ohsumed":
+        
+        data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
+        devel = fetch_ohsumed50k(subset='train', data_path=data_path)
+        test = fetch_ohsumed50k(subset='test', data_path=data_path)
+
+        train_data, train_target = devel.data, devel.target
+        test_data, test_target = test.data, test.target
+
+        class_type = 'multi-label'
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+        #self.devel_raw, self.test_raw = devel.data, test.data
+        
+        train_target, test_target, target_names = _label_matrix(train_target, test_target)
+
+        target_names = devel.target_names
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        num_classes = len(target_names)
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+
+    elif name == "rcv1":
+
+        data_path = os.path.join(DATASET_DIR, 'rcv1')
+        
+        devel = fetch_RCV1(subset='train', data_path=data_path)
+        test = fetch_RCV1(subset='test', data_path=data_path)
+
+        train_data, train_target = devel.data, devel.target
+        test_data, test_target = test.data, test.target
+
+        class_type = 'multi-label'
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+        #self.devel_raw, self.test_raw = devel.data, test.data
+        
+        train_target, test_target, target_names = _label_matrix(train_target, test_target)
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        num_classes = len(target_names)
+
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+
+    else:
+        raise ValueError("Unsupported dataset:", name)
+
+
+
+def _label_matrix(tr_target, te_target):
+    """
+    Converts multi-label target data into a binary matrix format using MultiLabelBinarizer.
+    
+    Input:
+    - tr_target: A list (or iterable) of multi-label sets for the training data. 
+                 Each element is a list, tuple, or set of labels assigned to a sample.
+                 Example: [["label1", "label2"], ["label3"], ["label2", "label4"]]
+    - te_target: A list (or iterable) of multi-label sets for the test data.
+                 Each element is a list, tuple, or set of labels assigned to a sample.
+                 Example: [["label1"], ["label3", "label4"]]
+    
+    Output:
+    - ytr: A binary label matrix for the training data where each column represents a label.
+           The matrix has shape (n_samples, n_classes).
+    - yte: A binary label matrix for the test data where each column represents a label.
+           The matrix has shape (n_samples, n_classes).
+    - mlb.classes_: A list of all unique classes (labels) across the training data.
+    """
+    
+    """
+    print("_label_matrix...")
+    print("tr_target:", tr_target)
+    print("te_target:", te_target)
+    """
+
+    mlb = MultiLabelBinarizer(sparse_output=True)
+    
+    ytr = mlb.fit_transform(tr_target)
+    yte = mlb.transform(te_target)
+
+    """
+    print("ytr:", type(ytr), ytr.shape)
+    print("yte:", type(yte), yte.shape)
+
+    print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
+    """
+    
+    return ytr, yte, mlb.classes_
 
 
 # Get the full model identifier and load from local directory
@@ -195,7 +364,7 @@ def compute_supervised_embeddings(Xtr, Ytr, Xval, Yval, Xte, Yte, opt):
 
 
 
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt):
     """
     Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
 
@@ -215,7 +384,7 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     - sup_range: Range in the embedding matrix where supervised embeddings are located.
     """
 
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
     
     Xtr = vectorized_training_data
     Ytr = training_label_matrix
@@ -227,20 +396,14 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         Ytr, 
         method=opt.supervised_method,
         max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore),
-        debug=debug
+        dozscore=(not opt.nozscore)
     )
-    
+
     # Adjust TCE matrix size
     num_missing_rows = vocabsize - TCE.shape[0]
-    if (debug):
-        print("TCE:", type(TCE), TCE.shape)
-        print("TCE[0]:", type(TCE[0]), TCE[0])
-        print("num_missing_rows:", num_missing_rows)
+    print("num_missing_rows:", num_missing_rows)
 
-    if (num_missing_rows > 0):
-        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
-    
+    TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
     tce_matrix = torch.from_numpy(TCE).float()
 
     return tce_matrix
@@ -397,356 +560,106 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 
+SUPPORTED_OPS = ["concat", "add", "dot"]
 
-class LCSequenceClassifier(nn.Module):
 
-    def __init__(self, 
-                hf_model: nn.Module, 
-                num_classes: int, 
-                vocab_size: int, 
-                class_type: str = 'single-label', 
-                class_weights: torch.Tensor = None, 
-                supervised: bool = False, 
-                tce_matrix: torch.Tensor = None, 
-                finetune: bool = False, 
-                normalize_tces: bool = True,
-                dropout_rate: float = 0.3, 
-                comb_method: str = "cat", 
-                debug: bool = False):
+
+class LCHFTCEClassifier2(nn.Module):
+
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="concat"):
         """
         A Transformer-based classifier with optional TCE integration.
         
         Args:
             hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
             num_classes: Number of classes for classification.
-            vocab_size: size of (tokenizer) vocabulary, for assertions
-            class_type: type of classification problem, either 'single-label' or 'multi-label'
-            class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            finetune: Boolean indicating if word embeddings are to be finetunes, ie trainable.
-            normalize_tce: Boolean indicating if TCE matrix is normalized.
-            dropout: Dropout rate for TCE matrix.
-            comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
-            debug: Debug mode flag.
+            comb-method: Method to integrate WCE embeddings ("add" or "concat").
         """
-        super(LCSequenceClassifier, self).__init__()
+        super(LCHFTCEClassifier2, self).__init__()
 
-        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetuned: {finetune}, supervised: {supervised}, debug: {debug}')
-
-        if (supervised):
-            print(f'normalize_tces: {normalize_tces}, trainable_tces: {trainable_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
-
-        self.debug = debug
+        print(f'LCHFTCEClassifier2:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}')
 
         self.transformer = hf_model
-        #transformer_output_dim = self.transformer.config.hidden_size  # e.g., 768
-
-        self.hidden_size = self.transformer.config.hidden_size          
+        self.hidden_size = self.transformer.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
 
         self.num_classes = num_classes
         self.class_type = class_type
-
         self.supervised = supervised
         self.comb_method = comb_method
-        self.normalize_tces = normalize_tces
-        self.trainable_tces = trainable_tces
-        self.class_weights = class_weights
-
-        if (self.class_weights is not None):
-            print("self.class_weights.shape:", self.class_weights.shape)
-            if (self.debug):
-                print("self.class_weights:", self.class_weights)
-        else:
-            print("self.class_weights is None")
-
-        self.vocab_size = vocab_size
-        print("self.vocab_size:", self.vocab_size)
-
-        #
-        # Optionally unfreeze the embedding layer if finetune is True
-        #
-        if self.finetune:
-            print("finetuning: retraining model embedding layer...")    
-
-            # Enable training of only the embedding layer
-            if hasattr(self.transformer, 'bert'):
-                embedding_layer = self.transformer.bert.embeddings
-            elif hasattr(self.transformer, 'roberta'):
-                embedding_layer = self.transformer.roberta.embeddings
-            elif hasattr(self.transformer, 'transformer'):
-                embedding_layer = self.transformer.transformer.wte  # GPT-2
-            else:
-                raise AttributeError(f"Embeddings not found for the given model: {type(self.transformer)}")
-            print("embedding_layer:", type(embedding_layer), embedding_layer)
-
-            for param in embedding_layer.parameters():
-                param.requires_grad = True
-        else:            
-            print("All transformer layers are frozen.")
-        # Loss functions
-        if class_type == 'multi-label':
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        elif class_type == 'single-label':
-            self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
-        else:
-            raise ValueError("class_type must be 'single-label' or 'multi-label'")
-        print("loss_fn:", self.loss_fn)
-
-        # Assert that tce_matrix is provided if supervised is True
-        if self.supervised:
-            assert tce_matrix is not None, "tce_matrix must be provided when supervised is True."
 
         self.tce_matrix = tce_matrix
-        self.tce_layer = None               # we initialize this only if we are using TCEs 
 
-        # initialize embedding dimensions to model embedding dimension
-        # we over-write this only if we are using supervised tces with the 'cat' method
-        combined_size = self.hidden_size
-
-        if (self.supervised and self.tce_matrix is not None):
-
-            print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
- 
-            with torch.no_grad():
-
-                # Normalize TCE matrix if required
-                if self.normalize_tces:
-
-                    # compute the mean and std from the core model embeddings
-                    embedding_layer = self.transformer.get_input_embeddings()
-                    embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
-                    embedding_std = embedding_layer.weight.std(dim=0).to(device)
-                    if (self.debug):
-                        print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
-
-                    # normalize the TCE matrix
-                    self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
-                    print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
-
-                    # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
-                    if (trainable_tces):
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
-                    else:
-                        self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-                
-                # Adapt classifier head based on combination method
-                # 'concat' method is dimension_size + num_classes
-                if (self.comb_method == 'cat'):
-                    combined_size = self.hidden_size + self.tce_matrix.size(1)
-                else:
-                    combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
-        
-        # Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
-        # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
-        self.classifier = nn.Sequential(
-            nn.Linear(combined_size, 256),                  # First linear layer
-            nn.ReLU(),                                      # non-linear activation function
-            nn.Dropout(dropout_rate),                       # regularization
-            nn.Linear(256, self.num_classes)                # FInal Linear layer
-        )
-        print("combined_size:", combined_size)
-        print("self.classifier:", self.classifier)
-
-        #
-        # force all of the tensors to be stored contiguously in memory
-        #
-        for param in self.transformer.parameters():
-            param.data = param.data.contiguous()
-    
-    
-    def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
-        """
-        Normalize the TCE matrix to align with the transformer's embedding distribution.
-
-        Args:
-            tce_matrix: TCE matrix (vocab_size x num_classes).
-            embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
-            embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
-
-        Returns:
-            Normalized TCE matrix (vocab_size x num_classes).
-        """
-
-        target_dim = embedding_mean.shape[0]  # Set target_dim to model embedding size
-
-        if (self.debug):
-            print(f"tce_matrix: {tce_matrix.shape}, {tce_matrix.dtype}")
-            #print("first row:", tce_matrix[0])
-            print(f"embedding_mean: {embedding_mean.shape}, {embedding_mean.dtype}")
-            #print(f'embedding_mean: {embedding_mean}')
-            print(f"embedding_std: {embedding_std.shape}, {embedding_std.dtype}")
-            #print(f'embedding_std: {embedding_std}')
-            print("target_dim:", target_dim)
-
-        device = embedding_mean.device                      # Ensure all tensors are on the same device
-        tce_matrix = tce_matrix.to(device)
-
-        # 1 Normalize TCE matrix row-wise (i.e. ompute mean and std per row)
-        tce_mean = tce_matrix.mean(dim=1, keepdim=True)
-        tce_std = tce_matrix.std(dim=1, keepdim=True)
-        tce_std[tce_std == 0] = 1                           # Prevent division by zero
-
-        if (self.debug):
-            print(f"tce_mean: {tce_mean.shape}, {tce_mean.dtype}")
-            #print(f'tce_mean: {tce_mean}')
-            print(f"tce_std: {tce_std.shape}, {tce_std.dtype}")
-            #print(f'tce_std: {tce_std}')
-
-        normalized_tce = (tce_matrix - tce_mean) / tce_std
-
-        if (self.debug):
-            print(f"normalized_tce (pre-scaling): {normalized_tce.shape}")
-
-        # 2. Scale to match embedding statistics
-        normalized_tce = normalized_tce * embedding_std.mean() + embedding_mean.mean()
-
-        # 3. Project normalized TCE into the target dimension (e.g., 128)
-        projection = torch.nn.Linear(tce_matrix.size(1), target_dim, bias=False).to(device)
-        projected_tce = projection(normalized_tce)
-
-        if self.debug:
-            print(f"Projected TCE matrix: {projected_tce.shape}")
-
-        # check for Nan or Inf values after normalization
-        if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
-            raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
-
-        return projected_tce
-
-
-    def forward(self, input_ids=None, attention_mask=None, labels=None):
-        """
-        Forward pass for the LCSequenceClassifier, includes support for integrated
-        TCE computation in the event that the Classifier has been set up with TCEs (ie supervised is True)
-
-        Args:
-            input_ids (torch.Tensor): Input token IDs (batch_size x seq_length).
-            attention_mask (torch.Tensor): Attention mask for input tokens.
-            labels (torch.Tensor, optional): Labels for computing loss.
-
-        Returns:
-            logits (torch.Tensor): Output logits from the classifier.
-            loss (torch.Tensor, optional): Loss value if labels are provided.
-        """
-        if (self.debug):
-            print("LCSequenceClassifier:forward()...")
-            print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
-            #print("input_ids:", input_ids)
-            print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
-            print(f"\tlabels: {type(labels)}, {labels.shape}")
-
-        assert input_ids.max() < self.vocab_size, f"Invalid token index: {input_ids.max()} >= {self.vocab_size}"
-        assert input_ids.min() >= 0, f"Invalid token index: {input_ids.min()} < 0"
-
-        # Pass inputs through the transformer model, ie Base model forward pass
-        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-
-        #
-        # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
-        # Use pooled output if available, if not and we are using a BERT based model, we get the
-        # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
-        #
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            pooled_output = outputs.pooler_output       
-        elif isinstance(self.transformer, (BertForSequenceClassification, 
-                                        RobertaForSequenceClassification, 
-                                        DistilBertForSequenceClassification, 
-                                        AlbertForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
-        elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
-                                        LlamaForSequenceClassification)):
-            pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
-        elif isinstance(self.transformer, XLNetForSequenceClassification):
-            # XLNet-specific pooling logic
-            #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
-
-            # Use mean pooling over the last hidden layer
-            last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
-            pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+        if (self.tce_matrix is not None):
+            print("self.tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
         else:
-            raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
+            print("self.tce_matrix: None")
 
-        if (self.debug):    
-            print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')
+        # Adjust classifier input size if TCEs are used
+        if self.supervised and self.comb_method == "concat":
+            self.classifier_input_size = self.hidden_size + self.num_classes
+        else:
+            self.classifier_input_size = self.hidden_size
+        
+        self.classifier = nn.Linear(self.classifier_input_size, self.num_classes)
 
-        if torch.isnan(pooled_output).any() or torch.isinf(pooled_output).any():
-            print("[ERROR] pooled_output contains NaN or Inf values")
+        """
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Linear(self.classifier_input_size, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, self.num_classes)
+        )
+        """
 
-        #
-        # Integrate TCEs if supervised is True
-        #
-        #if (self.supervised and (self.tce_matrix is not None)):
-        if self.tce_layer is not None:
-            
-            if (self.debug):
-                print("integrating TCEs into the model...")
+    def forward(self, input_ids=None, attention_mask=None, labels=None, tces=None):
+        """
+        Forward pass with optional supervised embeddings (TCEs).
+        """
 
-            # Debug info: Check for out-of-range indices
-            invalid_indices = input_ids[input_ids >= self.vocab_size]
-            if invalid_indices.numel() > 0:
-                print(f"[WARNING] Found invalid indices in input_ids: {invalid_indices.tolist()} (max valid index: {self.vocab_size - 1})")
+        # Move TCE matrix to the same device as input_ids if necessary
+        if self.tce_matrix is not None:
+            self.tce_matrix = self.tce_matrix.to(input_ids.device)
 
-            # Extract all relevant indices for pooling TCE embeddings
-            tce_indices = input_ids                                     # Assuming all input tokens are relevant for TCEs
-            tce_embeddings = self.tce_layer(tce_indices)                # (batch_size, seq_length, tce_dim)
+        # Base model forward pass
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
 
-            # Apply pooling to TCE embeddings to obtain a single vector per example
-            pooled_tce_embeddings = tce_embeddings.mean(dim=1)                                  # mean pooling, output (batch_size, tce_dim)
-            #pooled_tce_embeddings, _ = tce_embeddings.max(dim=1)                               # max pooling, output (batch_size, tce_dim)
-            
-            if (self.debug):
-                print("pooled_tce_embeddings:", type(pooled_tce_embeddings), pooled_tce_embeddings.shape)
-                print("pooled_tce_embeddings[0]:", type(pooled_tce_embeddings[0]), pooled_tce_embeddings[0])
-            
-            if torch.isnan(pooled_tce_embeddings).any() or torch.isinf(pooled_tce_embeddings).any():
-                print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+        # Pool the CLS token or equivalent for XLNet
+        if hasattr(outputs, "last_hidden_state"):                                   # For models like BERT
+            pooled_output = outputs.last_hidden_state[:, 0]
+        elif hasattr(outputs, "hidden_states"):                                     # XLNet or similar
+            sequence_output = outputs.hidden_states[-1]                             # Access the last layer's hidden states
+            pooled_output = sequence_output[:, -1, :]                               # Use the last token for pooling
+        else:
+            raise ValueError("Unsupported model output structure. Ensure compatibility.")
 
-            # Combine transformer output and TCE embeddings
-            if self.comb_method == 'cat':
-                if (self.debug):
-                    print("concatenating two matrices...")                                                
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
-                assert pooled_output.size(1) + pooled_tce_embeddings.size(1) == self.hidden_size + self.tce_matrix.size(1), \
-                    f"Concat dimension mismatch: {pooled_output.size(1) + pooled_tce_embeddings.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
-                pooled_output = torch.cat((pooled_output, pooled_tce_embeddings), dim=1)        # (batch_size, combined_size)
-            elif self.comb_method == 'add':
-                if (self.debug):
-                    print("adding two matricses...")
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
-                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
-                    f"Add dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
-                pooled_output = pooled_output + pooled_tce_embeddings                               # (batch_size, hidden_size) 
-            elif self.comb_method == 'dot':
-                if self.debug:
-                    print("computing dot product between embeddings...")
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), \
-                    "Batch size mismatch between pooled output and pooled TCE matrix"
-                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
-                    f"Dot dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
-                pooled_output = (pooled_output * pooled_tce_embeddings)                             # Shape (batch_size, hidden_size)
+        if self.supervised and self.tce_matrix is not None:
+                
+            # Map input_ids to TCE embeddings
+            tces = self.tce_matrix[input_ids]  # Shape: (batch_size, seq_len, tce_dim)
+
+            if self.comb_method == "concat":
+                pooled_output = torch.cat([pooled_output, tces.mean(dim=1)], dim=1)  # Concatenate TCEs
+            elif self.comb_method == "add":
+                pooled_output = pooled_output + tces.mean(dim=1)  # Add TCEs
             else:
-                raise ValueError(f"Unsupported combination method: {self.comb_method}")    
-            
-        if (self.debug):    
-            print(f'pooled_output (post combination): {type(pooled_output)}, {pooled_output.shape}')
+                raise ValueError(f"Unsupported comb_method: {self.comb_method}")            
 
         # Classification head
         logits = self.classifier(pooled_output)
-        if (self.debug):
-            print(f'logits: {type(logits)}, {logits.shape}, {logits}')
 
         loss = None
         if labels is not None:
-            if self.class_type in ['multi-label', 'multilabel']:
-                # BCEWithLogitsLoss requires float labels for multi-label classification
-                loss = self.loss_fn(logits, labels.float())
-            elif self.class_type in ['single-label', 'singlelabel']:
-                # CrossEntropyLoss expects long/int labels for single-label classification
-                loss = self.loss_fn(logits, labels.long())
-            else:
-                raise ValueError(f"Unsupported classification type: {self.class_type}")
+            #if labels.dtype == torch.long:                         
+            if class_type in ['single-label', 'singlelabel']:       # Single-label classification
+                loss_fn = nn.CrossEntropyLoss()
+            else:                                                   # Multi-label classification
+                loss_fn = nn.BCEWithLogitsLoss()
+
+            loss = loss_fn(logits, labels)
         else:
             print("WARNINMG: No labels provided for loss calculation.")
 
@@ -755,47 +668,182 @@ class LCSequenceClassifier(nn.Module):
 
 
 
-def lc_class_weights(labels, task_type="single-label"):
-    """
-    Compute class weights for single-label or multi-label classification.
 
-    Args:
-        labels: List or numpy array.
-                - Single-label: List of class indices (e.g., [0, 1, 2]).
-                - Multi-label: Binary array of shape (num_samples, num_classes).
-        task_type: "single-label" or "multi-label".
+class LCClassifier3(nn.Module):
 
-    Returns:
-        Torch tensor of class weights.
-    """
+    def __init__(self, hf_model, num_classes, class_type='single-label', supervised=False, tce_matrix=None, comb_method="dot", debug=False):
+        """
+        A Transformer-based classifier with optional TCE integration.
 
-    print(f'Computing class weights for {task_type} task...')
-    #print("labels:", labels)
+        Args:
+            hf_model: A Hugging Face Sequence Classification model (e.g., BertForSequenceClassification).
+            num_classes: Number of classes for classification.
+            class_type: 'single-label' or 'multi-label'.
+            supervised: Boolean indicating if supervised embeddings are used.
+            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
+            comb_method: Method to integrate TCE embeddings ("add" or "concat" or "dot").
+            debug: Boolean flag for debug mode.
+        """
+        super(LCClassifier3, self).__init__()
 
-    if task_type == "single-label":
-        # Compute class weights using sklearn
-        num_classes = len(np.unique(labels))
-        class_weights = compute_class_weight(
-            class_weight="balanced",
-            classes=np.arange(num_classes),
-            y=labels
-        )
-        return torch.tensor(class_weights, dtype=torch.float)
+        print(f"LCClassifier3:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, comb_method: {comb_method}, debug: {debug}")
 
-    elif task_type == "multi-label":
-        # Compute pos_weights for BCEWithLogitsLoss
-        labels = torch.tensor(labels, dtype=torch.float)
-        num_samples = labels.shape[0]
-        pos_counts = labels.sum(dim=0)  # Number of positive samples per class
-        neg_counts = num_samples - pos_counts  # Number of negative samples per class
+        self.transformer = hf_model
 
-        pos_counts = torch.clamp(pos_counts, min=1.0)  # Avoid division by zero
-        pos_weights = neg_counts / pos_counts
-        return pos_weights
+        # all the tensors need to be stored contiguously in memory
+        for param in self.transformer.parameters():
+            param.data = param.data.contiguous()
+        
+        self.num_classes = num_classes
+        self.class_type = class_type
+        self.supervised = supervised
+        self.comb_method = comb_method
+        self.debug = debug  
+        self.tce_matrix = tce_matrix
 
-    else:
-        raise ValueError("Invalid task_type. Use 'single-label' or 'multi-label'.")
+        if self.tce_matrix is not None:
+            print("-- original tce matrix --:", type(self.tce_matrix), self.tce_matrix.shape)
 
+            # Normalize the TCE matrix using transformer embedding stats
+            embedding_layer = self.transformer.get_input_embeddings()
+            embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
+            embedding_std = embedding_layer.weight.std(dim=0).to(device)
+            print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
+
+            self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
+            print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+
+            # Ensure the TCE matrix is normalized to the same distribution as the transformer embeddings
+            self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+            print(f"TCE embedding layer created with shape: {self.tce_layer.weight.shape}")
+        else:
+            print("self.tce_matrix: None")
+            
+
+        # Extract the hidden size from the model configuration
+        self.hidden_size = self.transformer.config.hidden_size
+        print("self.hidden_size:", self.hidden_size)
+
+        # Add a projection layer for `dot` operation to ensure hidden_size compatibility
+        if self.supervised and comb_method == "dot":
+            self.projection_layer = nn.Linear(self.tce_matrix.size(1), self.hidden_size)
+
+        if self.supervised is None and self.tce_matrix is None:
+            combined_size = self.hidden_size
+        else:
+            # Adapt classifier head based on combination method
+            combined_size = self.hidden_size if comb_method in ["dot", "add"] else self.hidden_size + self.tce_matrix.size(1)
+            
+        self.classifier = nn.Linear(self.hidden_size, self.num_classes)
+        
+        
+    def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
+        """
+        Normalize the TCE matrix to align with the transformer's embedding space.
+
+        Args:
+        - tce_matrix: TCE matrix (vocab_size x num_classes).
+        - embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
+        - embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
+
+        Returns:
+        - Normalized TCE matrix (vocab_size x model_dim).
+        """
+        device = embedding_mean.device  # Ensure all tensors are on the same device
+        tce_matrix = tce_matrix.to(device)
+
+        tce_mean = tce_matrix.mean(dim=1, keepdim=True).to(device)
+        tce_std = tce_matrix.std(dim=1, keepdim=True).to(device)
+        tce_std[tce_std == 0] = 1  # Avoid division by zero
+
+        # Expand TCE dimensions and normalize
+        tce_matrix_expanded = tce_matrix.unsqueeze(-1).expand(-1, -1, embedding_mean.size(0)).mean(dim=1).to(device)
+        normalized_tce = (tce_matrix_expanded - tce_mean) / tce_std  # Normalize
+        normalized_tce = normalized_tce * embedding_std + embedding_mean  # Scale to transformer embedding stats
+
+        return normalized_tce
+
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        """
+        Forward pass with optional supervised embeddings (TCEs).
+        """
+        # Pass inputs through the transformer model
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+
+        # Access the pooled output or the CLS token representation
+        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            pooled_output = outputs.pooler_output                                               # Use pooled output if available
+            if (self.debug):
+                print(f"[DEBUG] outputs.pooler_output.shape: {pooled_output.shape}")
+        else:
+            pooled_output = outputs.hidden_states[-1][:, 0]                                     # Use CLS token embedding from the last hidden layer
+            if (self.debug):
+                print(f"[DEBUG] outputs.hiudden_states[-1][:, 0].shape: {pooled_output.shape}")
+
+        #
+        # Integrate TCEs if supervised is True
+        #
+        if (self.supervised and self.tce_matrix is not None):
+
+            print("integrating TCEs into the model...")
+
+            self.tce_matrix = self.tce_matrix.to(input_ids.device)                              # Ensure `self.tce_matrix` is on the same device as `input_ids`
+
+            # Debug info: Check for out-of-range indices
+            vocab_size = self.tce_matrix.size(0)
+            invalid_indices = input_ids[input_ids >= vocab_size]
+            if invalid_indices.numel() > 0:
+                print(f"[WARNING] Found invalid indices in input_ids: {invalid_indices.tolist()} (max valid index: {vocab_size - 1})")
+
+            # Lookup TCEs for the input tokens
+            tces = self.tce_matrix[input_ids].mean(dim=1)                                       # Average TCEs across tokens
+            
+            # Debug info: TCEs shape and match checks    
+            if (self.debug):
+                print(f"[DEBUG] tces.shape: {tces.shape}")
+                print(f"[DEBUG] pooled_output.shape: {pooled_output.shape}")
+            
+            if self.comb_method == "concat":    
+                print("concatenating two matrices...")                                                
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                assert pooled_output.size(1) + tces.size(1) == self.hidden_size + self.tce_matrix.size(1), \
+                    f"Concat dimension mismatch: {pooled_output.size(1) + tces.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
+                combined_output = torch.cat([pooled_output, tces], dim=1)                         
+            elif self.comb_method == "add":                                                  
+                print("adding two matricses...")
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                assert pooled_output.size(1) == tces.size(1), \
+                    f"Add dimension mismatch: {pooled_output.size(1)} != {tces.size(1)}"
+                combined_output = pooled_output + tces   
+            elif self.comb_method == "dot":
+                print("multiplying two matricses...")
+                assert pooled_output.size(0) == tces.size(0), "Batch size mismatch between pooled output and TCEs"
+                tces_projected = self.projection_layer(tces)                            # Project TCEs to hidden_size
+                combined_output = pooled_output * tces_projected                        # Element-wise multiplication
+            else:
+                raise ValueError(f"Unsupported combination method: {self.comb_method}")    
+        
+            pooled_output = combined_output                                             # Update pooled output with combined representation
+
+        if (self.debug):
+            print(f'pooled_output: type: {type(pooled_output)}, shape: {pooled_output.shape}')
+        
+        # Pass the combined representation through the classifier
+        logits = self.classifier(pooled_output)
+
+        if labels is None:
+            print("WARNING: labels are None, cant compuet lose, returning logits only...")
+            return {"logits": logits}
+        
+        # Compute loss if labels are provided
+        if self.class_type in ["single-label", "singlelabel"]:
+            loss_fn = nn.CrossEntropyLoss()
+        else:
+            loss_fn = nn.BCEWithLogitsLoss()
+        loss = loss_fn(logits, labels)
+
+        return {"loss": loss, "logits": logits}
 
 
 
@@ -977,94 +1025,55 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
     hf_trans_model.config.output_hidden_states = True
 
     # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
-    """
     if hf_trans_model.config.pad_token_id is None:
         print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_model.config.pad_token_id = tokenizer.pad_token_id
-    """
-
-    if hf_trans_model.config.pad_token_id is None:
-        print("hf_trans_model padding token ID is None, setting to tokenizer.eos_token id...")
-        hf_trans_model.config.pad_token_id = tokenizer.eos_token  # Set PAD to end-of-sequence token    
+        
 
     # Initialize Hugging Face Transformer model for sequence classification
     hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         cache_dir=model_path,
-        num_labels=num_classes,                         # Specify the number of classes for classification
-        pad_token_id=tokenizer.pad_token_id             # Set PAD to end-of-sequence token
+        num_labels=num_classes  # Specify the number of classes for classification
     )
 
     # Ensure hidden states are enabled for the classification model
     hf_trans_class_model.config.output_hidden_states = True
 
     # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
-    """
     if hf_trans_class_model.config.pad_token_id is None:
         print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
         hf_trans_class_model.config.pad_token_id = tokenizer.pad_token_id
-    """
-
-    if hf_trans_class_model.config.pad_token_id is None:
-        print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
-        hf_trans_class_model.config.pad_token_id = tokenizer.eos_token
-
+    
     return hf_trans_model, hf_trans_class_model
 
 
 
-class LCTrainer(Trainer):
+def get_hf_models_old(model_name, model_path, num_classes, tokenizer):
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        """
-        Perform a training step on a batch of inputs.
+    print(f'get_hf_models(): model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}')
 
-        Subclass and override to inject custom behavior.
+    # Initialize Hugging Face Transfromer model
+    hf_trans_model = AutoModel.from_pretrained(model_name, cache_dir=model_path)
+    
+    # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
+    if (hf_trans_model.config.pad_token_id is None):
+        print("hf_trans_model padding token ID is None, setting to tokenizer.pad_token_id...")
+        hf_trans_model.config.pad_token_id = tokenizer.pad_token_id
+        
+    # Initialize Hugging Face Transformer model for sequence classification
+    hf_trans_class_model = AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        cache_dir=model_path,
+        num_labels=num_classes  # Specify the number of classes for classification
+    )
 
-        Args:
-            model (:obj:`nn.Module`):
-                The model to train.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
-
-        Return:
-            :obj:`torch.Tensor`: The tensor with training loss on this batch.
-        """
-
-        model.train()
-        inputs = self._prepare_inputs(inputs)
-
-        if self.use_amp:
-            with autocast():
-                loss = self.compute_loss(model, inputs)
-        else:
-            loss = self.compute_loss(model, inputs)
-
-        if self.args.n_gpu > 1:
-            if model.module.config.ctc_loss_reduction == "mean":
-                loss = loss.mean()
-            elif model.module.config.ctc_loss_reduction == "sum":
-                loss = loss.sum() / (inputs["labels"] >= 0).sum()
-            else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
-
-        if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
-
-        if self.use_amp:
-            self.scaler.scale(loss).backward(retain_graph=True)
-        elif self.use_apex:
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward(retain_graph=True)
-        elif self.deepspeed:
-            self.deepspeed.backward(loss, retain_graph=True)
-        else:
-            loss.backward(retain_graph=True)
-
-        return loss.detach()
+    # GPT2 does not have a native pad token ID, set to tokenizer.pad_token_id
+    if (hf_trans_class_model.config.pad_token_id is None):
+        print("hf_trans_class_model padding token ID is None, setting to tokenizer.pad_token_id...")
+        hf_trans_class_model.config.pad_token_id = tokenizer.pad_token_id
+    
+    return hf_trans_model, hf_trans_class_model
 
 
 
@@ -1092,9 +1101,7 @@ class CustomTrainer(Trainer):
             loss = loss / self.args.gradient_accumulation_steps
 
         # Backward pass with retain_graph=True
-        #loss.backward(retain_graph=True)  # Adjust based on need
-        self.accelerator.backward(loss, retain_graph=True)
-        
+        loss.backward(retain_graph=True)  # Adjust based on need
         return loss.detach()
     
 
@@ -1104,19 +1111,17 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
     
     parser.add_argument('--dataset', required=True, type=str, choices=SUPPORTED_DATASETS, help='Dataset to use')
-
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
-    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
-    parser.add_argument('--sup-mode', type=str, default='add', help='How to combine TCEs with model embeddings (add, dot, cat)')
+    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings')
     parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
-    parser.add_argument('--dropprob', type=float, default=0.3, metavar='[0.0, 1.0]', help='dropout probability for TCE Embedding layer classifier head (default: 0.3)')
+    parser.add_argument('--dropprob', type=float, default=0.1, metavar='[0.0, 1.0]', help='dropout probability (default: 0.1)')
     parser.add_argument('--net', type=str, default='hf.sc.ff', metavar='str', help=f'net, defaults to hf.sc (only supported option)')
     parser.add_argument('--learnable', type=int, default=0, metavar='int', help='dimension of the learnable embeddings (default 0)')
     parser.add_argument('--droptype', type=str, default='sup', metavar='DROPTYPE',
@@ -1126,7 +1131,7 @@ def parse_args():
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
-                        help='TCEs are tunable, ie unfrozen from the beginning (default False, i.e., static)')
+                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
@@ -1145,8 +1150,7 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.1 ---")
-    print()
+    print("\n\t--- TRANS_LAYER_CAKE 3.0 ---")
 
     args = parse_args()
     print("args:", args)
@@ -1183,6 +1187,7 @@ if __name__ == "__main__":
         print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, and wc_supervised == {args.supervised} for {args.dataset} already calculated, run with --force option to override. ---')
         exit(0)
 
+    #embedding_type = get_embedding_type(args)
     print("embedding_type:", embedding_type)
     print("embeddings:", embeddings)    
     print("embedding_path:", emb_path)
@@ -1195,7 +1200,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         print("CUDA is available")
         device = torch.device("cuda")
-        batch_size = DEFAULT_CUDA_BATCH_SIZE
+        batch_size = DEFAULT_GPU_BATCH_SIZE
     elif torch.backends.mps.is_available():
         print("MPS is available")
         device = torch.device("mps")
@@ -1211,7 +1216,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # Load dataset and print class information
-    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset)
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = load_dataset(args.dataset)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)
@@ -1227,17 +1232,13 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
-
-    print("\n\tinitializing tokenizer, vectorizer and dataset...")
-    
+    #
+    # check set up the tokenizer
+    #    
     tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-    
     # Add padding token if it doesn't exist
-    # NB: it is necessary to stay within the 
-    # boundaries of the model vocabulary size
     if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token               # Align pad token to eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id         # set pad_token_id
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     print("tokenizer:\n", tokenizer)
 
     # Get the pad_token_id
@@ -1303,64 +1304,31 @@ if __name__ == "__main__":
 
     assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
 
-    # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
-    assert vec_vocab_size == tok_vocab_size, \
-        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
-
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
     # then instantiate the LCSequenceClassifier model)
     #
     if (args.supervised):
 
-        print("\n\tcomputing tces...")
-
         if (class_type in ['single-label', 'singlelabel']):
 
             print("single label, converting target labels to to one-hot for tce computation...")
 
-            """
             label_binarizer = LabelBinarizer()        
             one_hot_labels_train = label_binarizer.fit_transform(labels_train)
-            """
-            from sklearn.preprocessing import OneHotEncoder
-            
-            # Assuming labels are a numpy array of shape (num_samples,)
-            def to_one_hot(labels, num_classes):
-                encoder = OneHotEncoder(categories='auto', sparse_output=True, dtype=np.float32)
-                labels = labels.reshape(-1, 1)
-                one_hot = encoder.fit_transform(labels)  # Result is a sparse matrix
-                return one_hot
 
-            one_hot_labels_train = to_one_hot(labels_train, num_classes=num_classes)
-
-        else:
-            one_hot_labels_train = labels_train
-
-        # Ensure one_hot_labels_train is a csr_matrix
-        if not isinstance(one_hot_labels_train, csr_matrix):
-            print("Converting one_hot_labels_train to csr_matrix...")
-            one_hot_labels_train = csr_matrix(one_hot_labels_train)
-            
         tce_matrix = compute_tces(
             vocabsize=vec_vocab_size,
             vectorized_training_data=Xtr,
             training_label_matrix=one_hot_labels_train,
-            opt=args,
-            #debug=True
+            opt=args
         )
 
         print("tce_matrix:", type(tce_matrix), tce_matrix.shape)
-        print("tce_matrix[0]:", type(tce_matrix[0]), tce_matrix[0].shape, tce_matrix[0])
-
-        if torch.isnan(tce_matrix).any() or torch.isinf(tce_matrix).any():
-            raise ValueError("[ERROR] tce_matrix contains NaN or Inf values during initialization.")
 
         tce_matrix.to(device)           # must move the TCE embeddings to same device as model
     else:
         tce_matrix = None
-
-    print("\n\tBuilding Classifier...")
 
     hf_trans_model, hf_trans_class_model = get_hf_models(
                     model_name, 
@@ -1368,48 +1336,25 @@ if __name__ == "__main__":
                     num_classes=num_classes, 
                     tokenizer=tokenizer)
     
-    hf_trans_model.to(device)
-    hf_trans_class_model.to(device)
-    """
     print("\n\thf_trans_model:\n", hf_trans_model)
     print("\n\thf_trans_class_model:\n", hf_trans_class_model)
-    """
+
+    hf_trans_model.to(device)
+    hf_trans_class_model.to(device)
 
     # Get embedding size from the model
     dimensions, vec_size = get_embedding_dims(hf_trans_model)
-    # Print for debugging
     print(f'model size: {dimensions}, embedding dimension: {vec_size}')
-    # Concatenate supervised-specific dimensions if args.supervised is True
-    if args.supervised:
-        # Convert tce_matrix.shape to string before concatenating
-        dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
-    # Log the dimensions
-    print("dimensions (for logger):", dimensions)
 
     hf_trans_model = hf_trans_class_model
-    #print("LC HF Sequence Classfier (hf_trans_model):\n", hf_trans_model)
 
-    class_weights = None
-    if (class_type in ['multi-label', 'multilabel']):
-        print("computing class weights...")
-        class_weights = lc_class_weights(labels_train, task_type=class_type)
-        print("class weights:", class_weights)
-    else:
-        print("no class weights computed...")
-
-    lc_model = LCSequenceClassifier(
+    lc_model = LCHFTCEClassifier2(
         hf_model=hf_trans_model,
         num_classes=num_classes,
-        vocab_size=tok_vocab_size,
         class_type=class_type,
-        class_weights=class_weights,
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        trainable_tces=args.tunable,
-        normalize_tces=True,
-        dropout_rate=args.dropprob,
-        comb_method=args.sup_mode,
-        #debug=True
+        comb_method="dot"
     ).to(device)
     print("lc_model:\n", lc_model)
 
@@ -1419,7 +1364,8 @@ if __name__ == "__main__":
         labels_train, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type 
+        class_type=class_type,
+        #supervised_embeddings=train_tces 
     )
 
     val_dataset = LCDataset(
@@ -1427,7 +1373,8 @@ if __name__ == "__main__":
         labels_val, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type
+        class_type=class_type,
+        #supervised_embeddings=val_tces
     )
 
     test_dataset = LCDataset(
@@ -1435,7 +1382,8 @@ if __name__ == "__main__":
         labels_test, 
         tokenizer, 
         max_length=max_length,
-        class_type=class_type
+        class_type=class_type,
+        #supervised_embeddings=test_tces 
     )
 
     tinit = time()
@@ -1469,10 +1417,10 @@ if __name__ == "__main__":
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
-    
+
     """
-    trainer = LCTrainer(
-        model=lc_model,                                 # Use LCClassifier
+    trainer = CustomTrainer(
+        model=lc_model,  # Use LCClassifier
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
@@ -1481,8 +1429,8 @@ if __name__ == "__main__":
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
     )
     """
-
-    print("\n\tbuilding model...")
+    
+    print("\n\t--- model training and evaluation ---\n")
 
     # Enable anomaly detection during training
     with torch.autograd.set_detect_anomaly(True):
@@ -1506,12 +1454,10 @@ if __name__ == "__main__":
     else:
         y_pred = (preds.predictions > 0.5).astype(int)
     
-    """
     print("labels_test:", type(labels_test), labels_test.shape)
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
     print("y_pred:", type(y_pred), y_pred.shape)
     print("y_pred[0]:", type(y_pred[0]), y_pred[0].shape, y_pred[0])
-    """
 
     print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
 
