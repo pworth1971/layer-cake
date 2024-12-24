@@ -56,7 +56,7 @@ from transformers import AutoConfig, PreTrainedModel
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
-from data.lc_dataset import trans_lc_load_dataset
+from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
@@ -66,8 +66,6 @@ from embedding.supervised import get_supervised_embeddings
 from embedding.pretrained import MODEL_MAP
 
 
-
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
 
 
 DATASET_DIR = "../datasets/"
@@ -1520,7 +1518,10 @@ def parse_args():
 # Main
 if __name__ == "__main__":
 
-    print("\n\t--- TRANS_LAYER_CAKE Version 4.3 ---")
+    program = 'trans_layer_cake'
+    version = '5.1'
+    
+    print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
     print()
 
     args = parse_args()
@@ -1551,7 +1552,7 @@ if __name__ == "__main__":
     print("args:", args)    
 
     # initialize logging and other system run variables
-    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(args)
+    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(args, program, version)
 
     # check to see if model params have been computed already
     if (already_modelled and not args.force):

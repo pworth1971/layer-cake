@@ -43,7 +43,7 @@ TOKEN_BASED_MODELS = ['bert', 'roberta', 'albert', 'distilbert', 'xlnet', 'gpt2'
 
 
 
-def initialize_testing(args):
+def initialize_testing(args, program, version):
 
     print("\n\tinitializing...")
 
@@ -66,6 +66,8 @@ def initialize_testing(args):
     logger = CSVLog(
         file=args.log_file, 
         columns=[
+            'source',
+            'version',
             'os',
             'cpus',
             'mem',
@@ -140,6 +142,9 @@ def initialize_testing(args):
     logger.set_default('mem', system.get_total_mem())
     logger.set_default('mode', run_mode)
 
+    logger.set_default('source', program)
+    logger.set_default('version', version)
+    
     gpus = system.get_gpu_summary()
     if gpus is None:
         gpus = -1   

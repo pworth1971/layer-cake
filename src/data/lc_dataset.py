@@ -38,6 +38,9 @@ from model.LCRepresentationModel import *
 
 
 
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
+
+
 DATASET_DIR = '../datasets/'                        # dataset directory
 
 #
