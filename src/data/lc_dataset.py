@@ -2524,7 +2524,7 @@ def trans_lc_load_dataset(name, seed):
         xtest = _preprocess(pd.Series(xtest), remove_punctuation=False)  
         """
 
-        return (xtrain, ytrain), (xtest, ytest), num_classes, target_names, class_type
+        return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
     else:
         raise ValueError("Unsupported dataset:", name)
 
