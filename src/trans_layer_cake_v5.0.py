@@ -1472,6 +1472,59 @@ def check_empty_docs(data, name):
 
 
 
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.pyplot as plt
+import numpy as np
+
+def visualize_class_distribution_and_weights(labels, target_names, class_type, dataset_name):
+    """
+    Visualize the class distribution and compute class weights for a multi-label or single-label dataset.
+
+    Parameters:
+    - labels: The label matrix (numpy array or csr_matrix), where rows are samples and columns are classes.
+    - target_names: A list of class names corresponding to the columns of the labels.
+    - class_type: A string, either 'single-label' or 'multi-label', to specify the classification type.
+    - dataset_name: A string representing the name of the dataset.
+
+    Returns:
+    - class_weights: A list of computed weights for each class, useful for loss functions.
+    """
+    if isinstance(labels, csr_matrix):
+        labels = labels.toarray()
+
+    # Summing labels across rows gives the count of samples per class
+    class_counts = np.sum(labels, axis=0)
+
+    # Calculate class weights (inverse of frequency)
+    total_samples = labels.shape[0]
+    class_weights = [total_samples / (len(class_counts) * count) if count > 0 else 0 for count in class_counts]
+
+    # Normalize weights
+    max_weight = max(class_weights) if max(class_weights) > 0 else 1
+    class_weights = [w / max_weight for w in class_weights]
+
+    # Visualize class distribution
+    plt.figure(figsize=(14, 8))
+    plt.bar(target_names, class_counts, color='blue', alpha=0.7)
+    plt.xlabel('Classes', fontsize=10)
+    plt.ylabel('Frequency', fontsize=10)
+    plt.title(f'Class Distribution in {dataset_name} ({len(target_names)} Classes)', fontsize=12)
+    plt.xticks(rotation=90, fontsize=8)
+    plt.yticks(fontsize=8)
+    plt.tight_layout()
+    plt.show()
+
+    # Print class names, counts, and weights for debugging
+    print(f"\nClass Distribution and Weights in {dataset_name}:")
+    for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
+        print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
+
+    return class_weights
+
+
+
+
 # Parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
@@ -1779,6 +1832,8 @@ if __name__ == "__main__":
         print("class weights:", class_weights)
     else:
         print("no class weights computed...")
+
+    visualize_class_distribution_and_weights(labels_train, target_names, class_type, args.dataset)
 
     lc_model = LCSequenceClassifier(
         hf_model=hf_trans_model,            # HuggingFace transformer model being used
