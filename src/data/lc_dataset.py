@@ -38,10 +38,12 @@ from model.LCRepresentationModel import *
 
 
 
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
-
+#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
 DATASET_DIR = '../datasets/'                        # dataset directory
+
+
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
@@ -52,6 +54,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
 TEST_SIZE = 0.175                   # test size for train/test split
 NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
+
+
+
 
 nltk.download('stopwords')
 nltk.download('punkt_tab')

@@ -123,6 +123,8 @@ import numpy as np
 
 
 
+import unicodedata
+
 
 class LCTokenizer:
 
