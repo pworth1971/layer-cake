@@ -2,11 +2,13 @@
 
 # Static configurable variables
 PROGRAM_NAME="python ../src/trans_layer_cake_v5.0.py"
+
 LOG_FILE="--log-file ../log/lc_nn_cuda_test.test"
 
-EPOCHS=23
-PATIENCE=2
-SEED=27
+EPOCHS=33
+PATIENCE=3
+
+SEED=42
 
 # Datasets array
 datasets=(
@@ -16,16 +18,19 @@ datasets=(
     "--dataset 20newsgroups"        # 20newsgroups (single label, 20 classes)
     "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
     "--dataset imdb"                # imdb (single-label, 2 classes)
-    #"--dataset arxiv"               # arxiv (multi-label, xxxxx classes)
+    "--dataset arxiv"               # arxiv (multi-label, xxxxx classes)
     #"--dataset cmu_movie_corpus"    # CMU Movie Corpus (multi-label, 363 classes)
 )
 
+# -------------------------------------------------------------------------------
+#
 # Pretrained embeddings array (indexed to preserve order)
+# NB: issues with Albert so leaving out. LlaMa has not been tested
+#
 embedding_names=(
     "BERT"
     "ROBERTA"
     "DISTILBERT"
-    "ALBERT"
     "XLNET"
     "GPT2"
 )
@@ -34,10 +39,10 @@ embedding_args=(
     "--pretrained bert"
     "--pretrained roberta"
     "--pretrained distilbert"
-    "--pretrained albert"
     "--pretrained xlnet"
     "--pretrained gpt2"
 )
+# ------------------------------------------------------------------------------
 
 # Iterate through datasets and embeddings
 for dataset in "${datasets[@]}"; do

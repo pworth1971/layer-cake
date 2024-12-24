@@ -10,9 +10,13 @@ from torchtext.vocab import GloVe as TorchTextGloVe
 from transformers import BertModel, BertTokenizerFast
 
 
+VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
 
-
-
+# ----------------------------------------------------------------------------------------------------------------------------
+#
+# pretrained models we are using for legacy Neural Model (supports word based models)
+#
+AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext']        
 
 #
 # pretrained models supported by custom CNN, LSTM and ATTN neural models
@@ -22,6 +26,15 @@ from transformers import BertModel, BertTokenizerFast
 
 GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 
+#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
+#GLOVE_SET = '6B'                                          # GloVe set to use
+
+#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
+#GLOVE_SET = '42B'                                          # GloVe set to use
+
+GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
+GLOVE_SET = '840B'                                          # GloVe set to use
+
 
 GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
 
@@ -29,14 +42,12 @@ WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, cas
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
 FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
+#
+# ----------------------------------------------------------------------------------------------------------------------------
 
 
 
-AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext', 'bert']
-
-VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
-
-# -------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------
 #
 # default pretrained models we are using - Hugging Face Library for Transformer models
 #
@@ -52,6 +63,9 @@ ROBERTA_MODEL = 'roberta-base'                                                  
 #DISTILBERT_MODEL = 'distilbert-base-cased'                                         # dimension = 768, case sensitive
 DISTILBERT_MODEL = 'distilbert-base-uncased'                                       # dimension = 768, case insensitive
 
+#
+# TODO: Issues with Albert model so leaving out for now
+#
 ALBERT_MODEL = 'albert-base-v2'                                                    # dimension = 128, case insensitive
 #ALBERT_MODE = 'albert-large-v2'                                                    # dimension = 128, case insensitive (uncased)  
 #ALBERT_MODEL = 'albert-xlarge-v2'                                                   # dimension = 128, case insensitive (uncased)      
@@ -65,32 +79,38 @@ GPT2_MODEL = 'gpt2'                                                             
 #GPT2_MODEL = 'gpt2-large'                                                          # dimension = 1280, case sensitive
 #GPT2_MODEL = 'gpt2-xl'                                                              # dimension = 1280, case sensitive
 
-LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
-# -------------------------------------------------------------------------------------------------------
-
 
 # 
-# Model Map for transformer based models
+# Model Map for transformer based models (trans_layer_cake)
 #
 MODEL_MAP = {
     "bert": BERT_MODEL,
     "roberta": ROBERTA_MODEL,
     "distilbert": DISTILBERT_MODEL,
-    "albert": ALBERT_MODEL,                           
     "xlnet": XLNET_MODEL,
     "gpt2": GPT2_MODEL,
-    "llama": LLAMA_MODEL  
 }
 
 MAX_LENGTH = 512  # default max sequence length for the transformer models
 
 #
+# TODO: LlaMa model has not been tested (memory hog)
+# leabing in as placeholder only
+#
+
+#
 # Hugging Face Login info for gated models (eg LlaMa)
+# needed for startup script which set this up
 #
 from huggingface_hub import login
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
+
+LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
+#
+# ----------------------------------------------------------------------------------------------------------------------------
+
 
 
 
@@ -161,16 +181,6 @@ class GloVe(Vectors):
         name = 'glove.{}.{}d.txt'.format(name, str(dim))
         super(GloVe, self).__init__(name, url=url, **kwargs)
 """
-
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-#GLOVE_SET = '6B'                                          # GloVe set to use
-
-#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_SET = '42B'                                          # GloVe set to use
-
-GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
-GLOVE_SET = '840B'                                          # GloVe set to use
-
 
 
 class GloVeEmbeddings(PretrainedEmbeddings):

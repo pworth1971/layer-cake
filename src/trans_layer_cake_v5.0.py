@@ -1778,22 +1778,21 @@ if __name__ == "__main__":
         print("no class weights computed...")
 
     lc_model = LCSequenceClassifier(
-        hf_model=hf_trans_model,
-        num_classes=num_classes,
+        hf_model=hf_trans_model,            # HuggingFace transformer model being used
+        num_classes=num_classes,            # number of classes for classification
         vocab_size=tok_vocab_size,
-        class_type=class_type,
-        class_weights=class_weights,
+        class_type=class_type,              # classification type, options 'single-label' or 'multi-label'
+        class_weights=class_weights,        # class weights for loss function
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        finetune=args.tunable,
-        normalize_tces=True,
-        #normalize_tces=False,
-        dropout_rate=args.dropprob,
-        comb_method=args.sup_mode,
+        finetune=args.tunable,              # embeddings are trainable (True), default is False (static)
+        normalize_tces=True,                 
+        dropout_rate=args.dropprob,         # dropout rate for TCEs
+        comb_method=args.sup_mode,          # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
         #debug=True
     ).to(device)
 
-    print("\n\t-- FINAL MODEL --:\n", lc_model)
+    print("\n\t-- Final LC Classifier Model --:\n", lc_model)
 
     # Prepare datasets
     train_dataset = LCDataset(
