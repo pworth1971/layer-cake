@@ -2028,7 +2028,7 @@ def trans_lc_load_dataset(name, seed):
 
         #train_data = preprocess_text(imdb_dataset['train']['text'])
         #train_data = _preprocess(imdb_dataset['train']['text'], remove_punctuation=False)
-        train_data = mdb_dataset['train']['text']
+        train_data = imdb_dataset['train']['text']
 
         # Split dataset into training and test data
         #train_data = imdb_dataset['train']['text']
@@ -2042,14 +2042,14 @@ def trans_lc_load_dataset(name, seed):
         test_target = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
 
         train_data = preprocess(
-            train_data, 
+            pd.Series(train_data), 
             remove_punctuation=False,
             lowercase=True,
             remove_stopwords=False
             )
 
         test_data = preprocess(
-            test_data, 
+            pd.Series(test_data), 
             remove_punctuation=False,
             lowercase=True,
             remove_stopwords=False
