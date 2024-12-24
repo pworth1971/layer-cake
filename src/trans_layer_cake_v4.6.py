@@ -69,11 +69,11 @@ from embedding.pretrained import MODEL_MAP
 
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
 
+
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
 
-TEST_SIZE = 0.15
-VAL_SIZE = 0.15
+VAL_SIZE = 0.15             # percentage of data to be set aside for model validation
 
 #
 # hyper parameters
@@ -1324,14 +1324,18 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     Returns:
     - Dictionary of computed metrics.
     """
-    print(f'compute_metrics()... class_type: {class_type}, threshold: {threshold}')
+    """
+    print(f'compute_metrics()... class_type: {class_type}')
     
+    if (class_type in ['multi-label', 'multilabel']):
+        print(f'threshold: {threshold}')
+    """
+
     predictions, labels = eval_pred.predictions, eval_pred.label_ids
 
     if class_type == 'single-label':
         # Convert predictions to class indices
-        preds = np.argmax(predictions, axis=1)
-        #labels = np.argmax(labels, axis=1)                              # Convert one-hot to class indices if needed
+        preds = np.argmax(predictions, axis=1)                  
     elif class_type == 'multi-label':
         # Threshold predictions for multi-label classification
         preds = (predictions > threshold).astype(int)
@@ -1339,9 +1343,11 @@ def compute_metrics(eval_pred, class_type='single-label', threshold=0.5):
     else:
         raise ValueError(f"Unsupported class_type: {class_type}")
 
-    #print("preds:", type(preds), preds.shape)
-    #print("labels:", type(labels), labels.shape)
-
+    """
+    print("preds:", type(preds), preds.shape)
+    print("labels:", type(labels), labels.shape)
+    """
+    
     # Compute metrics
     f1_micro = f1_score(labels, preds, average='micro', zero_division=1)
     f1_macro = f1_score(labels, preds, average='macro', zero_division=1)
@@ -1411,91 +1417,6 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
     return hf_trans_model, hf_trans_class_model
 
 
-
-class LCTrainer(Trainer):
-
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        """
-        Perform a training step on a batch of inputs.
-
-        Subclass and override to inject custom behavior.
-
-        Args:
-            model (:obj:`nn.Module`):
-                The model to train.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
-
-        Return:
-            :obj:`torch.Tensor`: The tensor with training loss on this batch.
-        """
-
-        model.train()
-        inputs = self._prepare_inputs(inputs)
-
-        if self.use_amp:
-            with autocast():
-                loss = self.compute_loss(model, inputs)
-        else:
-            loss = self.compute_loss(model, inputs)
-
-        if self.args.n_gpu > 1:
-            if model.module.config.ctc_loss_reduction == "mean":
-                loss = loss.mean()
-            elif model.module.config.ctc_loss_reduction == "sum":
-                loss = loss.sum() / (inputs["labels"] >= 0).sum()
-            else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
-
-        if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
-
-        if self.use_amp:
-            self.scaler.scale(loss).backward(retain_graph=True)
-        elif self.use_apex:
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward(retain_graph=True)
-        elif self.deepspeed:
-            self.deepspeed.backward(loss, retain_graph=True)
-        else:
-            loss.backward(retain_graph=True)
-
-        return loss.detach()
-
-
-
-class CustomTrainer(Trainer):
-    
-    def training_step(self, model, inputs):
-        """
-        Perform a training step on the model using inputs.
-
-        Args:
-            model: The model to train.
-            inputs: The inputs and targets of the model.
-
-        Returns:
-            torch.Tensor: The training loss on this batch.
-        """
-        model.train()
-        inputs = self._prepare_inputs(inputs)
-
-        # Forward pass
-        outputs = model(**inputs)
-        loss = outputs["loss"]
-
-        if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
-
-        # Backward pass with retain_graph=True
-        #loss.backward(retain_graph=True)  # Adjust based on need
-        self.accelerator.backward(loss, retain_graph=True)
-        
-        return loss.detach()
-    
 
 def init_hf_tokenizer():
 
@@ -1685,8 +1606,6 @@ if __name__ == "__main__":
     check_empty_docs(train_data, "Train")
     check_empty_docs(test_data, "Test")
 
-    print("\n\tinitializing tokenizer, vectorizer and dataset...")
-
     tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
 
     # Print tokenizer details for debugging
@@ -1714,71 +1633,70 @@ if __name__ == "__main__":
     print("labels_test:", type(labels_test), len(labels_test))
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
 
+    #
+    # Vectorize the text data
+    #
+    print("\n\t vectorizing dataset...")
+
+    vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
+        texts_train, 
+        texts_val, 
+        test_data, 
+        tokenizer, 
+        max_length=max_length
+    )
+    print("vectorizer:\n", vectorizer)
+    print("lc_tokenizer:\n", lc_tokenizer)
+
+    print("Xtr:", type(Xtr), Xtr.shape)
+    print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
+    #print("Xtr[1]:", type(Xtr[1]), Xtr[1].shape, Xtr[1])
+    #print("Xtr[1]:", type(Xtr[2]), Xtr[2].shape, Xtr[2])
+
+    print("Xval:", type(Xval), Xval.shape)
+    print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
+    
+    print("Xte:", type(Xte), Xte.shape)
+    print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
+
+    # convert single label y values from array of scalaers to one hot encoded
+    print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
+    vec_vocab_size = len(vectorizer.vocabulary_)
+    print("vec_vocab_size:", vec_vocab_size)
+    tok_vocab_size = len(tokenizer.get_vocab())
+    print("tok_vocab_size:", tok_vocab_size)
+
+    #
+    # validate that the vectorize and tokenizer vocabularies are mirrors of each other
+    # this is imperative for the TCE matrix computation alignment with the (pretrained) 
+    # model embeddings
+    #
+    assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
+
+    # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
+    assert vec_vocab_size == tok_vocab_size, \
+        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
+    tok_vocab = set(tokenizer.get_vocab().keys())
+    vec_vocab = set(vectorizer.vocabulary_.keys())
+    print(f"Tokenizer vocab size: {len(tok_vocab)}, Vectorizer vocab size: {len(vec_vocab)}")
+    print(f"Vocabulary intersection size: {len(tok_vocab & vec_vocab)}")
+
+    spot_check_documents(
+        documents=texts_train,
+        vectorizer=vectorizer,
+        tokenizer=lc_tokenizer, 
+        vectorized_data=Xtr,       
+        num_docs=2,
+    )
+
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
     # then instantiate the LCSequenceClassifier model)
     #
-    # NB we need to vectorize the text first (after loading/preprocessing) to prep the 
-    # matrix for TCE matrix computation 
-    #
     if (args.supervised):
 
         print("\n\tcomputing tces...")
-
-        #
-        # Vectorize the text data
-        #
-        vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
-            texts_train, 
-            texts_val, 
-            test_data, 
-            tokenizer, 
-            max_length=max_length
-        )
-        print("vectorizer:\n", vectorizer)
-        print("lc_tokenizer:\n", lc_tokenizer)
-
-        print("Xtr:", type(Xtr), Xtr.shape)
-        print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
-        #print("Xtr[1]:", type(Xtr[1]), Xtr[1].shape, Xtr[1])
-        #print("Xtr[1]:", type(Xtr[2]), Xtr[2].shape, Xtr[2])
-
-        print("Xval:", type(Xval), Xval.shape)
-        print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
-        
-        print("Xte:", type(Xte), Xte.shape)
-        print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
-
-        # convert single label y values from array of scalaers to one hot encoded
-        print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))
-        vec_vocab_size = len(vectorizer.vocabulary_)
-        print("vec_vocab_size:", vec_vocab_size)
-        tok_vocab_size = len(tokenizer.get_vocab())
-        print("tok_vocab_size:", tok_vocab_size)
-
-        #
-        # validate that the vectorize and tokenizer vocabularies are mirrors of each other
-        # this is imperative for the TCE matrix computation alignment with the (pretrained) 
-        # model embeddings
-        #
-        assert set(vectorizer.vocabulary_.keys()).issubset(tokenizer.get_vocab().keys()), "Vectorizer vocabulary must be a subset of tokenizer vocabulary"
-
-        # Assertion: Ensure vectorizer vocabulary size matches tokenizer vocabulary size
-        assert vec_vocab_size == tok_vocab_size, \
-            f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
-
-        tok_vocab = set(tokenizer.get_vocab().keys())
-        vec_vocab = set(vectorizer.vocabulary_.keys())
-        print(f"Tokenizer vocab size: {len(tok_vocab)}, Vectorizer vocab size: {len(vec_vocab)}")
-        print(f"Vocabulary intersection size: {len(tok_vocab & vec_vocab)}")
-
-        spot_check_documents(
-            documents=texts_train,
-            vectorizer=vectorizer,
-            tokenizer=lc_tokenizer, 
-            vectorized_data=Xtr,       
-            num_docs=2,
-        )
 
         if (class_type in ['single-label', 'singlelabel']):
 
@@ -1925,23 +1843,9 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=custom_data_collator,
-        #compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
         compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type, threshold=MC_THRESHOLD),
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)]
     )
-    
-    """
-    # with custom trainer, LCTrainer...
-    trainer = LCTrainer(
-        model=lc_model,                                     # Use LCClassifier
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=custom_data_collator,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, class_type),
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
-    )
-    """
 
     print("\n\tbuilding model...")
 

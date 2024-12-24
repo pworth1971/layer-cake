@@ -38,20 +38,17 @@ from model.LCRepresentationModel import *
 
 
 
-
-
 DATASET_DIR = '../datasets/'                        # dataset directory
-
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
 #
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
-TEST_SIZE = 0.25                    # test size for train/test split
-NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
 
+MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
+TEST_SIZE = 0.175                   # test size for train/test split
+NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
 
 nltk.download('stopwords')
 nltk.download('punkt_tab')
@@ -1606,13 +1603,191 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         return lcd
 
 
+
+
+
+
+def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False, remove_stopwords=False):
+    """
+    Preprocess a pandas Series of texts by removing punctuation, optionally lowercasing, and optionally removing stopwords.
+    Numbers are not masked, and text remains in its original form unless modified by these options.
+
+    Parameters:
+    - text_series: A pandas Series containing text data (strings).
+    - remove_punctuation: Boolean indicating whether to remove punctuation.
+    - lowercase: Boolean indicating whether to convert text to lowercase.
+    - remove_stopwords: Boolean indicating whether to remove stopwords.
+
+    Returns:
+    - processed_texts: A list containing processed text strings.
+    """
+
+    print("preprocessing...")
+    print("text_series:", type(text_series), text_series.shape)
+    
+    # Load stop words once outside the loop
+    stop_words = set(stopwords.words('english')) if remove_stopwords else set()
+    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+    # Function to process each text
+    def process_text(text):
+        if lowercase:
+            text = text.lower()
+
+        if remove_punctuation:
+            text = text.translate(punctuation_table)
+
+        if remove_stopwords:
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+        # Ensure extra spaces are removed after stopwords are deleted
+        return ' '.join(text.split())
+
+    # Use Parallel processing with multiple cores
+    processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+    # Return as a list
+    return list(processed_texts)
+
+
+
+def _mask_numbers(data, number_mask='[NUM]'):
+    """
+    Masks numbers in the given text data with a placeholder.
+    """
+    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+    return [mask.sub(number_mask, text) for text in data]
+
+
+def preprocess_text(data):
+    """
+    Preprocess the text data by converting to lowercase, masking numbers, 
+    removing punctuation, and removing stopwords.
+    """
+    import re
+    from nltk.corpus import stopwords
+    from string import punctuation
+
+    stop_words = set(stopwords.words('english'))
+    punct_table = str.maketrans("", "", punctuation)
+
+    def _remove_punctuation_and_stopwords(data):
+        """
+        Removes punctuation and stopwords from the text data.
+        """
+        cleaned = []
+        for text in data:
+            # Remove punctuation and lowercase text
+            text = text.translate(punct_table).lower()
+            # Remove stopwords
+            tokens = text.split()
+            tokens = [word for word in tokens if word not in stop_words]
+            cleaned.append(" ".join(tokens))
+        return cleaned
+
+    # Apply preprocessing steps
+    masked = _mask_numbers(data)
+    cleaned = _remove_punctuation_and_stopwords(masked)
+    return cleaned
+
+
+
+
+def _preprocess_old(text_series: pd.Series, remove_punctuation=True):
+    """
+    Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
+    We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
+
+    Parameters:
+    - text_series: A pandas Series containing text data (strings).
+
+    Returns:
+    - processed_texts: A NumPy array containing processed text strings.
+    """
+
+    print("_preprocessing...")
+    print("text_series:", type(text_series), text_series.shape)
+
+    # Load stop words once outside the loop
+    stop_words = set(stopwords.words('english'))
+    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+    # Function to process each text (masking numbers, removing punctuation, and stopwords)
+    def process_text(text):
+
+        # Remove punctuation
+        if (remove_punctuation):
+            text = text.translate(punctuation_table)
+
+        # Remove stopwords without tokenizing or lowercasing
+        for stopword in stop_words:
+            text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+        # Ensure extra spaces are removed after stopwords are deleted
+        return ' '.join(text.split())
+
+    # Use Parallel processing with multiple cores
+    processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+    # Return as NumPy array
+    return np.array(processed_texts)
+
+
+
+
+
+def _label_matrix(tr_target, te_target):
+    """
+    Converts multi-label target data into a binary matrix format using MultiLabelBinarizer.
+    
+    Input:
+    - tr_target: A list (or iterable) of multi-label sets for the training data. 
+                 Each element is a list, tuple, or set of labels assigned to a sample.
+                 Example: [["label1", "label2"], ["label3"], ["label2", "label4"]]
+    - te_target: A list (or iterable) of multi-label sets for the test data.
+                 Each element is a list, tuple, or set of labels assigned to a sample.
+                 Example: [["label1"], ["label3", "label4"]]
+    
+    Output:
+    - ytr: A binary label matrix for the training data where each column represents a label.
+           The matrix has shape (n_samples, n_classes).
+    - yte: A binary label matrix for the test data where each column represents a label.
+           The matrix has shape (n_samples, n_classes).
+    - mlb.classes_: A list of all unique classes (labels) across the training data.
+    """
+    
+    """
+    print("_label_matrix...")
+    print("tr_target:", tr_target)
+    print("te_target:", te_target)
+    """
+
+    mlb = MultiLabelBinarizer(sparse_output=True)
+    
+    ytr = mlb.fit_transform(tr_target)
+    yte = mlb.transform(te_target)
+
+    """
+    print("ytr:", type(ytr), ytr.shape)
+    print("yte:", type(yte), yte.shape)
+
+    print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
+    """
+    
+    return ytr, yte, mlb.classes_
+
+
+
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # Load dataset method for transformer based neural models
 #
 def trans_lc_load_dataset(name, seed):
 
-    print("\n\tLoading dataset:", name)
+    print("\n\tLoading dataset for transformer:", name)
     print("seed:", seed)
 
     if name == "20newsgroups":
@@ -1629,29 +1804,97 @@ def trans_lc_load_dataset(name, seed):
         test_data_processed = preprocess_text(test_data.data)
         """
 
-        train_data_processed = _preprocess(pd.Series(train_data.data))
-        test_data_processed = _preprocess(pd.Series(test_data.data))
+        train_data_processed = preprocess(
+            pd.Series(train_data.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False
+            )
+
+        test_data_processed = preprocess(
+            pd.Series(test_data.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False
+            )
 
         class_type = 'single-label'
 
         return (train_data_processed, train_data.target), (test_data_processed, test_data.target), num_classes, target_names, class_type
+        
 
+    elif name == "reuters21578":
+        
+        import os
 
+        data_path = os.path.join(DATASET_DIR, 'reuters21578')    
+        print("data_path:", data_path)  
+
+        class_type = 'multi-label'
+
+        train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
+        test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
+
+        train_data = preprocess(
+            pd.Series(train_labelled_docs.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False)
+        
+        test_data = preprocess(
+            pd.Series(test_labelled_docs.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False)
+        
+        """
+        train_data = preprocess_text(train_labelled_docs.data)
+        test_data = preprocess_text(list(test_labelled_docs.data))
+        """
+
+        train_target = train_labelled_docs.target
+        test_target = test_labelled_docs.target
+        
+        train_target, test_target, labels = _label_matrix(train_target, test_target)
+
+        train_target = train_target.toarray()                                     # Convert to dense
+        test_target = test_target.toarray()                                       # Convert to dense
+
+        target_names = train_labelled_docs.target_names
+        num_classes = len(target_names)
+        
+        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+        
     elif name == "ohsumed":
 
         import os
         
         data_path = os.path.join(DATASET_DIR, 'ohsumed50k')
+
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
         test = fetch_ohsumed50k(subset='test', data_path=data_path)
 
+        """
         train_data = preprocess_text(devel.data)
         test_data = preprocess_text(test.data)
+        """
+        
+        """
+        train_data = _preprocess(pd.Series(devel.data), remove_punctuation=False)
+        test_data = _preprocess(pd.Series(test.data), remove_punctuation=False)
+        """
 
-        """
-        train_data = _preprocess(pd.Series(devel.data))
-        test_data = _preprocess(pd.Series(test.data))
-        """
+        train_data = preprocess(
+            pd.Series(devel.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False)
+        
+        test_data = preprocess(
+            pd.Series(test.data), 
+            remove_punctuation=False, 
+            lowercase=True, 
+            remove_stopwords=False)
 
         train_target, test_target = devel.target, test.target
         class_type = 'multi-label'
@@ -1666,42 +1909,7 @@ def trans_lc_load_dataset(name, seed):
         num_classes = len(target_names)
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
-
-
-    elif name == "reuters21578":
-        
-        import os
-
-        data_path = os.path.join(DATASET_DIR, 'reuters21578')    
-        print("data_path:", data_path)  
-
-        train_labelled_docs = fetch_reuters21578(subset='train', data_path=data_path)
-        test_labelled_docs = fetch_reuters21578(subset='test', data_path=data_path)
-
-        """
-        train_data = preprocess_text(train_labelled_docs.data)
-        test_data = preprocess_text(list(test_labelled_docs.data))
-        """
-
-        train_data = _preprocess(pd.Series(train_labelled_docs.data))
-        test_data = _preprocess(pd.Series(test_labelled_docs.data))
-
-        train_target = train_labelled_docs.target
-        test_target = test_labelled_docs.target
-        
-        class_type = 'multi-label'
-
-        train_target, test_target, labels = _label_matrix(train_target, test_target)
-
-        train_target = train_target.toarray()                                     # Convert to dense
-        test_target = test_target.toarray()                                       # Convert to dense
-
-        target_names = train_labelled_docs.target_names
-        num_classes = len(target_names)
-        
-        return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
-
     elif name == "bbc-news":
 
         import os
@@ -1730,14 +1938,24 @@ def trans_lc_load_dataset(name, seed):
             random_state = seed,
         )
 
+        """
         train_data = preprocess_text(train_data.tolist())
         test_data = preprocess_text(test_data.tolist())
+        """
 
-        # reset indeces
-        """
-        train_data = train_data.reset_index(drop=True)
-        test_data = test_data.reset_index(drop=True)
-        """
+        train_data = preprocess(
+            train_data, 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        test_data = preprocess(
+            test_data, 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
         
         #
         # set up label targets
@@ -1761,23 +1979,32 @@ def trans_lc_load_dataset(name, seed):
 
         data_path = os.path.join(DATASET_DIR, 'rcv1')
         
+        class_type = 'multi-label'
+
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
+        """
         train_data = preprocess_text(devel.data)
         test_data = preprocess_text(test.data)
-
-        """
-        train_data, train_target = devel.data, devel.target
-        test_data, test_target = test.data, test.target
         """
 
-        train_target, test_target = devel.target, test.target
-        class_type = 'multi-label'
+        train_data = preprocess(
+            pd.Series(devel.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
 
-        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
-        #self.devel_raw, self.test_raw = devel.data, test.data
+        test_data = preprocess(
+            pd.Series(test.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
         
+        train_target, test_target = devel.target, test.target
+                
         train_target, test_target, target_names = _label_matrix(train_target, test_target)
 
         train_target = train_target.toarray()                                     # Convert to dense
@@ -1792,23 +2019,41 @@ def trans_lc_load_dataset(name, seed):
         from datasets import load_dataset
         import os
 
+        class_type = 'single-label'
+
         data_path = os.path.join(DATASET_DIR, 'imdb')
 
         # Load IMDB dataset using the Hugging Face Datasets library
         imdb_dataset = load_dataset('imdb', cache_dir=data_path)
 
-        train_data = preprocess_text(imdb_dataset['train']['text'])
+        #train_data = preprocess_text(imdb_dataset['train']['text'])
+        #train_data = _preprocess(imdb_dataset['train']['text'], remove_punctuation=False)
+        train_data = mdb_dataset['train']['text']
 
         # Split dataset into training and test data
         #train_data = imdb_dataset['train']['text']
         train_target = np.array(imdb_dataset['train']['label'], dtype=np.int64)  # Convert to numpy array of type int64
 
         #test_data = imdb_dataset['test']['text']
-        test_data = preprocess_text(imdb_dataset['test']['text'])
+        #test_data = preprocess_text(imdb_dataset['test']['text'])
+        #test_data = _preprocess(imdb_dataset['test']['text'], remove_punctuation=False)
+        test_data = imdb_dataset['test']['text']
+
         test_target = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
 
-        # Set class_type to single-label classification
-        class_type = 'single-label'
+        train_data = preprocess(
+            train_data, 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        test_data = preprocess(
+            test_data, 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
 
         # Define target names
         target_names = ['negative', 'positive']
@@ -1819,6 +2064,8 @@ def trans_lc_load_dataset(name, seed):
     elif name == 'arxiv':
 
         import os, json, re
+
+        class_type = 'multi-label'
 
         sci_field_map = {'astro-ph': 'Astrophysics',
                 'astro-ph.CO': 'Cosmology and Nongalactic Astrophysics',
@@ -2097,7 +2344,6 @@ def trans_lc_load_dataset(name, seed):
         print(papers_dataframe.head())
         """
 
-        """
         # clean the text, remove special chracters, etc
         def clean_text(text):
             # Mask numbers
@@ -2110,6 +2356,8 @@ def trans_lc_load_dataset(name, seed):
 
         # Apply cleaning to dataset texts
         papers_dataframe['text'] = papers_dataframe['text'].apply(clean_text)
+        
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
         """
@@ -2137,14 +2385,8 @@ def trans_lc_load_dataset(name, seed):
         target_names = multi_label_encoder.classes_
         num_classes = len(target_names)
 
-        # split dataset into training and validation set
+        # split dataset into training and test set
         xtrain, xtest, ytrain, ytest = train_test_split(papers_dataframe['text'], y, test_size=TEST_SIZE, random_state=seed)
-
-        xtrain = preprocess_text(xtrain)
-        xtest = preprocess_text(xtest)  
-
-        # Classification type
-        class_type = "multi-label"
 
         return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
     
@@ -2171,7 +2413,8 @@ def trans_lc_load_dataset(name, seed):
         import os
         import re
 
-        #print("Loading CMU Movie Corpus dataset...")
+        # Classification type
+        class_type = "multi-label"
 
         data_path = os.path.join(DATASET_DIR, 'cmu_movie_corpus')
         print("data_path:", data_path)
@@ -2259,7 +2502,7 @@ def trans_lc_load_dataset(name, seed):
             return ' '.join(no_stopword_text)
         
         movies_new['clean_plot'] = movies_new['clean_plot'].apply(lambda x: remove_stopwords(x))
-
+        
         mlb = MultiLabelBinarizer()
         mlb.fit(movies_new['genre_new'])
 
@@ -2270,141 +2513,19 @@ def trans_lc_load_dataset(name, seed):
         target_names = mlb.classes_
         num_classes = len(target_names)
 
-        # split dataset into training and validation set
+        # split dataset into training and test set
         xtrain, xtest, ytrain, ytest = train_test_split(movies_new['clean_plot'], y, test_size=TEST_SIZE, random_state=seed)
 
-        # Classification type
-        class_type = "multi-label"
+        """
+        xtrain = _preprocess(pd.Series(xtrain), remove_punctuation=False)
+        xtest = _preprocess(pd.Series(xtest), remove_punctuation=False)  
+        """
 
-        return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
+        return (xtrain, ytrain), (xtest, ytest), num_classes, target_names, class_type
     else:
         raise ValueError("Unsupported dataset:", name)
 
 
-
-
-def _mask_numbers(data, number_mask='[NUM]'):
-    """
-    Masks numbers in the given text data with a placeholder.
-    """
-    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
-    return [mask.sub(number_mask, text) for text in data]
-
-
-def preprocess_text(data):
-    """
-    Preprocess the text data by converting to lowercase, masking numbers, 
-    removing punctuation, and removing stopwords.
-    """
-    import re
-    from nltk.corpus import stopwords
-    from string import punctuation
-
-    stop_words = set(stopwords.words('english'))
-    punct_table = str.maketrans("", "", punctuation)
-
-    def _remove_punctuation_and_stopwords(data):
-        """
-        Removes punctuation and stopwords from the text data.
-        """
-        cleaned = []
-        for text in data:
-            # Remove punctuation and lowercase text
-            text = text.translate(punct_table).lower()
-            # Remove stopwords
-            tokens = text.split()
-            tokens = [word for word in tokens if word not in stop_words]
-            cleaned.append(" ".join(tokens))
-        return cleaned
-
-    # Apply preprocessing steps
-    masked = _mask_numbers(data)
-    cleaned = _remove_punctuation_and_stopwords(masked)
-    return cleaned
-
-
-
-def _preprocess(text_series: pd.Series, remove_punctuation=True):
-    """
-    Preprocess a pandas Series of texts by removing punctuation and stopwords, leavig numbers unmasked.
-    We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
-
-    Parameters:
-    - text_series: A pandas Series containing text data (strings).
-
-    Returns:
-    - processed_texts: A NumPy array containing processed text strings.
-    """
-
-    print("_preprocessing...")
-    print("text_series:", type(text_series), text_series.shape)
-
-    # Load stop words once outside the loop
-    stop_words = set(stopwords.words('english'))
-    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
-
-    # Function to process each text (masking numbers, removing punctuation, and stopwords)
-    def process_text(text):
-
-        # Remove punctuation
-        if (remove_punctuation):
-            text = text.translate(punctuation_table)
-
-        # Remove stopwords without tokenizing or lowercasing
-        for stopword in stop_words:
-            text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
-
-        # Ensure extra spaces are removed after stopwords are deleted
-        return ' '.join(text.split())
-
-    # Use Parallel processing with multiple cores
-    processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
-
-    # Return as NumPy array
-    return np.array(processed_texts)
-
-
-
-
-def _label_matrix(tr_target, te_target):
-    """
-    Converts multi-label target data into a binary matrix format using MultiLabelBinarizer.
-    
-    Input:
-    - tr_target: A list (or iterable) of multi-label sets for the training data. 
-                 Each element is a list, tuple, or set of labels assigned to a sample.
-                 Example: [["label1", "label2"], ["label3"], ["label2", "label4"]]
-    - te_target: A list (or iterable) of multi-label sets for the test data.
-                 Each element is a list, tuple, or set of labels assigned to a sample.
-                 Example: [["label1"], ["label3", "label4"]]
-    
-    Output:
-    - ytr: A binary label matrix for the training data where each column represents a label.
-           The matrix has shape (n_samples, n_classes).
-    - yte: A binary label matrix for the test data where each column represents a label.
-           The matrix has shape (n_samples, n_classes).
-    - mlb.classes_: A list of all unique classes (labels) across the training data.
-    """
-    
-    """
-    print("_label_matrix...")
-    print("tr_target:", tr_target)
-    print("te_target:", te_target)
-    """
-
-    mlb = MultiLabelBinarizer(sparse_output=True)
-    
-    ytr = mlb.fit_transform(tr_target)
-    yte = mlb.transform(te_target)
-
-    """
-    print("ytr:", type(ytr), ytr.shape)
-    print("yte:", type(yte), yte.shape)
-
-    print("MultiLabelBinarizer.classes_:\n", mlb.classes_)
-    """
-    
-    return ytr, yte, mlb.classes_
 
 
 

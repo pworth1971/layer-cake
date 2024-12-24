@@ -41,30 +41,29 @@ VECTOR_CACHE = "../.vector_cache"                               # cache director
 # default pretrained models we are using - Hugging Face Library for Transformer models
 #
 
-#BERT_MODEL = 'bert-base-uncased'                                                   # dimension = 1024, case insensitive
+BERT_MODEL = 'bert-base-uncased'                                                   # dimension = 768, case insensitive
 #BERT_MODEL = 'bert-base-cased'                                                     # dimension = 768, case sensitive
-BERT_MODEL = 'bert-large-uncased'                                                   # dimension = 1024, case insensitive
+#BERT_MODEL = 'bert-large-uncased'                                                   # dimension = 1024, case insensitive
 #BERT_MODEL = 'bert-large-cased'                                                    # dimension = 1024, case sensitive
 
-#ROBERTA_MODEL = 'roberta-base'                                                     # dimension = 768, case sensitive
-ROBERTA_MODEL = 'roberta-large'                                                     # dimension = 1024, case sensitive                 
+ROBERTA_MODEL = 'roberta-base'                                                     # dimension = 768, case sensitive
+#ROBERTA_MODEL = 'roberta-large'                                                     # dimension = 1024, case sensitive                 
 
 #DISTILBERT_MODEL = 'distilbert-base-cased'                                         # dimension = 768, case sensitive
 DISTILBERT_MODEL = 'distilbert-base-uncased'                                       # dimension = 768, case insensitive
 
-#ALBERT_MODEL = 'albert-base-v2'                                                    # dimension = 128, case insensitive
+ALBERT_MODEL = 'albert-base-v2'                                                    # dimension = 128, case insensitive
 #ALBERT_MODE = 'albert-large-v2'                                                    # dimension = 128, case insensitive (uncased)  
-ALBERT_MODEL = 'albert-xlarge-v2'                                                   # dimension = 128, case insensitive (uncased)      
+#ALBERT_MODEL = 'albert-xlarge-v2'                                                   # dimension = 128, case insensitive (uncased)      
 #ALBERT_MODE = 'albert-xxlarge-v2'                                                  # dimension = 128, case insensitive (uncased)      
 
-#XLNET_MODEL = 'xlnet-base-cased'                                                   # dimension = 768, case sensitive
-XLNET_MODEL = 'xlnet-large-cased'                                                   # dimension = 1024, case sensitive
+XLNET_MODEL = 'xlnet-base-cased'                                                   # dimension = 768, case sensitive
+#XLNET_MODEL = 'xlnet-large-cased'                                                   # dimension = 1024, case sensitive
 
-#GPT2_MODEL = 'gpt2'                                                                # dimension = 768, case sensitive
+GPT2_MODEL = 'gpt2'                                                                # dimension = 768, case sensitive
 #GPT2_MODEL = 'gpt2-medium'                                                         # dimension = 1024, case sensitive
 #GPT2_MODEL = 'gpt2-large'                                                          # dimension = 1280, case sensitive
-GPT2_MODEL = 'gpt2-xl'                                                              # dimension = 1280, case sensitive
-
+#GPT2_MODEL = 'gpt2-xl'                                                              # dimension = 1280, case sensitive
 
 LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 # -------------------------------------------------------------------------------------------------------
