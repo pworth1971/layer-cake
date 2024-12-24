@@ -1480,7 +1480,7 @@ def parse_args():
 
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
-    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama'], help='Pretrained embeddings')
+    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], help='supported language model types for dataset representation')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
     parser.add_argument('--sup-mode', type=str, default='cat', help='How to combine TCEs with model embeddings (add, dot, cat)')
@@ -1538,16 +1538,19 @@ if __name__ == "__main__":
         args.roberta_path = model_path
     elif (args.pretrained == 'distilbert'):
         args.distilbert_path = model_path
-    elif (args.pretrained == 'albert'):
-        args.albert_path = model_path
     elif (args.pretrained == 'xlnet'):
         args.xlnet_path = model_path
     elif (args.pretrained == 'gpt2'):
         args.gpt2_path = model_path
-    elif (args.pretrained == 'llama'):
-        args.llama_path = model_path
     else:
         raise ValueError("Unsupported pretrained model:", args.pretrained)
+    
+    """
+    elif (args.pretrained == 'albert'):
+        args.albert_path = model_path
+    elif (args.pretrained == 'llama'):
+        args.llama_path = model_path
+    """
     
     print("args:", args)    
 
