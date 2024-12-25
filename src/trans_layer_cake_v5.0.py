@@ -70,6 +70,7 @@ from embedding.pretrained import MODEL_MAP
 
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
+PICKLE_DIR = "../pickles/"
 
 VAL_SIZE = 0.15             # percentage of data to be set aside for model validation
 
@@ -1544,6 +1545,52 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
     return class_weights
 
 
+import os
+import pickle
+
+def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
+    """
+    Load dataset data from a pickle file if it exists; otherwise, call the dataset loading method,
+    save the returned data to a pickle file, and return the data.
+
+    Parameters:
+    - dataset_name (str): Name of the dataset.
+    - seed (int): Random seed for reproducibility.
+    - pickle_dir (str): Directory where the pickle file is stored.
+
+    Returns:
+    - train_data: Training data.
+    - train_target: Training labels.
+    - test_data: Test data.
+    - labels_test: Test labels.
+    - num_classes: Number of classes in the dataset.
+    - target_names: Names of the target classes.
+    - class_type: Classification type (e.g., 'multi-label', 'single-label').
+    """
+    pickle_file = os.path.join(pickle_dir, f"trans_lc.{dataset_name}.pickle")
+    
+    # Ensure the pickle directory exists
+    os.makedirs(pickle_dir, exist_ok=True)
+
+    if os.path.exists(pickle_file):
+        print(f"Loading dataset from pickle file: {pickle_file}")
+        with open(pickle_file, 'rb') as f:
+            data = pickle.load(f)
+    else:
+        print(f"Pickle file not found. Loading dataset using `trans_lc_load_dataset` for {dataset_name}...")
+        data = trans_lc_load_dataset(dataset_name, seed)  # Call your method to load the dataset
+        
+        # Save the dataset to a pickle file
+        print(f"Saving dataset to pickle file: {pickle_file}")
+        with open(pickle_file, 'wb') as f:
+            pickle.dump(data, f)
+
+    # Unpack and return the data
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = data
+
+    return train_data, train_target, test_data, labels_test, num_classes, target_names, class_type
+
+
 
 
 # Parse arguments
@@ -1666,8 +1713,15 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
 
-    # Load dataset and print class information
-    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset, args.seed)
+    print(f'\n\t--- Loading dataset {args.dataset} data ---')
+
+    #
+    # Load dataset training and test data, associated labels, 
+    # as well as number of classes (labels) and the target names of 
+    # the dataset 
+    #
+    #(train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset, args.seed)
+    train_data, train_target, test_data, labels_test, num_classes, target_names, class_type = get_dataset_data(args.dataset, args.seed)
 
     print("class_type:", class_type)
     print("num_classes:", num_classes)

@@ -1798,8 +1798,7 @@ def _label_matrix(tr_target, te_target):
 #
 def trans_lc_load_dataset(name, seed):
 
-    print("\n\tLoading dataset for transformer:", name)
-    print("seed:", seed)
+    print(f'trans_lc_load_dataset(): dataset: {name}, seed: {seed}...')
 
     if name == "20newsgroups":
 
@@ -1987,13 +1986,32 @@ def trans_lc_load_dataset(name, seed):
     elif name == "rcv1":
 
         import os
+        from sklearn.datasets import fetch_rcv1
 
         data_path = os.path.join(DATASET_DIR, 'rcv1')
         
         class_type = 'multi-label'
 
+        devel_data, devel_target = fetch_rcv1(
+            subset='train', 
+            data_home=data_path, 
+            download_if_missing=True,
+            return_X_y=True,
+            #shuffle-True
+            )
+
+        test_data, test_target = fetch_rcv1(
+            subset='test', 
+            data_home=data_path, 
+            download_if_missing=True,
+            return_X_y=True,
+            #shuffle-True
+            )
+
+        """
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
+        """
 
         """
         train_data = preprocess_text(devel.data)
@@ -2001,20 +2019,20 @@ def trans_lc_load_dataset(name, seed):
         """
 
         train_data = preprocess(
-            pd.Series(devel.data), 
+            pd.DataFrame(devel_data.toarray()).apply(lambda x: ' '.join(x.astype(str)), axis=1),
             remove_punctuation=False,
             lowercase=True,
             remove_stopwords=False
-            )
+        )
 
         test_data = preprocess(
-            pd.Series(test.data), 
+            pd.DataFrame(test_data.toarray()).apply(lambda x: ' '.join(x.astype(str)), axis=1),
             remove_punctuation=False,
             lowercase=True,
             remove_stopwords=False
-            )
-        
-        train_target, test_target = devel.target, test.target
+        )
+ 
+        train_target, test_target = devel_target, test_target
                 
         train_target, test_target, target_names = _label_matrix(train_target, test_target)
 
