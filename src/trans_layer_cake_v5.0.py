@@ -1474,32 +1474,39 @@ def check_empty_docs(data, name):
 
 
 
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.pyplot as plt
-import numpy as np
 
-def visualize_class_distribution_and_weights(labels, target_names, class_type, dataset_name):
+def show_class_dist(labels, target_names, class_type, dataset_name):
     """
-    Visualize the class distribution and compute class weights for a multi-label or single-label dataset.
+    Visualize the class distribution and compute class weights for single-label or multi-label datasets.
 
     Parameters:
-    - labels: The label matrix (numpy array or csr_matrix), where rows are samples and columns are classes.
-    - target_names: A list of class names corresponding to the columns of the labels.
+    - labels: The label matrix (numpy array or csr_matrix for multi-label) or 1D array for single-label.
+    - target_names: A list of class names corresponding to the labels.
     - class_type: A string, either 'single-label' or 'multi-label', to specify the classification type.
     - dataset_name: A string representing the name of the dataset.
 
     Returns:
     - class_weights: A list of computed weights for each class, useful for loss functions.
     """
+    # Handle sparse matrix for multi-label case
     if isinstance(labels, csr_matrix):
         labels = labels.toarray()
 
-    # Summing labels across rows gives the count of samples per class
-    class_counts = np.sum(labels, axis=0)
+    # Calculate class counts differently for single-label vs multi-label
+    if class_type == 'single-label':
+        # For single-label, count occurrences of each class
+        unique_labels, class_counts = np.unique(labels, return_counts=True)
+    elif class_type == 'multi-label':
+        # For multi-label, sum occurrences across the columns
+        class_counts = np.sum(labels, axis=0)
+        unique_labels = np.arange(len(class_counts))
+    else:
+        raise ValueError(f"Unsupported class_type: {class_type}")
 
-    # Calculate class weights (inverse of frequency)
+    # Total number of samples
     total_samples = labels.shape[0]
+
+    # Calculate class weights (inverse frequency)
     class_weights = [total_samples / (len(class_counts) * count) if count > 0 else 0 for count in class_counts]
 
     # Normalize weights
@@ -1527,6 +1534,8 @@ def visualize_class_distribution_and_weights(labels, target_names, class_type, d
 
 
 
+
+
 # Parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
@@ -1543,6 +1552,9 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
+    
+    parser.add_argument('--show-dist', action='store_true', default=False, help='show visual chart of dataset class distribution')
+    
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
     parser.add_argument('--dropprob', type=float, default=0.3, metavar='[0.0, 1.0]', help='dropout probability for TCE Embedding layer classifier head (default: 0.3)')
     parser.add_argument('--net', type=str, default='hf.sc.ff', metavar='str', help=f'net, defaults to hf.sc (only supported option)')
@@ -1835,7 +1847,9 @@ if __name__ == "__main__":
     else:
         print("no class weights computed...")
 
-    visualize_class_distribution_and_weights(labels_train, target_names, class_type, args.dataset)
+    if (args.show_dist):
+        cls_wghts = show_class_dist(labels_train, target_names, class_type, args.dataset)
+        print("cls_wghts:", cls_wghts)
 
     lc_model = LCSequenceClassifier(
         hf_model=hf_trans_model,            # HuggingFace transformer model being used
