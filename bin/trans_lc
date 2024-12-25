@@ -17,7 +17,7 @@ datasets=(
     "--dataset ohsumed"             # ohsumed (multi-label, 23 classes)
     "--dataset imdb"                # imdb (single-label, 2 classes)
     "--dataset arxiv"               # arxiv (multi-label, xxxxx classes)
-    #"--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
+    "--dataset rcv1"                # RCV1-v2 (multi-label, 101 classes)
 )
 
 # -------------------------------------------------------------------------------

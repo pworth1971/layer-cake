@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from time import time
 import random
+import pickle
 
 import matplotlib.pyplot as plt
 
@@ -56,33 +57,31 @@ from transformers import AutoConfig, PreTrainedModel
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
-from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
+
+#from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
+from data.lc_trans_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
 
-from embedding.supervised import get_supervised_embeddings
-
+#from embedding.supervised import get_supervised_embeddings, compute_supervised_embeddings, compute_tces, embedding_matrices, embedding_matrix
+from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
-
-
 
 
 DATASET_DIR = "../datasets/"
 VECTOR_CACHE = "../.vector_cache"
 PICKLE_DIR = "../pickles/"
 
-VAL_SIZE = 0.15             # percentage of data to be set aside for model validation
 
 #
 # hyper parameters
 #
+VAL_SIZE = 0.15             # percentage of data to be set aside for model validation
 MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
 EPOCHS = 25
-
-
 
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
@@ -416,6 +415,47 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, max_length):
 
 
 
+def get_vectorized_data(texts_train, texts_val, test_data, tokenizer, max_length, dataset, pretrained, vtype):
+    """
+    Wrapper for vectorize() method to save and load from a pickle file.
+
+    Parameters:
+        texts_train (list): Training texts.
+        texts_val (list): Validation texts.
+        test_data (list): Test texts.
+        tokenizer: Tokenizer instance.
+        max_length (int): Maximum length for tokenization.
+        dataset (str): Dataset name.
+        pretrained (str): Pretrained model name.
+        vtype (str): Vectorization type.
+
+    Returns:
+        tuple: vectorizer, lc_tokenizer, Xtr, Xval, Xte
+    """
+    pickle_file = os.path.join(PICKLE_DIR, f'vectors_{dataset}.{pretrained}.{vtype}.pickle')
+
+    # Check if the pickle file exists
+    if os.path.exists(pickle_file):
+        print(f"Loading vectorized data from {pickle_file}...")
+        with open(pickle_file, 'rb') as f:
+            vectorizer, lc_tokenizer, Xtr, Xval, Xte = pickle.load(f)
+    else:
+        print(f"Pickle file not found. Vectorizing data and saving to {pickle_file}...")
+        vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
+            texts_train, 
+            texts_val, 
+            test_data, 
+            tokenizer, 
+            max_length=max_length
+        )
+        # Save the results to the pickle file
+        with open(pickle_file, 'wb') as f:
+            pickle.dump((vectorizer, lc_tokenizer, Xtr, Xval, Xte), f)
+
+    return vectorizer, lc_tokenizer, Xtr, Xval, Xte
+
+
+
 def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5):
     """
     Spot-check random documents in the dataset for their TF-IDF calculations.
@@ -473,264 +513,6 @@ def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_
 
     print("--- finished spot checking docs ---")
 
-
-
-
-
-
-def compute_supervised_embeddings(Xtr, Ytr, Xval, Yval, Xte, Yte, opt):
-    """
-    Compute supervised embeddings for a given vectorized datasets - include training, validation
-    and test dataset output.
-
-    Parameters:
-    - vocabsize: Size of the (tokenizer and vectorizer) vocabulary.
-    - Xtr: Vectorized training data (e.g., TF-IDF, count vectors).
-    - Ytr: Multi-label binary matrix for training labels.
-    - Xval: Vectorized validation data.
-    - Yval: Multi-label binary matrix for validation labels.
-    - Xte: Vectorized test data.
-    - Yte: Multi-label binary matrix for test labels.
-    - opt: Options object with configuration (e.g., supervised method, max label space).
-
-    Returns:
-    - training_tces: Supervised embeddings for the training data.
-    - val_tces: Supervised embeddings for the validation data.
-    - test_tces: Supervised embeddings for the test data.
-    """
-
-    print(f'compute_supervised_embeddings(), opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
-
-    training_tces = get_supervised_embeddings(
-        Xtr, 
-        Ytr, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore)
-    )
-    print("training_tces:", type(training_tces), training_tces.shape)
-
-    val_tces = get_supervised_embeddings(
-        Xval, 
-        Yval, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore)
-    )
-    print("val_tces:", type(val_tces), val_tces.shape)
-
-    test_tces = get_supervised_embeddings(
-        Xte, 
-        Yte, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore)
-    )
-    print("test_tces:", type(test_tces), test_tces.shape)
-
-    return training_tces, val_tces, test_tces
-
-
-
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
-    """
-    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
-
-    Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
-    - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
-    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
-    - training_label_matrix: Multi-label binary matrix for training labels.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-
-    Returns:
-    - pretrained_embeddings: A tensor containing pretrained embeddings for the text at hand
-    - wce_matrix: computed supervised (Word-Class) embeddings, aka WCEs
-    - sup_range: Range in the embedding matrix where supervised embeddings are located.
-    """
-
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
-    
-    Xtr = vectorized_training_data
-    Ytr = training_label_matrix
-    #print("\tXtr:", type(Xtr), Xtr.shape)
-    #print("\tYtr:", type(Ytr), Ytr.shape)
-
-    TCE = get_supervised_embeddings(
-        Xtr, 
-        Ytr, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        #dozscore=(not opt.nozscore),
-        dozscore=False,                                 # normalize in the Classifier
-        debug=debug
-    )
-    
-    # Adjust TCE matrix size
-    num_missing_rows = vocabsize - TCE.shape[0]
-    if (debug):
-        print("TCE:", type(TCE), TCE.shape)
-        print("TCE[0]:", type(TCE[0]), TCE[0])
-        print("num_missing_rows:", num_missing_rows)
-
-    if (num_missing_rows > 0):
-        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
-    
-    tce_matrix = torch.from_numpy(TCE).float()
-
-    return tce_matrix
-
-
-
-def embedding_matrices(embedding_layer, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
-    """
-    Creates an embedding matrix that includes both pretrained and supervised embeddings.
-
-    Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
-    - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
-    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
-    - training_label_matrix: Multi-label binary matrix for training labels.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-
-    Returns:
-    - pretrained_embeddings: A tensor containing pretrained embeddings for the text at hand
-    - wce_matrix: computed supervised (Word-Class) embeddings, aka WCEs
-    - sup_range: Range in the embedding matrix where supervised embeddings are located.
-    """
-
-    print(f'embedding_matrices(): opt.pretrained: {opt.pretrained}, vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
-
-    pretrained_embeddings = []
-
-    #embedding_layer = model.get_input_embeddings()
-    embedding_dim = embedding_layer.embedding_dim
-    embedding_matrix = torch.zeros((vocabsize, embedding_dim))
-
-    # Pretrained embeddings
-    if opt.pretrained:
-        for word, idx in word2index.items():
-            token_id = tokenizer.convert_tokens_to_ids(word)
-            if token_id is not None and token_id < embedding_layer.num_embeddings:
-                with torch.no_grad():
-                    embedding = embedding_layer.weight[token_id].cpu()
-                embedding_matrix[idx] = embedding
-            else:
-                out_of_vocabulary.append(word)
-
-        pretrained_embeddings.append(embedding_matrix)
-        print(f'\t[pretrained-matrix] {embedding_matrix.shape}')
-    
-    # Supervised embeddings (WCEs)
-    wce_matrix = None
-    if opt.supervised:
-        print(f'computing supervised embeddings...')
-        Xtr = vectorized_training_data
-        Ytr = training_label_matrix
-        print("\tXtr:", type(Xtr), Xtr.shape)
-        print("\tYtr:", type(Ytr), Ytr.shape)
-
-        WCE = get_supervised_embeddings(Xtr, Ytr, method=opt.supervised_method,
-                                         max_label_space=opt.max_label_space,
-                                         dozscore=(not opt.nozscore),
-                                         transformers=True)
-
-        # Adjust WCE matrix size
-        num_missing_rows = vocabsize - WCE.shape[0]
-        WCE = np.vstack((WCE, np.zeros((num_missing_rows, WCE.shape[1]))))
-        wce_matrix = torch.from_numpy(WCE).float()
-        print('\t[supervised-matrix]', wce_matrix.shape)
-
-    return embedding_matrix, wce_matrix
-
-
-
-def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary, vectorized_training_data, training_label_matrix, opt):
-    """
-    Creates an embedding matrix that includes both pretrained and supervised embeddings.
-
-    Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
-    - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-
-    Returns:
-    - pretrained_embeddings: A tensor containing combined pretrained and supervised embeddings.
-    - sup_range: Range in the embedding matrix where supervised embeddings are located.
-    """
-    print(f'embedding_matrix(): opt.pretrained: {opt.pretrained},  vocabsize: {vocabsize}, opt.supervised: {opt.supervised}')
-          
-    pretrained_embeddings = []
-    sup_range = None
-
-     # Get the embedding layer for pretrained embeddings
-    embedding_layer = model.get_input_embeddings()                  # Works across models like BERT, RoBERTa, DistilBERT, GPT, XLNet, LLaMA
-    embedding_dim = embedding_layer.embedding_dim
-    embedding_matrix = torch.zeros((vocabsize, embedding_dim))
-
-    # If pretrained embeddings are needed
-    if opt.pretrained:
-
-        # Populate embedding matrix with pretrained embeddings
-        for word, idx in word2index.items():
-            token_id = tokenizer.convert_tokens_to_ids(word)
-            if token_id is not None and token_id < embedding_layer.num_embeddings:
-                with torch.no_grad():
-                    embedding = embedding_layer.weight[token_id].cpu()
-                embedding_matrix[idx] = embedding
-            else:
-                out_of_vocabulary.append(word)
-
-        pretrained_embeddings.append(embedding_matrix)
-        print(f'\t[pretrained-matrix] {embedding_matrix.shape}')
-
-    # If supervised embeddings are needed
-    if opt.supervised:
-
-        print(f'computing supervised embeddings...')
-        #Xtr, _ = vectorize_data(word2index, dataset)                # Function to vectorize the dataset
-        #Ytr = dataset.devel_labelmatrix                             # Assuming devel_labelmatrix is the label matrix for training data
-        
-        Xtr = vectorized_training_data
-        Ytr = training_label_matrix
-        
-        print("\tXtr:", type(Xtr), Xtr.shape)
-        print("\tYtr:", type(Ytr), Ytr.shape)
-
-        F = get_supervised_embeddings(
-            Xtr, 
-            Ytr,
-            method=opt.supervised_method,
-            max_label_space=opt.max_label_space,
-            dozscore=(not opt.nozscore),
-            transformers=True
-        )
-        
-        # Adjust supervised embedding matrix to match vocabulary size
-        num_missing_rows = vocabsize - F.shape[0]
-        F = np.vstack((F, np.zeros((num_missing_rows, F.shape[1]))))
-        F = torch.from_numpy(F).float()
-        print('\t[supervised-matrix]', F.shape)
-
-        # Concatenate supervised embeddings
-        offset = pretrained_embeddings[0].shape[1] if pretrained_embeddings else 0
-        sup_range = [offset, offset + F.shape[1]]
-        pretrained_embeddings.append(F)
-
-    # Concatenate all embeddings along the feature dimension
-    pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1) if pretrained_embeddings else None
-    print(f'\t[final pretrained_embeddings] {pretrained_embeddings.shape}')
-
-    return pretrained_embeddings, sup_range, pretrained_embeddings.shape[1]
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1545,9 +1327,6 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
     return class_weights
 
 
-import os
-import pickle
-
 def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
     """
     Load dataset data from a pickle file if it exists; otherwise, call the dataset loading method,
@@ -1641,7 +1420,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '5.1'
+    version = '5.2'
     
     print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
     print()
@@ -1775,6 +1554,18 @@ if __name__ == "__main__":
     #
     print("\n\t vectorizing dataset...")
 
+    vectorizer, lc_tokenizer, Xtr, Xval, Xte = get_vectorized_data(
+        texts_train,
+        texts_val,
+        test_data,
+        tokenizer,
+        max_length,
+        args.dataset,
+        args.pretrained,
+        args.vtype
+    )
+
+    """
     vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
         texts_train, 
         texts_val, 
@@ -1782,6 +1573,8 @@ if __name__ == "__main__":
         tokenizer, 
         max_length=max_length
     )
+    """
+
     print("vectorizer:\n", vectorizer)
     print("lc_tokenizer:\n", lc_tokenizer)
 
