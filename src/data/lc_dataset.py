@@ -65,14 +65,17 @@ stop_words = set(stopwords.words('english'))
 
 
 #
-# LCDataset class for legacy Neural Model (supports word based models)
+# LCDataset class for legacy Neural Model (supports word based models) which includes 
+# word2vec, glove and fasttext integrated with SVM and Logistic Regression ML models and 
+# CNN, LSTM and ATTN based neural models. The ML models are trained with scikit-learn
+# and also support various transformer models as well
 #
 
 class LCDataset:
 
     """
     A class to handle loading and preparing datasets for text classification.
-    Supports multiple datasets including Reuters, 20 Newsgroups, Ohsumed, RCV1, and WIPO.
+    Supports multiple datasets including reuters21578, 20newsgroups, ohsumed, rcv1 (and imdb and arxiv coming).
     """
 
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
