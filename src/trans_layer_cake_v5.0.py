@@ -1609,9 +1609,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
-
-    parser.add_argument('--show-dist', action='store_true', default=False, help='show visual chart of dataset class distribution')
-    
+    parser.add_argument('--show-dist', action='store_true', default=True, help='Show dataset class distribution')
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
     parser.add_argument('--dropprob', type=float, default=0.3, metavar='[0.0, 1.0]', help='dropout probability for TCE Embedding layer classifier head (default: 0.3)')
     parser.add_argument('--net', type=str, default='hf.sc.ff', metavar='str', help=f'net, defaults to hf.sc (only supported option)')
