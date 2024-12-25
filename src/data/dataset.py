@@ -11,6 +11,8 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
 
+from data.lc_trans_dataset import preprocess, get_dataset_data, PICKLE_DIR, RANDOM_SEED
+
 import pickle
 import numpy as np
 from tqdm import tqdm
@@ -126,11 +128,13 @@ class Dataset:
 
     dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'imdb', 'arxiv'}
 
-    def __init__(self, name, vtype='tfidf', custom_tokenizer=None):
+    def __init__(self, name, vtype='tfidf', custom_tokenizer=None, seed=RANDOM_SEED):
 
         print(f'loading dataset {name}')
 
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
+
+        self.name = name
 
         if name=='bbc-news':
             self._load_bbc_news()
@@ -142,16 +146,12 @@ class Dataset:
             self._load_rcv1()
         elif name == 'ohsumed':
             self._load_ohsumed()
-        elif name == 'jrcall':
-            self._load_jrc(version='all')
-        elif name == 'wipo-sl-mg':
-            self._load_wipo('singlelabel', 'maingroup')
-        elif name == 'wipo-ml-mg':
-            self._load_wipo('multilabel', 'maingroup')
-        elif name == 'wipo-sl-sc':
-            self._load_wipo('singlelabel', 'subclass')
-        elif name == 'wipo-ml-sc':
-            self._load_wipo('multilabel', 'subclass')
+        elif name == 'imdb':
+            self._load_imdb()
+        elif name == 'arxiv':
+            self._load_arxiv(seed)
+        else:
+            raise ValueError(f"Unsupported dataset name: {name}")
 
         self.nC = self.devel_labelmatrix.shape[1]
 
@@ -180,8 +180,8 @@ class Dataset:
         return self
 
 
-
     def _load_bbc_news(self):
+
         for dirname, _, filenames in os.walk(DATASET_DIR + 'bbc-news'):
             for filename in filenames:
                 print(os.path.join(dirname, filename))
@@ -218,7 +218,20 @@ class Dataset:
         print("self.X_test_raw[0]:\n", X_test_raw[0])
         """
 
-        self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
+        #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
+        self.devel_raw = preprocess(
+            text_series=X_train_raw,
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=X_test_raw,
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
 
         # Convert target labels to 1D arrays
         self.devel_target = np.array(y_train)       # Flattening the training labels into a 1D array
@@ -244,24 +257,164 @@ class Dataset:
         #print("self.target_names (original labels):\n", self.target_names)
 
 
+    def _load_arxiv(self, seed):
+        """    
+        # load arxiv data:
+        # 
+        # use the transfoer LC parser here, which requires the random seed
+        # NB dataset docs are already preprocessed and converted to lists
+        # Also note that self.,nC (num_classes) is handled in Dataset initialization
+        """
+
+        self.classification_type = 'multilabel'
+
+        self.devel_raw, self.devel_labelmatrix, self.test_raw, self.test_labelmatrix, num_classes, \
+            self.target_names, class_type = get_dataset_data(dataset_name='arxiv', seed=seed, pickle_dir=PICKLE_DIR)
+
+        print("self.devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("self.devel_labelmatrix[0]:", type(self.devel_labelmatrix[0]), self.devel_labelmatrix[0].shape)
+        print("self.test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("self.test_labelmatrix[0]:", type(self.test_labelmatrix[0]), self.test_labelmatrix[0].shape)
+
+        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+
+        print("self.devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("self.devel_target[0]:", type(self.devel_target[0]), self.devel_target[0].shape)
+        print("self.test_target:", type(self.test_target), self.test_target.shape)
+        print("self.test_target[0]:", type(self.test_target[0]), self.test_target[0].shape)
+
+
     def _load_reuters(self):
+
         data_path = os.path.join(get_data_home(), 'reuters21578')
         devel = fetch_reuters21578(subset='train', data_path=data_path)
         test = fetch_reuters21578(subset='test', data_path=data_path)
 
         self.classification_type = 'multilabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+        self.devel_raw = preprocess(
+            text_series=pd.Series(devel.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=pd.Series(test.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
+
+        print("self.devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("self.devel_labelmatrix[0]:", type(self.devel_labelmatrix[0]), self.devel_labelmatrix[0].shape)
+        print("self.test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("self.test_labelmatrix[0]:", type(self.test_labelmatrix[0]), self.test_labelmatrix[0].shape)
+
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         self.target_names = devel.target_names
 
 
+
+
+    def _load_imdb(self):
+
+        from datasets import load_dataset
+        import os
+
+        self.classification_type = 'singlelabel'
+
+        class_type = 'singlelabel'
+
+        data_path = os.path.join(DATASET_DIR, 'imdb')
+
+        # Load IMDB dataset using the Hugging Face Datasets library
+        imdb_dataset = load_dataset('imdb', cache_dir=data_path)
+
+        #train_data = preprocess_text(imdb_dataset['train']['text'])
+        #train_data = _preprocess(imdb_dataset['train']['text'], remove_punctuation=False)
+        train_data = imdb_dataset['train']['text']
+
+        # Split dataset into training and test data
+        #train_data = imdb_dataset['train']['text']
+        y_train = np.array(imdb_dataset['train']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        #test_data = imdb_dataset['test']['text']
+        #test_data = preprocess_text(imdb_dataset['test']['text'])
+        #test_data = _preprocess(imdb_dataset['test']['text'], remove_punctuation=False)
+        test_data = imdb_dataset['test']['text']
+
+        y_test = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        # Convert target labels to 1D arrays
+        self.devel_target = np.array(y_train)       # Flattening the training labels into a 1D array
+        self.test_target = np.array(y_test)         # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(self.devel_target)        # Fit on training labels
+
+        # Transform labels to numeric IDs
+        self.devel_target = label_encoder.transform(self.devel_target)
+        self.test_target = label_encoder.transform(self.test_target)
+        
+        #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
+
+        self.devel_raw = preprocess(
+            pd.Series(train_data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            pd.Series(test_data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        # Define target names
+        self.target_names = ['negative', 'positive']
+        # Save the original label names (classes)
+        #self.target_names = label_encoder.classes_
+        #print("self.target_names (original labels):\n", self.target_names)
+
+        # Pass these reshaped arrays to the _label_matrix method
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))      
+        """
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        """
+
+
     def _load_20news(self):
+
         metadata = ('headers', 'footers', 'quotes')
         devel = fetch_20newsgroups(subset='train', remove=metadata)
         test = fetch_20newsgroups(subset='test', remove=metadata)
+
         self.classification_type = 'singlelabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        self.devel_raw = preprocess(
+            text_series=pd.Series(devel.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=pd.Series(test.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
         self.devel_target, self.test_target = devel.target, test.target
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
         self.target_names = devel.target_names
@@ -273,19 +426,52 @@ class Dataset:
         test = fetch_ohsumed50k(subset='test', data_path=data_path)
 
         self.classification_type = 'multilabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        self.devel_raw = preprocess(
+            text_series=pd.Series(devel.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=pd.Series(test.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         self.target_names = devel.target_names
 
 
     def _load_rcv1(self):
+
         data_path = '../datasets/RCV1-v2/unprocessed_corpus' #TODO: check when missing
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
         self.classification_type = 'multilabel'
-        self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
+
+        self.devel_raw = preprocess(
+            text_series=pd.Series(devel.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=pd.Series(test.data), 
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         self.target_names = devel.target_names
@@ -330,7 +516,7 @@ class Dataset:
 
 
     @classmethod
-    def load(cls, name, vtype='tfidf', pt_model=None, pickle_dir=None):
+    def load(cls, name, vtype='tfidf', pt_model=None, pickle_dir=None, seed=1):
         """
         Load or create the dataset, and serialize it with a model-specific pickle file.
 
@@ -371,7 +557,8 @@ class Dataset:
                 dataset = Dataset(
                     name=name,
                     vtype=vtype,
-                    custom_tokenizer=tokenizer
+                    custom_tokenizer=tokenizer,
+                    seed=seed
                 )
                 print('dumping...')
                 with open(pickle_path, 'wb') as file:
@@ -381,7 +568,8 @@ class Dataset:
             dataset = Dataset(
                 name=name,
                 vtype=vtype,
-                custom_tokenizer=tokenizer
+                custom_tokenizer=tokenizer,
+                seed=seed
             )
 
         return dataset

@@ -8,6 +8,8 @@ from sklearn.model_selection import train_test_split
 
 from data.dataset import *
 
+from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED, show_class_distribution
+
 from embedding.pretrained import *
 from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
 
@@ -537,7 +539,9 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     yte_ = scipy.sparse.vstack(predictions)
     
-    Mf1, mf1, acc = evaluation_legacy(yte, yte_, classification_type)
+    #Mf1, mf1, acc = evaluation_legacy(yte, yte_, classification_type)
+
+    Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     
     tend = time() - tinit
@@ -547,16 +551,13 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-h_loss', value=h_loss, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-precision', value=precision, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-recall', value=recall, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-j_index', value=j_index, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
 
-        """
-        logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-        logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
-        logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
-        logfile.add_row(epoch=epoch, measure=f'{measure_prefix}-loss', value=loss, timelapse=tend)
-        """
-
-    return Mf1
+    return Mf1, mf1, acc, h_loss, precision, recall, j_index, loss
 
 
 def main(opt):
@@ -581,7 +582,7 @@ def main(opt):
 
     # check to see if model params have been computed already
     if (already_modelled and not opt.force):
-        print(f'--- model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} for {opt.dataset} already calculated, run with --force option to override. ---')
+        print(f'\n---{opt.dataset} model {method_name} with embeddings {embeddings}, pretrained == {pretrained}, tunable == {opt.tunable}, and wc_supervised == {opt.supervised} already calculated, run with --force option to override. ---\n')
         exit(0)
 
     pt_model = load_pt_model(opt)
@@ -591,8 +592,11 @@ def main(opt):
         name=opt.dataset, 
         vtype=opt.vtype,
         pt_model=pt_model,
-        pickle_dir=opt.pickle_dir 
-    ).show()
+        pickle_dir=opt.pickle_dir,
+        seed=opt.seed 
+    )
+    
+    print('\n]tDataset:', dataset.show())
 
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, opt, pt_model=pt_model)
     print("word2index:", type(word2index), len(word2index))
@@ -600,7 +604,9 @@ def main(opt):
     vocabsize = len(word2index) + len(out_of_vocabulary)
     print("vocabsize:", vocabsize)
 
-    # dataset split tr/val/test
+    #
+    # dataset split validation data from training data
+    #
     val_size = min(int(len(devel_index) * .2), 20000)
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
@@ -616,6 +622,35 @@ def main(opt):
         print("WCE: None")
     print("sup_range:", sup_range)
     print("vocabsize:", vocabsize)
+
+    #
+    # if specified, show the cl;ass distribution
+    # especially helpful for multi-label datasets
+    # where the class is unevenly distributed and hence
+    # affects micro-f1 scores out of testing (with smaller 
+    # samples where under represented classes in training 
+    # are further underrepresented in the test dataset)
+    #
+    if (opt.show_dist):
+
+        print("drawing class distributions...")
+
+        if (dataset.classification_type == 'multilabel'):
+            class_type = 'multi-label'
+        elif (dataset.classification_type == 'singlelabel'):
+            class_type = 'single-label'
+        else:
+            raise ValueError(f"Unsupported classification type: {dataset.classification_type}")
+
+        cls_wghts = show_class_distribution(
+            labels=ytr, 
+            target_names=dataset.target_names, 
+            class_type=class_type, 
+            dataset_name=dataset.name
+            )
+    
+        print("\n")
+
 
     # Initialize the model
     lc_model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(
@@ -690,6 +725,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural text classification with Word-Class Embeddings')
     parser.add_argument('--dataset', type=str, default='reuters21578', metavar='str',
                         help=f'dataset, one in {available_datasets}')
+    parser.add_argument('--show-dist', action='store_true', default=True, help='Show dataset class distribution')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--batch-size', type=int, default=100, metavar='int',
@@ -720,13 +756,13 @@ if __name__ == '__main__':
                              f'learnable embedding.')
     parser.add_argument('--dropprob', type=float, default=0.5, metavar='[0.0, 1.0]',
                         help='dropout probability (default: 0.5)')
-    parser.add_argument('--seed', type=int, default=1, metavar='int',
-                        help='random seed (default: 1)')
+    parser.add_argument('--seed', type=int, default=RANDOM_SEED, metavar='int',
+                        help=f'random seed (default: {RANDOM_SEED})')
     parser.add_argument('--log-interval', type=int, default=10, metavar='int',
                         help='how many batches to wait before printing training status')
-    parser.add_argument('--log-file', type=str, default='../log/log.csv', metavar='str',
+    parser.add_argument('--log-file', type=str, default='../log/nn_lc_test.test', metavar='str',
                         help='path to the log csv file')
-    parser.add_argument('--pickle-dir', type=str, default='../pickles', metavar='str',
+    parser.add_argument('--pickle-dir', type=str, default=PICKLE_DIR, metavar='str',
                         help=f'if set, specifies the path where to save/load the dataset pickled (set to None if you '
                              f'prefer not to retain the pickle file)')
     parser.add_argument('--test-each', type=int, default=0, metavar='int',

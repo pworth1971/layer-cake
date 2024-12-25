@@ -36,7 +36,7 @@ from data.rcv_reader import fetch_RCV1
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
 DATASET_DIR = '../datasets/'                        # dataset directory
-
+PICKLE_DIR = "../pickles/"
 
 
 #
@@ -47,6 +47,54 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 TEST_SIZE = 0.175                   # test size for train/test split
 NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
+
+RANDOM_SEED = 29
+
+
+
+
+def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
+    """
+    Load dataset data from a pickle file if it exists; otherwise, call the dataset loading method,
+    save the returned data to a pickle file, and return the data.
+
+    Parameters:
+    - dataset_name (str): Name of the dataset.
+    - seed (int): Random seed for reproducibility.
+    - pickle_dir (str): Directory where the pickle file is stored.
+
+    Returns:
+    - train_data: Training data.
+    - train_target: Training labels.
+    - test_data: Test data.
+    - labels_test: Test labels.
+    - num_classes: Number of classes in the dataset.
+    - target_names: Names of the target classes.
+    - class_type: Classification type (e.g., 'multi-label', 'single-label').
+    """
+    pickle_file = os.path.join(pickle_dir, f"trans_lc.{dataset_name}.pickle")
+    
+    # Ensure the pickle directory exists
+    os.makedirs(pickle_dir, exist_ok=True)
+
+    if os.path.exists(pickle_file):
+        print(f"Loading dataset from pickle file: {pickle_file}")
+        with open(pickle_file, 'rb') as f:
+            data = pickle.load(f)
+    else:
+        print(f"Pickle file not found. Loading dataset using `trans_lc_load_dataset` for {dataset_name}...")
+        data = trans_lc_load_dataset(dataset_name, seed)  # Call your method to load the dataset
+        
+        # Save the dataset to a pickle file
+        print(f"Saving dataset to pickle file: {pickle_file}")
+        with open(pickle_file, 'wb') as f:
+            pickle.dump(data, f)
+
+    # Unpack and return the data
+    (train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = data
+
+    return train_data, train_target, test_data, labels_test, num_classes, target_names, class_type
+
 
 
 
@@ -191,8 +239,14 @@ def trans_lc_load_dataset(name, seed):
 
     if name == "20newsgroups":
 
+        """
         train_data = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'))
         test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
+        """
+
+        metadata = ('headers', 'footers', 'quotes')
+        train_data = fetch_20newsgroups(subset='train', remove=metadata)
+        test_data = fetch_20newsgroups(subset='test', remove=metadata)
 
         target_names = list(set(train_data.target_names))  # Ensures unique class names
         num_classes = len(target_names)
@@ -953,3 +1007,75 @@ def trans_lc_load_dataset(name, seed):
         return (xtrain.tolist(), ytrain), (xtest.tolist(), ytest), num_classes, target_names, class_type
     else:
         raise ValueError("Unsupported dataset:", name)
+
+
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.sparse import csr_matrix
+
+def show_class_distribution(labels, target_names, class_type, dataset_name, display_mode='text'):
+    """
+    Visualize the class distribution and compute class weights for single-label or multi-label datasets.
+    Supports graphical display or text-based summary for remote sessions.
+
+    Parameters:
+    - labels: The label matrix (numpy array or csr_matrix for multi-label) or 1D array for single-label.
+    - target_names: A list of class names corresponding to the labels.
+    - class_type: A string, either 'single-label' or 'multi-label', to specify the classification type.
+    - dataset_name: A string representing the name of the dataset.
+    - display_mode: A string, 'both', 'text', or 'graph'. Controls whether to display a graph, text, or both.
+
+    Returns:
+    - class_weights: A list of computed weights for each class, useful for loss functions.
+    """
+    # Handle sparse matrix for multi-label case
+    if isinstance(labels, csr_matrix):
+        labels = labels.toarray()
+
+    # Calculate class counts differently for single-label vs multi-label
+    if class_type == 'single-label':
+        # For single-label, count occurrences of each class
+        unique_labels, class_counts = np.unique(labels, return_counts=True)
+    elif class_type == 'multi-label':
+        # For multi-label, sum occurrences across the columns
+        class_counts = np.sum(labels, axis=0)
+        unique_labels = np.arange(len(class_counts))
+    else:
+        raise ValueError(f"Unsupported class_type: {class_type}")
+
+    # Total number of samples
+    total_samples = labels.shape[0]
+
+    # Calculate class weights (inverse frequency)
+    class_weights = [total_samples / (len(class_counts) * count) if count > 0 else 0 for count in class_counts]
+
+    # Normalize weights
+    max_weight = max(class_weights) if max(class_weights) > 0 else 1
+    class_weights = [w / max_weight for w in class_weights]
+
+    # Display graphical output if requested
+    if display_mode in ('both', 'graph'):
+        plt.figure(figsize=(14, 8))
+        plt.bar(target_names, class_counts, color='blue', alpha=0.7)
+        plt.xlabel('Classes', fontsize=10)
+        plt.ylabel('Frequency', fontsize=10)
+        plt.title(f'Class Distribution in {dataset_name} ({len(target_names)} Classes)', fontsize=12)
+        plt.xticks(rotation=90, fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.tight_layout()
+        try:
+            plt.show()
+        except:
+            print("Unable to display the graph (e.g., no GUI backend available). Switching to text-only output.")
+
+    # Display text-based summary if requested
+    if display_mode in ('both', 'text'):
+        print(f"\n\tClass Distribution and Weights in {dataset_name}:")
+        for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
+            print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
+
+    print("\tclass weights:\n", class_weights)
+
+    return class_weights
