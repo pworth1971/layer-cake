@@ -124,7 +124,7 @@ class Dataset:
                          'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
     """
 
-    dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed'}
+    dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'imdb', 'arxiv'}
 
     def __init__(self, name, vtype='tfidf', custom_tokenizer=None):
 

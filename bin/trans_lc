@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v5.0.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v6.0.py"
 LOG_FILE="--log-file ../log/lc_nn_cuda_test.test"
 
 EPOCHS=33

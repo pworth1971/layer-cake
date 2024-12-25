@@ -35,9 +35,6 @@ GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 GLOVE_SET = '840B'                                          # GloVe set to use
 
-
-GLOVE_MODEL = "glove.840B.300d"                              # dimension 300, case sensitive
-
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
@@ -199,7 +196,7 @@ class GloVeEmbeddings(PretrainedEmbeddings):
         
         super().__init__()
 
-        print(f'GloVeEmbeddings::__init__... path={path}, setname={setname}, max_vectors={max_vectors}')
+        print(f'GloVeEmbeddings::__init__() setname={setname}, model_name: {model_name}, path={path}, max_vectors={max_vectors}')
 
         self.type = 'glove'
         self.tokenizer = None
