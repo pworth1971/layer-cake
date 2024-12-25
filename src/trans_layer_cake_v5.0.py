@@ -1474,16 +1474,21 @@ def check_empty_docs(data, name):
 
 
 
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.sparse import csr_matrix
 
-def show_class_dist(labels, target_names, class_type, dataset_name):
+def show_class_distribution(labels, target_names, class_type, dataset_name, display_mode='text'):
     """
     Visualize the class distribution and compute class weights for single-label or multi-label datasets.
+    Supports graphical display or text-based summary for remote sessions.
 
     Parameters:
     - labels: The label matrix (numpy array or csr_matrix for multi-label) or 1D array for single-label.
     - target_names: A list of class names corresponding to the labels.
     - class_type: A string, either 'single-label' or 'multi-label', to specify the classification type.
     - dataset_name: A string representing the name of the dataset.
+    - display_mode: A string, 'both', 'text', or 'graph'. Controls whether to display a graph, text, or both.
 
     Returns:
     - class_weights: A list of computed weights for each class, useful for loss functions.
@@ -1513,25 +1518,30 @@ def show_class_dist(labels, target_names, class_type, dataset_name):
     max_weight = max(class_weights) if max(class_weights) > 0 else 1
     class_weights = [w / max_weight for w in class_weights]
 
-    # Visualize class distribution
-    plt.figure(figsize=(14, 8))
-    plt.bar(target_names, class_counts, color='blue', alpha=0.7)
-    plt.xlabel('Classes', fontsize=10)
-    plt.ylabel('Frequency', fontsize=10)
-    plt.title(f'Class Distribution in {dataset_name} ({len(target_names)} Classes)', fontsize=12)
-    plt.xticks(rotation=90, fontsize=8)
-    plt.yticks(fontsize=8)
-    plt.tight_layout()
-    plt.show()
+    # Display graphical output if requested
+    if display_mode in ('both', 'graph'):
+        plt.figure(figsize=(14, 8))
+        plt.bar(target_names, class_counts, color='blue', alpha=0.7)
+        plt.xlabel('Classes', fontsize=10)
+        plt.ylabel('Frequency', fontsize=10)
+        plt.title(f'Class Distribution in {dataset_name} ({len(target_names)} Classes)', fontsize=12)
+        plt.xticks(rotation=90, fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.tight_layout()
+        try:
+            plt.show()
+        except:
+            print("Unable to display the graph (e.g., no GUI backend available). Switching to text-only output.")
 
-    # Print class names, counts, and weights for debugging
-    print(f"\nClass Distribution and Weights in {dataset_name}:")
-    for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
-        print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
+    # Display text-based summary if requested
+    if display_mode in ('both', 'text'):
+        print(f"\n\tClass Distribution and Weights in {dataset_name}:")
+        for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
+            print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
+
+    print("\tclass weights:\n", class_weights)
 
     return class_weights
-
-
 
 
 
@@ -1552,7 +1562,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
-    
+
     parser.add_argument('--show-dist', action='store_true', default=False, help='show visual chart of dataset class distribution')
     
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
@@ -1843,14 +1853,26 @@ if __name__ == "__main__":
     if (class_type in ['multi-label', 'multilabel']):
         print("computing class weights...")
         class_weights = lc_class_weights(labels_train, task_type=class_type)
-        print("class weights:", class_weights)
     else:
         print("no class weights computed...")
 
+    #
+    # if specified, show the cl;ass distribution
+    # especially helpful for multi-label datasets
+    # where the class is unevenly distributed and hence
+    # affects micro-f1 scores out of testing (with smaller 
+    # samples where under represented classes in training 
+    # are further underrepresented in the test dataset)
+    #
     if (args.show_dist):
-        cls_wghts = show_class_dist(labels_train, target_names, class_type, args.dataset)
-        print("cls_wghts:", cls_wghts)
-
+        cls_wghts = show_class_distribution(
+            labels=labels_train, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset
+            )
+    print("\n")
+    
     lc_model = LCSequenceClassifier(
         hf_model=hf_trans_model,            # HuggingFace transformer model being used
         num_classes=num_classes,            # number of classes for classification
