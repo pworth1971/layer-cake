@@ -450,7 +450,11 @@ class Dataset:
 
     def _load_rcv1(self):
 
-        data_path = '../datasets/RCV1-v2/unprocessed_corpus' #TODO: check when missing
+        
+        data_path = os.path.join(DATASET_DIR, 'rcv1')
+        
+        #data_path = '../datasets/RCV1-v2/unprocessed_corpus' #TODO: check when missing
+        
         devel = fetch_RCV1(subset='train', data_path=data_path)
         test = fetch_RCV1(subset='test', data_path=data_path)
 
