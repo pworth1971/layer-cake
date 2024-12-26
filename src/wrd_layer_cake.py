@@ -668,12 +668,14 @@ def main(opt):
     # establish dimensions (really shapes) of embedding and learning layers for logging
     #    
     emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
-    #print("emb_size:", emb_size_str)
-    lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
-    #print("lrn_size:", lrn_size_str)
+    print("emb_size:", emb_size_str)
     
+    """
+    lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
+    print("lrn_size:", lrn_size_str)
     emb_size_str = f'{emb_size_str}:{lrn_size_str}'
     print("emb_size_str:", emb_size_str)
+    """
 
     # train-validate
     tinit = time()
