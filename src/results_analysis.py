@@ -18,7 +18,7 @@ from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
 # measures filter: report on these specific measures
-MEASURES = ['final-te-macro-F1', 'final-te-micro-F1']
+MEASURES = ['final-te-macro-f1', 'final-te-micro-f1']
 
 Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
 
@@ -367,7 +367,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    if (neural):
+    if neural:
         # Extract the first term in the colon-delimited 'embeddings' field
         df['embedding_type'] = df['embeddings']
     else:
@@ -398,12 +398,13 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             # Update the representation column to include the dimensions in curly brackets, italicized
             subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} <i>{{{row['dimensions']}}}</i>", axis=1)
 
-            # Sorting by dimensions (in descending order) and representation
-            subset_df2.sort_values(by=['dimensions', 'representation'], ascending=[False, True], inplace=True)
-            if debug:
-                print("subset_df2:\n", subset_df2)
+            # Sort by performance value in descending order
+            subset_df2.sort_values(by='value', ascending=False, inplace=True)
 
-            # Define the sorted order for the x-axis
+            if debug:
+                print("subset_df2 sorted by value:\n", subset_df2)
+
+            # Define the sorted order for the x-axis based on performance
             model_rep_order = subset_df2['representation'].tolist()
 
             # Create the plot, coloring by the embedding type (extracted earlier)
@@ -419,7 +420,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
             fig.update_layout(
                 title={
-                    'text': f'{measure} Model & Representations Performance on {dataset}',
+                    'text': f'{dataset} {measure} Stats by Model & Representations',
                     'y': 0.95,
                     'x': 0.5,
                     'xanchor': 'center',

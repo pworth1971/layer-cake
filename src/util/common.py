@@ -20,8 +20,8 @@ import GPUtil
 from util.csv_log import CSVLog
 
 from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
-from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, ALBERT_MODEL
-from embedding.pretrained import XLNET_MODEL, GPT2_MODEL, LLAMA_MODEL
+from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
+from embedding.pretrained import XLNET_MODEL, GPT2_MODEL
 
 
 
@@ -34,11 +34,11 @@ LOG_DIR = '../log/'                                             # log directory
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff', 'hf.sc.ff', 'hf.class.ff']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'albert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'albert', 'distilbert', 'xlnet', 'gpt2', 'llama']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
 # --------------------------------------------------------------------------------------------------------------
 
 
@@ -353,16 +353,20 @@ def get_embeddings_path(pretrained, args):
         return args.roberta_path
     elif pretrained == 'distilbert':
         return args.distilbert_path
-    elif pretrained == 'albert':
-        return args.albert_path
     elif pretrained == 'xlnet':
         return args.xlnet_path
     elif pretrained == 'gpt2':
         return args.gpt2_path
-    elif pretrained == 'llama':
-        return args.llama_path
     else:
         return args.glove_path          # default to GloVe embeddings
+    
+    """
+    elif pretrained == 'albert':
+        return args.albert_path
+    elif pretrained == 'llama':
+        return args.llama_path
+    """
+
         
 
 def get_language_model_type(embeddings, model_name=None):
@@ -422,11 +426,11 @@ def set_method_name(opt, add_model=False):
                 'fasttext': ('subword', FASTTEXT_MODEL),
                 'bert': ('transformer', BERT_MODEL),
                 'roberta': ('transformer', ROBERTA_MODEL),
-                'albert': ('transformer', ALBERT_MODEL),
+                #'albert': ('transformer', ALBERT_MODEL),
                 'distilbert': ('transformer', DISTILBERT_MODEL),
                 'xlnet': ('transformer', XLNET_MODEL),
                 'gpt2': ('transformer', GPT2_MODEL),
-                'llama': ('transformer', LLAMA_MODEL)
+                #'llama': ('transformer', LLAMA_MODEL)
             }
             
             # Extract the model type and specific model name

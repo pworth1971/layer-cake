@@ -548,8 +548,8 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     if (measure_prefix == 'final-te'):
 
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=Mf1, timelapse=tend)
-        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-f1', value=Mf1, timelapse=tend)
+        logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-f1', value=mf1, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-h_loss', value=h_loss, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-precision', value=precision, timelapse=tend)

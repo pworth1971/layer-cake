@@ -1713,20 +1713,20 @@ if __name__ == "__main__":
     
     tend = time() - tinit
 
-    measure_prefix = 'final'
+    measure_prefix = 'final-te'
     #epoch = trainer.state.epoch
     epoch = int(round(trainer.state.epoch))
     print("epoch:", epoch)
 
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-macro-F1', value=macrof1, timelapse=tend)
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-micro-F1', value=microf1, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-macro-f1', value=macrof1, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-micro-f1', value=microf1, timelapse=tend)
     logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-accuracy', value=acc, timelapse=tend)
     logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-loss', value=final_loss, timelapse=tend)
 
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dimensions=dimensions, epoch=epoch, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-precision', value=precision, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-recall', value=recall, timelapse=tend)
+    logfile.insert(dimensions=dimensions, epoch=epoch, measure=f'{measure_prefix}-jacard-index', value=j_index, timelapse=tend)
 
     print("\n\t--- model training and evaluation complete---\n")
 
