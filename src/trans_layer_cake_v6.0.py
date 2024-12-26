@@ -48,8 +48,8 @@ from torch.optim.lr_scheduler import StepLR
 import transformers     
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import AutoModelForSequenceClassification, AutoModel, AutoTokenizer
-from transformers import BertForSequenceClassification, RobertaForSequenceClassification, DistilBertForSequenceClassification, AlbertForSequenceClassification
-from transformers import XLNetForSequenceClassification, GPT2ForSequenceClassification, LlamaForSequenceClassification
+from transformers import BertForSequenceClassification, RobertaForSequenceClassification, DistilBertForSequenceClassification
+from transformers import XLNetForSequenceClassification, GPT2ForSequenceClassification
 from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
 from transformers import AutoConfig, PreTrainedModel
 
@@ -59,7 +59,7 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 #from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
-from data.lc_trans_dataset import get_dataset_data, SUPPORTED_DATASETS, DATASET_DIR, RANDOM_SEED, show_class_distribution
+from data.lc_trans_dataset import get_dataset_data, SUPPORTED_DATASETS, DATASET_DIR, RANDOM_SEED, show_class_distribution, PICKLE_DIR
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
@@ -809,11 +809,9 @@ class LCSequenceClassifier(nn.Module):
                 pooled_output = outputs.pooler_output       
             elif isinstance(self.transformer, (BertForSequenceClassification, 
                                             RobertaForSequenceClassification, 
-                                            DistilBertForSequenceClassification, 
-                                            AlbertForSequenceClassification)):
+                                            DistilBertForSequenceClassification)):
                 pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
-            elif isinstance(self.transformer, (GPT2ForSequenceClassification, 
-                                            LlamaForSequenceClassification)):
+            elif isinstance(self.transformer, (GPT2ForSequenceClassification)):
                 pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
             elif isinstance(self.transformer, XLNetForSequenceClassification):
                 # XLNet-specific pooling logic
