@@ -421,6 +421,7 @@ class Dataset:
     
 
     def _load_ohsumed(self):
+        
         data_path = os.path.join(get_data_home(), 'ohsumed50k')
         devel = fetch_ohsumed50k(subset='train', data_path=data_path)
         test = fetch_ohsumed50k(subset='test', data_path=data_path)
@@ -449,7 +450,6 @@ class Dataset:
 
 
     def _load_rcv1(self):
-
         
         data_path = os.path.join(DATASET_DIR, 'rcv1')
         
