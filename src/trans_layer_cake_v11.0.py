@@ -3,7 +3,6 @@ import os
 import numpy as np
 import pandas as pd
 from time import time
-import random
 import pickle
 
 import matplotlib.pyplot as plt
@@ -21,16 +20,15 @@ from nltk.corpus import stopwords
 # sklearn
 from sklearn.datasets import fetch_20newsgroups, fetch_rcv1
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.metrics import confusion_matrix, precision_score, recall_score
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_score
 from sklearn.metrics import precision_recall_fscore_support
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.base import BaseEstimator, TransformerMixin
+
+from collections import defaultdict
 
 
 # PyTorch
@@ -46,7 +44,7 @@ from torch.optim.lr_scheduler import StepLR
 
 # HuggingFace Transformers library
 import transformers     
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, PreTrainedTokenizer
 from transformers import AutoModelForSequenceClassification, AutoModel, AutoTokenizer
 from transformers import BertForSequenceClassification, RobertaForSequenceClassification, DistilBertForSequenceClassification
 from transformers import XLNetForSequenceClassification, GPT2ForSequenceClassification
@@ -59,7 +57,8 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 #from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
-from data.lc_trans_dataset import get_dataset_data, SUPPORTED_DATASETS, DATASET_DIR, RANDOM_SEED, show_class_distribution, PICKLE_DIR
+from data.lc_trans_dataset import SUPPORTED_DATASETS, RANDOM_SEED, PICKLE_DIR
+from data.lc_trans_dataset import get_dataset_data, show_class_distribution, check_empty_docs, spot_check_documents
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
@@ -67,6 +66,9 @@ from util.common import initialize_testing, get_embedding_type
 #from embedding.supervised import get_supervised_embeddings, compute_supervised_embeddings, compute_tces, embedding_matrices, embedding_matrix
 from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
+
+import unicodedata
+
 
 
 VECTOR_CACHE = "../.vector_cache"
@@ -76,18 +78,25 @@ VECTOR_CACHE = "../.vector_cache"
 #
 # hyper parameters
 #
-VAL_SIZE = 0.15             # percentage of data to be set aside for model validation
+VAL_SIZE = 0.20             # percentage of data to be set aside for model validation
 MC_THRESHOLD = 0.5          # Multi-class threshold
 PATIENCE = 5                # Early stopping patience
 LEARNING_RATE = 1e-6        # Learning rate
-EPOCHS = 25
+EPOCHS = 33
 
 MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
 
-# batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 8
-DEFAULT_MPS_BATCH_SIZE = 8
-DEFAULT_CUDA_BATCH_SIZE = 8
+#
+# batch sizes for training and testing
+# set depending upon dataset size
+#
+DEFAULT_MIN_CPU_BATCH_SIZE = 8
+DEFAULT_MIN_MPS_BATCH_SIZE = 8
+DEFAULT_MIN_CUDA_BATCH_SIZE = 8
+
+DEFAULT_MAX_CPU_BATCH_SIZE = 32
+DEFAULT_MAX_MPS_BATCH_SIZE = 32
+DEFAULT_MAX_CUDA_BATCH_SIZE = 32
 
 #
 # supported operations for transformer classifier
@@ -103,27 +112,170 @@ SUPPORTED_OPS = ["cat", "add", "dot"]
 USE_MEAN_POOLING = False
 
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from collections import defaultdict
-
-from sklearn.base import BaseEstimator, TransformerMixin
-from scipy.sparse import csr_matrix
-from collections import defaultdict
-import numpy as np
-
-
-
-from sklearn.base import BaseEstimator, TransformerMixin
-from scipy.sparse import csr_matrix
-from collections import defaultdict
-import numpy as np
-
-
-
-import unicodedata
-
-
 class LCTokenizer:
+
+    def __init__(self, model_name, model_path, lowercase=False, remove_special_tokens=False, padding='max_length', truncation=True):
+        """
+        Wrapper around Hugging Face tokenizer for custom tokenization.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            max_length: Maximum token length for truncation.
+            lowercase: Whether to convert text to lowercase.
+            remove_special_tokens: Whether to remove special tokens from tokenized output.
+            padding: Padding strategy ('max_length', True, False). Defaults to 'max_lenth'.
+            truncation: Truncation strategy. Defaults to True.
+        """
+
+        #print(f"LCTokenizer:__init__()... model_name: {model_name}, model_path: {model_path}, max_length: {max_length}, lowercase: {lowercase}, remove_special_tokens: {remove_special_tokens}, padding: {padding}, truncation: {truncation}")
+
+        self.model_name = model_name
+        self.model_path = model_path
+
+        self.lowercase = lowercase
+        self.remove_special_tokens = remove_special_tokens
+        self.padding = padding
+        self.truncation = truncation
+        
+        # Debugging information
+        print("LCTokenizer initialized with the following parameters:")
+        print(f"  Model name: {self.model_name}")
+        print(f"  Model path: {self.model_path}")
+        print(f"  Lowercase: {self.lowercase}")
+        print(f"  Remove special tokens: {self.remove_special_tokens}")
+        print(f"  Padding: {self.padding}")
+        print(f"  Truncation: {self.truncation}")
+        
+        print("creating tokenizer using HF AutoTokenizer...")
+
+        # Load the tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir=self.model_path)
+
+        # Use an existing token as the padding token
+        if self.tokenizer.pad_token is None:
+            print(f"Tokenizer has no pad token. Reusing 'eos_token' ({self.tokenizer.eos_token_id}).")
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Print tokenizer details
+        self.vocab_size = len(self.tokenizer)
+        print("self.vocab_size:", self.vocab_size)
+
+        # Compute max_length from tokenizer
+        self.max_length = self.tokenizer.model_max_length
+        print(f"self.tokenizer max_length: {self.max_length}")
+
+        # Handle excessive or default max_length values
+        if self.max_length > MAX_TOKEN_LENGTH:
+            print(f"Invalid max_length ({self.max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
+            self.max_length = MAX_TOKEN_LENGTH
+
+        # Print tokenizer details for debugging
+        print("Tokenizer configuration:")
+        print(f"  Pad token: {self.tokenizer.pad_token} (ID: {self.tokenizer.pad_token_id})")
+        print(f"  Max length: {self.max_length}")
+
+
+    def tokenize(self, text):
+        """
+        Tokenize input text using the Hugging Face tokenizer.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        if self.lowercase:
+            text = text.lower()
+
+        tokens = self.tokenizer.tokenize(
+            text,
+            max_length=self.max_length,
+            truncation=self.truncation,
+            padding=self.padding
+        )
+
+        if self.remove_special_tokens:
+            special_tokens = self.tokenizer.all_special_tokens
+            tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+
+
+    def normalize_text(self, text):
+        """Normalize text to handle special characters and encodings."""
+        return unicodedata.normalize('NFKC', text)
+
+
+    def get_vocab(self):
+        """
+        Return the vocabulary of the Hugging Face tokenizer.
+
+        Returns:
+            Dict of token-to-index mappings.
+        """
+        return self.tokenizer.get_vocab()
+
+
+    def __call__(self, text):
+        """
+        Enable the object to be called as a function for tokenization.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        return self.tokenize(text)
+
+
+    def get_dataset_tokens(self, train_texts, val_texts, test_texts):
+        """
+        Compute the dataset vocabulary as token IDs that align with the tokenizer's vocabulary.
+
+        Args:
+            train_texts (list of str): Training set texts.
+            val_texts (list of str): Validation set texts.
+            test_texts (list of str): Test set texts.
+
+        Returns:
+            list: Relevant token IDs for the dataset vocabulary.
+        """
+        print("computing dataset token set...")
+
+        # Combine all texts from training, validation, and test sets
+        all_texts = train_texts + val_texts + test_texts
+
+        # Use a set to store unique token IDs from the dataset
+        dataset_vocab_ids = set()
+
+        # Tokenize each document with the same parameters used during input preparation
+        for text in all_texts:
+            tokens = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding=self.padding,
+                truncation=self.truncation,
+                return_attention_mask=False,  # No need for attention masks here
+                return_token_type_ids=False,  # No need for token type IDs here
+            )
+            # Add token IDs to the dataset vocabulary
+            dataset_vocab_ids.update(tokens['input_ids'])
+
+        # Ensure token IDs are in the tokenizer's range
+        tokenizer_vocab_size = len(self.tokenizer.get_vocab())
+        relevant_token_ids = [
+            token_id for token_id in dataset_vocab_ids if token_id < tokenizer_vocab_size
+        ]
+
+        print(f"Computed dataset vocabulary: {len(relevant_token_ids)} relevant tokens out of {tokenizer_vocab_size} total tokens in tokenizer.")
+        return relevant_token_ids
+
+
+
+
+class LCTokenizer_orig:
 
     def __init__(self, tokenizer, max_length, lowercase=False, remove_special_tokens=False):
         """
@@ -177,6 +329,52 @@ class LCTokenizer:
             Dict of token-to-index mappings.
         """
         return self.tokenizer.get_vocab()
+
+
+    def get_dataset_tokens(self, train_texts, val_texts, test_texts, padding=False, truncation=True):
+        """
+        Compute the dataset vocabulary as token IDs that align with the tokenizer's vocabulary.
+
+        Args:
+            train_texts (list of str): Training set texts.
+            val_texts (list of str): Validation set texts.
+            test_texts (list of str): Test set texts.
+            padding (bool or str, optional): Padding strategy ('max_length', True, False). Defaults to False.
+            truncation (bool, optional): Whether to truncate sequences to `max_length`. Defaults to True.
+
+        Returns:
+            list: Relevant token IDs for the dataset vocabulary.
+        """
+        print("get_dataset_tokens()...")
+
+        # Combine all texts from training, validation, and test sets
+        all_texts = train_texts + val_texts + test_texts
+
+        # Use a set to store unique token IDs from the dataset
+        dataset_vocab_ids = set()
+
+        # Tokenize each document with the same parameters used during input preparation
+        for text in all_texts:
+            tokens = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding=padding,
+                truncation=truncation,
+                return_attention_mask=False,  # No need for attention masks here
+                return_token_type_ids=False,  # No need for token type IDs here
+            )
+            # Add token IDs to the dataset vocabulary
+            dataset_vocab_ids.update(tokens['input_ids'])
+
+        # Ensure token IDs are in the tokenizer's range
+        tokenizer_vocab_size = len(self.tokenizer.get_vocab())
+        relevant_token_ids = [
+            token_id for token_id in dataset_vocab_ids if token_id < tokenizer_vocab_size
+        ]
+
+        print(f"Computed dataset vocabulary: {len(relevant_token_ids)} relevant tokens out of {tokenizer_vocab_size} total tokens in tokenizer.")
+        return relevant_token_ids
+    
 
     def __call__(self, text):
         """
@@ -354,26 +552,23 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
 
 
 
-def vectorize(texts_train, texts_val, texts_test, tokenizer, max_length):
+def vectorize(texts_train, texts_val, texts_test, lc_tokenizer):
 
-    print(f'vectorize(), max_length: {max_length}')
+    print(f'vectorize(), max_length: {lc_tokenizer.max_length}')
 
-    print("tokenizer:\n", tokenizer)
-
-    custom_tokenizer = LCTokenizer(tokenizer, max_length)
-    preprocessed_train = [" ".join(custom_tokenizer(text)) for text in texts_train]
-    preprocessed_val = [" ".join(custom_tokenizer(text)) for text in texts_val]
-    preprocessed_test = [" ".join(custom_tokenizer(text)) for text in texts_test]
-
-    print("lc_tokenizer:\n", custom_tokenizer)
+    print("lc_tokenizer:\n", lc_tokenizer)
+    
+    preprocessed_train = [" ".join(lc_tokenizer(text)) for text in texts_train]
+    preprocessed_val = [" ".join(lc_tokenizer(text)) for text in texts_val]
+    preprocessed_test = [" ".join(lc_tokenizer(text)) for text in texts_test]
 
     # Debugging: Preprocessed data
     print("preprocessed_train:", type(preprocessed_train), len(preprocessed_train))
     print(f"preprocessed_train[0]: {preprocessed_train[0]}")
     
-    tokenizer_vocab = custom_tokenizer.get_vocab()
+    tokenizer_vocab = lc_tokenizer.tokenizer.get_vocab()
 
-    vectorizer = LCTFIDFVectorizer(tokenizer=custom_tokenizer, debug=True)
+    vectorizer = LCTFIDFVectorizer(tokenizer=lc_tokenizer.tokenizer, debug=True)
 
     Xtr = vectorizer.fit_transform(
         X=preprocessed_train,
@@ -408,11 +603,11 @@ def vectorize(texts_train, texts_val, texts_test, tokenizer, max_length):
     assert vec_vocab_size == tok_vocab_size, \
         f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
 
-    return vectorizer, custom_tokenizer, Xtr, Xval, Xte
+    return vectorizer, Xtr, Xval, Xte
 
 
 
-def get_vectorized_data(texts_train, texts_val, test_data, tokenizer, max_length, dataset, pretrained, vtype):
+def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset, pretrained, vtype='tfidf'):
     """
     Wrapper for vectorize() method to save and load from a pickle file.
 
@@ -420,8 +615,7 @@ def get_vectorized_data(texts_train, texts_val, test_data, tokenizer, max_length
         texts_train (list): Training texts.
         texts_val (list): Validation texts.
         test_data (list): Test texts.
-        tokenizer: Tokenizer instance.
-        max_length (int): Maximum length for tokenization.
+        lc_tokenizer: LCTokenizer instance.
         dataset (str): Dataset name.
         pretrained (str): Pretrained model name.
         vtype (str): Vectorization type.
@@ -438,23 +632,23 @@ def get_vectorized_data(texts_train, texts_val, test_data, tokenizer, max_length
             vectorizer, lc_tokenizer, Xtr, Xval, Xte = pickle.load(f)
     else:
         print(f"Pickle file not found. Vectorizing data and saving to {pickle_file}...")
-        vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
+        vectorizer, Xtr, Xval, Xte = vectorize(
             texts_train, 
             texts_val, 
             test_data, 
-            tokenizer, 
-            max_length=max_length
+            lc_tokenizer
         )
         # Save the results to the pickle file
         with open(pickle_file, 'wb') as f:
             pickle.dump((vectorizer, lc_tokenizer, Xtr, Xval, Xte), f)
 
-    return vectorizer, lc_tokenizer, Xtr, Xval, Xte
-
+    return vectorizer, Xtr, Xval, Xte
 
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 
 class LCSequenceClassifier(nn.Module):
 
@@ -462,6 +656,8 @@ class LCSequenceClassifier(nn.Module):
                 hf_model: nn.Module, 
                 num_classes: int, 
                 vocab_size: int, 
+                relevant_tokens: list,                              # New: Subset of relevant tokens for the dataset
+                lc_tokenizer: LCTokenizer,                             
                 class_type: str = 'single-label', 
                 class_weights: torch.Tensor = None, 
                 supervised: bool = False, 
@@ -483,7 +679,7 @@ class LCSequenceClassifier(nn.Module):
             class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            finetune: Boolean indicating whether or not to make the model embedding layer, and the TCE matrix, trainable.
+            finetune: Boolean indicating whether or not the Embedding layer is trainable.
             normalize_tce: Boolean indicating if TCE matrix is normalized.
             dropout: Dropout rate for TCE matrix.
             comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
@@ -498,8 +694,15 @@ class LCSequenceClassifier(nn.Module):
 
         self.debug = debug
 
-        self.transformer = hf_model
-        #transformer_output_dim = self.transformer.config.hidden_size  # e.g., 768
+        self.tokenizer = lc_tokenizer.tokenizer
+        print("self.tokenizer:", self.tokenizer)
+
+        #
+        # Filter the transformer embeddings to only include relevant tokens
+        # that are present from the Dataset vocabulary (as tokenized)
+        #
+        self.transformer, self.relevant_embeddings = self._filter_transformer_embeddings(hf_model=hf_model, relevant_tokens=relevant_tokens)                    
+        print("self.transformer:", self.transformer)
 
         self.hidden_size = self.transformer.config.hidden_size          
         print("self.hidden_size:", self.hidden_size)
@@ -517,9 +720,28 @@ class LCSequenceClassifier(nn.Module):
             print("self.class_weights.shape:", self.class_weights.shape)
             if (self.debug):
                 print("self.class_weights:", self.class_weights)
+
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
+
         else:
             print("self.class_weights is None")
 
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss()
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss()
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
+        
         self.vocab_size = vocab_size
         print("self.vocab_size:", self.vocab_size)
 
@@ -549,14 +771,6 @@ class LCSequenceClassifier(nn.Module):
         else:            
             print("finetune == False, default model configuration ...")
 
-        # Loss functions
-        if class_type == 'multi-label':
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        elif class_type == 'single-label':
-            self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
-        else:
-            raise ValueError("class_type must be 'single-label' or 'multi-label'")
-        print("loss_fn:", self.loss_fn)
 
         # Assert that tce_matrix is provided if supervised is True
         if self.supervised:
@@ -618,17 +832,482 @@ class LCSequenceClassifier(nn.Module):
                     print("not finetuning, not retraining tce embedding layer...")
                     self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
                 """
-                
-        # Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
+
+        # -----------------------------------------------------------------------------------------------
+        # 
+        # initialize Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
         # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
+        #
+
+        print("combined_size:", combined_size)
+
+        #
+        # simplified classification head that adjusts the size of the Linear layer according 
+        # to the method we are using to combine TCEs with built in transformer embeddings
+        #
+        self.classifier = nn.Linear(combined_size, self.num_classes)                
+        
+        """
         self.classifier = nn.Sequential(
             nn.Linear(combined_size, 256),                  # First linear layer
             nn.ReLU(),                                      # non-linear activation function
             nn.Dropout(dropout_rate),                       # regularization
             nn.Linear(256, self.num_classes)                # FInal Linear layer
         )
-        print("combined_size:", combined_size)
+        """
+        
         print("self.classifier:", self.classifier)
+        # -----------------------------------------------------------------------------------------------
+
+        #
+        # force all of the tensors to be stored contiguously in memory
+        #
+        for param in self.transformer.parameters():
+            param.data = param.data.contiguous()
+    
+
+    def _filter_transformer_embeddings(self, hf_model, relevant_tokens):
+        """
+        Replace the transformer embedding layer with a reduced embedding matrix and update the tokenizer.
+        """
+        print("Filtering transformer embeddings to align with dataset...")
+        print(f"relevant_tokens: {type(relevant_tokens)} {len(relevant_tokens)}")
+
+        # Extract original embeddings
+        embedding_layer = hf_model.get_input_embeddings()
+        original_embeddings = embedding_layer.weight.data
+
+        # Validate relevant_tokens
+        assert all(0 <= idx < original_embeddings.size(0) for idx in relevant_tokens), \
+            "Relevant tokens contain indices out of range of the original embeddings."
+
+        # Get embeddings for relevant tokens
+        relevant_embeddings = original_embeddings[relevant_tokens, :]
+        print("relevant_embeddings:", type(relevant_embeddings), relevant_embeddings.shape)
+
+        # Replace the embedding layer
+        reduced_embedding_layer = nn.Embedding.from_pretrained(relevant_embeddings)
+        print("reduced_embedding_layer:", type(reduced_embedding_layer), reduced_embedding_layer)
+
+        hf_model.set_input_embeddings(reduced_embedding_layer)
+        print("updated hf_model:", hf_model)
+
+        return hf_model, relevant_embeddings
+    
+
+
+    def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
+        """
+        Normalize the TCE matrix to align with the transformer's embedding distribution.
+
+        Args:
+            tce_matrix: TCE matrix (vocab_size x num_classes).
+            embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
+            embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
+
+        Returns:
+            Normalized TCE matrix (vocab_size x num_classes).
+        """
+
+        target_dim = embedding_mean.shape[0]  # Set target_dim to model embedding size
+
+        if (self.debug):
+            print(f"tce_matrix: {tce_matrix.shape}, {tce_matrix.dtype}")
+            #print("first row:", tce_matrix[0])
+            print(f"embedding_mean: {embedding_mean.shape}, {embedding_mean.dtype}")
+            #print(f'embedding_mean: {embedding_mean}')
+            print(f"embedding_std: {embedding_std.shape}, {embedding_std.dtype}")
+            #print(f'embedding_std: {embedding_std}')
+            print("target_dim:", target_dim)
+
+        device = embedding_mean.device                      # Ensure all tensors are on the same device
+        tce_matrix = tce_matrix.to(device)
+
+        # 1 Normalize TCE matrix row-wise (i.e. ompute mean and std per row)
+        tce_mean = tce_matrix.mean(dim=1, keepdim=True)
+        tce_std = tce_matrix.std(dim=1, keepdim=True)
+        tce_std[tce_std == 0] = 1                           # Prevent division by zero
+
+        if (self.debug):
+            print(f"tce_mean: {tce_mean.shape}, {tce_mean.dtype}")
+            #print(f'tce_mean: {tce_mean}')
+            print(f"tce_std: {tce_std.shape}, {tce_std.dtype}")
+            #print(f'tce_std: {tce_std}')
+
+        normalized_tce = (tce_matrix - tce_mean) / tce_std
+
+        if (self.debug):
+            print(f"normalized_tce (pre-scaling): {normalized_tce.shape}")
+
+        # 2. Scale to match embedding statistics
+        normalized_tce = normalized_tce * embedding_std.mean() + embedding_mean.mean()
+
+        # 3. Project normalized TCE into the target dimension (e.g., 128)
+        projection = torch.nn.Linear(tce_matrix.size(1), target_dim, bias=False).to(device)
+        projected_tce = projection(normalized_tce)
+
+        if self.debug:
+            print(f"Projected TCE matrix: {projected_tce.shape}")
+
+        # check for Nan or Inf values after normalization
+        if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
+            print("[WARNING]: projected_tce contains NaN or Inf values after normalization.")
+            #raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
+
+        return projected_tce
+
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        """
+        Forward pass for the LCSequenceClassifier, includes support for integrated
+        TCE computation in the event that the Classifier has been set up with TCEs (ie supervised is True)
+
+        Args:
+            input_ids (torch.Tensor): Input token IDs (batch_size x seq_length).
+            attention_mask (torch.Tensor): Attention mask for input tokens.
+            labels (torch.Tensor, optional): Labels for computing loss.
+
+        Returns:
+            logits (torch.Tensor): Output logits from the classifier.
+            loss (torch.Tensor, optional): Loss value if labels are provided.
+        """
+        if (self.debug):
+            print("LCSequenceClassifier:forward()...")
+            print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
+            print("input_ids:", input_ids)
+            print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
+            print(f"\tlabels: {type(labels)}, {labels.shape}")
+
+        assert input_ids.max() < self.vocab_size, f"Invalid token index: {input_ids.max()} >= {self.vocab_size}"
+        assert input_ids.min() >= 0, f"Invalid token index: {input_ids.min()} < 0"
+
+        # Pass inputs through the transformer model, ie Base model forward pass
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+
+        if (USE_MEAN_POOLING):
+            # Extract the last hidden state (batch_size, seq_length, hidden_size)
+            last_hidden_state = outputs.hidden_states[-1]
+
+            # Apply mean pooling across the sequence dimension
+            # Mask the padded tokens during mean pooling to avoid including their embeddings
+            if attention_mask is not None:
+                # Expand attention mask for the hidden size dimension
+                mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size())
+                masked_hidden_state = last_hidden_state * mask_expanded
+                sum_hidden_state = torch.sum(masked_hidden_state, dim=1)
+                sum_mask = torch.sum(mask_expanded, dim=1)
+                pooled_output = sum_hidden_state / sum_mask.clamp(min=1e-9)  # Avoid division by zero
+            else:
+                # Simple mean pooling when no attention mask is provided
+                pooled_output = torch.mean(last_hidden_state, dim=1)
+        else:
+            #
+            # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
+            # Use pooled output if available, if not and we are using a BERT based model, we get the
+            # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
+            #
+            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                pooled_output = outputs.pooler_output       
+            elif isinstance(self.transformer, (BertForSequenceClassification, 
+                                            RobertaForSequenceClassification, 
+                                            DistilBertForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
+            elif isinstance(self.transformer, (GPT2ForSequenceClassification)):
+                pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
+            elif isinstance(self.transformer, XLNetForSequenceClassification):
+                # XLNet-specific pooling logic
+                #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+
+                # Use mean pooling over the last hidden layer
+                last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
+                pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
+            else:
+                raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
+
+        if (self.debug):    
+            print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')
+
+        if torch.isnan(pooled_output).any() or torch.isinf(pooled_output).any():
+            #print("[ERROR] pooled_output contains NaN or Inf values")
+            raise ValueError("[ERROR] pooled_output contains NaN or Inf values")
+
+        #
+        # Integrate TCEs if supervised is True
+        #
+        #if (self.supervised and (self.tce_matrix is not None)):
+        if self.supervised:
+            
+            if self.tce_layer is None:
+                raise ValueError("[ERROR]:supervised is True but tce_layer embedding layer is None.")
+            
+            if (self.debug):
+                print("integrating TCEs into the model...")
+
+            # Debug info: Check for out-of-range indices
+            invalid_indices = input_ids[input_ids >= self.vocab_size]
+            if invalid_indices.numel() > 0:
+                print(f"[WARNING] Found invalid indices in input_ids: {invalid_indices.tolist()} (max valid index: {self.vocab_size - 1})")
+
+            # Extract all relevant indices for pooling TCE embeddings
+            tce_indices = input_ids                                     # Assuming all input tokens are relevant for TCEs
+            tce_embeddings = self.tce_layer(tce_indices)                # (batch_size, seq_length, tce_dim)
+
+            # Apply pooling to TCE embeddings to obtain a single vector per example
+            pooled_tce_embeddings = tce_embeddings.mean(dim=1)                                  # mean pooling, output (batch_size, tce_dim)
+            #pooled_tce_embeddings, _ = tce_embeddings.max(dim=1)                               # max pooling, output (batch_size, tce_dim)
+            
+            if (self.debug):
+                print("pooled_tce_embeddings:", type(pooled_tce_embeddings), pooled_tce_embeddings.shape)
+                print("pooled_tce_embeddings[0]:", type(pooled_tce_embeddings[0]), pooled_tce_embeddings[0])
+            
+            if torch.isnan(pooled_tce_embeddings).any() or torch.isinf(pooled_tce_embeddings).any():
+                #print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+                raise ValueError("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
+
+            # Combine transformer output and TCE embeddings
+            if self.comb_method == 'cat':
+                if (self.debug):
+                    print("concatenating two matrices...")                                                
+                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
+                assert pooled_output.size(1) + pooled_tce_embeddings.size(1) == self.hidden_size + self.tce_matrix.size(1), \
+                    f"Concat dimension mismatch: {pooled_output.size(1) + pooled_tce_embeddings.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
+                pooled_output = torch.cat((pooled_output, pooled_tce_embeddings), dim=1)        # (batch_size, combined_size)
+            elif self.comb_method == 'add':
+                if (self.debug):
+                    print("adding two matricses...")
+                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
+                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
+                    f"Add dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
+                pooled_output = pooled_output + pooled_tce_embeddings                               # (batch_size, hidden_size) 
+            elif self.comb_method == 'dot':
+                if self.debug:
+                    print("computing dot product between embeddings...")
+                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), \
+                    "Batch size mismatch between pooled output and pooled TCE matrix"
+                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
+                    f"Dot dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
+                pooled_output = (pooled_output * pooled_tce_embeddings)                             # Shape (batch_size, hidden_size)
+            else:
+                raise ValueError(f"Unsupported combination method: {self.comb_method}")    
+            
+        if (self.debug):    
+            print(f'pooled_output (post combination): {type(pooled_output)}, {pooled_output.shape}')
+
+        # Classification head
+        logits = self.classifier(pooled_output)
+        if (self.debug):
+            print(f'logits: {type(logits)}, {logits.shape}, {logits}')
+
+        loss = None
+        if labels is not None:
+            if self.class_type in ['multi-label', 'multilabel']:
+                # BCEWithLogitsLoss requires float labels for multi-label classification
+                loss = self.loss_fn(logits, labels.float())
+            elif self.class_type in ['single-label', 'singlelabel']:
+                # CrossEntropyLoss expects long/int labels for single-label classification
+                loss = self.loss_fn(logits, labels.long())
+            else:
+                raise ValueError(f"Unsupported classification type: {self.class_type}")
+        else:
+            print("WARNINMG: No labels provided for loss calculation.")
+
+        return {"loss": loss, "logits": logits}
+    
+
+
+
+
+class LCSequenceClassifier_orig(nn.Module):
+
+    def __init__(self, 
+                hf_model: nn.Module, 
+                num_classes: int, 
+                vocab_size: int, 
+                class_type: str = 'single-label', 
+                class_weights: torch.Tensor = None, 
+                supervised: bool = False, 
+                tce_matrix: torch.Tensor = None, 
+                finetune: bool = False, 
+                normalize_tces: bool = True,
+                dropout_rate: float = 0.3, 
+                comb_method: str = "cat", 
+                debug: bool = False):
+        """
+        A Transformer-based Sequence Classifier with optional TCE integration and parameters for Layer Cake Text
+        Classification testing. Supports both single label and multi-label classification.
+        
+        Args:
+            hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
+            num_classes: Number of classes for classification.
+            vocab_size: size of (tokenizer) vocabulary, for assertions
+            class_type: type of classification problem, either 'single-label' or 'multi-label'
+            class_weights: Class weights for loss function.
+            supervised: Boolean indicating if supervised embeddings are used.
+            tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
+            finetune: Boolean indicating whether or not to make the model embedding layer, and the TCE matrix, trainable.
+            normalize_tce: Boolean indicating if TCE matrix is normalized.
+            dropout: Dropout rate for TCE matrix.
+            comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
+            debug: Debug mode flag.
+        """
+        super(LCSequenceClassifier, self).__init__()
+
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
+
+        if (supervised):
+            print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
+
+        self.debug = debug
+
+        self.transformer = hf_model
+        #transformer_output_dim = self.transformer.config.hidden_size  # e.g., 768
+
+        self.hidden_size = self.transformer.config.hidden_size          
+        print("self.hidden_size:", self.hidden_size)
+
+        self.num_classes = num_classes
+        self.class_type = class_type
+
+        self.supervised = supervised
+        self.comb_method = comb_method
+        self.normalize_tces = normalize_tces
+        self.finetune = finetune
+        self.class_weights = class_weights
+
+        if (self.class_weights is not None):
+            print("self.class_weights.shape:", self.class_weights.shape)
+            if (self.debug):
+                print("self.class_weights:", self.class_weights)
+
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
+
+        else:
+            print("self.class_weights is None")
+
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss()
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss()
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
+        
+
+        self.vocab_size = vocab_size
+        print("self.vocab_size:", self.vocab_size)
+
+        #
+        # Optionally unfreeze the embedding layer if finetune is True
+        #
+        if self.finetune:
+            print("finetuning == True, making the embedding layer (only) trainable")    
+
+            # Freeze gradient computation for all transformer parameters
+            for param in self.transformer.parameters():
+                param.requires_grad = False
+
+            # Enable training of only the embedding layer
+            if hasattr(self.transformer, 'bert'):
+                embedding_layer = self.transformer.bert.embeddings
+            elif hasattr(self.transformer, 'roberta'):
+                embedding_layer = self.transformer.roberta.embeddings
+            elif hasattr(self.transformer, 'transformer'):
+                embedding_layer = self.transformer.transformer.wte  # GPT-2
+            else:
+                raise AttributeError(f"Embeddings not found for the given model: {type(self.transformer)}")
+            print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+            for param in embedding_layer.parameters():
+                param.requires_grad = True
+        else:            
+            print("finetune == False, default model configuration ...")
+
+        # Assert that tce_matrix is provided if supervised is True
+        if self.supervised:
+            assert tce_matrix is not None, "tce_matrix must be provided when supervised is True."
+
+        self.tce_matrix = tce_matrix
+        self.tce_layer = None               # we initialize this only if we are using TCEs 
+
+        # initialize embedding dimensions to model embedding dimension
+        # we over-write this only if we are using supervised tces with the 'cat' method
+        combined_size = self.hidden_size
+
+        if (self.supervised and self.tce_matrix is not None):
+
+            print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
+ 
+            with torch.no_grad():                           # normalization code should be in this block
+
+                # Normalize TCE matrix if required
+                if self.normalize_tces:
+
+                    # compute the mean and std from the core model embeddings
+                    embedding_layer = self.transformer.get_input_embeddings()
+                    embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
+                    embedding_std = embedding_layer.weight.std(dim=0).to(device)
+                    if (self.debug):
+                        print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
+
+                    # normalize the TCE matrix
+                    self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
+                    print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+            
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                """
+                if (trainable_tces):
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+
+                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                
+                # Adapt classifier head based on combination method
+                # 'concat' method is dimension_size + num_classes
+                if (self.comb_method == 'cat'):
+                    combined_size = self.hidden_size + self.tce_matrix.size(1)
+                else:
+                    combined_size = self.hidden_size                                # redundant but for clarity - good for 'add' or 'dot'
+
+                """
+                #
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                # otherwise let the model train the tce embedding layer
+                #
+                if (finetune):
+                    print("finetuning, retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    print("not finetuning, not retraining tce embedding layer...")
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+
+        # -----------------------------------------------------------------------------------------------
+        # 
+        # initialize Classification head: maps the (potentially) combined input (transformer output or transformer output + optional TCE embeddings) 
+        # to the final logits, introducing additional learnable parameters and allowing for flexibility to adapt the model to the specific task.
+        #
+
+        print("combined_size:", combined_size)
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(combined_size, 256),                  # First linear layer
+            nn.ReLU(),                                      # non-linear activation function
+            nn.Dropout(dropout_rate),                       # regularization
+            nn.Linear(256, self.num_classes)                # FInal Linear layer
+        )
+        
+        print("self.classifier:", self.classifier)
+        # -----------------------------------------------------------------------------------------------
 
         #
         # force all of the tensors to be stored contiguously in memory
@@ -907,8 +1586,7 @@ def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
     model_path = os.path.join(cache_dir, pretrained)
 
     return model_name, model_path
-
-
+    
 
 
 class LCDataset(Dataset):
@@ -1105,59 +1783,47 @@ def get_hf_models(model_name, model_path, num_classes, tokenizer):
 
 
 
-def init_hf_tokenizer():
-
-    print("Initializing Hugging Face tokenizer...")
-
-    # Load the tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_path)
-
-    # Use an existing token as the padding token
-    if tokenizer.pad_token is None:
-        print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
-        tokenizer.pad_token = tokenizer.eos_token
-
-    # Get the pad_token_id
-    pad_token_id = tokenizer.pad_token_id
-
-    # Print tokenizer details
-    tok_vocab_size = len(tokenizer)
-    print("tok_vocab_size:", tok_vocab_size)
-
-    # Compute max_length from tokenizer
-    max_length = tokenizer.model_max_length
-    print(f"Tokenizer max_length: {max_length}")
-
-    # Handle excessive or default max_length values
-    if max_length > MAX_TOKEN_LENGTH:
-        print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
-        max_length = MAX_TOKEN_LENGTH
-
-    # Print tokenizer details for debugging
-    print("Tokenizer configuration:")
-    print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
-    print(f"  Max length: {max_length}")
-
-    return tokenizer, max_length, pad_token_id, tok_vocab_size
 
 
 
 
-def check_empty_docs(data, name):
+def compute_dataset_vocab(train_texts, val_texts, test_texts, tokenizer):
     """
-    Check for empty docs (strings) in a list of data and print details for debugging.
-
+    Compute the dataset vocabulary as token IDs that align with the tokenizer's vocabulary.
+    
     Args:
-        data: List of strings (e.g., train_data or test_data).
-        name: Name of the dataset (e.g., "Train", "Test").
+        train_texts (list of str): Training set texts.
+        val_texts (list of str): Validation set texts.
+        test_texts (list of str): Test set texts.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer used for the transformer model.
+        
+    Returns:
+        list: Relevant token IDs for the dataset vocabulary.
     """
-    empty_indices = [i for i, doc in enumerate(data) if not doc.strip()]
-    if empty_indices:
-        print(f"[WARNING] {name} dataset contains {len(empty_indices)} empty strings (docs).")
-        for idx in empty_indices[:10]:  # Print details for up to 10 empty rows
-            print(f"Empty String at Index {idx}: Original Document: '{data[idx]}'")
-    else:
-        print(f"[INFO] No empty strings (docs) found in {name} dataset.")
+    print("compute_dataset_vocab()...")
+
+    # Combine all texts from training, validation, and test sets
+    all_texts = train_texts + val_texts + test_texts
+
+    # Use a set to store unique tokens from the dataset
+    dataset_vocab_tokens = set()
+
+    # Tokenize each document and add the tokens to the dataset vocabulary
+    for text in all_texts:
+        tokens = tokenizer.tokenize(text)  # Tokenize the text using the tokenizer
+        dataset_vocab_tokens.update(tokens)  # Add tokens to the dataset vocabulary
+
+    # Convert dataset tokens to their respective token IDs using the tokenizer's vocabulary
+    relevant_tokens = [
+        tokenizer.vocab[token]
+        for token in dataset_vocab_tokens
+        if token in tokenizer.vocab
+    ]
+
+    print(f"Computed dataset vocabulary: {len(relevant_tokens)} relevant tokens out of {len(tokenizer.vocab)} total tokens in tokenizer.")
+    return relevant_tokens
+
+
 
 
 
@@ -1209,7 +1875,8 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '5.2'
+    version = '11.0'
+    print(f'program: {program}, version: {version}')
     
     print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
     print()
@@ -1262,19 +1929,37 @@ if __name__ == "__main__":
     # Check for CUDA and MPS availability
     # Default to CPU if neither CUDA nor MPS is available
     if torch.cuda.is_available():
-        print("CUDA is available")
         device = torch.device("cuda")
-        batch_size = DEFAULT_CUDA_BATCH_SIZE
-    elif torch.backends.mps.is_available():
-        print("MPS is available")
-        device = torch.device("mps")
-        batch_size = DEFAULT_MPS_BATCH_SIZE
-    else:
-        print("Neither CUDA nor MPS is available, using CPU")
-        device = torch.device("cpu")
-        batch_size = DEFAULT_CPU_BATCH_SIZE     
 
-    print(f"Using device: {device}")
+        if (args.dataset == 'rcv1'):
+            batch_size = DEFAULT_MIN_CUDA_BATCH_SIZE
+        else:
+            batch_size = DEFAULT_MAX_CUDA_BATCH_SIZE
+
+        # for eval_step calculation
+        num_devices = system.get_num_gpus()
+
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+
+        if (args.dataset == 'rcv1'):
+            batch_size = DEFAULT_MIN_MPS_BATCH_SIZE
+        else:
+            batch_size = DEFAULT_MAX_MPS_BATCH_SIZE
+
+        # for eval_step calculation
+        num_devices = 1                                # MPS only supports a single GPU
+    else:
+        if (args.dataset == 'rcv1'):
+            batch_size = DEFAULT_MIN_CPU_BATCH_SIZE
+        else:
+            batch_size = DEFAULT_MAX_CPU_BATCH_SIZE     
+        
+        # for eval_step calculation
+        num_devices = 1                                # No GPUs available (CPU), so we default to 1
+
+    print(f"device: {device}")
+    print("num_devices:", num_devices)
     print("batch_size:", batch_size)
 
     torch.manual_seed(args.seed)
@@ -1307,12 +1992,19 @@ if __name__ == "__main__":
     check_empty_docs(train_data, "Train")
     check_empty_docs(test_data, "Test")
 
-    tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
-
-    # Print tokenizer details for debugging
+    #tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
+    lc_tokenizer = LCTokenizer(
+        model_name=model_name,
+        model_path=model_path,
+        lowercase=False,
+        remove_special_tokens=False,
+        padding='max_length',
+        truncation=True
+    )
+    print("lc_tokenizer:", type(lc_tokenizer), lc_tokenizer)
     print("Tokenizer configuration:")
-    print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
-    print(f"  Max length: {max_length}")
+    print(f"  Pad token: {lc_tokenizer.tokenizer.pad_token} (ID: {lc_tokenizer.tokenizer.pad_token_id})")
+    print(f"  Max length: {lc_tokenizer.max_length}")
 
     # Split off validation data from the training set
     texts_train, texts_val, labels_train, labels_val = train_test_split(
@@ -1343,29 +2035,20 @@ if __name__ == "__main__":
     #
     print("\n\t vectorizing dataset...")
 
-    vectorizer, lc_tokenizer, Xtr, Xval, Xte = get_vectorized_data(
+    vectorizer, Xtr, Xval, Xte = get_vectorized_data(
         texts_train,
         texts_val,
         test_data,
-        tokenizer,
-        max_length,
+        lc_tokenizer,
         args.dataset,
         args.pretrained,
         args.vtype
     )
 
-    """
-    vectorizer, lc_tokenizer, Xtr, Xval, Xte = vectorize(
-        texts_train, 
-        texts_val, 
-        test_data, 
-        tokenizer, 
-        max_length=max_length
-    )
-    """
-
     print("vectorizer:\n", vectorizer)
-    print("lc_tokenizer:\n", lc_tokenizer)
+
+    tokenizer = lc_tokenizer.tokenizer
+    print("lc_tokenizer.tokenizer (tokenizer):", type(tokenizer), tokenizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
     print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
@@ -1401,13 +2084,33 @@ if __name__ == "__main__":
     print(f"Tokenizer vocab size: {len(tok_vocab)}, Vectorizer vocab size: {len(vec_vocab)}")
     print(f"Vocabulary intersection size: {len(tok_vocab & vec_vocab)}")
 
+    #
+    # spot check the vectorized data to make sure the vectorizer 
+    # and tokenizer are in sync, this is crucial for TCE computation
+    #
     spot_check_documents(
         documents=texts_train,
         vectorizer=vectorizer,
-        tokenizer=lc_tokenizer, 
+        tokenizer=lc_tokenizer,                # we pass in the LCTokenizer 
         vectorized_data=Xtr,       
-        num_docs=2,
+        num_docs=3,
+        debug=True
     )
+
+    #
+    # get the relevant tokens from the dataset to send to LCSequenceClassifier
+    #
+    relevant_tokens = lc_tokenizer.get_dataset_tokens(texts_train, texts_val, test_data)
+    print("relevant_tokens:", type(relevant_tokens), len(relevant_tokens))
+
+    # Get the size of the dataset-specific vocabulary
+    filtered_vocab_size = len(relevant_tokens)
+    print(f"Relevant tokens size: {filtered_vocab_size}")
+
+    # Assert that all relevant tokens are valid token IDs within the tokenizer's vocabulary
+    assert all(
+        0 <= token_id < len(tokenizer) for token_id in relevant_tokens
+    ), "Some relevant tokens are not valid token IDs in the tokenizer vocabulary."
 
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings( and 
@@ -1415,7 +2118,7 @@ if __name__ == "__main__":
     #
     if (args.supervised):
 
-        print("\n\tcomputing tces...")
+        print("\n\tcomputing TCEs...")
 
         if (class_type in ['single-label', 'singlelabel']):
 
@@ -1470,17 +2173,6 @@ if __name__ == "__main__":
     print("\nhf_trans_model:\n", hf_trans_model)
     print("\nhf_trans_class_model:\n", hf_trans_class_model)
     
-    # Get embedding size from the model
-    dimensions, vec_size = get_embedding_dims(hf_trans_model)
-    # Print for debugging
-    print(f'model size: {dimensions}, embedding dimension: {vec_size}')
-    # Concatenate supervised-specific dimensions if args.supervised is True
-    if args.supervised:
-        # Convert tce_matrix.shape to string before concatenating
-        dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
-    # Log the dimensions
-    print("dimensions (for logger):", dimensions)
-
     hf_trans_model = hf_trans_class_model
 
     class_weights = None
@@ -1507,12 +2199,18 @@ if __name__ == "__main__":
             )
     print("\n")
     
+    #
+    # note we instantiate only with relevant_tokens 
+    # from our custom tokenizer (lc_tokenizer)
+    #
     lc_model = LCSequenceClassifier(
-        hf_model=hf_trans_model,            # HuggingFace transformer model being used
-        num_classes=num_classes,            # number of classes for classification
+        hf_model=hf_trans_model,                        # HuggingFace transformer model being used
+        num_classes=num_classes,                        # number of classes for classification
         vocab_size=tok_vocab_size,
+        relevant_tokens=relevant_tokens,    # relevant tokens for the dataset
+        lc_tokenizer=lc_tokenizer,                # HuggingFace tokenizer
         class_type=class_type,              # classification type, options 'single-label' or 'multi-label'
-        class_weights=class_weights,        # class weights for loss function
+        #class_weights=class_weights,        # class weights for loss function
         supervised=args.supervised,
         tce_matrix=tce_matrix,
         finetune=args.tunable,              # embeddings are trainable (True), default is False (static)
@@ -1521,15 +2219,60 @@ if __name__ == "__main__":
         comb_method=args.sup_mode,          # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
         #debug=True
     ).to(device)
-
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
+
+
+
+    def get_embedding_dims(hf_model):
+        """
+        Retrieve the embedding dimensions from the Hugging Face model.
+
+        Parameters:
+        - hf_model: A Hugging Face model instance.
+
+        Returns:
+        - Tuple[int]: The shape of the embedding layer (vocab_size, embedding_dim).
+        """
+        print("get_embedding_dims()...")
+        #print("hf_model:\n", type(hf_model), hf_model)
+
+        # Find the embedding layer dynamically
+        if hasattr(hf_model, "embeddings"):                                             # BERT, RoBERTa, DistilBERT, ALBERT
+            embedding_layer = hf_model.embeddings.word_embeddings
+        elif hasattr(hf_model, "wte"):                                                  # GPT-2
+            embedding_layer = hf_model.wte    
+        elif hasattr(hf_model, "word_embedding"):                                       # XLNet        
+            embedding_layer = hf_model.word_embedding
+        elif hasattr(hf_model, "llama"):
+            embedding_layer = hf_model.model.embed_tokens
+        else:
+            raise ValueError("Model not supported for automatic embedding extraction")
+
+        print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+        model_size = embedding_layer.weight.shape
+        embedding_size = hf_model.config.hidden_size
+        
+        return model_size, embedding_size
+    
+    # Get embedding size from the model
+    #dimensions, vec_size = get_embedding_dims(lc_model.transformer)
+    dimensions = lc_model.relevant_embeddings.shape
+    print("dimensions:", dimensions)
+
+    # Concatenate supervised-specific dimensions if args.supervised is True
+    if args.supervised:
+        # Convert tce_matrix.shape to string before concatenating
+        dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
+    # Log the dimensions
+    print("dimensions (for logger):", dimensions)
 
     # Prepare datasets
     train_dataset = LCDataset(
         texts_train, 
         labels_train, 
         tokenizer, 
-        max_length=max_length,
+        max_length=lc_tokenizer.max_length,
         class_type=class_type 
     )
 
@@ -1537,7 +2280,7 @@ if __name__ == "__main__":
         texts_val, 
         labels_val, 
         tokenizer, 
-        max_length=max_length,
+        max_length=lc_tokenizer.max_length,
         class_type=class_type
     )
 
@@ -1545,16 +2288,61 @@ if __name__ == "__main__":
         test_data, 
         labels_test, 
         tokenizer, 
-        max_length=max_length,
+        max_length=lc_tokenizer.max_length,
         class_type=class_type
     )
 
     tinit = time()
 
-    # Training arguments
-    training_args = TrainingArguments(
+    #
+    # set Training arguments
+    #
+    """
+    training_args_orig = TrainingArguments(
         output_dir='../out',
-        evaluation_strategy="epoch",
+        evaluation_strategy="epoch",                        
+        save_strategy="epoch",
+        save_total_limit=3,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_f1_macro",
+        greater_is_better=True,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        num_train_epochs=args.epochs,
+        weight_decay=args.weight_decay,
+        logging_dir='../log',
+        run_name='trans_layer_cake',
+        seed=args.seed,
+        report_to="none"
+    )
+    """
+
+    """
+    # 
+    # set Training arguments with evaluation strategy set to steps
+    #
+    steps_per_epoch = len(texts_train) / (batch_size * num_devices)         # Calculate steps per epoch
+    print(f"steps_per_epoch: {steps_per_epoch}")
+
+    desired_evaluations_per_epoch = 2                                       # Evaluate 2 times per epoch
+    print("desired_evaluations_per_epoch:", desired_evaluations_per_epoch)
+    
+    #eval_steps = steps_per_epoch / desired_evaluations_per_epoch            # Calculate eval_steps
+    eval_steps = int(round(steps_per_epoch / desired_evaluations_per_epoch))
+    print(f"eval_steps: {eval_steps}")
+
+    # Ensure save_steps is a multiple of eval_steps
+    save_steps = eval_steps  # Save after every evaluation
+    print(f"save_steps: {save_steps}")
+    """
+
+    training_args_opt = TrainingArguments(
+        output_dir='../out',
+        #evaluation_strategy="steps",                                # Change to "steps" for evaluation after a fixed number of steps
+        #eval_steps=eval_steps,                                      # Add this to specify evaluation frequency (e.g., every 100 steps)
+        #save_strategy="steps",                                      # Optional: Save the model checkpoint after evaluation
+        #save_steps=eval_steps,                                      # Same frequency as eval_steps to save checkpoints
+        evaluation_strategy="epoch",                        
         save_strategy="epoch",
         save_total_limit=3,
         load_best_model_at_end=True,
@@ -1573,7 +2361,7 @@ if __name__ == "__main__":
     # Trainer with custom data collator
     trainer = Trainer(
         model=lc_model,                                     # use LCSequenceClassifier model
-        args=training_args,
+        args=training_args_opt,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=custom_data_collator,

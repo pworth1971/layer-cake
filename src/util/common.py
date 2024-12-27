@@ -600,7 +600,9 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
 
 
 class SystemResources:
+
     def __init__(self):
+    
         self.os = self.get_os()
         self.cpus = self.get_cpus()
         self.mem = self.get_mem()
@@ -642,6 +644,9 @@ class SystemResources:
             return f'{self.num_cuda_devices}:{self.cuda_devices[0]}'
         else:
             return None
+        
+    def get_num_gpus(self):
+        return self.num_cuda_devices
 
     def __str__(self):
         return f"OS: {self.os}, CPUs: {self.cpus}, Memory: {self.mem}, GPUs: {self.gpus}"

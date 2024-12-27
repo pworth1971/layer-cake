@@ -11,7 +11,8 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
 
-from data.lc_trans_dataset import preprocess, get_dataset_data, PICKLE_DIR, RANDOM_SEED
+from data.lc_trans_dataset import preprocess, get_dataset_data, check_empty_docs
+from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED
 
 import pickle
 import numpy as np
@@ -176,9 +177,30 @@ class Dataset:
         nfeats = len(self._vectorizer.vocabulary_)
         nC = self.devel_labelmatrix.shape[1]
         nD=nTr_docs+nTe_docs
-        print(f'{self.classification_type}, nD={nD}=({nTr_docs}+{nTe_docs}), nF={nfeats}, nC={nC}')
+        print(f'N={self.name}, T={self.classification_type}, nD={nD}=({nTr_docs}+{nTe_docs}), nF={nfeats}, nC={nC}')
         return self
 
+
+    def inspect_text(self):
+
+        print("class_type:", self.classification_type)
+        print("num_classes:", self.nC)
+        print("target_names:", self.target_names)
+
+        print("train_data:", type(self.devel_raw), len(self.devel_raw))
+        print("train_data[0]:", type(self.devel_raw[0]), self.devel_raw[0])
+        print("train_target:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("train_target[0]:", type(self.devel_labelmatrix[0]), self.devel_labelmatrix[0].shape, self.devel_labelmatrix[0])
+
+        print("test_data:", type(self.test_raw), len(self.test_raw))
+        print("test_data[0]:", type(self.test_raw[0]), self.test_raw[0])
+        print("labels_test:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels_test[0]:", type(self.test_labelmatrix[0]), self.test_labelmatrix[0].shape, self.test_labelmatrix[0])
+
+        # Check for empty strings in train_data and test_data
+        check_empty_docs(self.devel_raw, "Train")
+        check_empty_docs(self.test_raw, "Test")
+        
 
     def _load_bbc_news(self):
 

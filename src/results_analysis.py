@@ -205,7 +205,7 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
                     )
 
                     # Customize plot
-                    plt.title(f"DATASET:{dataset}, MODEL: {model}, MEASURE: {measure} [{embedding_category} Embeddings]", fontsize=20, weight='bold')           # Increased title size
+                    plt.title(f"DATASET:{dataset} | MODEL: {model} | MEASURE: {measure} [{embedding_category} Embeddings]", fontsize=20, weight='bold')           # Increased title size
                     plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)                                                     # Larger x-axis label
                     plt.ylabel(measure, fontsize=14)                                                                                    # Larger y-axis label
                     plt.ylim(y_axis_threshold, 1)                                                                                       # Set y-axis range
@@ -445,14 +445,14 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
 
             # Ensure the x-axis is treated as categorical and sorted, and rotate the labels
             fig.update_xaxes(
-                title_text='Model - Representation',
+                title_text='Representation',
                 type='category',                                                # Treat x-axis as categorical to prevent reordering
                 tickangle=-45,                                                  # Rotate the x-axis labels
                 tickfont=dict(size=9)                                           # Make the x-axis labels slightly smaller
             )
 
             fig.update_yaxes(
-                title_text='Performance Metric', 
+                title_text='Performance', 
                 range=[y_axis_threshold, 1]
             )
 

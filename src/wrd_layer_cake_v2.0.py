@@ -8,7 +8,8 @@ from sklearn.model_selection import train_test_split
 
 from data.dataset import *
 
-from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED, show_class_distribution
+from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED
+from data.lc_trans_dataset import show_class_distribution
 
 from embedding.pretrained import *
 from embedding.supervised import get_supervised_embeddings, STWFUNCTIONS
@@ -21,7 +22,6 @@ from util.common import *
 from util.csv_log import CSVLog
 from util.file import create_if_not_exist
 from util.metrics import *
-
 
 
 
@@ -503,9 +503,10 @@ def main(opt):
         seed=opt.seed 
     )
     
-    print('\n]tDataset:', dataset.show())
+    print('\n\t]tDataset:', dataset.show())
     
     dataset.inspect_text()
+    print("\n")
 
     word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, opt, pt_model=pt_model)
     print("word2index:", type(word2index), len(word2index))

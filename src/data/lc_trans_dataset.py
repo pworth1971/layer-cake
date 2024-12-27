@@ -4,12 +4,7 @@ from tqdm import tqdm
 import re
 import pandas as pd
 import string
-
-from pathlib import Path
-from urllib import request
-import tarfile
-import gzip
-import shutil
+import random
 
 from scipy.sparse import csr_matrix
 
@@ -29,7 +24,6 @@ from joblib import Parallel, delayed
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
-
 
 
 #SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
@@ -1079,3 +1073,81 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
     print("\tclass weights:\n", class_weights)
 
     return class_weights
+
+
+
+
+def check_empty_docs(data, name):
+    """
+    Check for empty docs (strings) in a list of data and print details for debugging.
+
+    Args:
+        data: List of strings (e.g., train_data or test_data).
+        name: Name of the dataset (e.g., "Train", "Test").
+    """
+    empty_indices = [i for i, doc in enumerate(data) if not doc.strip()]
+    if empty_indices:
+        print(f"[WARNING] {name} dataset contains {len(empty_indices)} empty strings (docs).")
+        for idx in empty_indices[:10]:  # Print details for up to 10 empty rows
+            print(f"Empty String at Index {idx}: Original Document: '{data[idx]}'")
+    else:
+        print(f"[INFO] No empty strings (docs) found in {name} dataset.")
+
+
+
+def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5, debug=False):
+    """
+    Spot-check random documents in the dataset for their TF-IDF calculations.
+
+    Args:
+        documents: List of original documents (strings).
+        vectorizer: Fitted LCTFIDFVectorizer object.
+        tokenizer: Custom tokenizer object.
+        vectorized_data: Sparse matrix of TF-IDF features.
+        num_docs: Number of random documents to check.
+    """
+    vocab = vectorizer.vocabulary_
+    idf_values = vectorizer.idf_
+    reverse_vocab = {idx: token for token, idx in vocab.items()}
+    
+    print("\n[INFO] Spot-checking random documents...")
+    
+    if (debug):
+        print("documents:", type(documents), len(documents))
+        print("documents[0]:", type(documents[0]), documents[0])
+
+        print("vectorized_data:", type(vectorized_data))
+        print(f"[DEBUG] Vocabulary size: {len(vocab)}, IDF array size: {len(idf_values)}\n")
+
+    # Randomly select `num_docs` indices from the document list
+    doc_indices = random.sample(range(len(documents)), min(num_docs, len(documents)))
+
+    for doc_id in doc_indices:
+        doc = documents[doc_id]
+
+        if (debug):
+            print(f"[INFO] Document {doc_id}:")
+            print(f"Original Text: {doc}\n")
+
+        tokens = tokenizer(doc)
+        if (debug):
+            print(f"Tokens: {tokens}\n")
+
+        vectorized_row = vectorized_data[doc_id]
+        mismatches = []
+
+        for token in tokens:
+            if token in vocab:
+                idx = vocab[token]
+                if idx < len(idf_values):
+                    tfidf_value = vectorized_row[0, idx]
+                    expected_idf = idf_values[idx]
+                    if tfidf_value == 0:
+                        print(f"[DEBUG] Token '{token}' in tokenizer vocabulary: {token in tokenizer.get_vocab()}")
+                        print(f"[ERROR] Token '{token}' has IDF {expected_idf} but TF-IDF is 0.")
+                else:
+                    print(f"[WARNING] Token '{token}' has out-of-bounds index {idx}.")
+            else:
+                print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
+
+    print("finished spot checking docs.\n")
