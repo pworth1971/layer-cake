@@ -420,7 +420,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
             fig.update_layout(
                 title={
-                    'text': f'{dataset} {measure} Stats by Model & Representations',
+                    'text': f'{dataset} {measure} model performance [by representation]',
                     'y': 0.95,
                     'x': 0.5,
                     'xanchor': 'center',
