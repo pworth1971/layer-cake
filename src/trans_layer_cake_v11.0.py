@@ -545,7 +545,7 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
 
 
 
-def vectorize(texts_train, texts_val, texts_test, lc_tokenizer):
+def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
 
     print(f'vectorize(), max_length: {lc_tokenizer.max_length}')
 
@@ -561,7 +561,10 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer):
     
     tokenizer_vocab = lc_tokenizer.tokenizer.get_vocab()
 
-    vectorizer = LCTFIDFVectorizer(tokenizer=lc_tokenizer.tokenizer, debug=True)
+    vectorizer = LCTFIDFVectorizer(
+        tokenizer=lc_tokenizer.tokenizer, 
+        debug=debug
+        )
 
     Xtr = vectorizer.fit_transform(
         X=preprocessed_train,
@@ -600,7 +603,7 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer):
 
 
 
-def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset, pretrained, vtype='tfidf'):
+def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset, pretrained, vtype='tfidf', debug=False):
     """
     Wrapper for vectorize() method to save and load from a pickle file.
 
@@ -629,7 +632,8 @@ def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset
             texts_train, 
             texts_val, 
             test_data, 
-            lc_tokenizer
+            lc_tokenizer,
+            debug=debug
         )
         # Save the results to the pickle file
         with open(pickle_file, 'wb') as f:
@@ -1020,6 +1024,19 @@ class LCSequenceClassifier(nn.Module):
 
         if (self.debug):
             print(f"combined_output: {type(combined_output)}, {combined_output.shape}")
+
+        if attention_mask is not None:
+            mask_expanded = attention_mask.unsqueeze(-1).expand(combined_output.size())
+            masked_output = combined_output * mask_expanded
+            sum_hidden_state = torch.sum(masked_output, dim=1)
+            sum_mask = torch.sum(mask_expanded, dim=1).clamp(min=1e-9)  # Avoid division by zero
+            pooled_output = sum_hidden_state / sum_mask
+        else:
+            pooled_output = combined_output.mean(dim=1)  # Fallback to mean pooling
+
+        if self.debug:
+            print(f"pooled_output: {type(pooled_output)}, {pooled_output.shape}")
+
 
         # Pool across the sequence dimension to reduce to (batch_size, combined_size)
         if attention_mask is not None:
@@ -1937,7 +1954,7 @@ if __name__ == "__main__":
     lc_tokenizer = LCTokenizer(
         model_name=model_name,
         model_path=model_path,
-        lowercase=False,
+        lowercase=True,                                         # should align with the way dataset is (pre) processed
         remove_special_tokens=False,
         padding='max_length',
         truncation=True
@@ -1983,7 +2000,8 @@ if __name__ == "__main__":
         lc_tokenizer,
         args.dataset,
         args.pretrained,
-        args.vtype
+        args.vtype,
+        debug=True
     )
 
     print("vectorizer:\n", vectorizer)
@@ -2158,7 +2176,7 @@ if __name__ == "__main__":
         normalize_tces=True,                 
         dropout_rate=args.dropprob,                     # dropout rate for TCEs
         comb_method=args.sup_mode,                      # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
-        #debug=True                                     # turns on active forware debugging
+        debug=True                                     # turns on active forware debugging
     ).to(device)
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
 

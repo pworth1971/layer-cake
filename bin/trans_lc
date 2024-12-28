@@ -6,16 +6,17 @@ PROGRAM_NAME="python ../src/trans_layer_cake_v11.0.py"
 #
 # TEST/STG settings
 #
-#EPOCHS=33              # TEST
-#PATIENCE=3             # TEST
-#LOG_FILE="--log-file ../log/lc_nn_trans_test.test"
+EPOCHS=33              # TEST
+PATIENCE=3             # TEST
+
+LOG_FILE="--log-file ../log/lc_nn_trans_test.test"
 
 #
 # DEV settings
 #
-EPOCHS=12               # DEV
-PATIENCE=1              # DEV
-LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
+#EPOCHS=12               # DEV
+#PATIENCE=1              # DEV
+#LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
 
 SEED=33
