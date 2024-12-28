@@ -2306,7 +2306,7 @@ if __name__ == "__main__":
     # Get embedding size from the model
     dimensions, vec_size = lc_model.get_embedding_dims()
     print(f'dimensions: {dimensions}, vec_size: {vec_size}')
-
+    dimensions = f'({dimensions},{vec_size})'
     # Concatenate supervised-specific dimensions if args.supervised is True
     if args.supervised:
         # Convert tce_matrix.shape to string before concatenating
