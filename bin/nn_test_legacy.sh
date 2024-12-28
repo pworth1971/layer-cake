@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 PY="python ../src/wrd_layer_cake_v2.0.py"
-LOG="--log-file ../log/lc_nn_legacy_test.test"
+LOG="--log-file ../log/lc_nn_cuda_test.legacy.test"
 
 CNN="--net cnn"
 LSTM="--net lstm"
@@ -26,22 +26,22 @@ do
     #$PY $LOG $dataset	$CNN	--learnable 200	--channels 256 --seed $run
 
     $PY $LOG $dataset	$CNN	--channels 256	--pretrained glove --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 256	--pretrained glove	--tunable --seed $run
-    #$PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained glove	--tunable --seed $run --droptype learn
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--channels 256	--pretrained glove	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained glove	--tunable --seed $run --droptype learn
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised --seed $run
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained glove	--supervised	--tunable --seed $run
 
     $PY $LOG $dataset	$CNN	--channels 256	--pretrained word2vec --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 256	--pretrained word2vec	--tunable --seed $run
-    #$PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained word2vec	--tunable --seed $run --droptype learn
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained word2vec	--supervised --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained word2vec	--supervised	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--channels 256	--pretrained word2vec	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained word2vec	--tunable --seed $run --droptype learn
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained word2vec	--supervised --seed $run
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained word2vec	--supervised	--tunable --seed $run
 
     $PY $LOG $dataset	$CNN	--channels 256	--pretrained fasttext --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 256	--pretrained fasttext	--tunable --seed $run
-    #$PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained fasttext	--tunable --seed $run --droptype learn
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext	--supervised --seed $run
-    #$PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext	--supervised	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--channels 256	--pretrained fasttext	--tunable --seed $run
+    $PY $LOG $dataset	$CNN	--learnable 115	--channels 256	--pretrained fasttext	--tunable --seed $run --droptype learn
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext	--supervised --seed $run
+    $PY $LOG $dataset	$CNN	--channels 512	--pretrained fasttext	--supervised	--tunable --seed $run
 
     ##
     # LSTM runs

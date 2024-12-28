@@ -78,13 +78,13 @@ VECTOR_CACHE = "../.vector_cache"
 #
 # hyper parameters
 #
-VAL_SIZE = 0.20             # percentage of data to be set aside for model validation
-MC_THRESHOLD = 0.5          # Multi-class threshold
-PATIENCE = 5                # Early stopping patience
-LEARNING_RATE = 1e-6        # Learning rate
+VAL_SIZE = 0.20                     # percentage of data to be set aside for model validation
+MC_THRESHOLD = 0.5                  # Multi-class threshold
+PATIENCE = 5                        # Early stopping patience
+LEARNING_RATE = 1e-6                # Learning rate
 EPOCHS = 33
 
-MAX_TOKEN_LENGTH = 1024      # Maximum token length for transformer models models
+MAX_TOKEN_LENGTH = 512              # Maximum token length for transformer models models
 
 #
 # batch sizes for training and testing
@@ -730,11 +730,12 @@ def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset
 class LCSequenceClassifier(nn.Module):
 
     def __init__(self, 
-                hf_model: nn.Module, 
+                hf_model: nn.Module,
                 num_classes: int, 
                 vocab_size: int, 
-                relevant_tokens: list,                              # New: Subset of relevant tokens for the dataset
+                relevant_tokens: list,                                  # subset of relevant tokens for the dataset
                 lc_tokenizer: LCTokenizer,                             
+                simple: bool = True,                                    # whether or not to use the simple classifier head
                 class_type: str = 'single-label', 
                 class_weights: torch.Tensor = None, 
                 supervised: bool = False, 
@@ -752,6 +753,9 @@ class LCSequenceClassifier(nn.Module):
             hf_model: The HuggingFace pre-trained transformer model (e.g., BERT), preloaded.
             num_classes: Number of classes for classification.
             vocab_size: size of (tokenizer) vocabulary, for assertions
+            relevant_tokens: List of tokens to be considered relevant for classification (from embeddings).
+            lc_tokenizer: Custom tokenizer for the dataset.
+            simple: Whether to use the simple classifier head (just the one Linear layer after HF SeuqenceClassifier).
             class_type: type of classification problem, either 'single-label' or 'multi-label'
             class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
@@ -764,7 +768,7 @@ class LCSequenceClassifier(nn.Module):
         """
         super(LCSequenceClassifier, self).__init__()
 
-        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, simple: {simple}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
 
         if (supervised):
             print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
@@ -923,21 +927,20 @@ class LCSequenceClassifier(nn.Module):
 
         print("combined_size:", combined_size)
 
+        # -----------------------------------------------------------------------------------------------
+        # define classifier
         #
-        # simplified classification head that adjusts the size of the Linear layer according 
-        # to the method we are using to combine TCEs with built in transformer embeddings
-        #
-        self.classifier = nn.Linear(combined_size, self.num_classes)                
-        
-        """
-        self.classifier = nn.Sequential(
-            nn.Linear(combined_size, 256),                  # First linear layer
-            nn.ReLU(),                                      # non-linear activation function
-            nn.Dropout(dropout_rate),                       # regularization
-            nn.Linear(256, self.num_classes)                # FInal Linear layer
-        )
-        """
-
+        if simple:
+            # simplified classification head that adjusts the size of the Linear layer according  
+            # to the method we are using to combine TCEs with built in transformer embeddings
+            self.classifier = nn.Linear(combined_size, self.num_classes)                                  
+        else:    
+            self.classifier = nn.Sequential(
+                nn.Linear(combined_size, 256),                  # First linear layer
+                nn.ReLU(),                                      # non-linear activation function
+                nn.Dropout(dropout_rate),                       # regularization
+                nn.Linear(256, self.num_classes)                # FInal Linear layer
+            )
         print("self.classifier:", self.classifier)
         # -----------------------------------------------------------------------------------------------
 
@@ -1156,6 +1159,33 @@ class LCSequenceClassifier(nn.Module):
 
         return {"loss": loss, "logits": logits}
     
+
+    def get_embedding_dims(self):
+        """
+        Retrieve the dimensions of the embedding layer.
+
+        Returns:
+            Tuple[int, int]: A tuple containing the vocabulary size and embedding dimension.
+        """
+        # Identify the embedding layer dynamically
+        if hasattr(self.transformer, 'bert'):
+            embedding_layer = self.transformer.bert.embeddings.word_embeddings
+        elif hasattr(self.transformer, 'roberta'):
+            embedding_layer = self.transformer.roberta.embeddings.word_embeddings
+        elif hasattr(self.transformer, 'transformer'):  # GPT-2
+            embedding_layer = self.transformer.transformer.wte
+        elif hasattr(self.transformer, 'model') and hasattr(self.transformer.model, 'embed_tokens'):  # LLaMA
+            embedding_layer = self.transformer.model.embed_tokens
+        else:
+            raise ValueError("Unsupported model type or embedding layer not found.")
+
+        # Extract dimensions
+        vocab_size, embedding_dim = embedding_layer.weight.size()
+
+        if self.debug:
+            print(f"Embedding layer dimensions: vocab_size={vocab_size}, embedding_dim={embedding_dim}")
+
+        return vocab_size, embedding_dim
 
 
 
@@ -1874,20 +1904,24 @@ def compute_dataset_vocab(train_texts, val_texts, test_texts, tokenizer):
 def parse_args():
     parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
     
+    # system params
     parser.add_argument('--dataset', required=True, type=str, choices=SUPPORTED_DATASETS, help='Dataset to use')
-
-    parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
-    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
+    parser.add_argument('--show-dist', action='store_true', default=True, help='Show dataset class distribution')
+    #parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
+    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
+                        help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], help='supported language model types for dataset representation')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
-    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
-    parser.add_argument('--sup-mode', type=str, default='cat', help='How to combine TCEs with model embeddings (add, dot, cat)')
-    parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
+    parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', help='Path to log file')
+    parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
+    parser.add_argument('--simple', action='store_true', default=True, help='Use the simple classifier (just the one Linear layer after HF SeuqenceClassifier)')
+    
+    # model params
+    parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
+    
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
-    parser.add_argument('--log-file', type=str, default='../log/lc_nn_test.test', help='Path to log file')
-    parser.add_argument('--show-dist', action='store_true', default=True, help='Show dataset class distribution')
-    parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
     parser.add_argument('--dropprob', type=float, default=0.3, metavar='[0.0, 1.0]', help='dropout probability for TCE Embedding layer classifier head (default: 0.3)')
     parser.add_argument('--net', type=str, default='hf.sc.ff', metavar='str', help=f'net, defaults to hf.sc (only supported option)')
     parser.add_argument('--learnable', type=int, default=0, metavar='int', help='dimension of the learnable embeddings (default 0)')
@@ -1899,10 +1933,12 @@ def parse_args():
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    
+    # TCE params
+    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
+    parser.add_argument('--sup-mode', type=str, default='cat', help='How to combine TCEs with model embeddings (add, dot, cat)')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
-    parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
-                        help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
@@ -2216,44 +2252,6 @@ if __name__ == "__main__":
     
     print("\nhf_trans_model:\n", hf_trans_model)
     print("\nhf_trans_class_model:\n", hf_trans_class_model)
-    
-    def get_embedding_dims(hf_model):
-        """
-        Retrieve the embedding dimensions from the Hugging Face model.
-
-        Parameters:
-        - hf_model: A Hugging Face model instance.
-
-        Returns:
-        - Tuple[int]: The shape of the embedding layer (vocab_size, embedding_dim).
-        """
-        print("get_embedding_dims()...")
-        #print("hf_model:\n", type(hf_model), hf_model)
-
-        # Find the embedding layer dynamically
-        if hasattr(hf_model, "embeddings"):                                             # BERT, RoBERTa, DistilBERT, ALBERT
-            embedding_layer = hf_model.embeddings.word_embeddings
-        elif hasattr(hf_model, "wte"):                                                  # GPT-2
-            embedding_layer = hf_model.wte    
-        elif hasattr(hf_model, "word_embedding"):                                       # XLNet        
-            embedding_layer = hf_model.word_embedding
-        elif hasattr(hf_model, "llama"):
-            embedding_layer = hf_model.model.embed_tokens
-        else:
-            raise ValueError("Model not supported for automatic embedding extraction")
-
-        print("embedding_layer:", type(embedding_layer), embedding_layer)
-
-        model_size = embedding_layer.weight.shape
-        embedding_size = hf_model.config.hidden_size
-        
-        return model_size, embedding_size
-  
-    # Get embedding size from the model
-    dimensions, vec_size = get_embedding_dims(hf_trans_model)
-    #dimensions = lc_model.relevant_embeddings.shape                    # if we are filtering embeddings (relevant_embeddings is Not None)
-    print("dimensions:", dimensions)
-
 
     hf_trans_model = hf_trans_class_model
 
@@ -2292,6 +2290,7 @@ if __name__ == "__main__":
         #relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
         relevant_tokens=None,
         lc_tokenizer=lc_tokenizer,                      # HuggingFace tokenizer
+        simple=args.simple,                             # whethe or not to use the simple classifier head
         class_type=class_type,                          # classification type, options 'single-label' or 'multi-label'
         #class_weights=class_weights,                   # class weights for loss function
         supervised=args.supervised,
@@ -2303,6 +2302,10 @@ if __name__ == "__main__":
         #debug=True                                     # turns on active forware debugging
     ).to(device)
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
+
+    # Get embedding size from the model
+    dimensions, vec_size = lc_model.get_embedding_dims()
+    print(f'dimensions: {dimensions}, vec_size: {vec_size}')
 
     # Concatenate supervised-specific dimensions if args.supervised is True
     if args.supervised:
