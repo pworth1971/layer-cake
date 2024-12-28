@@ -105,13 +105,6 @@ DEFAULT_MAX_CUDA_BATCH_SIZE = 32
 SUPPORTED_OPS = ["cat", "add", "dot"]
 
 
-#
-# whether or not to use mean_pooling in the
-# forward method of the Classifier for all models
-#
-USE_MEAN_POOLING = False
-
-
 class LCTokenizer:
 
     def __init__(self, model_name, model_path, lowercase=False, remove_special_tokens=False, padding='max_length', truncation=True):
@@ -855,7 +848,7 @@ class LCSequenceClassifier(nn.Module):
             nn.Linear(256, self.num_classes)                # FInal Linear layer
         )
         """
-        
+
         print("self.classifier:", self.classifier)
         # -----------------------------------------------------------------------------------------------
 
@@ -984,52 +977,15 @@ class LCSequenceClassifier(nn.Module):
         # Pass inputs through the transformer model, ie Base model forward pass
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
 
-        if (USE_MEAN_POOLING):
-            # Extract the last hidden state (batch_size, seq_length, hidden_size)
-            last_hidden_state = outputs.hidden_states[-1]
-
-            # Apply mean pooling across the sequence dimension
-            # Mask the padded tokens during mean pooling to avoid including their embeddings
-            if attention_mask is not None:
-                # Expand attention mask for the hidden size dimension
-                mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size())
-                masked_hidden_state = last_hidden_state * mask_expanded
-                sum_hidden_state = torch.sum(masked_hidden_state, dim=1)
-                sum_mask = torch.sum(mask_expanded, dim=1)
-                pooled_output = sum_hidden_state / sum_mask.clamp(min=1e-9)  # Avoid division by zero
-            else:
-                # Simple mean pooling when no attention mask is provided
-                pooled_output = torch.mean(last_hidden_state, dim=1)
+        if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
+            last_hidden_state = outputs.hidden_states[-1]  # Use hidden states if available
         else:
-            #
-            # retrieve the pooled output representation depending upon the underlying SequenceClassifier model
-            # Use pooled output if available, if not and we are using a BERT based model, we get the
-            # CLS token, ie the first token, otherwise (GPT2 or LlaMa) we use the last token
-            #
-            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-                pooled_output = outputs.pooler_output       
-            elif isinstance(self.transformer, (BertForSequenceClassification, 
-                                            RobertaForSequenceClassification, 
-                                            DistilBertForSequenceClassification)):
-                pooled_output = outputs.hidden_states[-1][:, 0]                                                             # Use CLS token embedding
-            elif isinstance(self.transformer, (GPT2ForSequenceClassification)):
-                pooled_output = outputs.hidden_states[-1][:, -1]                                                            # Use last token embedding
-            elif isinstance(self.transformer, XLNetForSequenceClassification):
-                # XLNet-specific pooling logic
-                #pooled_output = outputs.hidden_states[-1][:, 0, :]  # Use the first token representation
+            raise AttributeError("Transformer model did not output hidden states. Ensure output_hidden_states=True is set.")
+        if (self.debug):
+            print(f"last_hidden_state: {type(last_hidden_state)}, {last_hidden_state.shape}")
 
-                # Use mean pooling over the last hidden layer
-                last_hidden_state = outputs.hidden_states[-1]                       # Extract the last layer's hidden states
-                pooled_output = torch.mean(last_hidden_state, dim=1)                # Mean pooling across the sequence dimension
-            else:
-                raise ValueError("Unsupported model type for pooling. Please implement pooling logic for this transformer.")
-
-        if (self.debug):    
-            print(f'pooled_output (pre combination): {type(pooled_output)}, {pooled_output.shape}')
-
-        if torch.isnan(pooled_output).any() or torch.isinf(pooled_output).any():
-            #print("[ERROR] pooled_output contains NaN or Inf values")
-            raise ValueError("[ERROR] pooled_output contains NaN or Inf values")
+        # default 
+        combined_output = last_hidden_state     # USe only the transformer outputs
 
         #
         # Integrate TCEs if supervised is True
@@ -1052,46 +1008,31 @@ class LCSequenceClassifier(nn.Module):
             tce_indices = input_ids                                     # Assuming all input tokens are relevant for TCEs
             tce_embeddings = self.tce_layer(tce_indices)                # (batch_size, seq_length, tce_dim)
 
-            # Apply pooling to TCE embeddings to obtain a single vector per example
-            pooled_tce_embeddings = tce_embeddings.mean(dim=1)                                  # mean pooling, output (batch_size, tce_dim)
-            #pooled_tce_embeddings, _ = tce_embeddings.max(dim=1)                               # max pooling, output (batch_size, tce_dim)
-            
-            if (self.debug):
-                print("pooled_tce_embeddings:", type(pooled_tce_embeddings), pooled_tce_embeddings.shape)
-                print("pooled_tce_embeddings[0]:", type(pooled_tce_embeddings[0]), pooled_tce_embeddings[0])
-            
-            if torch.isnan(pooled_tce_embeddings).any() or torch.isinf(pooled_tce_embeddings).any():
-                #print("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
-                raise ValueError("[ERROR] pooled_tce_embeddings contains NaN or Inf values")
-
-            # Combine transformer output and TCE embeddings
+            # Combine transformer outputs with TCE embeddings
             if self.comb_method == 'cat':
-                if (self.debug):
-                    print("concatenating two matrices...")                                                
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
-                assert pooled_output.size(1) + pooled_tce_embeddings.size(1) == self.hidden_size + self.tce_matrix.size(1), \
-                    f"Concat dimension mismatch: {pooled_output.size(1) + pooled_tce_embeddings.size(1)} != {self.hidden_size + self.tce_matrix.size(1)}"
-                pooled_output = torch.cat((pooled_output, pooled_tce_embeddings), dim=1)        # (batch_size, combined_size)
+                combined_output = torch.cat((last_hidden_state, tce_embeddings), dim=-1)  # (batch_size, seq_length, hidden_size + tce_dim)
             elif self.comb_method == 'add':
-                if (self.debug):
-                    print("adding two matricses...")
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), "Batch size mismatch between pooled output and pooled input TCE matrix"
-                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
-                    f"Add dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
-                pooled_output = pooled_output + pooled_tce_embeddings                               # (batch_size, hidden_size) 
+                combined_output = last_hidden_state + tce_embeddings  # Element-wise addition
             elif self.comb_method == 'dot':
-                if self.debug:
-                    print("computing dot product between embeddings...")
-                assert pooled_output.size(0) == pooled_tce_embeddings.size(0), \
-                    "Batch size mismatch between pooled output and pooled TCE matrix"
-                assert pooled_output.size(1) == pooled_tce_embeddings.size(1), \
-                    f"Dot dimension mismatch: {pooled_output.size(1)} != {pooled_tce_embeddings.size(1)}"
-                pooled_output = (pooled_output * pooled_tce_embeddings)                             # Shape (batch_size, hidden_size)
+                combined_output = last_hidden_state * tce_embeddings  # Element-wise multiplication
             else:
-                raise ValueError(f"Unsupported combination method: {self.comb_method}")    
-            
-        if (self.debug):    
-            print(f'pooled_output (post combination): {type(pooled_output)}, {pooled_output.shape}')
+                raise ValueError(f"Unsupported combination method: {self.comb_method}")
+
+        if (self.debug):
+            print(f"combined_output: {type(combined_output)}, {combined_output.shape}")
+
+        # Pool across the sequence dimension to reduce to (batch_size, combined_size)
+        if attention_mask is not None:
+            mask_expanded = attention_mask.unsqueeze(-1).expand(combined_output.size())
+            masked_output = combined_output * mask_expanded
+            sum_hidden_state = torch.sum(masked_output, dim=1)
+            sum_mask = torch.sum(mask_expanded, dim=1)
+            pooled_output = sum_hidden_state / sum_mask.clamp(min=1e-9)  # Avoid division by zero
+        else:
+            pooled_output = combined_output.mean(dim=1)  # Simple mean pooling when no attention mask is provided
+
+        if self.debug:
+            print(f"pooled_output: {type(pooled_output)}, {pooled_output.shape}")
 
         # Classification head
         logits = self.classifier(pooled_output)
@@ -2207,17 +2148,17 @@ if __name__ == "__main__":
         hf_model=hf_trans_model,                        # HuggingFace transformer model being used
         num_classes=num_classes,                        # number of classes for classification
         vocab_size=tok_vocab_size,
-        relevant_tokens=relevant_tokens,    # relevant tokens for the dataset
-        lc_tokenizer=lc_tokenizer,                # HuggingFace tokenizer
-        class_type=class_type,              # classification type, options 'single-label' or 'multi-label'
-        #class_weights=class_weights,        # class weights for loss function
+        relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
+        lc_tokenizer=lc_tokenizer,                      # HuggingFace tokenizer
+        class_type=class_type,                          # classification type, options 'single-label' or 'multi-label'
+        #class_weights=class_weights,                   # class weights for loss function
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        finetune=args.tunable,              # embeddings are trainable (True), default is False (static)
+        finetune=args.tunable,                          # embeddings are trainable (True), default is False (static)
         normalize_tces=True,                 
-        dropout_rate=args.dropprob,         # dropout rate for TCEs
-        comb_method=args.sup_mode,          # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
-        #debug=True
+        dropout_rate=args.dropprob,                     # dropout rate for TCEs
+        comb_method=args.sup_mode,                      # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
+        #debug=True                                     # turns on active forware debugging
     ).to(device)
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
 
