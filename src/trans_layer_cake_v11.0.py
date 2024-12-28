@@ -235,7 +235,66 @@ class LCTokenizer:
         Returns:
             list: Relevant token IDs for the dataset vocabulary.
         """
+        print("Computing dataset token set...")
+
+        print(f"max_length: {self.max_length}, padding: {self.padding}, truncation: {self.truncation}")
+
+        # Combine all texts from training, validation, and test sets
+        all_texts = train_texts + val_texts + test_texts
+
+        # Use a set to store unique token IDs from the dataset
+        dataset_vocab_ids = set()
+
+        # Tokenize each document with the same parameters used during input preparation
+        for text in all_texts:
+
+            tokens = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding=self.padding,
+                truncation=self.truncation,
+                return_attention_mask=False,  # No need for attention masks here
+                return_token_type_ids=False,  # No need for token type IDs here
+            )
+
+            # Debug: Check for tokens not in tokenizer vocabulary
+            tokenizer_vocab_size = len(self.tokenizer.get_vocab())
+            out_of_vocab_tokens = [token_id for token_id in tokens['input_ids'] if token_id >= tokenizer_vocab_size]
+
+            if out_of_vocab_tokens:
+                print(f"[DEBUG] Found {len(out_of_vocab_tokens)} tokens outside vocabulary in text: {text[:50]}...")
+                print(f"[DEBUG] Out-of-vocab token IDs: {out_of_vocab_tokens}")
+
+            # Add token IDs to the dataset vocabulary
+            dataset_vocab_ids.update(tokens['input_ids'])
+
+        # Ensure token IDs are in the tokenizer's range
+        tokenizer_vocab_size = len(self.tokenizer.get_vocab())
+        relevant_token_ids = [
+            token_id for token_id in dataset_vocab_ids if token_id < tokenizer_vocab_size
+        ]
+
+        print(f"Computed dataset vocabulary: {len(relevant_token_ids)} relevant tokens out of {tokenizer_vocab_size} total tokens in tokenizer.")
+
+        return relevant_token_ids
+
+
+
+    def get_dataset_tokens_orig(self, train_texts, val_texts, test_texts):
+        """
+        Compute the dataset vocabulary as token IDs that align with the tokenizer's vocabulary.
+
+        Args:
+            train_texts (list of str): Training set texts.
+            val_texts (list of str): Validation set texts.
+            test_texts (list of str): Test set texts.
+
+        Returns:
+            list: Relevant token IDs for the dataset vocabulary.
+        """
         print("computing dataset token set...")
+
+        print(f'max_length: {self.max_length}, padding: {self.padding}, truncation: {self.truncation}')
 
         # Combine all texts from training, validation, and test sets
         all_texts = train_texts + val_texts + test_texts
@@ -263,6 +322,7 @@ class LCTokenizer:
         ]
 
         print(f"Computed dataset vocabulary: {len(relevant_token_ids)} relevant tokens out of {tokenizer_vocab_size} total tokens in tokenizer.")
+
         return relevant_token_ids
 
 
@@ -407,7 +467,7 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
         Fit the vectorizer to the tokenized documents.
 
         Args:
-            tokenized_documents: List of tokenized documents (lists of tokens).
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
             y: Ignored, present for compatibility with sklearn pipelines.
         """
         print("Fitting LCTFIDFVectorizer to tokenized docs...")
@@ -416,16 +476,26 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
         print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
 
         term_doc_counts = defaultdict(int)
-        for tokens in tokenized_documents:
-            # Filter out blank tokens
+
+        for doc_idx, tokens in enumerate(tokenized_documents):
+            # Ensure tokens are processed using the tokenizer
+            if isinstance(tokens, str):
+                tokens = self.tokenizer.tokenize(tokens)
+            
+            # Filter out blank tokens and special tokens not in the vocabulary
             tokens = [token for token in tokens if token.strip()]
             unique_tokens = set(tokens)
+
+            unmatched_tokens = []
+
             for token in unique_tokens:
                 if token in self.vocabulary_:
                     term_doc_counts[token] += 1
                 else:
-                    if self.debug:
-                        print(f"[DEBUG] Token '{token}' not in vocabulary (fit).")
+                    unmatched_tokens.append(token)
+
+            if self.debug and unmatched_tokens:
+                print(f"[DEBUG] Document {doc_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}")
 
         num_documents = len(tokenized_documents)
         self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
@@ -435,9 +505,19 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
 
             if self.debug and self.idf_[idx] == 0:
                 print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
-                      f"Document count: {doc_count}, Total docs: {num_documents}.")
+                    f"Document count: {doc_count}, Total docs: {num_documents}.")
+
+        if self.debug:
+            # Debug: Check if special tokens are present
+            special_tokens = self.tokenizer.all_special_tokens
+            for token in special_tokens:
+                if token not in self.vocabulary_:
+                    print(f"[WARNING] Special token '{token}' not found in the vocabulary.")
+                else:
+                    print(f"[INFO] Special token '{token}' is correctly included in the vocabulary.")
 
         return self
+
 
 
     def transform(self, tokenized_documents, original_documents=None):
@@ -694,11 +774,16 @@ class LCSequenceClassifier(nn.Module):
         self.tokenizer = lc_tokenizer.tokenizer
         print("self.tokenizer:", self.tokenizer)
 
-        #
-        # Filter the transformer embeddings to only include relevant tokens
-        # that are present from the Dataset vocabulary (as tokenized)
-        #
-        self.transformer, self.relevant_embeddings = self._filter_transformer_embeddings(hf_model=hf_model, relevant_tokens=relevant_tokens)                    
+        if relevant_tokens is not None:
+            #
+            # Filter the transformer embeddings to only include relevant tokens
+            # that are present from the Dataset vocabulary (as tokenized)
+            #
+            self.transformer, self.relevant_embeddings = self._filter_transformer_embeddings(hf_model=hf_model, relevant_tokens=relevant_tokens)                    
+        else:
+            self.transformer = hf_model
+            self.relevant_embeddings = None
+
         print("self.transformer:", self.transformer)
 
         self.hidden_size = self.transformer.config.hidden_size          
@@ -2132,6 +2217,44 @@ if __name__ == "__main__":
     print("\nhf_trans_model:\n", hf_trans_model)
     print("\nhf_trans_class_model:\n", hf_trans_class_model)
     
+    def get_embedding_dims(hf_model):
+        """
+        Retrieve the embedding dimensions from the Hugging Face model.
+
+        Parameters:
+        - hf_model: A Hugging Face model instance.
+
+        Returns:
+        - Tuple[int]: The shape of the embedding layer (vocab_size, embedding_dim).
+        """
+        print("get_embedding_dims()...")
+        #print("hf_model:\n", type(hf_model), hf_model)
+
+        # Find the embedding layer dynamically
+        if hasattr(hf_model, "embeddings"):                                             # BERT, RoBERTa, DistilBERT, ALBERT
+            embedding_layer = hf_model.embeddings.word_embeddings
+        elif hasattr(hf_model, "wte"):                                                  # GPT-2
+            embedding_layer = hf_model.wte    
+        elif hasattr(hf_model, "word_embedding"):                                       # XLNet        
+            embedding_layer = hf_model.word_embedding
+        elif hasattr(hf_model, "llama"):
+            embedding_layer = hf_model.model.embed_tokens
+        else:
+            raise ValueError("Model not supported for automatic embedding extraction")
+
+        print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+        model_size = embedding_layer.weight.shape
+        embedding_size = hf_model.config.hidden_size
+        
+        return model_size, embedding_size
+  
+    # Get embedding size from the model
+    dimensions, vec_size = get_embedding_dims(hf_trans_model)
+    #dimensions = lc_model.relevant_embeddings.shape                    # if we are filtering embeddings (relevant_embeddings is Not None)
+    print("dimensions:", dimensions)
+
+
     hf_trans_model = hf_trans_class_model
 
     class_weights = None
@@ -2166,7 +2289,8 @@ if __name__ == "__main__":
         hf_model=hf_trans_model,                        # HuggingFace transformer model being used
         num_classes=num_classes,                        # number of classes for classification
         vocab_size=tok_vocab_size,
-        relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
+        #relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
+        relevant_tokens=None,
         lc_tokenizer=lc_tokenizer,                      # HuggingFace tokenizer
         class_type=class_type,                          # classification type, options 'single-label' or 'multi-label'
         #class_weights=class_weights,                   # class weights for loss function
@@ -2176,48 +2300,9 @@ if __name__ == "__main__":
         normalize_tces=True,                 
         dropout_rate=args.dropprob,                     # dropout rate for TCEs
         comb_method=args.sup_mode,                      # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
-        debug=True                                     # turns on active forware debugging
+        #debug=True                                     # turns on active forware debugging
     ).to(device)
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
-
-
-
-    def get_embedding_dims(hf_model):
-        """
-        Retrieve the embedding dimensions from the Hugging Face model.
-
-        Parameters:
-        - hf_model: A Hugging Face model instance.
-
-        Returns:
-        - Tuple[int]: The shape of the embedding layer (vocab_size, embedding_dim).
-        """
-        print("get_embedding_dims()...")
-        #print("hf_model:\n", type(hf_model), hf_model)
-
-        # Find the embedding layer dynamically
-        if hasattr(hf_model, "embeddings"):                                             # BERT, RoBERTa, DistilBERT, ALBERT
-            embedding_layer = hf_model.embeddings.word_embeddings
-        elif hasattr(hf_model, "wte"):                                                  # GPT-2
-            embedding_layer = hf_model.wte    
-        elif hasattr(hf_model, "word_embedding"):                                       # XLNet        
-            embedding_layer = hf_model.word_embedding
-        elif hasattr(hf_model, "llama"):
-            embedding_layer = hf_model.model.embed_tokens
-        else:
-            raise ValueError("Model not supported for automatic embedding extraction")
-
-        print("embedding_layer:", type(embedding_layer), embedding_layer)
-
-        model_size = embedding_layer.weight.shape
-        embedding_size = hf_model.config.hidden_size
-        
-        return model_size, embedding_size
-    
-    # Get embedding size from the model
-    #dimensions, vec_size = get_embedding_dims(lc_model.transformer)
-    dimensions = lc_model.relevant_embeddings.shape
-    print("dimensions:", dimensions)
 
     # Concatenate supervised-specific dimensions if args.supervised is True
     if args.supervised:
