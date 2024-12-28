@@ -1172,6 +1172,8 @@ class LCSequenceClassifier(nn.Module):
             embedding_layer = self.transformer.bert.embeddings.word_embeddings
         elif hasattr(self.transformer, 'roberta'):
             embedding_layer = self.transformer.roberta.embeddings.word_embeddings
+        elif hasattr(self.transformer, 'distilbert'):
+            embedding_layer = self.transformer.distilbert.embeddings.word_embeddings
         elif hasattr(self.transformer, 'transformer'):  # GPT-2
             embedding_layer = self.transformer.transformer.wte
         elif hasattr(self.transformer, 'model') and hasattr(self.transformer.model, 'embed_tokens'):  # LLaMA
