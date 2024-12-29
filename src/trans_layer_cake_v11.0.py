@@ -1174,8 +1174,13 @@ class LCSequenceClassifier(nn.Module):
             embedding_layer = self.transformer.roberta.embeddings.word_embeddings
         elif hasattr(self.transformer, 'distilbert'):
             embedding_layer = self.transformer.distilbert.embeddings.word_embeddings
-        elif hasattr(self.transformer, 'transformer'):  # GPT-2
-            embedding_layer = self.transformer.transformer.wte
+        elif hasattr(self.transformer, 'transformer'):        
+            if hasattr(self.transformer.transformer, 'word_embedding'):                                     # XLNet
+                embedding_layer = self.transformer.transformer.word_embedding
+            elif hasattr(self.transformer.transformer, 'wte'):                                              # GPT-2
+                embedding_layer = self.transformer.transformer.wte
+            else:
+                raise ValueError("Unsupported model type or embedding layer not found.")
         elif hasattr(self.transformer, 'model') and hasattr(self.transformer.model, 'embed_tokens'):  # LLaMA
             embedding_layer = self.transformer.model.embed_tokens
         else:
@@ -1921,7 +1926,6 @@ def parse_args():
     # model params
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
-    
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--patience', type=int, default=PATIENCE, help='Patience for early stopping')
     parser.add_argument('--dropprob', type=float, default=0.3, metavar='[0.0, 1.0]', help='dropout probability for TCE Embedding layer classifier head (default: 0.3)')
