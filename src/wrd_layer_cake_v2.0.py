@@ -260,54 +260,6 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
             else:
                 raise ValueError(f"Unsupported embedding type: {opt.pretrained}")
 
-            """
-            elif opt.pretrained in ['bert', 'roberta', 'distilbert']:
-                # Dynamic token-based embeddings
-                print("Extracting embeddings dynamically for dataset text with attention...")
-                max_length = pretrained.tokenizer.model_max_length  # Ensure proper padding
-                batch_size = opt.batch_size
-                all_embeddings = []
-                
-                # Process dataset text in batches with a progress bar
-                dataset_texts = dataset.devel_raw + dataset.test_raw  # Combine development and test set
-
-                # Initialize the progress bar
-                pbar = tqdm(total=len(dataset_texts), desc="Computing dynamic embeddings from transformer model...", unit="docs")
-                with torch.no_grad():
-                    for i in range(0, len(dataset_texts), batch_size):
-                        batch_texts = dataset_texts[i:i + batch_size]
-                        tokens = pretrained.tokenizer(
-                            batch_texts,
-                            return_tensors="pt",
-                            padding=True,
-                            truncation=True,
-                            max_length=max_length
-                        ).to(opt.device)
-
-                        outputs = pretrained.model(
-                            input_ids=tokens["input_ids"],
-                            attention_mask=tokens["attention_mask"]
-                        )
-                        embeddings = outputs.last_hidden_state.mean(dim=1)  # Mean pooling
-                        all_embeddings.append(embeddings)
-
-                        # Update progress bar
-                        pbar.update(len(batch_texts))
-                
-                # Close the progress bar
-                pbar.close()
-
-                # Concatenate all embeddings
-                all_embeddings = torch.cat(all_embeddings, dim=0)
-
-                # Adjust `final_vocabsize` to match the number of embeddings
-                dynamic_vocabsize = all_embeddings.shape[0]
-                print(f"Dynamic vocabulary size computed: {dynamic_vocabsize}")
-
-                pretrained_embeddings.append(all_embeddings)
-                print('\t[pretrained-matrix]', all_embeddings.shape)
-            """
-
         # Handle supervised embeddings (WCE)
         if opt.supervised:
             

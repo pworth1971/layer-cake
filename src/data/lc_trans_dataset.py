@@ -46,8 +46,7 @@ RANDOM_SEED = 29
 
 
 
-
-def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
+def get_dataset_data(dataset_name, seed=RANDOM_SEED, pickle_dir=PICKLE_DIR):
     """
     Load dataset data from a pickle file if it exists; otherwise, call the dataset loading method,
     save the returned data to a pickle file, and return the data.
@@ -66,6 +65,9 @@ def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
     - target_names: Names of the target classes.
     - class_type: Classification type (e.g., 'multi-label', 'single-label').
     """
+
+    print(f'get_dataset_data()... dataset_name: {dataset_name}, pickle_dir: {pickle_dir}, seed: {seed}')
+
     pickle_file = os.path.join(pickle_dir, f"trans_lc.{dataset_name}.pickle")
     
     # Ensure the pickle directory exists
@@ -77,7 +79,10 @@ def get_dataset_data(dataset_name, seed, pickle_dir=PICKLE_DIR):
             data = pickle.load(f)
     else:
         print(f"Pickle file not found. Loading dataset using `trans_lc_load_dataset` for {dataset_name}...")
-        data = trans_lc_load_dataset(dataset_name, seed)  # Call your method to load the dataset
+        
+        data = trans_lc_load_dataset(
+            name=dataset_name, 
+            seed=seed) 
         
         # Save the dataset to a pickle file
         print(f"Saving dataset to pickle file: {pickle_file}")
@@ -852,7 +857,7 @@ def trans_lc_load_dataset(name, seed):
 
         papers_dataframe = papers_dataframe[["text", "categories", "categories_encoded"]]
         del paper_titles, paper_intro, paper_type
-        print(papers_dataframe.head())
+        #print(papers_dataframe.head())
 
         # Convert encoded labels to a 2D array
         y = np.vstack(papers_dataframe['categories_encoded'].values)

@@ -21,6 +21,8 @@ import pandas as pd
 from os.path import join
 import re
 
+from scipy.sparse import csr_matrix
+
 
 TEST_SIZE = 0.2
 VAL_SIZE = 0.2
@@ -122,16 +124,11 @@ def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
 
 class Dataset:
 
-    """
-    dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'ohsumed', 'jrcall',
-                         'wipo-sl-mg','wipo-ml-mg','wipo-sl-sc','wipo-ml-sc'}
-    """
-
     dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'imdb', 'arxiv'}
 
     def __init__(self, name, vtype='tfidf', custom_tokenizer=None, seed=RANDOM_SEED):
 
-        print(f'loading dataset {name}')
+        print(f'Dataset init()... name: {name}, vtype: {vtype}, custom_tokenizer: {custom_tokenizer}, seed: {seed}')
 
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
 
@@ -290,20 +287,19 @@ class Dataset:
 
         self.classification_type = 'multilabel'
 
-        self.devel_raw, self.devel_labelmatrix, self.test_raw, self.test_labelmatrix, num_classes, \
+        self.devel_raw, devel_labelmatrix_arr, self.test_raw, test_labelmatrix_arr, num_classes, \
             self.target_names, class_type = get_dataset_data(dataset_name='arxiv', seed=seed, pickle_dir=PICKLE_DIR)
+        
+        # must convert to csr_matrices
+        self.devel_labelmatrix = csr_matrix(devel_labelmatrix_arr)
+        self.test_labelmatrix = csr_matrix(test_labelmatrix_arr)
+
+        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
 
         print("self.devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("self.devel_labelmatrix[0]:", type(self.devel_labelmatrix[0]), self.devel_labelmatrix[0].shape)
         print("self.test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
         print("self.test_labelmatrix[0]:", type(self.test_labelmatrix[0]), self.test_labelmatrix[0].shape)
-
-        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
-
-        print("self.devel_target:", type(self.devel_target), self.devel_target.shape)
-        print("self.devel_target[0]:", type(self.devel_target[0]), self.devel_target[0].shape)
-        print("self.test_target:", type(self.test_target), self.test_target.shape)
-        print("self.test_target[0]:", type(self.test_target[0]), self.test_target[0].shape)
 
 
     def _load_reuters(self):
@@ -338,8 +334,6 @@ class Dataset:
 
         self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
         self.target_names = devel.target_names
-
-
 
 
     def _load_imdb(self):
