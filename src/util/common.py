@@ -61,8 +61,8 @@ def initialize_testing(args, program, version):
     else:
         gpus = 'None'
 
-    method_name = set_method_name(args)
-    print("method_name:", method_name)
+    representation = set_method_name(args)
+    print("representation:", representation)
 
     logger = CSVLog(
         file=args.log_file, 
@@ -93,8 +93,10 @@ def initialize_testing(args, program, version):
         verbose=True, 
         overwrite=False)
 
-    run_mode = method_name
+    """
+    run_mode = representation
     print("run_mode:", {run_mode})
+    """
 
     if args.pretrained:
         pretrained = True
@@ -118,7 +120,7 @@ def initialize_testing(args, program, version):
 
     if (args.supervised):
         supervised = True
-        mode = f'supervised:{args.sup_mode}'
+        mode = f'supervised[{args.sup_mode}]'
 
         if not args.nozscore:
             mode += '-zscore'
@@ -142,7 +144,7 @@ def initialize_testing(args, program, version):
     logger.set_default('os', system.get_os())
     logger.set_default('cpus', system.get_cpu_details())
     logger.set_default('mem', system.get_total_mem())
-    logger.set_default('mode', run_mode)
+    logger.set_default('mode', representation)
 
     logger.set_default('source', program)
     logger.set_default('version', version)
@@ -157,7 +159,7 @@ def initialize_testing(args, program, version):
     logger.set_default('mode', mode)
     logger.set_default('embeddings', embeddings)
     logger.set_default('run', args.seed)
-    logger.set_default('representation', method_name)
+    logger.set_default('representation', representation)
     logger.set_default('lm_type', lm_type)
     logger.set_default('optimized', args.tunable)
 
@@ -181,16 +183,16 @@ def initialize_testing(args, program, version):
     # check to see if the model has been run before
     already_modelled = logger.already_calculated(
         dataset=args.dataset,
-        #embeddings=embeddings,
         model=args.net, 
-        representation=method_name,
+        representation=representation,
         mode=mode,
-        run=args.seed
+        run=args.seed,
+        optimized=args.tunable
         )
 
     print("already_modelled:", already_modelled)
 
-    return already_modelled, logger, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
+    return already_modelled, logger, representation, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
 
 
 
@@ -447,8 +449,8 @@ def set_method_name(opt, add_model=False):
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
 
-        if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2']):
-            method_name += f'-tce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
+        if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):
+            method_name += f'-tce[{opt.sup_mix}]({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
         else:
             method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
 

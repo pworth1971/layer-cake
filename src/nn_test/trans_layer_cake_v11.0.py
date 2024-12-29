@@ -1922,7 +1922,8 @@ def parse_args():
     parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', help='Path to log file')
     parser.add_argument('--force', action='store_true', default=False, help='do not check if this experiment has already been run')
     parser.add_argument('--simple', action='store_true', default=True, help='Use the simple classifier (just the one Linear layer after HF SeuqenceClassifier)')
-    
+    parser.add_argument('--weighted', action='store_true', default=False, help='Whether or not to use class_weights in the loss funtion of the classifier (default False)')
+
     # model params
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
@@ -1939,6 +1940,8 @@ def parse_args():
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    parser.add_argument('--emb-filter', action='store_true', default=True,
+                        help='filter model embeddings to align with dataset vocabulary (default True)')
     
     # TCE params
     parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
@@ -1960,7 +1963,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '11.0'
+    version = '11.1'
     print(f'program: {program}, version: {version}')
     
     print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
@@ -2261,12 +2264,12 @@ if __name__ == "__main__":
 
     hf_trans_model = hf_trans_class_model
 
-    class_weights = None
-    if (class_type in ['multi-label', 'multilabel']):
+    if (args.weighted):
         print("computing class weights...")
         class_weights = lc_class_weights(labels_train, task_type=class_type)
     else:
         print("no class weights computed...")
+        class_weights = None
 
     #
     # if specified, show the cl;ass distribution
@@ -2285,6 +2288,11 @@ if __name__ == "__main__":
             )
     print("\n")
     
+    # set relevant_tokens to None if we are not
+    # filtering embedding layer
+    if not args.emb_filter:
+        relevant_tokens = None
+
     #
     # note we instantiate only with relevant_tokens 
     # from our custom tokenizer (lc_tokenizer)
@@ -2293,12 +2301,11 @@ if __name__ == "__main__":
         hf_model=hf_trans_model,                        # HuggingFace transformer model being used
         num_classes=num_classes,                        # number of classes for classification
         vocab_size=tok_vocab_size,
-        #relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
-        relevant_tokens=None,
+        relevant_tokens=relevant_tokens,                # relevant tokens for the dataset
         lc_tokenizer=lc_tokenizer,                      # HuggingFace tokenizer
         simple=args.simple,                             # whethe or not to use the simple classifier head
         class_type=class_type,                          # classification type, options 'single-label' or 'multi-label'
-        #class_weights=class_weights,                   # class weights for loss function
+        class_weights=class_weights,                    # class weights for loss function
         supervised=args.supervised,
         tce_matrix=tce_matrix,
         finetune=args.tunable,                          # embeddings are trainable (True), default is False (static)

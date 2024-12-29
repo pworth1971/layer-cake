@@ -13,6 +13,7 @@ import pickle
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.model_selection import train_test_split
+from sklearn.base import BaseEstimator, TransformerMixin
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -25,13 +26,22 @@ from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.sparse import csr_matrix
 
-#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
+import unicodedata
+
+from collections import defaultdict
+
+from transformers import AutoTokenizer
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
 
 DATASET_DIR = '../datasets/'                        # dataset directory
 PICKLE_DIR = "../pickles/"
-
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
@@ -44,6 +54,15 @@ NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tas
 
 RANDOM_SEED = 29
 
+
+#
+# supported operations for transformer classifier
+# combination method with TCEs
+#
+SUPPORTED_OPS = ["cat", "add", "dot"]
+
+MAX_TOKEN_LENGTH = 512              # Maximum token length for transformer models models
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 def get_dataset_data(dataset_name, seed=RANDOM_SEED, pickle_dir=PICKLE_DIR):
@@ -1008,11 +1027,8 @@ def trans_lc_load_dataset(name, seed):
         raise ValueError("Unsupported dataset:", name)
 
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------
 
-
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.sparse import csr_matrix
 
 def show_class_distribution(labels, target_names, class_type, dataset_name, display_mode='text'):
     """
@@ -1156,3 +1172,601 @@ def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_
                 print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
 
     print("finished spot checking docs.\n")
+
+
+
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+
+import json
+
+OUT_DIR = '../out/'
+
+class LCTokenizer:
+
+    def __init__(self, model_name, model_path, lowercase=False, remove_special_tokens=False, padding='max_length', truncation=True):
+        """
+        Wrapper around Hugging Face tokenizer for custom tokenization.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            max_length: Maximum token length for truncation.
+            lowercase: Whether to convert text to lowercase.
+            remove_special_tokens: Whether to remove special tokens from tokenized output.
+            padding: Padding strategy ('max_length', True, False). Defaults to 'max_lenth'.
+            truncation: Truncation strategy. Defaults to True.
+        """
+
+        #print(f"LCTokenizer:__init__()... model_name: {model_name}, model_path: {model_path}, max_length: {max_length}, lowercase: {lowercase}, remove_special_tokens: {remove_special_tokens}, padding: {padding}, truncation: {truncation}")
+
+        self.model_name = model_name
+        self.model_path = model_path
+
+        self.lowercase = lowercase
+        self.remove_special_tokens = remove_special_tokens
+        self.padding = padding
+        self.truncation = truncation
+        
+        # Debugging information
+        print("LCTokenizer initialized with the following parameters:")
+        print(f"  Model name: {self.model_name}")
+        print(f"  Model path: {self.model_path}")
+        print(f"  Lowercase: {self.lowercase}")
+        print(f"  Remove special tokens: {self.remove_special_tokens}")
+        print(f"  Padding: {self.padding}")
+        print(f"  Truncation: {self.truncation}")
+        
+        print("creating tokenizer using HF AutoTokenizer...")
+
+        # instantiate the tokenizer
+        self.tokenizer, self.vocab_size, self.max_length = self._instantiate_tokenizer()
+        
+        # Print tokenizer details for debugging
+        print("Initial Tokenizer config:\n", self.tokenizer)
+        print(f"  Pad token: {self.tokenizer.pad_token} (ID: {self.tokenizer.pad_token_id})")
+        print(f"  Max length: {self.max_length}")
+
+        self.filtered = False
+
+
+    def _instantiate_tokenizer(self, vocab_file=None):
+        
+        print(f'instantiating new tokenizer from model: {self.model_name} and path: {self.model_path}...')
+        if vocab_file == None:
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name, 
+                cache_dir=self.model_path
+                )
+        else:
+            print(f"Loading tokenizer with custom vocab file: {vocab_file}")
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name, 
+                cache_dir=self.model_path, 
+                vocab_file=vocab_file
+                )
+        
+        # Use an existing token as the padding token
+        if tokenizer.pad_token is None:
+            print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
+            tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Print tokenizer details
+        vocab_size = len(tokenizer.get_vocab())
+        print("vocab_size:", vocab_size)
+
+        # Compute max_length from tokenizer
+        max_length = tokenizer.model_max_length
+        print(f"max_length: {max_length}")
+
+        # Handle excessive or default max_length values
+        if max_length > MAX_TOKEN_LENGTH:
+            print(f"Invalid max_length ({max_length}) detected. Adjusting to {MAX_TOKEN_LENGTH}.")
+            max_length = MAX_TOKEN_LENGTH
+
+        return tokenizer, vocab_size, max_length
+    
+
+    def tokenize(self, text):
+        """
+        Tokenize input text using the Hugging Face tokenizer.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        if self.lowercase:
+            text = text.lower()
+
+        tokens = self.tokenizer.tokenize(
+            text,
+            max_length=self.max_length,
+            truncation=self.truncation,
+            padding=self.padding
+        )
+
+        if self.remove_special_tokens:
+            special_tokens = self.tokenizer.all_special_tokens
+            tokens = [token for token in tokens if token not in special_tokens]
+
+        return tokens
+
+
+    def normalize_text(self, text):
+        """Normalize text to handle special characters and encodings."""
+        return unicodedata.normalize('NFKC', text)
+
+
+    def get_vocab(self):
+        """
+        Return the vocabulary of the Hugging Face tokenizer.
+
+        Returns:
+            Dict of token-to-index mappings.
+        """
+        return self.tokenizer.get_vocab()
+
+
+    def filter_tokens(self, texts, dataset_name):
+        """
+        Compute the dataset vocabulary as token IDs that align with the tokenizer's vocabulary.
+
+        Args:
+            texts (list of str): Texts to compute the token set.
+            dataset_name (str): Name of the dataset for saving the filtered vocabulary.
+
+        Returns:
+            tuple: (relevant_tokens, relevant_token_ids, mismatches)
+                - relevant_tokens: List of tokens in the dataset that are in the tokenizer vocabulary.
+                - relevant_token_ids: List of token IDs in the dataset that are in the tokenizer vocabulary.
+                - mismatches: Tokens found in the dataset but not in the tokenizer vocabulary.
+        """
+        print(f"Computing dataset token list for dataset {dataset_name}...")
+        print(f"max_length: {self.max_length}, padding: {self.padding}, truncation: {self.truncation}")
+
+        # Initialize sets and variables
+        dataset_vocab_ids = set()
+        dataset_tokens = set()
+        mismatches = []
+
+        # Tokenizer vocabulary
+        tokenizer_vocab = self.get_vocab()
+        tokenizer_vocab_set = set(tokenizer_vocab.keys())
+
+        # Tokenize each document with the same parameters used during input preparation
+        for text in tqdm(texts, desc="Tokenizing documents..."):
+            tokens = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding=self.padding,
+                truncation=self.truncation,
+                return_attention_mask=False,
+                return_token_type_ids=False,
+            )
+
+            input_ids = tokens['input_ids']
+            decoded_tokens = [self.tokenizer.convert_ids_to_tokens(tok_id) for tok_id in input_ids]
+
+            # Check for tokens not in vocabulary
+            for tok_id, tok in zip(input_ids, decoded_tokens):
+                if tok in tokenizer_vocab_set:
+                    dataset_tokens.add(tok)
+                    dataset_vocab_ids.add(tok_id)
+                else:
+                    print("WARNING: Token not in tokenizer vocabulary:", tok)
+                    mismatches.append((tok, tok_id))
+
+        # Build the filtered vocabulary
+        relevant_token_ids = sorted(dataset_vocab_ids)
+        relevant_tokens = [
+            self.tokenizer.convert_ids_to_tokens(token_id) for token_id in relevant_token_ids
+        ]
+
+        # Ensure special tokens retain their original IDs
+        special_tokens = {
+            "pad_token": (self.tokenizer.pad_token, self.tokenizer.pad_token_id),
+            "cls_token": (self.tokenizer.cls_token, self.tokenizer.cls_token_id),
+            "sep_token": (self.tokenizer.sep_token, self.tokenizer.sep_token_id),
+            "mask_token": (self.tokenizer.mask_token, self.tokenizer.mask_token_id),
+            "unk_token": (self.tokenizer.unk_token, self.tokenizer.unk_token_id),
+        }
+
+        for key, (token, token_id) in special_tokens.items():
+            if token and token not in relevant_tokens:
+                if token is not None:
+                    relevant_tokens.append(token)
+                    relevant_token_ids.append(token_id)
+                else:
+                    print(f"[INFO] Special token '{key}' not found in the default tokenizer vocab, not putting in the filtered vocabulary.")
+
+        # Create the filtered vocabulary dictionary
+        filtered_vocab = {token: idx for idx, token in enumerate(relevant_tokens)}
+        print("filtered_vocab::", type(filtered_vocab), len(filtered_vocab)
+              )
+        
+        tokenizer_name = self.tokenizer.__class__.__name__
+        print("tokenizer_name:", tokenizer_name)
+
+        # Reset the tokenizer with the filtered vocabulary
+        vocab_file = f"{OUT_DIR}{dataset_name}.{tokenizer_name}.filtered_vocab.json"
+        with open(vocab_file, "w") as vf:
+            json.dump(filtered_vocab, vf)
+        print(f"Filtered vocabulary saved to: {vocab_file}")
+        
+        # 
+        # TODO: update self.tokenizer vocabulary with the limited, filtered vocabulary
+        # although this looks difficult to do, see 
+        # https://stackoverflow.com/questions/69531811/using-hugginface-transformers-and-tokenizers-with-a-fixed-vocabulary
+        #
+
+        return relevant_tokens, relevant_token_ids, mismatches
+
+
+    def __call__(self, text):
+        """
+        Enable the object to be called as a function for tokenization.
+        
+        Args:
+            text: Input string to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        return self.tokenize(text)
+
+
+
+class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, lc_tokenizer, max_length=MAX_TOKEN_LENGTH, lowercase=False, debug=False):
+        """
+        Custom TF-IDF Vectorizer that aligns its vocabulary with the Hugging Face tokenizer.
+
+        Args:
+            tokenizer: Hugging Face tokenizer object.
+            lowercase: Whether to convert text to lowercase.
+            debug: Whether to enable debugging messages.
+        """
+        self.lc_tokenizer = lc_tokenizer
+        self.max_length = max_length
+        self.lowercase = lowercase
+        self.debug = debug
+        self.vocabulary_ = {token: idx for token, idx in lc_tokenizer.get_vocab().items()}
+        self.idf_ = None
+
+
+    def fit(self, tokenized_documents, y=None):
+        """
+        Fit the vectorizer to the tokenized documents.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
+            y: Ignored, present for compatibility with sklearn pipelines.
+        """
+        print("Fitting LCTFIDFVectorizer to tokenized docs...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        term_doc_counts = defaultdict(int)
+        max_length = self.lc_tokenizer.max_length
+
+        if (max_length != self.max_length):
+            print(f"WARNING: Max length mismatch between tokenizer ({max_length}) and vectorizer ({self.max_length}).")
+
+        for doc_idx, tokens in enumerate(tokenized_documents):
+            # Ensure tokens are processed using the tokenizer
+            if isinstance(tokens, str):
+                tokens = self.lc_tokenizer.tokenize(tokens)
+            else:
+                ValueError("Tokenized documents must be strings.")
+            
+            # Check sequence length
+            if len(tokens) > max_length:
+                print(f"[ERROR] Document {doc_idx} exceeds max length ({len(tokens)} > {max_length}).")
+                print(f"[DEBUG] Document: {tokenized_documents[doc_idx][:200]}...")                             # Print a truncated version of the doc
+                print(f"[DEBUG] Tokens: {tokens[:50]}...")                                                      # Print a sample of the tokens
+                raise ValueError("Document exceeds max length.")
+            
+            # Filter out blank tokens and special tokens not in the vocabulary
+            tokens = [token for token in tokens if token.strip()]
+            unique_tokens = set(tokens)
+
+            unmatched_tokens = []
+
+            for token in unique_tokens:
+                if token in self.vocabulary_:
+                    term_doc_counts[token] += 1
+                else:
+                    unmatched_tokens.append(token)
+
+            if self.debug and unmatched_tokens:
+                print(f"[DEBUG] Document {doc_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}")
+
+        num_documents = len(tokenized_documents)
+        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
+        for token, idx in self.vocabulary_.items():
+            doc_count = term_doc_counts.get(token, 0)
+            self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
+
+            if self.debug and self.idf_[idx] == 0:
+                print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                    f"Document count: {doc_count}, Total docs: {num_documents}.")
+
+        if self.debug:
+            # Debug: Check if special tokens are present
+            special_tokens = self.lc_tokenizer.tokenizer.all_special_tokens
+            for token in special_tokens:
+                if token not in self.vocabulary_:
+                    print(f"[WARNING] Special token '{token}' not found in the vocabulary.")
+                else:
+                    print(f"[INFO] Special token '{token}' is correctly included in the vocabulary.")
+
+        return self
+
+
+
+
+    def fit_old(self, tokenized_documents, y=None):
+        """
+        Fit the vectorizer to the tokenized documents.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
+            y: Ignored, present for compatibility with sklearn pipelines.
+        """
+        print("Fitting LCTFIDFVectorizer to tokenized docs...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        term_doc_counts = defaultdict(int)
+
+        for doc_idx, tokens in enumerate(tokenized_documents):
+            # Ensure tokens are processed using the tokenizer
+            if isinstance(tokens, str):
+                tokens = self.tokenizer.tokenize(tokens)
+            
+            # Filter out blank tokens and special tokens not in the vocabulary
+            tokens = [token for token in tokens if token.strip()]
+            unique_tokens = set(tokens)
+
+            unmatched_tokens = []
+
+            for token in unique_tokens:
+                if token in self.vocabulary_:
+                    term_doc_counts[token] += 1
+                else:
+                    unmatched_tokens.append(token)
+
+            if self.debug and unmatched_tokens:
+                print(f"[DEBUG] Document {doc_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}")
+
+        num_documents = len(tokenized_documents)
+        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
+        for token, idx in self.vocabulary_.items():
+            doc_count = term_doc_counts.get(token, 0)
+            self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
+
+            if self.debug and self.idf_[idx] == 0:
+                print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                    f"Document count: {doc_count}, Total docs: {num_documents}.")
+
+        if self.debug:
+            # Debug: Check if special tokens are present
+            special_tokens = self.tokenizer.all_special_tokens
+            for token in special_tokens:
+                if token not in self.vocabulary_:
+                    print(f"[WARNING] Special token '{token}' not found in the vocabulary.")
+                else:
+                    print(f"[INFO] Special token '{token}' is correctly included in the vocabulary.")
+
+        return self
+
+
+
+    def transform(self, tokenized_documents, original_documents=None):
+        """
+        Transform the tokenized documents to TF-IDF features.
+
+        Args:
+            tokenized_documents: List of tokenized documents (lists of tokens or strings of tokenized text).
+            original_documents: List of original documents (strings).
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Transforming tokenized docs with fitted LCTFIDFVectorizer...")
+
+        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
+        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
+
+        rows, cols, data = [], [], []
+        empty_rows_details = []  # To collect details of empty rows
+
+        for row_idx, doc in enumerate(tokenized_documents):
+
+            # If the document is a string, split it into tokens
+            if isinstance(doc, str):
+                tokens = doc.split()
+            else:
+                raise ValueError("row in tokenized doc is not a 'str'")
+                #tokens = doc
+
+            # Save the original document tokens for debugging
+            original_tokens = doc.split()
+
+            # Filter out blank tokens
+            tokens = [token for token in tokens if token.strip()]
+            term_freq = defaultdict(int)
+            unmatched_tokens = []
+
+            for token in tokens:
+                if token in self.vocabulary_:
+                    term_freq[token] += 1
+                else:
+                    unmatched_tokens.append(token)
+            
+            if self.debug and unmatched_tokens:
+                print(f"[WARNING] Document {row_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}...")
+            
+            # Collect unmatched tokens for empty rows
+            if not term_freq:  # No matched tokens
+                if original_documents is not None:
+                    empty_rows_details.append((row_idx, original_documents[row_idx], original_tokens, unmatched_tokens))
+                else:
+                    empty_rows_details.append((row_idx, None, original_tokens, unmatched_tokens))
+
+            # Calculate TF-IDF
+            for token, freq in term_freq.items():
+                col_idx = self.vocabulary_[token]
+                tf = freq / len(tokens)
+                tfidf = tf * self.idf_[col_idx]
+
+                """
+                if self.debug:
+                    print(f"[INFO] Document {row_idx}, Token '{token}': Frequency: {freq}, TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
+                """
+
+                rows.append(row_idx)
+                cols.append(col_idx)
+                data.append(tfidf)
+
+        # construct sparse matrix
+        matrix = csr_matrix((data, (rows, cols)), shape=(len(tokenized_documents), len(self.vocabulary_)))
+
+        if self.debug:
+            empty_rows = matrix.sum(axis=1).A1 == 0
+            for row_idx, original_doc, original_tokens, unmatched_tokens in empty_rows_details:
+                if empty_rows[row_idx]:
+                    print(f"[WARNING] Row {row_idx} in TF-IDF matrix is empty.")
+                    print(f"[INFO] Original document: {original_doc}")
+                    print(f"[INFO] Original tokens: {original_tokens}")
+                    print(f"[INFO] Unmatched tokens (not in vocab): {unmatched_tokens}")
+                    # Manually tokenize with the custom tokenizer
+                    if original_doc:
+                        custom_tokens = self.tokenizer.tokenize(original_doc)
+                        print(f"[DEBUG] Custom tokenizer tokens: {custom_tokens}")
+                    
+        return matrix
+
+
+    def fit_transform(self, X, y=None, original_documents=None):
+        """
+        Fit to data, then transform it.
+
+        Args:
+            X: List of tokenized documents (lists of tokens or strings of tokenized text).
+            y: Ignored, present for compatibility with sklearn pipelines.
+            original_documents: List of original documents before tokenization, for debugging.
+
+        Returns:
+            Sparse matrix of TF-IDF features.
+        """
+        print("Fit-transforming LCTFIDFVectorizer to tokenized docs...")
+
+        self.fit(X, y)
+        return self.transform(X, original_documents=original_documents)
+
+
+
+def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
+
+    print(f'vectorize(), max_length: {lc_tokenizer.max_length}')
+
+    print("lc_tokenizer:\n", lc_tokenizer)
+    
+    preprocessed_train = [" ".join(lc_tokenizer(text)) for text in texts_train]
+    preprocessed_val = [" ".join(lc_tokenizer(text)) for text in texts_val]
+    preprocessed_test = [" ".join(lc_tokenizer(text)) for text in texts_test]
+
+    # Debugging: Preprocessed data
+    print("preprocessed_train:", type(preprocessed_train), len(preprocessed_train))
+    print(f"preprocessed_train[0]: {preprocessed_train[0]}")
+    
+    tokenizer_vocab = lc_tokenizer.tokenizer.get_vocab()
+
+    vectorizer = LCTFIDFVectorizer(
+        lc_tokenizer=lc_tokenizer, 
+        max_length=lc_tokenizer.max_length,
+        debug=debug
+        )
+
+    Xtr = vectorizer.fit_transform(
+        X=preprocessed_train,
+        original_documents=texts_train
+        )
+    
+    Xval = vectorizer.transform(
+        X=preprocessed_val,
+        original_documents=texts_val
+        )
+    
+    Xte = vectorizer.transform(
+        X=preprocessed_test,
+        original_documents=texts_test
+        )
+
+    def check_empty_rows(matrix, name, original_texts):
+        empty_rows = matrix.sum(axis=1).A1 == 0
+        if empty_rows.any():
+            print(f"[WARNING] {name} contains {empty_rows.sum()} empty rows.")
+            for i in range(len(empty_rows)):
+                if empty_rows[i]:
+                    print(f"Empty row {i}: Original text: '{original_texts[i]}'")
+
+    check_empty_rows(Xtr, "Xtr", texts_train)
+    check_empty_rows(Xval, "Xval", texts_val)
+    check_empty_rows(Xte, "Xte", texts_test)
+
+    vec_vocab_size = len(vectorizer.vocabulary_)
+    tok_vocab_size = len(tokenizer_vocab)
+
+    assert vec_vocab_size == tok_vocab_size, \
+        f"Vectorizer vocab size ({vec_vocab_size}) must equal tokenizer vocab size ({tok_vocab_size})"
+
+    return vectorizer, Xtr, Xval, Xte
+
+
+
+def get_vectorized_data(texts_train, texts_val, test_data, lc_tokenizer, dataset, pretrained, vtype='tfidf', debug=False):
+    """
+    Wrapper for vectorize() method to save and load from a pickle file.
+
+    Parameters:
+        texts_train (list): Training texts.
+        texts_val (list): Validation texts.
+        test_data (list): Test texts.
+        lc_tokenizer: LCTokenizer instance.
+        dataset (str): Dataset name.
+        pretrained (str): Pretrained model name.
+        vtype (str): Vectorization type.
+
+    Returns:
+        tuple: vectorizer, lc_tokenizer, Xtr, Xval, Xte
+    """
+    pickle_file = os.path.join(PICKLE_DIR, f'vectors_{dataset}.{pretrained}.{vtype}.pickle')
+
+    # Check if the pickle file exists
+    if os.path.exists(pickle_file):
+        print(f"Loading vectorized data from {pickle_file}...")
+        with open(pickle_file, 'rb') as f:
+            vectorizer, lc_tokenizer, Xtr, Xval, Xte = pickle.load(f)
+    else:
+        print(f"Pickle file not found. Vectorizing data and saving to {pickle_file}...")
+        vectorizer, Xtr, Xval, Xte = vectorize(
+            texts_train, 
+            texts_val, 
+            test_data, 
+            lc_tokenizer,
+            debug=debug
+        )
+        # Save the results to the pickle file
+        with open(pickle_file, 'wb') as f:
+            pickle.dump((vectorizer, lc_tokenizer, Xtr, Xval, Xte), f)
+
+    return vectorizer, Xtr, Xval, Xte
+
