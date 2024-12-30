@@ -26,17 +26,13 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-
 # --------------------------------------------------------------------------------------------------------------
 #
 PICKLE_DIR = '../pickles/'                                          # pickle directory
-
 OUT_DIR = '../out/'                                                 # output directory
 LOG_DIR = '../log/'                                                 # log directory
-
 VECTOR_CACHE = '../.vector_cache'                                   # vector cache directory (for language models)
 DATASET_DIR = '../datasets/'                                        # dataset directory
-
 
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff', 'hf.sc.ff', 'hf.class.ff']
 ML_MODELS = ['svm', 'lr', 'nb']
@@ -905,49 +901,6 @@ def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, opt)
 
 
 
-
-def index_old(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary):
-    """
-    Index (i.e., replaces word strings with numerical indexes) a list of string documents
-    :param data: list of string documents
-    :param vocab: a fixed mapping [str]->[int] of words to indexes
-    :param known_words: a set of known words (e.g., words that, despite not being included in the vocab, can be retained
-    because they are anyway contained in a pre-trained embedding set that we know in advance)
-    :param analyzer: the preprocessor in charge of transforming the document string into a chain of string words
-    :param unk_index: the index of the 'unknown token', i.e., a symbol that characterizes all words that we cannot keep
-    :param out_of_vocabulary: an incremental mapping [str]->[int] of words to indexes that will index all those words that
-    are not in the original vocab but that are in the known_words
-    :return:
-    """
-    indexes=[]
-    vocabsize = len(vocab)
-    unk_count = 0
-    knw_count = 0
-    out_count = 0
-    pbar = tqdm(data, desc=f'indexing documents')
-    for text in pbar:
-        words = analyzer(text)
-        index = []
-        for word in words:
-            if word in vocab:
-                idx = vocab[word]
-            else:
-                if word in known_words:
-                    if word not in out_of_vocabulary:
-                        out_of_vocabulary[word] = vocabsize+len(out_of_vocabulary)
-                    idx = out_of_vocabulary[word]
-                    out_count += 1
-                else:
-                    idx = unk_index
-                    unk_count += 1
-            index.append(idx)
-        indexes.append(index)
-        knw_count += len(index)
-        pbar.set_description(f'[unk = {unk_count}/{knw_count}={(100.*unk_count/knw_count):.2f}%]'
-                             f'[out = {out_count}/{knw_count}={(100.*out_count/knw_count):.2f}%]')
-    return indexes
-
-
 def define_pad_length(index_list):
     lengths = [len(index) for index in index_list]
     return int(np.mean(lengths)+np.std(lengths))
@@ -1038,3 +991,112 @@ def tokenize_parallel(documents, tokenizer, max_tokens, n_jobs=-1):
         for job, slice_i in enumerate(slices)
     )
     return list(itertools.chain.from_iterable(tokens))
+
+
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# text preprocessing functions
+#
+
+import pandas as pd
+from nltk.corpus import stopwords
+import string
+import re
+
+
+def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False, remove_stopwords=False, remove_special_chars=False):
+    """
+    Preprocess a pandas Series of texts by removing punctuation, optionally lowercasing, 
+    and optionally removing stopwords. Unmatched tokens, warnings, and unwanted patterns 
+    are also removed.
+
+    Parameters:
+    - text_series: A pandas Series containing text data (strings).
+    - remove_punctuation: Boolean indicating whether to remove punctuation.
+    - lowercase: Boolean indicating whether to convert text to lowercase.
+    - remove_stopwords: Boolean indicating whether to remove stopwords.
+    - remove_special_chars: Boolean indicating whether to remove special LaTeX-like symbols. 
+
+    Returns:
+    - processed_texts: A list containing processed text strings.
+    """
+
+    print("preprocessing...")
+    print("text_series:", type(text_series), text_series.shape)
+    
+    # Load stop words once outside the loop
+    stop_words = set(stopwords.words('english')) if remove_stopwords else set()
+    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+    # Regular expression for the specific pattern: '['^', '^', ...]...'
+    # from arxiv data, post preprocessing
+    unmatched_pattern = r"\[\s*'(\^)',?\s*(?:'(?:\^)',?\s*)*\]\.{3}"
+
+    # Function to process each text
+    def process_text(text):
+
+        if lowercase:
+            text = text.lower()
+
+        # for arxiv data
+        if remove_special_chars:
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)            # Remove special LaTeX-like symbols and tags
+            text = re.sub(unmatched_pattern, '', text)                          # Remove unmatched token patterns
+    
+        if remove_punctuation:
+            text = text.translate(punctuation_table)
+
+        if remove_stopwords:
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+        # Ensure extra spaces are removed after stopwords are deleted
+        return ' '.join(text.split())
+
+    # Use Parallel processing with multiple cores
+    processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
+
+    # Return as a list
+    return list(processed_texts)
+
+
+def _mask_numbers(data, number_mask='[NUM]'):
+    """
+    Masks numbers in the given text data with a placeholder.
+    """
+    mask = re.compile(r'\b[0-9][0-9.,-]*\b')
+    return [mask.sub(number_mask, text) for text in data]
+
+
+def preprocess_text(data):
+    """
+    Preprocess the text data by converting to lowercase, masking numbers, 
+    removing punctuation, and removing stopwords.
+    """
+    import re
+    from nltk.corpus import stopwords
+    from string import punctuation
+
+    stop_words = set(stopwords.words('english'))
+    punct_table = str.maketrans("", "", punctuation)
+
+    def _remove_punctuation_and_stopwords(data):
+        """
+        Removes punctuation and stopwords from the text data.
+        """
+        cleaned = []
+        for text in data:
+            # Remove punctuation and lowercase text
+            text = text.translate(punct_table).lower()
+            # Remove stopwords
+            tokens = text.split()
+            tokens = [word for word in tokens if word not in stop_words]
+            cleaned.append(" ".join(tokens))
+        return cleaned
+
+    # Apply preprocessing steps
+    masked = _mask_numbers(data)
+    cleaned = _remove_punctuation_and_stopwords(masked)
+    return cleaned

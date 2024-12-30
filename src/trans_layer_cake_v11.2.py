@@ -208,7 +208,10 @@ class LCSequenceClassifier(nn.Module):
         # initialize embedding dimensions to model embedding dimension
         # we over-write this only if we are using supervised tces with the 'cat' method
         combined_size = self.hidden_size
-
+        
+        print(f'self.hidden_size: {self.hidden_size}')
+        print("combined_size:", combined_size)
+            
         if (self.supervised and self.tce_matrix is not None):
 
             print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
@@ -238,7 +241,8 @@ class LCSequenceClassifier(nn.Module):
                 """
 
                 self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-                
+                print("self.tce_layer:", self.tce_layer)
+
                 # Adapt classifier head based on combination method
                 # 'concat' method is dimension_size + num_classes
                 if (self.comb_method == 'cat'):
@@ -832,6 +836,8 @@ def parse_args():
                         help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
+    parser.add_argument('--normalize', action='store_true', default=True,
+                        help='normalizes TCE matrix using underlying embedding mean and std. Default == True')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
@@ -847,9 +853,8 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '11.2.2'
-    print(f'program: {program}, version: {version}')
-    
+    version = '11.2.4'
+
     print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
     print()
 
@@ -1163,13 +1168,6 @@ if __name__ == "__main__":
 
     hf_trans_model = hf_trans_class_model
 
-    if (args.weighted):
-        print("computing class weights...")
-        class_weights = lc_class_weights(labels_train, task_type=class_type)
-    else:
-        print("not using class weights...")
-        class_weights = None
-
     #
     # if specified, show the cl;ass distribution
     # especially helpful for multi-label datasets
@@ -1201,24 +1199,32 @@ if __name__ == "__main__":
             dataset_name=args.dataset+':test'
             )
 
+    if (args.weighted):
+        print("computing class weights...")
+        class_weights = lc_class_weights(labels_train, task_type=class_type)
+    else:
+        print("not using class weights...")
+        class_weights = None
+
     #
     # note we instantiate only with relevant_tokens 
     # from our custom tokenizer (lc_tokenizer)
     #
     lc_model = LCSequenceClassifier(
-        hf_model=hf_trans_model,                        # HuggingFace transformer model being used
-        num_classes=num_classes,                        # number of classes for classification
-        lc_tokenizer=lc_tokenizer,                      # LCTokenizer (used for validation)
-        class_type=class_type,                          # classification type, options 'single-label' or 'multi-label'
-        class_weights=class_weights,                    # class weights for loss function
+        hf_model=hf_trans_model,                                    # HuggingFace transformer model being used
+        num_classes=num_classes,                                    # number of classes for classification
+        lc_tokenizer=lc_tokenizer,                                  # LCTokenizer (used for validation)
+        class_type=class_type,                                      # classification type, options 'single-label' or 'multi-label'
+        class_weights=class_weights,                                # class weights for loss function
         supervised=args.supervised,
         tce_matrix=tce_matrix,
-        finetune=args.tunable,                          # embeddings are trainable (True), default is False (static)
-        normalize_tces=True,                 
-        dropout_rate=args.dropprob,                     # dropout rate for TCEs
-        comb_method=args.sup_mode,                      # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
-        #debug=True                                     # turns on active forware debugging
+        finetune=args.tunable,                                      # embeddings are trainable (True), default is False (static)
+        normalize_tces=args.normalize,                              # normalize TCE matrix using underlying embedding mean and std                     
+        dropout_rate=args.dropprob,                                 # dropout rate for TCEs
+        comb_method=args.sup_mode,                                  # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
+        #debug=True                                                 # turns on active forware debugging
     ).to(device)
+
     print("\n\t-- Final LC Classifier Model --:\n", lc_model)
 
     # Get embedding size from the model
