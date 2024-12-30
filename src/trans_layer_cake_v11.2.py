@@ -792,7 +792,8 @@ def compute_dataset_vocab(train_texts, val_texts, test_texts, tokenizer):
 
 # Parse arguments
 def parse_args():
-    parser = argparse.ArgumentParser(description="Text Classification with Transformer Models.")
+
+    parser = argparse.ArgumentParser(description="Transformer Layer Cake: Text Classification with Transformer Models.")
     
     # system params
     parser.add_argument('--dataset', required=True, type=str, choices=SUPPORTED_DATASETS, help='Dataset to use')
@@ -825,8 +826,10 @@ def parse_args():
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
 
     # TCE params
-    parser.add_argument('--supervised', action='store_true', help='Use supervised embeddings (TCEs')
-    parser.add_argument('--sup-mode', type=str, default='cat', help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
+    parser.add_argument('--supervised', action='store_true', 
+                        help='Use supervised embeddings (TCEs')
+    parser.add_argument('--sup-mode', type=str, default='cat', 
+                        help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
@@ -835,7 +838,7 @@ def parse_args():
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
-      
+
     return parser.parse_args()
 
 
@@ -844,7 +847,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '11.2'
+    version = '11.2.2'
     print(f'program: {program}, version: {version}')
     
     print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
@@ -1164,7 +1167,7 @@ if __name__ == "__main__":
         print("computing class weights...")
         class_weights = lc_class_weights(labels_train, task_type=class_type)
     else:
-        print("no class weights computed...")
+        print("not using class weights...")
         class_weights = None
 
     #

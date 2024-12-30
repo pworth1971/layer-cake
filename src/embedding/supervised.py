@@ -3,11 +3,10 @@ import numpy as np
 from data.tsr_function__ import get_supervised_matrix, get_tsr_matrix, information_gain, chi_square, conf_weight, word_prob
 from model.embedding_predictor import EmbeddingPredictor
 
-#from util.common import *
-
 from sklearn.decomposition import PCA
 from data.tsr_function__ import  STWFUNCTIONS
 
+import torch
 
 from scipy.sparse import csr_matrix
 

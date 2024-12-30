@@ -1186,7 +1186,7 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
 
     # Display text-based summary if requested
     if display_mode in ('both', 'text'):
-        print(f"\n\tClass Distribution and Weights in {dataset_name}:")
+        print(f"\tClass Distribution and Weights in {dataset_name}:")
         for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
             print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
 

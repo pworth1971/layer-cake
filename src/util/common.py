@@ -436,11 +436,9 @@ def set_method_name(opt, add_model=False):
                 'fasttext': ('subword', FASTTEXT_MODEL),
                 'bert': ('transformer', BERT_MODEL),
                 'roberta': ('transformer', ROBERTA_MODEL),
-                #'albert': ('transformer', ALBERT_MODEL),
                 'distilbert': ('transformer', DISTILBERT_MODEL),
                 'xlnet': ('transformer', XLNET_MODEL),
                 'gpt2': ('transformer', GPT2_MODEL),
-                #'llama': ('transformer', LLAMA_MODEL)
             }
             
             # Extract the model type and specific model name
@@ -457,13 +455,19 @@ def set_method_name(opt, add_model=False):
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
 
+        """
         if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):
-            method_name += f'-tce[{opt.sup_mix}]({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}'
+            method_name += f'-tce[{opt.sup_mode}]-d{sup_drop}-{opt.supervised_method}'
         else:
             method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
-
+        """
+        
+        method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
+        
         if not opt.nozscore:
             method_name += '-zscore'
+        else:
+            method_name += '-nozscore'
 
     if opt.dropprob > 0:
         if opt.droptype != 'sup':

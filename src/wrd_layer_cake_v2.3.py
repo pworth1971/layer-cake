@@ -3,7 +3,8 @@ import argparse
 from time import time
 
 import scipy
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
+
 from sklearn.model_selection import train_test_split
 
 # custom imports
@@ -358,7 +359,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
         if to_ < from_:
             train_index = train_index[from_:] + train_index[:to_]
             if issparse(ytr):
-                ytr = vstack((ytr[from_:], ytr[:to_]))
+                ytr = np.vstack((ytr[from_:], ytr[:to_]))
             else:
                 ytr = np.concatenate((ytr[from_:], ytr[:to_]))
         else:
@@ -400,10 +401,8 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         prediction = csr_matrix(predict(logits, classification_type=classification_type))
         predictions.append(prediction)
 
-    yte_ = scipy.sparse.vstack(predictions)
+    yte_ = np.vstack(predictions)
     
-    #Mf1, mf1, acc = evaluation_legacy(yte, yte_, classification_type)
-
     Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     
