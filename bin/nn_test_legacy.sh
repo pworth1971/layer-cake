@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PY="python ../src/wrd_layer_cake_v2.3.py"
+PY="python ../src/wrd_layer_cake_v2.3.py --nepochs 111 --patience --seed 77"
 LOG="--log-file ../log/lc_nn_cuda_test.legacy.test"
 
 CNN="--net cnn"

@@ -20,7 +20,8 @@ from model.classification import Token2BertEmbeddings, Token2WCEmbeddings
 
 from util.early_stop import EarlyStopping
 
-from util.common import PICKLE_DIR, initialize_testing, index_dataset, get_word_list, batchify, clip_gradient
+from util.common import PICKLE_DIR, initialize_testing, index_dataset
+from util.common import get_word_list, batchify, clip_gradient, predict
 
 from util.csv_log import CSVLog
 
