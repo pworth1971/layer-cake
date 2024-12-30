@@ -20,12 +20,6 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
-from joblib import Parallel, delayed
-
-from data.ohsumed_reader import fetch_ohsumed50k
-from data.reuters21578_reader import fetch_reuters21578
-from data.rcv_reader import fetch_RCV1
-
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -36,12 +30,21 @@ from collections import defaultdict
 
 from transformers import AutoTokenizer
 
+from joblib import Parallel, delayed
+
+# Custom
+from data.ohsumed_reader import fetch_ohsumed50k
+from data.reuters21578_reader import fetch_reuters21578
+from data.rcv_reader import fetch_RCV1
+
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "arxiv_protoformer"]
 
 DATASET_DIR = '../datasets/'                        # dataset directory
 PICKLE_DIR = "../pickles/"
+VECTOR_CACHE = "../.vector_cache"
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
@@ -54,12 +57,6 @@ NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tas
 
 RANDOM_SEED = 29
 
-
-#
-# supported operations for transformer classifier
-# combination method with TCEs
-#
-SUPPORTED_OPS = ["cat", "add", "dot"]
 
 MAX_TOKEN_LENGTH = 512              # Maximum token length for transformer models models
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -336,6 +333,7 @@ def trans_lc_load_dataset(name, seed):
         
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
         
+
     elif name == "ohsumed":
 
         import os
@@ -381,6 +379,7 @@ def trans_lc_load_dataset(name, seed):
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
     
+
     elif name == "bbc-news":
 
         import os
@@ -443,6 +442,7 @@ def trans_lc_load_dataset(name, seed):
         test_target_encoded = label_encoder.transform(test_target_arr)
 
         return (train_data, train_target_encoded), (test_data, test_target_encoded), num_classes, target_names, class_type
+
 
     elif name == "rcv1":
 
@@ -515,6 +515,7 @@ def trans_lc_load_dataset(name, seed):
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
 
+
     elif name == 'imdb':
 
         from datasets import load_dataset
@@ -561,6 +562,99 @@ def trans_lc_load_dataset(name, seed):
         num_classes = len(target_names)
 
         return (train_data, train_target), (test_data, test_target), num_classes, target_names, class_type
+
+
+    elif name == 'arxiv_protoformer':
+
+        import os
+
+        class_type = 'single-label'
+
+        print("loading data...")
+
+        #
+        # dataset from https://paperswithcode.com/dataset/arxiv-10
+        #
+        data_path = os.path.join(DATASET_DIR, 'arxiv_protoformer')
+
+        file_path = data_path + '/arxiv100.csv'
+        print("file_path:", file_path)
+
+        # Load datasets
+        full_data_set = pd.read_csv(file_path)
+        
+        target_names = full_data_set['label'].unique()
+        num_classes = len(full_data_set['label'].unique())
+        print(f"num_classes: {len(target_names)}")
+        print("target_names:", target_names)
+        
+        papers_dataframe = pd.DataFrame({
+            'title': full_data_set['title'],
+            'abstract': full_data_set['abstract'],
+            'label': full_data_set['label']
+        })
+
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+
+        print("proeprocessing...")
+
+        # preprocess text
+        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
+        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
+
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+
+        # Ensure the 'categories' column value counts are calculated and indexed properly
+        categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
+
+        papers_dataframe['text'] = preprocess(
+            pd.Series(papers_dataframe['text']),
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+        )
+        
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())        
+
+        # Shuffle DataFrame
+        #papers_df = papers_dataframe.sample(frac=1).reset_index(drop=True)
+
+        # we split the train data into train and test here because that is
+        # not done for us with the BBC News dataset (Test data is not labeled)
+        train_data, test_data, train_target, test_target = train_test_split(
+            papers_dataframe['text'], 
+            papers_dataframe['label'], 
+            train_size = 1-TEST_SIZE, 
+            random_state = seed,
+        )
+        
+        """
+        print("train_data:", type(train_data), train_data.shape)
+        print("train_target:", type(train_target), train_target.shape)
+        print("test_data:", type(test_data), test_data.shape)
+        print("test_target:", type(test_target), test_target.shape)
+        """
+        
+        #
+        # set up label targets
+        # Convert target labels to 1D arrays
+        train_target_arr = np.array(train_target)                   # Flattening the training labels into a 1D array
+        test_target_arr = np.array(test_target)                     # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(train_target_arr)  # Fit on training labels
+
+        # Transform labels to numeric IDs
+        train_target_encoded = label_encoder.transform(train_target_arr)
+        test_target_encoded = label_encoder.transform(test_target_arr)
+
+        return (train_data.tolist(), train_target_encoded), (test_data.tolist(), test_target_encoded), num_classes, target_names, class_type
+
 
     elif name == 'arxiv':
 
@@ -730,6 +824,7 @@ def trans_lc_load_dataset(name, seed):
         file_path = data_path + '/arxiv-metadata-oai-snapshot.json'
         #print("file_path:", file_path)
 
+        """
         # Preprocessing function for text cleaning
         def clean_text(text):
             text = text.lower()                                                       # Convert text to lowercase
@@ -752,6 +847,7 @@ def trans_lc_load_dataset(name, seed):
 
         paper_metadata = get_data(file_path, preprocess=True)
         #print("paper_metadata:", type(paper_metadata))
+        """
 
         """
         def load_dataset(file_path):
@@ -847,16 +943,24 @@ def trans_lc_load_dataset(name, seed):
 
         # clean the text, remove special chracters, etc
         def clean_text(text):
+            text = text.lower()                                                 # Convert text to lowercase
             # Mask numbers
-            text = re.sub(r'\d+', '<NUM>', text)
+            text = re.sub(r'\d+', '<NUM>', text)                                # Mask numbers
             # Remove special LaTeX-like symbols and tags
-            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)            # Remove LaTeX-like symbols
             # Remove extra whitespace
-            text = re.sub(r'\s+', ' ', text).strip()
+            text = re.sub(r'\s+', ' ', text).strip()                            # Remove extra spaces
             return text
 
         # Apply cleaning to dataset texts
-        papers_dataframe['text'] = papers_dataframe['text'].apply(clean_text)
+        #papers_dataframe['text'] = papers_dataframe['text'].apply(clean_text)
+
+        papers_dataframe['text'] = preprocess(
+            pd.Series(papers_dataframe['text']),
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+        )
         
         """
         print("papers_dataframe:", papers_dataframe.shape)
@@ -1091,7 +1195,7 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
         for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
             print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
 
-    print("\tclass weights:\n", class_weights)
+    #print("\tclass weights:\n", class_weights)
 
     return class_weights
 
@@ -1218,35 +1322,23 @@ class LCTokenizer:
         print(f"  Padding: {self.padding}")
         print(f"  Truncation: {self.truncation}")
         
-        print("creating tokenizer using HF AutoTokenizer...")
+        #print("creating tokenizer using HF AutoTokenizer...")
 
         # instantiate the tokenizer
         self.tokenizer, self.vocab_size, self.max_length = self._instantiate_tokenizer()
         
-        # Print tokenizer details for debugging
-        print("Initial Tokenizer config:\n", self.tokenizer)
-        print(f"  Pad token: {self.tokenizer.pad_token} (ID: {self.tokenizer.pad_token_id})")
-        print(f"  Max length: {self.max_length}")
-
         self.filtered = False
 
 
     def _instantiate_tokenizer(self, vocab_file=None):
         
         print(f'instantiating new tokenizer from model: {self.model_name} and path: {self.model_path}...')
-        if vocab_file == None:
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, 
-                cache_dir=self.model_path
-                )
-        else:
-            print(f"Loading tokenizer with custom vocab file: {vocab_file}")
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, 
-                cache_dir=self.model_path, 
-                vocab_file=vocab_file
-                )
         
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, 
+            cache_dir=self.model_path
+            )
+    
         # Use an existing token as the padding token
         if tokenizer.pad_token is None:
             print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
@@ -1677,7 +1769,7 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
 
     print(f'vectorize(), max_length: {lc_tokenizer.max_length}')
 
-    print("lc_tokenizer:\n", lc_tokenizer)
+    #print("lc_tokenizer:\n", lc_tokenizer)
     
     preprocessed_train = [" ".join(lc_tokenizer(text)) for text in texts_train]
     preprocessed_val = [" ".join(lc_tokenizer(text)) for text in texts_val]

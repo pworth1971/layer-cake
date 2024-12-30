@@ -27,15 +27,10 @@ import transformers
 from transformers import AutoModelForSequenceClassification, AutoModel
 from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
 
-# Custom
-from data.ohsumed_reader import fetch_ohsumed50k
-from data.reuters21578_reader import fetch_reuters21578
-from data.rcv_reader import fetch_RCV1
-
 #from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
-from data.lc_trans_dataset import SUPPORTED_DATASETS, RANDOM_SEED, MAX_TOKEN_LENGTH
+from data.lc_trans_dataset import RANDOM_SEED, MAX_TOKEN_LENGTH, SUPPORTED_DATASETS, VECTOR_CACHE
 from data.lc_trans_dataset import get_dataset_data, show_class_distribution, check_empty_docs, spot_check_documents
-from data.lc_trans_dataset import LCTokenizer, get_vectorized_data, SUPPORTED_DATASETS, SUPPORTED_OPS
+from data.lc_trans_dataset import LCTokenizer, get_vectorized_data
 
 from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
@@ -47,10 +42,9 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-VECTOR_CACHE = "../.vector_cache"
 
 
-
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # hyper parameters
 #
@@ -59,7 +53,6 @@ MC_THRESHOLD = 0.5                  # Multi-class threshold
 PATIENCE = 5                        # Early stopping patience
 LEARNING_RATE = 1e-6                # Learning rate
 EPOCHS = 33
-
 
 
 #
@@ -74,7 +67,11 @@ DEFAULT_MAX_CPU_BATCH_SIZE = 32
 DEFAULT_MAX_MPS_BATCH_SIZE = 32
 DEFAULT_MAX_CUDA_BATCH_SIZE = 32
 
-
+#
+# supported operations for transformer classifier
+# combination method with TCEs
+#
+SUPPORTED_OPS = ["cat", "add", "dot"]
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -547,7 +544,7 @@ def lc_class_weights(labels, task_type="single-label"):
 
 
 # Get the full model identifier and load from local directory
-def get_model_identifier(pretrained, cache_dir="../.vector_cache"):
+def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
 
     model_name = MODEL_MAP.get(pretrained, pretrained)
     model_path = os.path.join(cache_dir, pretrained)
@@ -600,7 +597,12 @@ class LCDataset(Dataset):
         - item: Dictionary containing tokenized inputs, labels, and optionally supervised embeddings.
         """
         text = self.texts[idx]
-        labels = self.labels[idx] if self.labels is not None else 0  # Default label is 0 if missing
+
+        if self.labels is not None:
+            labels = self.labels[idx] 
+        else:
+            print("WARNING: No labels provided for LCDataset dataset item at index", idx) 
+            0  # Default label is 0 if missing
 
         # Tokenize the text
         encoding = self.tokenizer(
@@ -964,9 +966,11 @@ if __name__ == "__main__":
         padding='max_length',
         truncation=True
     )
-    print("lc_tokenizer:", type(lc_tokenizer), lc_tokenizer)
-    print("Tokenizer configuration:")
-    print(f"  Pad token: {lc_tokenizer.tokenizer.pad_token} (ID: {lc_tokenizer.tokenizer.pad_token_id})")
+
+    tokenizer = lc_tokenizer.tokenizer
+    print("LCTokenizer tokenizer configuration:")
+    print(f'  tokenizer: {type(tokenizer)}, {tokenizer}')
+    print(f"  Pad token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
     print(f"  Max length: {lc_tokenizer.max_length}")
 
     # Split off validation data from the training set
@@ -1010,9 +1014,6 @@ if __name__ == "__main__":
     )
 
     print("vectorizer:\n", vectorizer)
-
-    tokenizer = lc_tokenizer.tokenizer
-    print("lc_tokenizer.tokenizer (tokenizer):", type(tokenizer), tokenizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
     print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
@@ -1146,7 +1147,6 @@ if __name__ == "__main__":
         tce_matrix = None
     # -----------------------------------------------------------------------------------------------
 
-
     print("\n\tBuilding Classifier...")
 
     hf_trans_model, hf_trans_class_model = get_hf_models(
@@ -1179,13 +1179,27 @@ if __name__ == "__main__":
     # are further underrepresented in the test dataset)
     #
     if (args.show_dist):
-        cls_wghts = show_class_distribution(
+
+        train_cls_wghts = show_class_distribution(
             labels=labels_train, 
             target_names=target_names, 
             class_type=class_type, 
-            dataset_name=args.dataset
+            dataset_name=args.dataset+':train'
             )
-    print("\n")
+        
+        val_cls_wghts = show_class_distribution(
+            labels=labels_val, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset+':val'
+            )
+        
+        test_cls_wghts = show_class_distribution(
+            labels=labels_test, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset+':test'
+            )
 
     #
     # note we instantiate only with relevant_tokens 
