@@ -21,7 +21,7 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 from data.lc_trans_dataset import preprocess, get_dataset_data, check_empty_docs, TEST_SIZE, VAL_SIZE, RANDOM_SEED
-
+from util.common import DATASET_DIR
 
 
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary

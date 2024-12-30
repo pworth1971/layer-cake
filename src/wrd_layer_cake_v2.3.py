@@ -6,6 +6,7 @@ import scipy
 from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
 
+# custom imports
 from data.dataset import *
 
 from data.lc_trans_dataset import RANDOM_SEED
@@ -18,12 +19,14 @@ from model.classification import NeuralClassifier, BertWCEClassifier
 from model.classification import Token2BertEmbeddings, Token2WCEmbeddings
 
 from util.early_stop import EarlyStopping
-from util.common import *
+
+from util.common import PICKLE_DIR, initialize_testing, index_dataset, get_word_list, batchify, clip_gradient
+
 from util.csv_log import CSVLog
+
 from util.file import create_if_not_exist
+
 from util.metrics import *
-
-
 
 
 
