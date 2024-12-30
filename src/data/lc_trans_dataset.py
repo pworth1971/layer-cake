@@ -786,7 +786,7 @@ class LCTokenizer:
         # Use an existing token as the padding token
         if tokenizer.pad_token is None:
             print(f"Tokenizer has no pad token. Reusing 'eos_token' ({tokenizer.eos_token_id}).")
-            tokenizer.pad_token = self.tokenizer.eos_token
+            tokenizer.pad_token = tokenizer.eos_token
 
         # Print tokenizer details
         vocab_size = len(tokenizer.get_vocab())
