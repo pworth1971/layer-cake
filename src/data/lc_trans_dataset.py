@@ -16,7 +16,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
 
 import nltk
-from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
@@ -37,22 +36,18 @@ from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
-
+from util.common import PICKLE_DIR, VECTOR_CACHE, DATASET_DIR
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "arxiv_protoformer"]
-
-DATASET_DIR = '../datasets/'                        # dataset directory
-PICKLE_DIR = "../pickles/"
-VECTOR_CACHE = "../.vector_cache"
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
 #
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-
 TEST_SIZE = 0.175                   # test size for train/test split
+VAL_SIZE = 0.20                     # percentage of data to be set aside for model validation
 NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
 
 RANDOM_SEED = 29
@@ -638,7 +633,7 @@ def trans_lc_load_dataset(name, seed):
         print("test_data:", type(test_data), test_data.shape)
         print("test_target:", type(test_target), test_target.shape)
         """
-        
+
         #
         # set up label targets
         # Convert target labels to 1D arrays

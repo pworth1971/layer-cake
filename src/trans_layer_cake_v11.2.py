@@ -28,7 +28,7 @@ from transformers import AutoModelForSequenceClassification, AutoModel
 from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
 
 #from data.lc_dataset import trans_lc_load_dataset, SUPPORTED_DATASETS
-from data.lc_trans_dataset import RANDOM_SEED, MAX_TOKEN_LENGTH, SUPPORTED_DATASETS, VECTOR_CACHE
+from data.lc_trans_dataset import RANDOM_SEED, MAX_TOKEN_LENGTH, SUPPORTED_DATASETS, VECTOR_CACHE, VAL_SIZE
 from data.lc_trans_dataset import get_dataset_data, show_class_distribution, check_empty_docs, spot_check_documents
 from data.lc_trans_dataset import LCTokenizer, get_vectorized_data
 
@@ -42,13 +42,10 @@ from embedding.pretrained import MODEL_MAP
 
 
 
-
-
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # hyper parameters
 #
-VAL_SIZE = 0.20                     # percentage of data to be set aside for model validation
 MC_THRESHOLD = 0.5                  # Multi-class threshold
 PATIENCE = 5                        # Early stopping patience
 LEARNING_RATE = 1e-6                # Learning rate

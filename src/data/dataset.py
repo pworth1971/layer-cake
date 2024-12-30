@@ -1,18 +1,4 @@
-import os,sys
-
-from sklearn.datasets import get_data_home, fetch_20newsgroups
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
-from sklearn.model_selection import train_test_split
-
-from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
-from data.ohsumed_reader import fetch_ohsumed50k
-from data.reuters21578_reader import fetch_reuters21578
-from data.rcv_reader import fetch_RCV1
-from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
-
-from data.lc_trans_dataset import preprocess, get_dataset_data, check_empty_docs
-from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED
+import os
 
 import pickle
 import numpy as np
@@ -23,20 +9,22 @@ import re
 
 from scipy.sparse import csr_matrix
 
+from sklearn.datasets import get_data_home, fetch_20newsgroups
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
+from sklearn.model_selection import train_test_split
 
-TEST_SIZE = 0.2
-VAL_SIZE = 0.2
+
+# custom imports
+from data.ohsumed_reader import fetch_ohsumed50k
+from data.reuters21578_reader import fetch_reuters21578
+from data.rcv_reader import fetch_RCV1
+
+from data.lc_trans_dataset import preprocess, get_dataset_data, check_empty_docs, TEST_SIZE, VAL_SIZE, RANDOM_SEED
+
+
 
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
-
-
-DATASET_DIR = '../datasets/'                        # dataset directory
-
-
-"""
-def init_vectorizer():
-    return TfidfVectorizer(min_df=5, sublinear_tf=True)
-"""
 
 
 
@@ -124,7 +112,7 @@ def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
 
 class Dataset:
 
-    dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'imdb', 'arxiv'}
+    dataset_available = {'bbc-news', 'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'imdb', 'arxiv', 'arxiv_protoformer'}
 
     def __init__(self, name, vtype='tfidf', custom_tokenizer=None, seed=RANDOM_SEED):
 
@@ -148,6 +136,8 @@ class Dataset:
             self._load_imdb()
         elif name == 'arxiv':
             self._load_arxiv(seed)
+        elif name == 'arxiv_protoformer':
+            self._load_arxiv_protoformer(seed)
         else:
             raise ValueError(f"Unsupported dataset name: {name}")
 
@@ -221,7 +211,7 @@ class Dataset:
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = 1
+            random_state = seed
         )
 
         # reset indeces
@@ -275,6 +265,114 @@ class Dataset:
         self.target_names = label_encoder.classes_
         #print("self.target_names (original labels):\n", self.target_names)
 
+
+    def _load_arxiv_protoformer(self, seed):
+
+
+        self.classification_type = 'singlelabel'
+
+        #
+        # dataset from https://paperswithcode.com/dataset/arxiv-10
+        #
+        data_path = os.path.join(DATASET_DIR, 'arxiv_protoformer')
+
+        file_path = data_path + '/arxiv100.csv'
+        print("file_path:", file_path)
+
+        # Load datasets
+        train_set = pd.read_csv(file_path)
+
+        print("train_set:", train_set.shape)
+        print("train_set columns:\n", train_set.columns)
+        print("train_set:\n", train_set.head())
+        
+        target_names = train_set['label'].unique()
+        num_classes = len(train_set['label'].unique())
+        print(f"num_classes: {len(target_names)}")
+        print("target_names:", target_names)
+        
+        papers_dataframe = pd.DataFrame({
+            'title': train_set['title'],
+            'abstract': train_set['abstract'],
+            'label': train_set['label']
+        })
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+
+        print("proeprocessing...")
+
+        # preprocess text
+        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
+        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+
+        # Ensure the 'categories' column value counts are calculated and indexed properly
+        categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
+        print("categories_counts:", categories_counts.shape)
+
+        #
+        # we split the train data into train and test here 
+        #
+        X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+            papers_dataframe['text'], 
+            papers_dataframe['label'], 
+            train_size = 1-TEST_SIZE, 
+            random_state = seed
+        )
+
+        # reset indeces
+        X_train_raw = X_train_raw.reset_index(drop=True)
+        X_test_raw = X_test_raw.reset_index(drop=True)
+
+        """
+        print("\t--- unprocessed text ---")
+        print("self.X_train_raw:", type(X_train_raw), X_train_raw.shape)
+        print("self.X_train_raw[0]:\n", X_train_raw[0])
+
+        print("self.X_test_raw:", type(X_test_raw), X_test_raw.shape)
+        print("self.X_test_raw[0]:\n", X_test_raw[0])
+        """
+
+        #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
+        self.devel_raw = preprocess(
+            text_series=X_train_raw,
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        self.test_raw = preprocess(
+            text_series=X_test_raw,
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False
+            )
+
+        # Convert target labels to 1D arrays
+        self.devel_target = np.array(y_train)       # Flattening the training labels into a 1D array
+        self.test_target = np.array(y_test)         # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(self.devel_target)        # Fit on training labels
+
+        # Transform labels to numeric IDs
+        self.devel_target = label_encoder.transform(self.devel_target)
+        self.test_target = label_encoder.transform(self.test_target)
+        
+        # Pass these reshaped arrays to the _label_matrix method
+        self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))      
+        """
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        """
+
+        # Save the original label names (classes)
+        self.target_names = label_encoder.classes_
+        #print("self.target_names (original labels):\n", self.target_names)
+    
 
     def _load_arxiv(self, seed):
         """    

@@ -1,10 +1,7 @@
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 import numpy as np
 from tqdm import tqdm
 import os
-
+import pickle
 import torch
 
 from scipy.sparse import vstack, issparse
@@ -17,20 +14,30 @@ import platform
 import psutil
 import GPUtil
 
+
+# custom importa
 from util.csv_log import CSVLog
 
 from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
 from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
 from embedding.pretrained import XLNET_MODEL, GPT2_MODEL
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-
-
-OUT_DIR = '../out/'                                             # output directory
-LOG_DIR = '../log/'                                             # log directory
 
 
 # --------------------------------------------------------------------------------------------------------------
+#
+PICKLE_DIR = '../pickles/'                                          # pickle directory
+
+OUT_DIR = '../out/'                                                 # output directory
+LOG_DIR = '../log/'                                                 # log directory
+
+VECTOR_CACHE = '../.vector_cache'                                   # vector cache directory (for language models)
+DATASET_DIR = '../datasets/'                                        # dataset directory
+
+
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'ff', 'hf.sc.ff', 'hf.class.ff']
 ML_MODELS = ['svm', 'lr', 'nb']
 
@@ -39,6 +46,7 @@ SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
 TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
+#
 # --------------------------------------------------------------------------------------------------------------
 
 
@@ -683,7 +691,78 @@ def get_system_resources():
 
 
 
+
 def index_dataset(dataset, opt, pt_model=None):
+    """
+    Indexes the dataset for use with word-based (e.g., GloVe, Word2Vec, FastText)
+    and token-based (e.g., BERT, RoBERTa, DistilBERT) embeddings.
+
+    Parameters:
+    ----------
+    dataset : Dataset
+        The dataset object containing raw text and a fitted vectorizer.
+    opt : argparse.Namespace
+    pt_model : PretrainedEmbeddings class (instantiated) optional
+        Pretrained embedding object to extend the known vocabulary.
+
+    Returns:
+    -------
+    tuple : (word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index)
+        - word2index: Mapping of tokens to indices.
+        - out_of_vocabulary: Mapping of OOV tokens to indices.
+        - unk_index: Index for unknown tokens.
+        - pad_index: Index for padding tokens.
+        - devel_index: Indexed representation of the development dataset.
+        - test_index: Indexed representation of the test dataset.
+    """
+    print(f'indexing dataset.... dataset: {dataset}, vtype: {opt.vtype}, model: {opt.pretrained}')
+    
+    pickle_file = os.path.join(PICKLE_DIR, f"{opt.dataset}.{opt.vtype}.{opt.pretrained}.index.pickle")
+    print('pickle_file:', pickle_file)
+
+    # Check if the pickle file exists
+    if os.path.exists(pickle_file):
+        print(f"Loading indexed dataset from {pickle_file}...")
+        with open(pickle_file, "rb") as f:
+            return pickle.load(f)
+
+    print("Indexing dataset from scratch...")
+
+    # Build the vocabulary
+    word2index = dict(dataset.vocabulary)
+    known_words = set(word2index.keys())
+    if pt_model is not None:
+        print(f"Updating known_words with pretrained vocabulary: {len(pt_model.vocabulary())} entries")
+        known_words.update(pt_model.vocabulary())
+    print(f"Total known words: {len(known_words)}")
+
+    # Add special tokens
+    word2index['UNKTOKEN'] = len(word2index)
+    word2index['PADTOKEN'] = len(word2index)
+    unk_index = word2index['UNKTOKEN']
+    pad_index = word2index['PADTOKEN']
+
+    # Initialize out-of-vocabulary dictionary and analyzer
+    out_of_vocabulary = dict()
+    analyzer = dataset.analyzer()
+    print("Analyzer initialized.")
+
+    # Index the datasets
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
+    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
+
+    # Save the indexed dataset to a pickle file
+    print(f"Saving indexed dataset to {pickle_file}...")
+    with open(pickle_file, "wb") as f:
+        pickle.dump((word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index), f)
+
+    return word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index
+
+
+
+
+
+def index_dataset_old(dataset, opt, pt_model=None):
     """
     Indexes the dataset for use with word-based (e.g., GloVe, Word2Vec, FastText)
     and token-based (e.g., BERT, RoBERTa, DistilBERT) embeddings.
