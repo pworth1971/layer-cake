@@ -139,7 +139,7 @@ def initialize_testing(args, program, version):
     system = SystemResources()
     print("system:\n", system)
 
-    if (args.dataset in ['bbc-news', '20newsgroups', 'imdb']):
+    if (args.dataset in ['bbc-news', '20newsgroups', 'imdb', 'arxiv_protoformer']):
         logger.set_default('class_type', 'single-label')
     else:
         logger.set_default('class_type', 'multi-label')
@@ -449,22 +449,24 @@ def set_method_name(opt, add_model=False):
     
     if opt.supervised:
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
+
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
 
-        """
         if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):
-            method_name += f'-tce[{opt.sup_mode}]-d{sup_drop}-{opt.supervised_method}'
-        else:
-            method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
-        """
-        
-        method_name += f'-wce({opt.sup_mode})-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
-        
-        if not opt.nozscore:
-            method_name += '-zscore'
-        else:
-            method_name += '-nozscore'
 
+            if opt.normalize:
+                method_name += f'-tce.norm[{opt.sup_mode}]'
+            else:
+                method_name += f'-tce[{opt.sup_mode}]'            
+        
+        else:
+            method_name += f'-wce({opt.sup_mode}]'
+
+        method_name += f'-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
+
+        if not opt.nozscore:
+            method_name += '.zscore'
+        
     if opt.dropprob > 0:
         if opt.droptype != 'sup':
             method_name += f'-drop{opt.droptype}{opt.dropprob}'
