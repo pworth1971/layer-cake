@@ -714,7 +714,79 @@ def check_empty_docs(data, name):
 
 
 
-def spot_check_documents(documents, vectorizer, tokenizer, vectorized_data, num_docs=5, debug=False):
+def spot_check_documents(documents, vectorizer, lc_tokenizer, vectorized_data, num_docs=5, debug=False):
+    """
+    Spot-check random documents in the dataset for their TF-IDF calculations.
+
+    Args:
+        documents: List of original documents (strings).
+        vectorizer: Fitted LCTFIDFVectorizer object.
+        lc_tokenizer: Custom tokenizer object.
+        vectorized_data: Sparse matrix of TF-IDF features.
+        num_docs: Number of random documents to check.
+        debug: Whether to enable debug-level logging.
+    """
+
+    print(f"spot_check_documents()... num_docs: {num_docs}, debug: {debug}")
+
+    vocab = vectorizer.vocabulary_
+    idf_values = vectorizer.idf_
+    reverse_vocab = {idx: token for token, idx in vocab.items()}
+    
+    tokenizer = lc_tokenizer.tokenizer
+
+    # Dynamically identify the pad token from the tokenizer
+    pad_token = tokenizer.pad_token if tokenizer.pad_token else "[PAD]"
+    pad_token_id = vocab.get(pad_token, None)
+
+    print("\n[INFO] Spot-checking random documents...")
+    
+    if debug:
+        print("documents:", type(documents), len(documents))
+        print("documents[0]:", type(documents[0]), documents[0])
+        print("vectorized_data:", type(vectorized_data))
+        print(f"[DEBUG] Vocabulary size: {len(vocab)}, IDF array size: {len(idf_values)}\n")
+
+    # Randomly select `num_docs` indices from the document list
+    doc_indices = random.sample(range(len(documents)), min(num_docs, len(documents)))
+
+    for doc_id in doc_indices:
+        doc = documents[doc_id]
+
+        if debug:
+            print(f"[INFO] Document {doc_id}:")
+            print(f"Original Text: {doc}\n")
+
+        # Tokenize the document
+        tokens = tokenizer.tokenize(doc)
+        if debug:
+            print(f"Tokens: {tokens}\n")
+
+        vectorized_row = vectorized_data[doc_id]
+        mismatches = []
+
+        for token in tokens:
+            if token in vocab:
+                idx = vocab[token]
+                tfidf_value = vectorized_row[0, idx]
+                expected_idf = idf_values[idx]
+
+                # Check for proper TF-IDF values
+                if token == pad_token:
+                    if expected_idf != 0 or tfidf_value != 0:
+                        print(f"[ERROR] PAD token '{pad_token}' has incorrect values: IDF={expected_idf}, TF-IDF={tfidf_value}.")
+                else:
+                    if tfidf_value == 0:
+                        print(f"[DEBUG] Token '{token}' in tokenizer vocabulary: {token in tokenizer.get_vocab()}")
+                        print(f"[ERROR] Token '{token}' has IDF {expected_idf} but TF-IDF is 0.")
+            else:
+                print(f"[ERROR] Token '{token}' not in vectorizer vocabulary.")
+
+    print("---finished spot-checking documents---")
+
+
+
+def spot_check_documents_old(documents, vectorizer, tokenizer, vectorized_data, num_docs=5, debug=False):
     """
     Spot-check random documents in the dataset for their TF-IDF calculations.
 
@@ -863,6 +935,8 @@ class LCTokenizer:
         """
         if self.lowercase:
             text = text.lower()
+
+        text = self.normalize_text(text)        # normalize text
 
         tokens = self.tokenizer.tokenize(
             text,
@@ -1020,6 +1094,11 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
         self.lowercase = lowercase
         self.debug = debug
         self.vocabulary_ = {token: idx for token, idx in lc_tokenizer.get_vocab().items()}
+
+        self.pad_token = lc_tokenizer.tokenizer.pad_token  # Dynamically retrieve pad token
+        if self.pad_token is None:
+            raise ValueError("Pad token is not defined in the tokenizer.")
+
         self.idf_ = None
 
 
@@ -1056,30 +1135,34 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
                 print(f"[DEBUG] Tokens: {tokens[:50]}...")                                                      # Print a sample of the tokens
                 raise ValueError("Document exceeds max length.")
             
-            # Filter out blank tokens and special tokens not in the vocabulary
-            tokens = [token for token in tokens if token.strip()]
+            tokens = [token for token in tokens if token.strip() and token != self.pad_token]
             unique_tokens = set(tokens)
-
             unmatched_tokens = []
 
             for token in unique_tokens:
                 if token in self.vocabulary_:
                     term_doc_counts[token] += 1
                 else:
+                    print(f"[WARNING] Unmatched token '{token}' in document {doc_idx}.")
                     unmatched_tokens.append(token)
-
-            if self.debug and unmatched_tokens:
-                print(f"[DEBUG] Document {doc_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}")
+            
+        missing_tokens = [token for token in self.vocabulary_ if token not in term_doc_counts]
+        if missing_tokens:
+            print(f"[WARNING] Tokens in vocabulary with no document counts: {missing_tokens[:10]}")
 
         num_documents = len(tokenized_documents)
         self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
+
         for token, idx in self.vocabulary_.items():
             doc_count = term_doc_counts.get(token, 0)
-            self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
+            if token == self.pad_token:
+                self.idf_[idx] = 0  # Exclude [PAD] from TF-IDF calculations
+            else:
+                self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
 
-            if self.debug and self.idf_[idx] == 0:
-                print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
-                    f"Document count: {doc_count}, Total docs: {num_documents}.")
+                if self.debug and self.idf_[idx] == 0:
+                    print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                        f"Document count: {doc_count}, Total docs: {num_documents}.")
 
         if self.debug:
             # Debug: Check if special tokens are present
@@ -1106,27 +1189,23 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
             Sparse matrix of TF-IDF features.
         """
         print("Transforming tokenized docs with fitted LCTFIDFVectorizer...")
-
-        print("tokenized_documents: ", type(tokenized_documents), len(tokenized_documents))
-        print("tokenized_documents[0]: ", type(tokenized_documents[0]), tokenized_documents[0])
-
         rows, cols, data = [], [], []
         empty_rows_details = []  # To collect details of empty rows
 
         for row_idx, doc in enumerate(tokenized_documents):
-
-            # If the document is a string, split it into tokens
+            # Tokenize using the tokenizer
             if isinstance(doc, str):
-                tokens = doc.split()
+                tokens = self.lc_tokenizer.tokenize(doc)  # Use tokenizer to split the document
             else:
-                raise ValueError("row in tokenized doc is not a 'str'")
-                #tokens = doc
+                raise ValueError("Each document in tokenized_documents must be a string.")
 
-            # Save the original document tokens for debugging
-            original_tokens = doc.split()
+            # Filter out [PAD] and blank tokens
+            tokens = [token for token in tokens if token.strip() and token != self.pad_token]
+            term_freq = defaultdict(int)
+            
+            if len(tokens) == 0:
+                print(f"[WARNING] Document {row_idx} contains no valid tokens after tokenization.")
 
-            # Filter out blank tokens
-            tokens = [token for token in tokens if token.strip()]
             term_freq = defaultdict(int)
             unmatched_tokens = []
 
@@ -1134,50 +1213,57 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
                 if token in self.vocabulary_:
                     term_freq[token] += 1
                 else:
+                    print("[WARNING] Unmatched token '{token}' in document {row_idx}.")
                     unmatched_tokens.append(token)
-            
-            if self.debug and unmatched_tokens:
-                print(f"[WARNING] Document {row_idx} has {len(unmatched_tokens)} unmatched tokens: {unmatched_tokens[:10]}...")
-            
-            # Collect unmatched tokens for empty rows
-            if not term_freq:  # No matched tokens
-                if original_documents is not None:
-                    empty_rows_details.append((row_idx, original_documents[row_idx], original_tokens, unmatched_tokens))
-                else:
-                    empty_rows_details.append((row_idx, None, original_tokens, unmatched_tokens))
 
-            # Calculate TF-IDF
+            # Handle empty rows (no matched tokens)
+            if not term_freq:
+                if original_documents is not None:
+                    empty_rows_details.append((row_idx, original_documents[row_idx], tokens, unmatched_tokens))
+                else:
+                    empty_rows_details.append((row_idx, None, tokens, unmatched_tokens))
+
+            # Calculate TF-IDF for tokens in the vocabulary
+            total_tokens = len(tokens)
+            if total_tokens == 0:
+                continue  # Skip documents with no tokens
+
             for token, freq in term_freq.items():
                 col_idx = self.vocabulary_[token]
-                tf = freq / len(tokens)
-                tfidf = tf * self.idf_[col_idx]
+                tf = freq / total_tokens  # Term frequency
+                tfidf = tf * self.idf_[col_idx]  # TF-IDF value
 
                 """
                 if self.debug:
-                    print(f"[INFO] Document {row_idx}, Token '{token}': Frequency: {freq}, TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
+                    print(f"[DEBUG] Row {row_idx}, Token '{token}', TF: {tf}, IDF: {self.idf_[col_idx]}, TF-IDF: {tfidf}")
                 """
 
                 rows.append(row_idx)
                 cols.append(col_idx)
                 data.append(tfidf)
 
-        # construct sparse matrix
+        # Construct sparse matrix
         matrix = csr_matrix((data, (rows, cols)), shape=(len(tokenized_documents), len(self.vocabulary_)))
 
         if self.debug:
+            # Debugging: Check for empty rows in the matrix
             empty_rows = matrix.sum(axis=1).A1 == 0
-            for row_idx, original_doc, original_tokens, unmatched_tokens in empty_rows_details:
+            for row_idx, original_doc, tokens, unmatched_tokens in empty_rows_details:
                 if empty_rows[row_idx]:
                     print(f"[WARNING] Row {row_idx} in TF-IDF matrix is empty.")
                     print(f"[INFO] Original document: {original_doc}")
-                    print(f"[INFO] Original tokens: {original_tokens}")
-                    print(f"[INFO] Unmatched tokens (not in vocab): {unmatched_tokens}")
-                    # Manually tokenize with the custom tokenizer
-                    if original_doc:
-                        custom_tokens = self.tokenizer.tokenize(original_doc)
-                        print(f"[DEBUG] Custom tokenizer tokens: {custom_tokens}")
-                    
+                    print(f"[INFO] Tokens: {tokens}")
+                    print(f"[INFO] Unmatched tokens: {unmatched_tokens}")
+
+            # Debugging: Special tokens' TF-IDF values
+            special_tokens = self.lc_tokenizer.tokenizer.all_special_tokens
+            for token in special_tokens:
+                if token in self.vocabulary_:
+                    idx = self.vocabulary_[token]
+                    print(f"[DEBUG] Special token '{token}' - IDF: {self.idf_[idx]}")
+
         return matrix
+
 
 
     def fit_transform(self, X, y=None, original_documents=None):
@@ -1214,6 +1300,16 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
     print(f"preprocessed_train[0]: {preprocessed_train[0]}")
     
     tokenizer_vocab = lc_tokenizer.tokenizer.get_vocab()
+
+    # Debugging: Check preprocessed tokens and unmatched tokens
+    print("[DEBUG] Checking preprocessed tokens and their presence in vocabulary...")
+    for i, doc in enumerate(preprocessed_train[:5]):  # Sample first 5 documents
+        tokens = doc.split()
+        unmatched = [token for token in tokens if token not in lc_tokenizer.get_vocab()]
+        print(f"Document {i}: Tokens: {tokens[:10]}...")  # Print a subset of tokens
+        if unmatched:
+            print(f"[WARNING] Document {i} has unmatched tokens: {unmatched[:10]}")  # Show a few unmatched tokens
+
 
     vectorizer = LCTFIDFVectorizer(
         lc_tokenizer=lc_tokenizer, 

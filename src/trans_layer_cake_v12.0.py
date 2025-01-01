@@ -602,7 +602,7 @@ if __name__ == "__main__":
     spot_check_documents(
         documents=texts_train,
         vectorizer=vectorizer,
-        tokenizer=lc_tokenizer,                # we pass in the LCTokenizer 
+        lc_tokenizer=lc_tokenizer,                # we pass in the LCTokenizer 
         vectorized_data=Xtr,       
         num_docs=3,
         debug=True

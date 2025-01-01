@@ -917,7 +917,6 @@ class LC_Linear_BERT_Classifier(LCBERTBaseClassifier):
         return {"loss": loss, "logits": logits}
     
 
-
 class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels, debug=False):
@@ -931,6 +930,7 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
         self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, self.hidden_size), stride=1)
         self.dropout = nn.Dropout(0.5)
 
+        # Classification layer
         self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
 
     def forward(self, input_ids, attention_mask, labels=None):
@@ -954,9 +954,9 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
         # Concatenate pooled outputs
         features = torch.cat((pool1, pool2, pool3), dim=1)  # Shape: (batch_size, num_filters * 3)
 
-        # Apply dropout and fully connected layer
+        # Apply dropout and classification layer
         features = self.dropout(features)
-        logits = self.fc(features)
+        logits = self.classifier(features)
 
         if self.debug:
             print(f"logits: {logits.shape}")
@@ -964,7 +964,7 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
         # Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
-    
+
 
 
 class LC_LSTM_BERT_Classifier(LCBERTBaseClassifier):
