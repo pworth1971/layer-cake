@@ -930,10 +930,8 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
         self.conv2 = nn.Conv2d(1, num_channels, kernel_size=(5, self.hidden_size), stride=1)
         self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, self.hidden_size), stride=1)
         self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
 
-        # Ensure compatibility with BaseLCClassifier
-        self.classifier = self.fc  # Alias for fully connected layer
+        self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
 
     def forward(self, input_ids, attention_mask, labels=None):
         # Get BERT embeddings
@@ -978,9 +976,7 @@ class LC_LSTM_BERT_Classifier(LCBERTBaseClassifier):
 
         # LSTM-based projection
         self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
-
-        self.classifier = self.fc  # Alias for compatibility
+        self.classifier = nn.Linear(hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, labels=None):
         output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
@@ -1009,9 +1005,7 @@ class LC_ATTN_BERT_Classifier(LCBERTBaseClassifier):
 
         # Attention-based projection
         self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
-
-        self.classifier = self.fc  # Alias for compatibility
+        self.classifier = nn.Linear(hidden_size, num_classes)
 
     def attention_net(self, lstm_output, final_state):
         hidden = final_state.squeeze(0)  # (batch_size, hidden_size)
@@ -1038,8 +1032,6 @@ class LC_ATTN_BERT_Classifier(LCBERTBaseClassifier):
         # Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
-
-
 
 
 class LC_Linear_RoBERTa_Classifier(LCBERTBaseClassifier):
