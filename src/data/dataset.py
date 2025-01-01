@@ -21,7 +21,7 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 
 from data.lc_trans_dataset import preprocess, get_dataset_data, check_empty_docs, TEST_SIZE, VAL_SIZE, RANDOM_SEED
-from util.common import DATASET_DIR
+from util.common import DATASET_DIR, PICKLE_DIR
 
 
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
@@ -121,6 +121,7 @@ class Dataset:
         assert name in Dataset.dataset_available, f'dataset {name} is not available'
 
         self.name = name
+        self.seed = seed
 
         if name=='bbc-news':
             self._load_bbc_news()
@@ -211,7 +212,7 @@ class Dataset:
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = seed
+            random_state = self.seed
         )
 
         # reset indeces
@@ -266,7 +267,7 @@ class Dataset:
         #print("self.target_names (original labels):\n", self.target_names)
 
 
-    def _load_arxiv_protoformer(self, seed):
+    def _load_arxiv_protoformer(self):
 
 
         self.classification_type = 'singlelabel'
@@ -319,7 +320,7 @@ class Dataset:
             papers_dataframe['text'], 
             papers_dataframe['label'], 
             train_size = 1-TEST_SIZE, 
-            random_state = seed
+            random_state = self.seed
         )
 
         # reset indeces
@@ -374,7 +375,7 @@ class Dataset:
         #print("self.target_names (original labels):\n", self.target_names)
     
 
-    def _load_arxiv(self, seed):
+    def _load_arxiv(self):
         """    
         # load arxiv data:
         # 
@@ -386,7 +387,7 @@ class Dataset:
         self.classification_type = 'multilabel'
 
         self.devel_raw, devel_labelmatrix_arr, self.test_raw, test_labelmatrix_arr, num_classes, \
-            self.target_names, class_type = get_dataset_data(dataset_name='arxiv', seed=seed, pickle_dir=PICKLE_DIR)
+            self.target_names, class_type = get_dataset_data(dataset_name='arxiv', seed=self.seed, pickle_dir=PICKLE_DIR)
         
         # must convert to csr_matrices
         self.devel_labelmatrix = csr_matrix(devel_labelmatrix_arr)

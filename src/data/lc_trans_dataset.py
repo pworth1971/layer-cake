@@ -540,6 +540,53 @@ def trans_lc_load_dataset(name, seed):
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+import torch
+from sklearn.utils.class_weight import compute_class_weight
+
+
+def lc_class_weights(labels, task_type="single-label"):
+    """
+    Compute class weights for single-label or multi-label classification.
+
+    Args:
+        labels: List or numpy array.
+                - Single-label: List of class indices (e.g., [0, 1, 2]).
+                - Multi-label: Binary array of shape (num_samples, num_classes).
+        task_type: "single-label" or "multi-label".
+
+    Returns:
+        Torch tensor of class weights.
+    """
+
+    print(f'Computing class weights for {task_type} task...')
+    #print("labels:", labels)
+
+    if task_type == "single-label":
+        # Compute class weights using sklearn
+        num_classes = len(np.unique(labels))
+        class_weights = compute_class_weight(
+            class_weight="balanced",
+            classes=np.arange(num_classes),
+            y=labels
+        )
+        return torch.tensor(class_weights, dtype=torch.float)
+
+    elif task_type == "multi-label":
+        # Compute pos_weights for BCEWithLogitsLoss
+        labels = torch.tensor(labels, dtype=torch.float)
+        num_samples = labels.shape[0]
+        pos_counts = labels.sum(dim=0)  # Number of positive samples per class
+        neg_counts = num_samples - pos_counts  # Number of negative samples per class
+
+        pos_counts = torch.clamp(pos_counts, min=1.0)  # Avoid division by zero
+        pos_weights = neg_counts / pos_counts
+        return pos_weights
+
+    else:
+        raise ValueError("Invalid task_type. Use 'single-label' or 'multi-label'.")
+
+
+
 def show_class_distribution(labels, target_names, class_type, dataset_name, display_mode='text'):
     """
     Visualize the class distribution and compute class weights for single-label or multi-label datasets.
@@ -819,9 +866,11 @@ class LCTokenizer:
 
         tokens = self.tokenizer.tokenize(
             text,
+            add_special_tokens=True,
+            return_token_type_ids=True,
             max_length=self.max_length,
             truncation=self.truncation,
-            padding=self.padding
+            padding=self.padding,
         )
 
         if self.remove_special_tokens:
