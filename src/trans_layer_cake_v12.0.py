@@ -37,9 +37,8 @@ from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
-from model.classification import LCSequenceClassifier
-from model.classification import LC_Linear_BERT_Classifier, LC_Linear_DistillBERT_Classifier, LC_Linear_RoBERTa_Classifier
-from model.classification import LC_CNN_BERT_Classifier, SUPPORTED_OPS
+from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier
+from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearRoBERTaClassifier
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -369,7 +368,9 @@ def parse_args():
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
-
+    parser.add_argument('--emb-filter', action='store_true', default=False,
+                        help='filter model embeddings to align with dataset vocabulary (default False)')
+    
     # TCE params
     parser.add_argument('--supervised', action='store_true', 
                         help='Use supervised embeddings (TCEs')
@@ -616,7 +617,6 @@ if __name__ == "__main__":
     #
     # NB this is not working, the Classifier does not like this filtered Embedding layer for some reason
     #
-    """
     if not args.emb_filter:
         print('not filtering embeddings...')
         relevant_token_ids = None
@@ -638,7 +638,6 @@ if __name__ == "__main__":
         #
         # TODO: may need to update the vocab_size variable here for downstream processing (eg. TCE computation)
         #
-    """
     # -----------------------------------------------------------------------------------------------
 
 
@@ -726,10 +725,10 @@ if __name__ == "__main__":
         """
 
     if (args.weighted):
-        print("computing class weights...")
+        print("computing class weights for classifier loss function...")
         class_weights = lc_class_weights(labels_train, task_type=class_type)
     else:
-        print("not using class weights...")
+        print("--- not using class weights... ---")
         class_weights = None
 
 
@@ -744,7 +743,7 @@ if __name__ == "__main__":
 
         if args.pretrained == 'bert':
 
-            linear_model = LC_Linear_BERT_Classifier(
+            linear_model = LCLinearBERTClassifier(
                 model_name=model_name, 
                 cache_dir=model_path, 
                 num_classes=num_classes,
@@ -753,7 +752,7 @@ if __name__ == "__main__":
         
         elif args.pretrained == 'roberta':
         
-            linear_model = LC_Linear_RoBERTa_Classifier(
+            linear_model = LCLinearRoBERTaClassifier(
                 model_name=model_name, 
                 cache_dir=model_path, 
                 num_classes=num_classes, 
@@ -762,7 +761,7 @@ if __name__ == "__main__":
         
         elif args.pretrained == 'distilbert':
             
-            linear_model = LC_Linear_DistillBERT_Classifier(
+            linear_model = LCLinearDistilBERTClassifier(
                 model_name=model_name, 
                 cache_dir=model_path, 
                 num_classes=num_classes, 
@@ -782,13 +781,34 @@ if __name__ == "__main__":
 
         if args.pretrained == 'bert':
 
-            cnn_model = LC_CNN_BERT_Classifier(
+            cnn_model = LCCNNBERTClassifier(
                 model_name=model_name, 
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type,
                 num_channels=args.channels
                 )
+        
+        elif args.pretrained == 'roberta':
+        
+            linear_model = LCCNNRoBERTaClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes, 
+                class_type=class_type,
+                num_channels=args.channels
+                )
+        
+        elif args.pretrained == 'distilbert':
+            
+            linear_model = LCCNNDistilBERTClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes, 
+                class_type=class_type,
+                num_channels=args.channels
+                )
+        
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
 

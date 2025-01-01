@@ -2,15 +2,22 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 import torch
-from transformers import BertModel, BertTokenizer
+from torch import nn
+from torch.utils.data import Dataset
 from transformers import BertTokenizerFast, BertModel
+from transformers import DistilBertModel, RobertaModel
 
+# custom imports
 from model.layers import *
 
 from embedding.pretrained import BERT_MODEL
 
 
 
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
+# legacy neural classifier (CNN, ATTN, LSTM support)
+#
 
 class NeuralClassifier(nn.Module):
 
@@ -52,8 +59,13 @@ class NeuralClassifier(nn.Module):
     def get_learnable_embedding_size(self):
         return self.embed.get_lrn_dimensions()
     
-    
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# BERT Embeddings functions (TESTING ONLY)
+#
 class Token2BertEmbeddings:
 
     def __init__(self, pretrained_model_name=BERT_MODEL, device=None):
@@ -833,10 +845,7 @@ baseline_model.to(device)
 
 
 
-import torch
-from torch import nn
-from torch.utils.data import Dataset
-from transformers import DistilBertModel, BertModel, RobertaModel
+
 
 
 class LCBERTBaseClassifier(nn.Module):
@@ -851,7 +860,9 @@ class LCBERTBaseClassifier(nn.Module):
     - debug: Whether to enable debug logging.
     """
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+
         super().__init__()
+        
         self.model_name = model_name
         self.num_classes = num_classes
         self.class_type = class_type
@@ -870,17 +881,14 @@ class LCBERTBaseClassifier(nn.Module):
         self.dropout = nn.Dropout(0.6)
         self.classifier = None  # To be initialized after getting hidden size
 
-
     def forward(self, input_ids, attention_mask, labels=None):
         raise NotImplementedError("Subclasses must implement the forward method.")
-
 
     def get_embedding_dims(self):
         """
         Returns the dimensions of the embedding layer as (hidden_size, num_classes).
         """
         return self.l1.embeddings.word_embeddings.weight.shape
-
 
     def compute_loss(self, logits, labels):
         """
@@ -893,10 +901,206 @@ class LCBERTBaseClassifier(nn.Module):
             elif self.class_type in ['single-label', 'singlelabel']:
                 loss = self.loss_fn(logits, labels.long())
         return loss
+    
+
+    def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
+        """
+        Normalize the TCE matrix to align with the transformer's embedding distribution.
+
+        Args:
+            tce_matrix: TCE matrix (vocab_size x num_classes).
+            embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
+            embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
+
+        Returns:
+            Normalized TCE matrix (vocab_size x num_classes).
+        """
+
+        target_dim = embedding_mean.shape[0]  # Set target_dim to model embedding size
+
+        if (self.debug):
+            print(f"tce_matrix: {tce_matrix.shape}, {tce_matrix.dtype}")
+            #print("first row:", tce_matrix[0])
+            print(f"embedding_mean: {embedding_mean.shape}, {embedding_mean.dtype}")
+            #print(f'embedding_mean: {embedding_mean}')
+            print(f"embedding_std: {embedding_std.shape}, {embedding_std.dtype}")
+            #print(f'embedding_std: {embedding_std}')
+            print("target_dim:", target_dim)
+
+        device = embedding_mean.device                      # Ensure all tensors are on the same device
+        tce_matrix = tce_matrix.to(device)
+
+        # 1 Normalize TCE matrix row-wise (i.e. ompute mean and std per row)
+        tce_mean = tce_matrix.mean(dim=1, keepdim=True)
+        tce_std = tce_matrix.std(dim=1, keepdim=True)
+        tce_std[tce_std == 0] = 1                           # Prevent division by zero
+
+        if (self.debug):
+            print(f"tce_mean: {tce_mean.shape}, {tce_mean.dtype}")
+            #print(f'tce_mean: {tce_mean}')
+            print(f"tce_std: {tce_std.shape}, {tce_std.dtype}")
+            #print(f'tce_std: {tce_std}')
+
+        normalized_tce = (tce_matrix - tce_mean) / tce_std
+
+        if (self.debug):
+            print(f"normalized_tce (pre-scaling): {normalized_tce.shape}")
+
+        # 2. Scale to match embedding statistics
+        normalized_tce = normalized_tce * embedding_std.mean() + embedding_mean.mean()
+
+        # 3. Project normalized TCE into the target dimension (e.g., 128)
+        projection = torch.nn.Linear(tce_matrix.size(1), target_dim, bias=False).to(device)
+        projected_tce = projection(normalized_tce)
+
+        if self.debug:
+            print(f"Projected TCE matrix: {projected_tce.shape}")
+
+        # check for Nan or Inf values after normalization
+        if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
+            print("[WARNING]: projected_tce contains NaN or Inf values after normalization.")
+            #raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
+
+        return projected_tce
+
+
+    def _filter_transformer_embeddings(self, model, relevant_tokens):
+        """
+        Replace the transformer embedding layer with a reduced embedding matrix and update the tokenizer.
+        """
+        print("Filtering transformer embeddings to align with dataset...")
+        print(f"relevant_tokens: {type(relevant_tokens)} {len(relevant_tokens)}")
+
+        # Extract original embeddings
+        embedding_layer = model.get_input_embeddings()
+        original_embeddings = embedding_layer.weight.data
+        print("original_embeddings:", type(original_embeddings), original_embeddings.shape)
+
+        # Validate relevant_tokens
+        assert all(0 <= idx < original_embeddings.size(0) for idx in relevant_tokens), \
+            "Relevant tokens contain indices out of range of the original embeddings."
+
+        # Get embeddings for relevant tokens
+        relevant_embeddings = original_embeddings[relevant_tokens, :]
+        print("relevant_embeddings:", type(relevant_embeddings), relevant_embeddings.shape)
+
+        # Replace the embedding layer
+        reduced_embedding_layer = nn.Embedding.from_pretrained(relevant_embeddings)
+        print("reduced_embedding_layer:", type(reduced_embedding_layer), reduced_embedding_layer)
+
+        model.set_input_embeddings(reduced_embedding_layer)
+        print("updated model:", model)
+
+        return model, relevant_embeddings
+    
+
+
+class LCLinearBaseClassifier(LCBERTBaseClassifier):
+    """
+    Base class for linear classifiers.
+    """
+    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
+        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
+        self.classifier = nn.Linear(self.hidden_size, num_classes)
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = output[0][:, 0]  # CLS token representation
+        logits = self.classifier(self.dropout(pooled_output))
+
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+class LCCNNBaseClassifier(LCBERTBaseClassifier):
+    """
+    Base class for CNN-based classifiers.
+    """
+    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
+        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
+        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
+
+        # CNN-based layers
+        self.conv1 = nn.Conv2d(1, num_channels, kernel_size=(3, self.hidden_size), stride=1)
+        self.conv2 = nn.Conv2d(1, num_channels, kernel_size=(5, self.hidden_size), stride=1)
+        self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, self.hidden_size), stride=1)
+        self.dropout = nn.Dropout(0.5)
+        self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        # Get transformer embeddings
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        hidden_states = output[0]  # Shape: (batch_size, seq_len, hidden_size)
+
+        # Reshape for CNN (add channel dimension)
+        hidden_states = hidden_states.unsqueeze(1)  # Shape: (batch_size, 1, seq_len, hidden_size)
+
+        # Apply convolutions
+        conv1_out = torch.relu(self.conv1(hidden_states)).squeeze(3)
+        conv2_out = torch.relu(self.conv2(hidden_states)).squeeze(3)
+        conv3_out = torch.relu(self.conv3(hidden_states)).squeeze(3)
+
+        # Apply max pooling
+        pool1 = torch.max(conv1_out, dim=2)[0]
+        pool2 = torch.max(conv2_out, dim=2)[0]
+        pool3 = torch.max(conv3_out, dim=2)[0]
+
+        # Concatenate pooled outputs
+        features = torch.cat((pool1, pool2, pool3), dim=1)
+
+        # Apply dropout and classification layer
+        features = self.dropout(features)
+        logits = self.classifier(features)
+
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+# Model-specific subclasses
+class LCLinearBERTClassifier(LCLinearBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, debug)
+
+
+class LCCNNBERTClassifier(LCCNNBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
+
+
+class LCLinearRoBERTaClassifier(LCLinearBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, debug)
+
+
+class LCCNNRoBERTaClassifier(LCCNNBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
+
+
+class LCLinearDistilBERTClassifier(LCLinearBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, debug)
+
+
+class LCCNNDistilBERTClassifier(LCCNNBaseClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
 
 
 
-class LC_Linear_BERT_Classifier(LCBERTBaseClassifier):
+
+class LC_Linear_BERT_Classifier_orig(LCBERTBaseClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
@@ -917,12 +1121,38 @@ class LC_Linear_BERT_Classifier(LCBERTBaseClassifier):
         return {"loss": loss, "logits": logits}
     
 
-class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
+
+
+class LC_CNN_BERT_Classifier_orig(LCBERTBaseClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+
+        super().__init__(
+            model_name=model_name, 
+            cache_dir=cache_dir, 
+            num_classes=num_classes, 
+            class_type=class_type, 
+            debug=debug)
+
+        def_model = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+
+        # ----------------------------------------------------------------------------------------------------------------------------
+        #
+        # Filter the transformer embeddings to only include relevant tokens
+        # that are present from the Dataset vocabulary (as tokenized)
+        #
+        if relevant_tokens is not None:
+            self.l1, self.relevant_embeddings = self._filter_transformer_embeddings(
+                                                            model=def_model, 
+                                                            relevant_tokens=relevant_tokens
+                                                            )                    
+        else:
+            self.l1 = model
+            self.relevant_embeddings = None
+        # ----------------------------------------------------------------------------------------------------------------------------
+
         self.hidden_size = self.l1.config.hidden_size
+        print("self.hidden_size:", self.hidden_size)
 
         # CNN-based classifier
         self.conv1 = nn.Conv2d(1, num_channels, kernel_size=(3, self.hidden_size), stride=1)
@@ -932,6 +1162,7 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
 
         # Classification layer
         self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
+        print("self.classifier:", self.classifier)
 
     def forward(self, input_ids, attention_mask, labels=None):
         # Get BERT embeddings
@@ -964,6 +1195,64 @@ class LC_CNN_BERT_Classifier(LCBERTBaseClassifier):
         # Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
+
+
+
+
+
+
+class LC_Linear_RoBERTa_Classifier_orig(LCBERTBaseClassifier):
+
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
+        self.l1 = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
+        self.classifier = nn.Linear(self.hidden_size, num_classes)
+
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = output_1[0][:, 0]  # CLS token representation
+        logits = self.classifier(self.dropout(pooled_output))
+
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+class LC_Linear_DistillBERT_Classifier_orig(LCBERTBaseClassifier):
+
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
+        self.l1 = DistilBertModel.from_pretrained(model_name, cache_dir=cache_dir)
+        self.hidden_size = self.l1.config.hidden_size
+        self.classifier = nn.Linear(self.hidden_size, num_classes)
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = output_1[0][:, 0]  # CLS token representation
+        logits = self.classifier(self.dropout(pooled_output))
+        
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1026,49 +1315,6 @@ class LC_ATTN_BERT_Classifier(LCBERTBaseClassifier):
 
         logits = self.fc(attn_output)
 
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-class LC_Linear_RoBERTa_Classifier(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
-
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output_1[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
-
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-class LC_Linear_DistillBERT_Classifier(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = DistilBertModel.from_pretrained(model_name, cache_dir=cache_dir)
-        self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output_1[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
-        
         if self.debug:
             print(f"logits: {logits.shape}")
 
