@@ -482,7 +482,6 @@ if __name__ == "__main__":
     # as well as number of classes (labels) and the target names of 
     # the dataset 
     #
-    #(train_data, train_target), (test_data, labels_test), num_classes, target_names, class_type = trans_lc_load_dataset(args.dataset, args.seed)
     train_data, train_target, test_data, labels_test, num_classes, target_names, class_type = get_dataset_data(args.dataset, args.seed)
 
     print("class_type:", class_type)
@@ -503,7 +502,6 @@ if __name__ == "__main__":
     check_empty_docs(train_data, "Train")
     check_empty_docs(test_data, "Test")
 
-    #tokenizer, max_length, pad_token_id, tok_vocab_size = init_hf_tokenizer()
     lc_tokenizer = LCTokenizer(
         model_name=model_name,
         model_path=model_path,
@@ -562,15 +560,15 @@ if __name__ == "__main__":
     print("vectorizer:\n", vectorizer)
 
     print("Xtr:", type(Xtr), Xtr.shape)
-    print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
+    #print("Xtr[0]:", type(Xtr[0]), Xtr[0].shape, Xtr[0].toarray().flatten())
     #print("Xtr[1]:", type(Xtr[1]), Xtr[1].shape, Xtr[1])
     #print("Xtr[1]:", type(Xtr[2]), Xtr[2].shape, Xtr[2])
 
     print("Xval:", type(Xval), Xval.shape)
-    print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
+    #print("Xval[0]:", type(Xval[0]), Xval[0].shape, Xval[0])
     
     print("Xte:", type(Xte), Xte.shape)
-    print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
+    #print("Xte[0]:", type(Xte[0]), Xte[0].shape, Xte[0])
 
     # convert single label y values from array of scalaers to one hot encoded
     print("vectorizer.vocabulary_:", type(vectorizer.vocabulary_), len(vectorizer.vocabulary_))

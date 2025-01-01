@@ -40,6 +40,7 @@ import json
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+#
 SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "arxiv_protoformer"]
 
 #
@@ -47,14 +48,15 @@ SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsum
 #
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-TEST_SIZE = 0.175                   # test size for train/test split
-VAL_SIZE = 0.20                     # percentage of data to be set aside for model validation
-NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
+TEST_SIZE = 0.175                       # test size for train/test split
+VAL_SIZE = 0.175                        # percentage of data to be set aside for model validation
+
+NUM_DL_WORKERS = 3                      # number of workers to handle DataLoader tasks
 
 RANDOM_SEED = 29
 
-
 MAX_TOKEN_LENGTH = 512              # Maximum token length for transformer models models
+#
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
