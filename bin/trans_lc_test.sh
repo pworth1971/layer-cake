@@ -24,8 +24,8 @@ MODEL='--net cnn'
 #
 # DEV settings
 #
-EPOCHS=14               # DEV
-PATIENCE=2              # DEV
+EPOCHS=21               # DEV
+PATIENCE=3              # DEV
 LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
 SEED=47

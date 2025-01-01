@@ -758,7 +758,7 @@ def spot_check_documents(documents, vectorizer, lc_tokenizer, vectorized_data, n
             print(f"Original Text: {doc}\n")
 
         # Tokenize the document
-        tokens = tokenizer.tokenize(doc)
+        tokens = lc_tokenizer(doc)
         if debug:
             print(f"Tokens: {tokens}\n")
 
@@ -1117,17 +1117,18 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
 
         term_doc_counts = defaultdict(int)
         max_length = self.lc_tokenizer.max_length
+        num_documents = len(tokenized_documents)
 
         if (max_length != self.max_length):
             print(f"WARNING: Max length mismatch between tokenizer ({max_length}) and vectorizer ({self.max_length}).")
 
-        for doc_idx, tokens in enumerate(tokenized_documents):
-            # Ensure tokens are processed using the tokenizer
-            if isinstance(tokens, str):
-                tokens = self.lc_tokenizer.tokenize(tokens)
+        for doc_idx, tokenized_text in enumerate(tokenized_documents):
+
+            if isinstance(tokenized_text, str):
+                tokens = tokenized_text.split()  # Split pre-tokenized text
             else:
-                ValueError("Tokenized documents must be strings.")
-            
+                raise ValueError("Tokenized documents must be strings of tokenized text.")
+
             # Check sequence length
             if len(tokens) > max_length:
                 print(f"[ERROR] Document {doc_idx} exceeds max length ({len(tokens)} > {max_length}).")
@@ -1135,8 +1136,10 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
                 print(f"[DEBUG] Tokens: {tokens[:50]}...")                                                      # Print a sample of the tokens
                 raise ValueError("Document exceeds max length.")
             
+            # Filter out [PAD] and blank tokens
             tokens = [token for token in tokens if token.strip() and token != self.pad_token]
-            unique_tokens = set(tokens)
+
+            unique_tokens = set(tokens)        
             unmatched_tokens = []
 
             for token in unique_tokens:
@@ -1147,21 +1150,22 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
                     unmatched_tokens.append(token)
             
         missing_tokens = [token for token in self.vocabulary_ if token not in term_doc_counts]
-        if missing_tokens:
-            print(f"[WARNING] Tokens in vocabulary with no document counts: {missing_tokens[:10]}")
+        if (self.debug):
+            if missing_tokens:
+                print(f"[WARNING] Tokens in vocabulary with no document counts: {missing_tokens[:10]}")
 
         num_documents = len(tokenized_documents)
-        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
 
+        # Compute IDF values
+        self.idf_ = np.zeros(len(self.vocabulary_), dtype=np.float64)
         for token, idx in self.vocabulary_.items():
             doc_count = term_doc_counts.get(token, 0)
             if token == self.pad_token:
-                self.idf_[idx] = 0  # Exclude [PAD] from TF-IDF calculations
+                self.idf_[idx] = 0                          # Exclude pad_token from TF-IDF calculations
             else:
                 self.idf_[idx] = np.log((1 + num_documents) / (1 + doc_count)) + 1
-
                 if self.debug and self.idf_[idx] == 0:
-                    print(f"[DEBUG] IDF for token '{token}' is 0 during fit. "
+                    print(f"[WARNING] IDF for token '{token}' is 0 during fit. "
                         f"Document count: {doc_count}, Total docs: {num_documents}.")
 
         if self.debug:
@@ -1192,14 +1196,14 @@ class LCTFIDFVectorizer(BaseEstimator, TransformerMixin):
         rows, cols, data = [], [], []
         empty_rows_details = []  # To collect details of empty rows
 
-        for row_idx, doc in enumerate(tokenized_documents):
-            # Tokenize using the tokenizer
-            if isinstance(doc, str):
-                tokens = self.lc_tokenizer.tokenize(doc)  # Use tokenizer to split the document
-            else:
-                raise ValueError("Each document in tokenized_documents must be a string.")
+        for row_idx, tokenized_doc in enumerate(tokenized_documents):
 
-            # Filter out [PAD] and blank tokens
+            if isinstance(tokenized_doc, str):
+                tokens = tokenized_doc.split()             # Split pre-tokenized text
+            else:
+                raise ValueError("Tokenized documents must be strings of tokenized text.")
+
+            # Filter out pad_token and blank tokens
             tokens = [token for token in tokens if token.strip() and token != self.pad_token]
             term_freq = defaultdict(int)
             
@@ -1291,25 +1295,24 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
 
     #print("lc_tokenizer:\n", lc_tokenizer)
     
-    preprocessed_train = [" ".join(lc_tokenizer(text)) for text in texts_train]
-    preprocessed_val = [" ".join(lc_tokenizer(text)) for text in texts_val]
-    preprocessed_test = [" ".join(lc_tokenizer(text)) for text in texts_test]
+    tokenized_train = [" ".join(lc_tokenizer(text)) for text in texts_train]
+    tokenized_val = [" ".join(lc_tokenizer(text)) for text in texts_val]
+    tokenized_test = [" ".join(lc_tokenizer(text)) for text in texts_test]
 
     # Debugging: Preprocessed data
-    print("preprocessed_train:", type(preprocessed_train), len(preprocessed_train))
-    print(f"preprocessed_train[0]: {preprocessed_train[0]}")
+    print("tokenized_train:", type(tokenized_train), len(tokenized_train))
+    print(f"tokenized_train[0]: {tokenized_train[0]}")
     
     tokenizer_vocab = lc_tokenizer.tokenizer.get_vocab()
 
     # Debugging: Check preprocessed tokens and unmatched tokens
-    print("[DEBUG] Checking preprocessed tokens and their presence in vocabulary...")
-    for i, doc in enumerate(preprocessed_train[:5]):  # Sample first 5 documents
+    print("[DEBUG] Checking tokenized tokens and their presence in vocabulary...")
+    for i, doc in enumerate(tokenized_train[:5]):  # Sample first 5 documents
         tokens = doc.split()
         unmatched = [token for token in tokens if token not in lc_tokenizer.get_vocab()]
-        print(f"Document {i}: Tokens: {tokens[:10]}...")  # Print a subset of tokens
+        print(f"[INFO]: Document {i}: Tokens: {tokens[:20]}...")  # Print a subset of tokens
         if unmatched:
-            print(f"[WARNING] Document {i} has unmatched tokens: {unmatched[:10]}")  # Show a few unmatched tokens
-
+            print(f"[WARNING]: Document {i} has unmatched tokens: {unmatched[:10]}")  # Show a few unmatched tokens
 
     vectorizer = LCTFIDFVectorizer(
         lc_tokenizer=lc_tokenizer, 
@@ -1318,17 +1321,17 @@ def vectorize(texts_train, texts_val, texts_test, lc_tokenizer, debug=False):
         )
 
     Xtr = vectorizer.fit_transform(
-        X=preprocessed_train,
+        X=tokenized_train,
         original_documents=texts_train
         )
     
     Xval = vectorizer.transform(
-        X=preprocessed_val,
+        X=tokenized_val,
         original_documents=texts_val
         )
     
     Xte = vectorizer.transform(
-        X=preprocessed_test,
+        X=tokenized_test,
         original_documents=texts_test
         )
 
