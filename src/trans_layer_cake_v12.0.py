@@ -738,110 +738,36 @@ if __name__ == "__main__":
     # check to see which classifier we are using
     #
     if args.net == 'linear':
-        
         print("using linear classifier...")
-
         if args.pretrained == 'bert':
-
-            linear_model = LCLinearBERTClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes,
-                class_type=class_type
-                )
-        
+            linear_model = LCLinearBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
         elif args.pretrained == 'roberta':
-        
-            linear_model = LCLinearRoBERTaClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type
-                )
-        
+            linear_model = LCLinearRoBERTaClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
         elif args.pretrained == 'distilbert':
-            
-            linear_model = LCLinearDistilBERTClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type
-                )
+            linear_model = LCLinearDistilBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
 
         linear_model.to(device)
-        print("Linear Classifier Model:\n", linear_model)
-
+        #print("Linear Classifier Model:\n", linear_model)
         lc_model = linear_model
         
     elif args.net == 'cnn':
-        
         print("using CNN classifier...")
-
         if args.pretrained == 'bert':
-
-            cnn_model = LCCNNBERTClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes,
-                class_type=class_type,
-                num_channels=args.channels
-                )
-        
+            cnn_model = LCCNNBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
         elif args.pretrained == 'roberta':
-        
-            linear_model = LCCNNRoBERTaClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type,
-                num_channels=args.channels
-                )
-        
+            cnn_model = LCCNNRoBERTaClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
         elif args.pretrained == 'distilbert':
-            
-            linear_model = LCCNNDistilBERTClassifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type,
-                num_channels=args.channels
-                )
-        
+            cnn_model = LCCNNDistilBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
-
-        """
-        elif args.pretrained == 'roberta':
-        
-            simple_model = LC_CNN_RoBERTa_Classifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type
-                )
-        
-        elif args.pretrained == 'distilbert':
-            
-            simple_model = LC_CNN_DistillBERT_Classifier(
-                model_name=model_name, 
-                cache_dir=model_path, 
-                num_classes=num_classes, 
-                class_type=class_type
-                )
-        """
-        
         cnn_model.to(device)
-        print("\nCNN Classifier Model:\n", cnn_model)
-
+        #print("\nCNN Classifier Model:\n", cnn_model)
         lc_model = cnn_model
 
-
-
     elif args.net == 'hf.sc':
-
-        # Fall back to the existing transformer-based LCSequenceClassifier setup
+        print("using HuggingFace Sequence Classifier...")
         hf_trans_model, hf_trans_class_model = get_hf_models(
             model_name, 
             model_path, 
