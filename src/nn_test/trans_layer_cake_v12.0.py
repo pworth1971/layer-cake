@@ -37,8 +37,8 @@ from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
-from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier
-from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearRoBERTaClassifier
+from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
+from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearRoBERTaClassifier, LCLinearXLNetClassifier, LCLinearGPT2Classifier
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -368,7 +368,7 @@ def parse_args():
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
-    parser.add_argument('--emb-filter', action='store_true', default=False,
+    parser.add_argument('--emb-filter', action='store_true', default=True,
                         help='filter model embeddings to align with dataset vocabulary (default False)')
     
     # TCE params
@@ -621,6 +621,8 @@ if __name__ == "__main__":
         print('not filtering embeddings...')
         relevant_token_ids = None
     else:
+        print('\n\tfiltering embeddings...')
+
         all_docs = texts_train + texts_val + test_data                                             # accumulate all of the docs together
         relevant_tokens, relevant_token_ids, mismatches = lc_tokenizer.filter_tokens(
                                                                     texts=all_docs, 
@@ -755,11 +757,14 @@ if __name__ == "__main__":
     elif args.net == 'cnn':
         print("using CNN classifier...")
         if args.pretrained == 'bert':
-            cnn_model = LCCNNBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
+            cnn_model = LCCNNBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, \
+                                            class_type=class_type, num_channels=args.channels, relevant_tokens=relevant_token_ids)
         elif args.pretrained == 'roberta':
-            cnn_model = LCCNNRoBERTaClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
+            cnn_model = LCCNNRoBERTaClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, 
+                                               class_type=class_type, num_channels=args.channels, relevant_tokens=relevant_token_ids)
         elif args.pretrained == 'distilbert':
-            cnn_model = LCCNNDistilBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type, num_channels=args.channels)
+            cnn_model = LCCNNDistilBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, 
+                                                  class_type=class_type, num_channels=args.channels, relevant_tokens=relevant_token_ids)
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
         cnn_model.to(device)

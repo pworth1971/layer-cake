@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v12.0.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v12.4.py"
 
 # Network types
 network_types=(
@@ -12,7 +12,11 @@ network_types=(
     "hf.sc"
 )
 
+#MODEL='--net hf.sc'
+#MODEL='--net linear'
 MODEL='--net cnn'
+#MODEL='--net attn'
+#MODEL='--net lstm'
 
 #
 # TEST/STG settings
@@ -24,7 +28,7 @@ MODEL='--net cnn'
 #
 # DEV settings
 #
-EPOCHS=18              # DEV
+EPOCHS=15              # DEV
 PATIENCE=2              # DEV
 LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
@@ -33,15 +37,15 @@ SEED=33
 
 # Datasets array
 datasets=(
+    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
+    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset imdb"                            # imdb (single-label, 2 classes)    
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes)
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
-    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
-    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes)
+    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes)   
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes)    
-)   
+    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
+ )   
 
 # -------------------------------------------------------------------------------
 #
@@ -49,19 +53,19 @@ datasets=(
 # NB: issues with Albert so leaving out. LlaMa has not been tested
 #
 embedding_names=(
-    "BERT"
     "ROBERTA"
     "DISTILBERT"
-#    "XLNET"
-#    "GPT2"
+    "XLNET"
+    "GPT2"
+    "BERT"
 )
 
 embedding_args=(    
-    "--pretrained bert"
     "--pretrained roberta"
     "--pretrained distilbert"
-#    "--pretrained xlnet"
-#    "--pretrained gpt2" 
+    "--pretrained xlnet"
+    "--pretrained gpt2" 
+    "--pretrained bert"
 )
 
 # ------------------------------------------------------------------------------
@@ -79,10 +83,10 @@ for dataset in "${datasets[@]}"; do
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
         echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
-        #echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
+        echo
 
         #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
         #echo

@@ -3,16 +3,13 @@ logging.basicConfig(level=logging.INFO)
 
 import torch
 from torch import nn
-from torch.utils.data import Dataset
 from transformers import BertTokenizerFast, BertModel
-from transformers import DistilBertModel, RobertaModel
+from transformers import DistilBertModel, RobertaModel, XLNetModel, GPT2Model
 
 # custom imports
 from model.layers import *
 
 from embedding.pretrained import BERT_MODEL
-
-
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -62,307 +59,6 @@ class NeuralClassifier(nn.Module):
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------------------------------------------------------------------------------------
-#
-# BERT Embeddings functions (TESTING ONLY)
-#
-class Token2BertEmbeddings:
-
-    def __init__(self, pretrained_model_name=BERT_MODEL, device=None):
-        """
-        Initialize Token2BertEmbeddings with a pretrained BERT model and tokenizer.
-
-        Parameters:
-        ----------
-        pretrained_model_name : str
-            The name of the pretrained BERT model (default: 'bert-base-uncased').
-        device : str
-            Device to run the model on ('cuda', 'mps', or 'cpu').
-        """
-        self.tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name)
-        self.model = BertModel.from_pretrained(pretrained_model_name).eval().to(device)
-
-        self.max_length = self.model.config.max_position_embeddings  # Dynamically get max length
-        self.hidden_size = self.model.config.hidden_size  # Dynamically get embedding dimension
-        
-        self.device = device
-
-    def train(self, mode=True):
-        """
-        Sets the model to training or evaluation mode.
-
-        Parameters:
-        ----------
-        mode : bool
-            If True, sets to training mode. If False, sets to evaluation mode.
-        """
-        self.model.train(mode)
-
-    def eval(self):
-        """
-        Sets the BERT model in evaluation mode for inference.
-        """
-        self.model.eval()
-
-    def embeddings(self, tokens):
-        """
-        Generate contextualized embeddings for the given tokens.
-
-        Parameters:
-        ----------
-        tokens : list of lists of str or tensor
-            Tokenized input. Each sublist is a sequence of tokens.
-
-        Returns:
-        -------
-        torch.Tensor
-            Contextualized embeddings of shape (batch_size, seq_len, embedding_dim).
-        """
-        if isinstance(tokens, torch.Tensor):
-            # Convert tensor to a list of lists of tokens using the tokenizer
-            tokens = [
-                [self.tokenizer.convert_ids_to_tokens(token_id.item()) for token_id in doc if token_id != self.tokenizer.pad_token_id]
-                for doc in tokens
-            ]
-
-        max_length = min(self.max_length, max(map(len, tokens)))  # for dynamic padding
-        cls_t = self.tokenizer.cls_token
-        sep_t = self.tokenizer.sep_token
-        pad_idx = self.tokenizer.pad_token_id
-        tokens = [[cls_t] + d[:max_length] + [sep_t] for d in tokens]
-        index = [
-            self.tokenizer.convert_tokens_to_ids(doc) + [pad_idx] * (max_length - (len(doc)-2)) for doc in
-            tokens
-        ]
-        index = torch.tensor(index).to(self.device)
-
-        # Create attention mask (1 for tokens, 0 for padding)
-        attention_mask = (index != pad_idx).long()
-
-        with torch.no_grad():
-            outputs = self.model(input_ids=index, attention_mask=attention_mask)
-            contextualized_embeddings = outputs[0]
-            contextualized_embeddings = contextualized_embeddings[:, 1:-1, :]  # Ignore [CLS] and last token
-            return contextualized_embeddings
-        
-
-    def dim(self):
-        """
-        Get the dimensionality of the embeddings.
-
-        Returns:
-        -------
-        int
-            The embedding dimensionality.
-        """
-        return self.hidden_size
-
-
-
-class Token2WCEmbeddings(nn.Module):
-
-    def __init__(self, WCE, WCE_range, WCE_vocab, drop_embedding_prop=0.5, max_length=500, device='cuda'):
-        """
-        Initialize Token2WCEmbeddings for Word-Class Embeddings.
-
-        Parameters:
-        ----------
-        WCE : torch.Tensor
-            Pretrained Word-Class Embedding matrix.
-        WCE_range : list
-            Range of supervised embeddings in the matrix.
-        WCE_vocab : dict
-            Vocabulary mapping words to indices.
-        drop_embedding_prop : float
-            Dropout probability for embedding dropout.
-        max_length : int
-            Maximum sequence length.
-        device : str
-            Device to use ('cuda', 'cpu', etc.).
-        """
-        super(Token2WCEmbeddings, self).__init__()
-        assert '[PAD]' in WCE_vocab, 'unknown index for special token [PAD] in WCE vocabulary'
-    
-        self.embed = EmbeddingCustom(len(WCE_vocab), 0, WCE, WCE_range, drop_embedding_prop).to(device)
-    
-        self.max_length = max_length
-        self.device = device
-        self.vocab = WCE_vocab
-        self.pad_idx = self.vocab['[PAD]']
-        self.unk_idx = self.vocab['[UNK]']
-
-        self.training_mode = False
-
-    def forward(self, tokens):
-        """
-        Generate embeddings for a batch of token sequences.
-
-        Parameters:
-        ----------
-        tokens : list of lists of str
-            Tokenized input.
-
-        Returns:
-        -------
-        torch.Tensor
-            Word-Class Embeddings for the input tokens.
-        """
-        max_length = min(self.max_length, max(map(len,tokens)))  # for dynamic padding
-        tokens = [d[:max_length] for d in tokens]
-        index = [
-            [self.vocab.get(ti, self.unk_idx) for ti in doc] + [self.pad_idx]*(max_length - len(doc)) for doc in tokens
-        ]
-        index = torch.tensor(index).to(self.device)
-        return self.embed(index)
-
-    def dim(self):
-        """
-        Get the dimensionality of the embeddings.
-
-        Returns:
-        -------
-        int
-            The embedding dimensionality.
-        """
-        return self.embed.dim()
-
-    def train(self, mode=True):
-        """
-        Set the embedding layer to training mode.
-
-        Parameters:
-        ----------
-        mode : bool
-            If True, set to training mode. Otherwise, evaluation mode.
-        """
-        self.training_mode = mode
-        super(Token2WCEmbeddings, self).train(mode)
-        self.embed.train(mode)
-
-    def eval(self):
-        """
-        Set the embedding layer to evaluation mode.
-        """
-        self.train(False)
-
-    def finetune_pretrained(self):
-        """
-        Enable fine-tuning for the pretrained embeddings.
-        """
-        self.embed.finetune_pretrained()
-
-
-
-class BertWCEClassifier(nn.Module):
-    
-    ALLOWED_NETS = {'cnn', 'lstm', 'attn'}
-
-    def __init__(self,
-                 net_type,
-                 output_size,
-                 hidden_size,
-                 token2bert_embeddings,
-                 token2wce_embeddings):
-        """
-        Initialize the BertWCEClassifier with optional Word-Class Embeddings (WCE).
-
-        Parameters:
-        ----------
-        net_type : str
-            Type of network architecture ('cnn', 'lstm', or 'attn').
-        output_size : int
-            Number of output classes.
-        hidden_size : int
-            Size of the hidden layer.
-        token2bert_embeddings : Token2BertEmbeddings
-            BERT-based embeddings.
-        token2wce_embeddings : Token2WCEmbeddings or None
-            Optional Word-Class Embeddings.
-        """
-        super(BertWCEClassifier, self).__init__()
-
-        emb_dim = token2bert_embeddings.dim() + (0 if token2wce_embeddings is None else token2wce_embeddings.dim())
-        print(f'Embedding dimensions {emb_dim}')
-
-        self.token2bert_embeddings = token2bert_embeddings
-        self.token2wce_embeddings = token2wce_embeddings
-        
-        self.projection = init__projection(net_type)(emb_dim, hidden_size)
-        
-        self.label = nn.Linear(self.projection.dim(), output_size)
-
-
-    def forward(self, input):                   # list of lists of tokens
-        """
-        Forward pass of the BertWCEClassifier.
-
-        Parameters:
-        ----------
-        input : list of lists of tokens
-            Input tokenized text.
-
-        Returns:
-        -------
-        torch.Tensor
-            Logits of shape (batch_size, output_size).
-        """
-
-        # convert tokens to id for Bert, pad, and get contextualized embeddings
-        contextualized_embeddings = self.token2bert_embeddings.embeddings(input)
-
-        # convert tokens to ids for WCE, pad, and get WCEs
-        if self.token2wce_embeddings is not None:
-            wce_embeddings = self.token2wce_embeddings(input)
-            # concatenate Bert embeddings with WCEs
-            assert contextualized_embeddings.shape[1] == wce_embeddings.shape[1], 'shape mismatch between Bert and WCE'
-            word_emb = torch.cat([contextualized_embeddings, wce_embeddings], dim=-1)
-        else:
-            word_emb = contextualized_embeddings
-
-        doc_emb = self.projection(word_emb)
-        logits = self.label(doc_emb)
-        return logits
-
-    def train(self, mode=True):
-        """
-        Set the model to training mode.
-
-        Parameters:
-        ----------
-        mode : bool
-            If True, set to training mode. Otherwise, evaluation mode.
-        """
-        super(BertWCEClassifier, self).train(mode)
-        self.token2bert_embeddings.train(mode)
-        if self.token2wce_embeddings:
-            self.token2wce_embeddings.train(mode)
-
-    def eval(self):
-        """
-        Set the model to evaluation mode.
-        """
-        self.train(False)
-
-    def finetune_pretrained(self):
-        """
-        Enable fine-tuning for the pretrained embeddings in both BERT and WCE.
-        """
-        self.token2bert_embeddings.finetune_pretrained()
-        if self.token2wce_embeddings:
-            self.token2wce_embeddings.finetune_pretrained()
-
-    def xavier_uniform(self):
-        """
-        Apply Xavier uniform initialization to all learnable parameters.
-        """
-        for model in [self.token2wce_embeddings, self.projection, self.label]:
-            if model is None:
-                continue
-            for p in model.parameters():
-                if p.dim() > 1 and p.requires_grad:
-                    nn.init.xavier_uniform_(p)
-
-
 
 def init__projection(net_type):
     assert net_type in NeuralClassifier.ALLOWED_NETS, 'unknown network'
@@ -379,8 +75,7 @@ def init__projection(net_type):
 #
 # TRANS_LAYER_CAKE Classes and Functions
 #
-# supported operations for transformer classifier
-# combination method with TCEs
+# supported operations for transformer classifier combination method with TCEs
 #
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -848,27 +543,55 @@ baseline_model.to(device)
 
 
 
-class LCBERTBaseClassifier(nn.Module):
+class LCTransformerClassifier(nn.Module):
     """
-    Base class for all BERT based LC classifiers (BERT, RoBERTa, DistilBERT).
+    Base class for all Transfofmer based LC classifiers (BERT, RoBERTa, DistilBERT, XLNet, GPT2).
 
     Parameters:
     - model_name: Name of the model architecture.
     - cache_dir: Directory for loading the pre-trained model.
     - num_classes: Number of output classes for classification.
     - class_type: Classification type ('single-label' or 'multi-label').
+    - lc_tokenizer: LCTokenizer object for token verification.
     - debug: Whether to enable debug logging.
     """
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-
+    def __init__(self, 
+                model_name: str, 
+                cache_dir: str, 
+                num_classes: int, 
+                class_type: str,
+                lc_tokenizer: LCTokenizer,
+                debug=False):
+        
         super().__init__()
         
-        self.model_name = model_name
-        self.num_classes = num_classes
-        self.class_type = class_type
-        self.hidden_size = None  # To be set dynamically
+        print(f'LCTransformerClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, debug: {debug}')
+
         self.debug = debug
 
+        self.model_name = model_name
+        self.cache_dir = cache_dir
+        self.num_classes = num_classes
+        self.class_type = class_type
+        
+        # --------------------------------------------------------------
+        #
+        # set up the tokenizer and vocab info to use for input_ind 
+        # validation in forward method
+        # 
+        self.tokenizer = lc_tokenizer.tokenizer
+        print("self.tokenizer:\n", self.tokenizer)
+
+        self.vocab_size = len(self.tokenizer.get_vocab())
+        print("self.vocab_size:", self.vocab_size)
+        self.vocab = self.tokenizer.get_vocab()
+        self.vocab_set = set(self.vocab.values())
+        #
+        # --------------------------------------------------------------
+
+
+        self.hidden_size = None  # To be set dynamically
+        
         # Initialize loss function based on classification type
         if class_type in ['multi-label', 'multilabel']:
             self.loss_fn = nn.BCEWithLogitsLoss()
@@ -879,6 +602,7 @@ class LCBERTBaseClassifier(nn.Module):
         print("loss_fn:", self.loss_fn)
 
         self.dropout = nn.Dropout(0.6)
+
         self.classifier = None  # To be initialized after getting hidden size
 
     def forward(self, input_ids, attention_mask, labels=None):
@@ -964,80 +688,161 @@ class LCBERTBaseClassifier(nn.Module):
         return projected_tce
 
 
-    def _filter_transformer_embeddings(self, model, relevant_tokens):
-        """
-        Replace the transformer embedding layer with a reduced embedding matrix and update the tokenizer.
-        """
-        print("Filtering transformer embeddings to align with dataset...")
-        print(f"relevant_tokens: {type(relevant_tokens)} {len(relevant_tokens)}")
-
-        # Extract original embeddings
-        embedding_layer = model.get_input_embeddings()
-        original_embeddings = embedding_layer.weight.data
-        print("original_embeddings:", type(original_embeddings), original_embeddings.shape)
-
-        # Validate relevant_tokens
-        assert all(0 <= idx < original_embeddings.size(0) for idx in relevant_tokens), \
-            "Relevant tokens contain indices out of range of the original embeddings."
-
-        # Get embeddings for relevant tokens
-        relevant_embeddings = original_embeddings[relevant_tokens, :]
-        print("relevant_embeddings:", type(relevant_embeddings), relevant_embeddings.shape)
-
-        # Replace the embedding layer
-        reduced_embedding_layer = nn.Embedding.from_pretrained(relevant_embeddings)
-        print("reduced_embedding_layer:", type(reduced_embedding_layer), reduced_embedding_layer)
-
-        model.set_input_embeddings(reduced_embedding_layer)
-        print("updated model:", model)
-
-        return model, relevant_embeddings
-    
 
 
-class LCLinearBaseClassifier(LCBERTBaseClassifier):
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------
+# CNN Transformer Classifier
+#
+class LCCNNTransformerClassifier(LCTransformerClassifier):
     """
-    Base class for linear classifiers.
+    Base class for CNN Transformer based classifiers.
     """
-    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
+    def __init__(self, 
+                 model_class: nn.Module,
+                 model_name: str,
+                 cache_dir: str, 
+                 num_classes: int, 
+                 class_type: str, 
+                 lc_tokenizer: LCTokenizer,
+                 num_channels=256, 
+                 supervised: bool = False, 
+                 tce_matrix: torch.Tensor = None, 
+                 finetune: bool = False, 
+                 normalize_tces: bool = True,
+                 dropout_rate: float = 0.5, 
+                 comb_method: str = "cat",  
+                 debug=False):
+
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, debug)
+
+        print(f"LCCNNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, num_channels: {num_channels}, debug: {debug}")
+
+        if (supervised):
+            print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
+
+        self.supervised = supervised
+        self.tce_matrix = tce_matrix
+        self.comb_method = comb_method
+
+        # Load the transformer model
         self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        
+        # force all of the tensors to be stored contiguously in memory
+        for param in self.l1.parameters():
+            param.data = param.data.contiguous()
+            
         self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
+        print("self.hidden_size:", self.hidden_size)
 
-    def forward(self, input_ids, attention_mask, labels=None):
-        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
+        # initialize embedding dimensions to model embedding dimension
+        # we over-write this only if we are using supervised tces with the 'cat' method
+        combined_size = self.hidden_size        
+            
+        if (self.supervised and self.tce_matrix is not None):
 
-        if self.debug:
-            print(f"logits: {logits.shape}")
+            print("supervised is True, original tce_matrix:", type(self.tce_matrix), self.tce_matrix.shape)
+ 
+            with torch.no_grad():                           # normalization code should be in this block
 
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
+                # Normalize TCE matrix if required
+                if self.normalize_tces:
 
+                    # compute the mean and std from the core model embeddings
+                    embedding_layer = self.transformer.get_input_embeddings()
+                    embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
+                    embedding_std = embedding_layer.weight.std(dim=0).to(device)
+                    if (self.debug):
+                        print(f"transformer embeddings mean: {embedding_mean.shape}, std: {embedding_std.shape}")
 
-class LCCNNBaseClassifier(LCBERTBaseClassifier):
-    """
-    Base class for CNN-based classifiers.
-    """
-    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
-        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
-        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
+                    # normalize the TCE matrix
+                    self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
+                    print(f"Normalized TCE matrix: {type(self.tce_matrix)}, {self.tce_matrix.shape}")
+            
+                # initialize the TCE Embedding layer, freeze the embeddings if trainable_tces == False
+                """
+                if (trainable_tces):
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=False)
+                else:
+                    self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                """
+                self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
+                print("self.tce_layer:", self.tce_layer)
+
+                # Adapt classifier head based on combination method
+                # 'concat' method is dimension_size + num_classes
+                if (self.comb_method == 'cat'):
+                    combined_size += self.tce_matrix.size(1)            # Add TCE dimension    
+                else:
+                    combined_size = self.hidden_size                    # redundant but for clarity for 'add' or 'dot'
+        else:
+            self.tce_layer = None
+
+        print("combined_size:", combined_size)
 
         # CNN-based layers
-        self.conv1 = nn.Conv2d(1, num_channels, kernel_size=(3, self.hidden_size), stride=1)
-        self.conv2 = nn.Conv2d(1, num_channels, kernel_size=(5, self.hidden_size), stride=1)
-        self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, self.hidden_size), stride=1)
-        self.dropout = nn.Dropout(0.5)
+        self.conv1 = nn.Conv2d(1, num_channels, kernel_size=(3, combined_size), stride=1)
+        self.conv2 = nn.Conv2d(1, num_channels, kernel_size=(5, combined_size), stride=1)
+        self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, combined_size), stride=1)
+        self.dropout = nn.Dropout(dropout_rate)
+        
         self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
+        print("self.classifier:", self.classifier)
+
+        
+
 
     def forward(self, input_ids, attention_mask, labels=None):
+        """
+        Forward pass for the LCSequenceClassifier, includes support for integrated
+        TCE computation in the event that the Classifier has been set up with TCEs (ie supervised is True)
+
+        Args:
+            input_ids (torch.Tensor): Input token IDs (batch_size x seq_length).
+            attention_mask (torch.Tensor): Attention mask for input tokens.
+            labels (torch.Tensor, optional): Labels for computing loss.
+
+        Returns:
+            logits (torch.Tensor): Output logits from the classifier.
+            loss (torch.Tensor, optional): Loss value if labels are provided.
+        """
+        if (self.debug):
+            print("LCCNNTransformerClassifier:forward()...")
+            print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
+            #print("input_ids:", input_ids)
+            print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
+            print(f"\tlabels: {type(labels)}, {labels.shape}")
+
+        # Validate input_ids
+        invalid_tokens = [token.item() for token in input_ids.flatten() if token.item() not in self.vocab_set]
+        if invalid_tokens:
+            raise ValueError(
+                f"Invalid token IDs found in input_ids: {invalid_tokens[:10]}... "
+                f"(total {len(invalid_tokens)}) out of tokenizer vocabulary size {len(self.vocab_set)}."
+            )
+
         # Get transformer embeddings
-        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         hidden_states = output[0]  # Shape: (batch_size, seq_len, hidden_size)
+
+        if self.supervised and self.tce_matrix is not None:
+            # Apply TCE embeddings
+            tce_embeddings = self.tce_layer(input_ids)  # Shape: (batch_size, seq_len, tce_dim)
+
+            if self.comb_method == "cat":
+                # Concatenate along the last dimension
+                hidden_states = torch.cat((hidden_states, tce_embeddings), dim=2)
+            elif self.comb_method == "add":
+                # Element-wise addition
+                hidden_states = hidden_states + tce_embeddings
+            elif self.comb_method == "dot":
+                # Element-wise multiplication (dot product)
+                hidden_states = hidden_states * tce_embeddings
+            else:
+                raise ValueError(f"Unsupported comb_method: {self.comb_method}")
+
+            if self.debug:
+                print(f"Combined hidden states shape: {hidden_states.shape}")
 
         # Reshape for CNN (add channel dimension)
         hidden_states = hidden_states.unsqueeze(1)  # Shape: (batch_size, 1, seq_len, hidden_size)
@@ -1067,185 +872,124 @@ class LCCNNBaseClassifier(LCBERTBaseClassifier):
         return {"loss": loss, "logits": logits}
 
 
+
 # Model-specific subclasses
-class LCLinearBERTClassifier(LCLinearBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, debug)
+class LCCNNBERTClassifier(LCCNNTransformerClassifier):
+
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 finetune=False, 
+                 normalize_tces=True, 
+                 dropout_rate=0.5, 
+                 comb_method='cat', 
+                 debug=False):
+        
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
+                         finetune, normalize_tces, dropout_rate, comb_method, debug)
 
 
-class LCCNNBERTClassifier(LCCNNBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
-        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
+class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
+    
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 finetune=False, 
+                 normalize_tces=True, 
+                 dropout_rate=0.5, 
+                 comb_method='cat', 
+                 debug=False):
+        
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
+                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        
+
+class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
+    
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 finetune=False, 
+                 normalize_tces=True, 
+                 dropout_rate=0.5, 
+                 comb_method='cat', 
+                 debug=False):
+        
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
+                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        
 
 
-class LCLinearRoBERTaClassifier(LCLinearBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, debug)
-
-
-class LCCNNRoBERTaClassifier(LCCNNBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
-        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
-
-
-class LCLinearDistilBERTClassifier(LCLinearBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, debug)
-
-
-class LCCNNDistilBERTClassifier(LCCNNBaseClassifier):
-    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels=128, debug=False):
-        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, num_channels, debug)
-
-
-
-
-class LC_Linear_BERT_Classifier_orig(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output_1[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
-
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
+class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
+    
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 finetune=False, 
+                 normalize_tces=True, 
+                 dropout_rate=0.5, 
+                 comb_method='cat', 
+                 debug=False):
+        
+        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
+                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from XLNet's word embeddings.
+        """
+        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
     
 
+class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
 
-
-class LC_CNN_BERT_Classifier_orig(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, num_channels, debug=False):
-
-        super().__init__(
-            model_name=model_name, 
-            cache_dir=cache_dir, 
-            num_classes=num_classes, 
-            class_type=class_type, 
-            debug=debug)
-
-        def_model = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-
-        # ----------------------------------------------------------------------------------------------------------------------------
-        #
-        # Filter the transformer embeddings to only include relevant tokens
-        # that are present from the Dataset vocabulary (as tokenized)
-        #
-        if relevant_tokens is not None:
-            self.l1, self.relevant_embeddings = self._filter_transformer_embeddings(
-                                                            model=def_model, 
-                                                            relevant_tokens=relevant_tokens
-                                                            )                    
-        else:
-            self.l1 = model
-            self.relevant_embeddings = None
-        # ----------------------------------------------------------------------------------------------------------------------------
-
-        self.hidden_size = self.l1.config.hidden_size
-        print("self.hidden_size:", self.hidden_size)
-
-        # CNN-based classifier
-        self.conv1 = nn.Conv2d(1, num_channels, kernel_size=(3, self.hidden_size), stride=1)
-        self.conv2 = nn.Conv2d(1, num_channels, kernel_size=(5, self.hidden_size), stride=1)
-        self.conv3 = nn.Conv2d(1, num_channels, kernel_size=(7, self.hidden_size), stride=1)
-        self.dropout = nn.Dropout(0.5)
-
-        # Classification layer
-        self.classifier = nn.Linear(num_channels * 3, num_classes)  # num_channels filters * 3 convolution layers
-        print("self.classifier:", self.classifier)
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        # Get BERT embeddings
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_states = output_1[0]  # Shape: (batch_size, seq_len, hidden_size)
-
-        # Reshape for CNN (add channel dimension)
-        hidden_states = hidden_states.unsqueeze(1)  # Shape: (batch_size, 1, seq_len, hidden_size)
-
-        # Apply convolutions
-        conv1_out = torch.relu(self.conv1(hidden_states)).squeeze(3)  # Shape: (batch_size, num_filters, seq_len - 2)
-        conv2_out = torch.relu(self.conv2(hidden_states)).squeeze(3)  # Shape: (batch_size, num_filters, seq_len - 4)
-        conv3_out = torch.relu(self.conv3(hidden_states)).squeeze(3)  # Shape: (batch_size, num_filters, seq_len - 6)
-
-        # Apply max pooling
-        pool1 = torch.max(conv1_out, dim=2)[0]  # Shape: (batch_size, num_filters)
-        pool2 = torch.max(conv2_out, dim=2)[0]  # Shape: (batch_size, num_filters)
-        pool3 = torch.max(conv3_out, dim=2)[0]  # Shape: (batch_size, num_filters)
-
-        # Concatenate pooled outputs
-        features = torch.cat((pool1, pool2, pool3), dim=1)  # Shape: (batch_size, num_filters * 3)
-
-        # Apply dropout and classification layer
-        features = self.dropout(features)
-        logits = self.classifier(features)
-
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-
-
-
-
-class LC_Linear_RoBERTa_Classifier_orig(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
-
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output_1[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
-
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-class LC_Linear_DistillBERT_Classifier_orig(LCBERTBaseClassifier):
-
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = DistilBertModel.from_pretrained(model_name, cache_dir=cache_dir)
-        self.hidden_size = self.l1.config.hidden_size
-        self.classifier = nn.Linear(self.hidden_size, num_classes)
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output_1[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 finetune=False, 
+                 normalize_tces=True, 
+                 dropout_rate=0.5, 
+                 comb_method='cat', 
+                 debug=False):
         
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-
-
+        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
+                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from GPT2's word embeddings.
+        """
+        return self.l1.wte.weight.shape  # GPT2 uses `wte`
 
 
 
@@ -1253,10 +997,7 @@ class LC_Linear_DistillBERT_Classifier_orig(LCBERTBaseClassifier):
 
 
 
-
-
-
-class LC_LSTM_BERT_Classifier(LCBERTBaseClassifier):
+class LC_LSTM_BERT_Classifier(LCTransformerClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, hidden_size=128, debug=False):
         super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
@@ -1285,7 +1026,7 @@ class LC_LSTM_BERT_Classifier(LCBERTBaseClassifier):
         return {"loss": loss, "logits": logits}
 
 
-class LC_ATTN_BERT_Classifier(LCBERTBaseClassifier):
+class LC_ATTN_BERT_Classifier(LCTransformerClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, hidden_size=128, debug=False):
         super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
@@ -1323,40 +1064,374 @@ class LC_ATTN_BERT_Classifier(LCBERTBaseClassifier):
         return {"loss": loss, "logits": logits}
 
 
-
-
-class LCDataFormat(Dataset):
-
-    def __init__(self, dataframe, tokenizer, max_len):
-        self.len = len(dataframe)
-        self.data = dataframe
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        
-    def __getitem__(self, index):
-        cur_doc = str(self.data.doc[index])
-        cur_doc = " ".join(cur_doc.split())
-        inputs = self.tokenizer.encode_plus(
-            cur_doc,
-            None,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            padding='max_length',
-            return_token_type_ids=True,
-            truncation=True
-        )
-        ids = inputs['input_ids']
-        mask = inputs['attention_mask']
-
-        return {
-            'ids': torch.tensor(ids, dtype=torch.long),
-            'mask': torch.tensor(mask, dtype=torch.long),
-            'targets': torch.tensor(self.data.labels[index], dtype=torch.long)
-        } 
-    
-    def __len__(self):
-        return self.len
-
-
-
 # -----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Linear Classifier
+#
+class LCLinearTransformerClassifier(LCTransformerClassifier):
+    """
+    Base class for linear classifiers.
+    """
+    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
+
+        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
+        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
+        
+        self.classifier = nn.Linear(self.hidden_size, num_classes)
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = output[0][:, 0]  # CLS token representation
+        logits = self.classifier(self.dropout(pooled_output))
+
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+# Model-specific subclasses
+class LCLinearBERTClassifier(LCLinearTransformerClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, debug)
+
+class LCLinearRoBERTaClassifier(LCLinearTransformerClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, debug)
+
+class LCLinearDistilBERTClassifier(LCLinearTransformerClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, debug)
+
+# GPT-2 Classifiers
+class LCLinearGPT2Classifier(LCLinearTransformerClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, debug)
+
+class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
+    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
+        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, debug)
+
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from XLNet's word embeddings.
+        """
+        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
+    
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# BERT Embeddings functions (TESTING ONLY)
+#
+class Token2BertEmbeddings:
+
+    def __init__(self, pretrained_model_name=BERT_MODEL, device=None):
+        """
+        Initialize Token2BertEmbeddings with a pretrained BERT model and tokenizer.
+
+        Parameters:
+        ----------
+        pretrained_model_name : str
+            The name of the pretrained BERT model (default: 'bert-base-uncased').
+        device : str
+            Device to run the model on ('cuda', 'mps', or 'cpu').
+        """
+        self.tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name)
+        self.model = BertModel.from_pretrained(pretrained_model_name).eval().to(device)
+
+        self.max_length = self.model.config.max_position_embeddings  # Dynamically get max length
+        self.hidden_size = self.model.config.hidden_size  # Dynamically get embedding dimension
+        
+        self.device = device
+
+    def train(self, mode=True):
+        """
+        Sets the model to training or evaluation mode.
+
+        Parameters:
+        ----------
+        mode : bool
+            If True, sets to training mode. If False, sets to evaluation mode.
+        """
+        self.model.train(mode)
+
+    def eval(self):
+        """
+        Sets the BERT model in evaluation mode for inference.
+        """
+        self.model.eval()
+
+    def embeddings(self, tokens):
+        """
+        Generate contextualized embeddings for the given tokens.
+
+        Parameters:
+        ----------
+        tokens : list of lists of str or tensor
+            Tokenized input. Each sublist is a sequence of tokens.
+
+        Returns:
+        -------
+        torch.Tensor
+            Contextualized embeddings of shape (batch_size, seq_len, embedding_dim).
+        """
+        if isinstance(tokens, torch.Tensor):
+            # Convert tensor to a list of lists of tokens using the tokenizer
+            tokens = [
+                [self.tokenizer.convert_ids_to_tokens(token_id.item()) for token_id in doc if token_id != self.tokenizer.pad_token_id]
+                for doc in tokens
+            ]
+
+        max_length = min(self.max_length, max(map(len, tokens)))  # for dynamic padding
+        cls_t = self.tokenizer.cls_token
+        sep_t = self.tokenizer.sep_token
+        pad_idx = self.tokenizer.pad_token_id
+        tokens = [[cls_t] + d[:max_length] + [sep_t] for d in tokens]
+        index = [
+            self.tokenizer.convert_tokens_to_ids(doc) + [pad_idx] * (max_length - (len(doc)-2)) for doc in
+            tokens
+        ]
+        index = torch.tensor(index).to(self.device)
+
+        # Create attention mask (1 for tokens, 0 for padding)
+        attention_mask = (index != pad_idx).long()
+
+        with torch.no_grad():
+            outputs = self.model(input_ids=index, attention_mask=attention_mask)
+            contextualized_embeddings = outputs[0]
+            contextualized_embeddings = contextualized_embeddings[:, 1:-1, :]  # Ignore [CLS] and last token
+            return contextualized_embeddings
+        
+
+    def dim(self):
+        """
+        Get the dimensionality of the embeddings.
+
+        Returns:
+        -------
+        int
+            The embedding dimensionality.
+        """
+        return self.hidden_size
+
+
+
+class Token2WCEmbeddings(nn.Module):
+
+    def __init__(self, WCE, WCE_range, WCE_vocab, drop_embedding_prop=0.5, max_length=500, device='cuda'):
+        """
+        Initialize Token2WCEmbeddings for Word-Class Embeddings.
+
+        Parameters:
+        ----------
+        WCE : torch.Tensor
+            Pretrained Word-Class Embedding matrix.
+        WCE_range : list
+            Range of supervised embeddings in the matrix.
+        WCE_vocab : dict
+            Vocabulary mapping words to indices.
+        drop_embedding_prop : float
+            Dropout probability for embedding dropout.
+        max_length : int
+            Maximum sequence length.
+        device : str
+            Device to use ('cuda', 'cpu', etc.).
+        """
+        super(Token2WCEmbeddings, self).__init__()
+        assert '[PAD]' in WCE_vocab, 'unknown index for special token [PAD] in WCE vocabulary'
+    
+        self.embed = EmbeddingCustom(len(WCE_vocab), 0, WCE, WCE_range, drop_embedding_prop).to(device)
+    
+        self.max_length = max_length
+        self.device = device
+        self.vocab = WCE_vocab
+        self.pad_idx = self.vocab['[PAD]']
+        self.unk_idx = self.vocab['[UNK]']
+
+        self.training_mode = False
+
+    def forward(self, tokens):
+        """
+        Generate embeddings for a batch of token sequences.
+
+        Parameters:
+        ----------
+        tokens : list of lists of str
+            Tokenized input.
+
+        Returns:
+        -------
+        torch.Tensor
+            Word-Class Embeddings for the input tokens.
+        """
+        max_length = min(self.max_length, max(map(len,tokens)))  # for dynamic padding
+        tokens = [d[:max_length] for d in tokens]
+        index = [
+            [self.vocab.get(ti, self.unk_idx) for ti in doc] + [self.pad_idx]*(max_length - len(doc)) for doc in tokens
+        ]
+        index = torch.tensor(index).to(self.device)
+        return self.embed(index)
+
+    def dim(self):
+        """
+        Get the dimensionality of the embeddings.
+
+        Returns:
+        -------
+        int
+            The embedding dimensionality.
+        """
+        return self.embed.dim()
+
+    def train(self, mode=True):
+        """
+        Set the embedding layer to training mode.
+
+        Parameters:
+        ----------
+        mode : bool
+            If True, set to training mode. Otherwise, evaluation mode.
+        """
+        self.training_mode = mode
+        super(Token2WCEmbeddings, self).train(mode)
+        self.embed.train(mode)
+
+    def eval(self):
+        """
+        Set the embedding layer to evaluation mode.
+        """
+        self.train(False)
+
+    def finetune_pretrained(self):
+        """
+        Enable fine-tuning for the pretrained embeddings.
+        """
+        self.embed.finetune_pretrained()
+
+
+
+class BertWCEClassifier(nn.Module):
+    
+    ALLOWED_NETS = {'cnn', 'lstm', 'attn'}
+
+    def __init__(self,
+                 net_type,
+                 output_size,
+                 hidden_size,
+                 token2bert_embeddings,
+                 token2wce_embeddings):
+        """
+        Initialize the BertWCEClassifier with optional Word-Class Embeddings (WCE).
+
+        Parameters:
+        ----------
+        net_type : str
+            Type of network architecture ('cnn', 'lstm', or 'attn').
+        output_size : int
+            Number of output classes.
+        hidden_size : int
+            Size of the hidden layer.
+        token2bert_embeddings : Token2BertEmbeddings
+            BERT-based embeddings.
+        token2wce_embeddings : Token2WCEmbeddings or None
+            Optional Word-Class Embeddings.
+        """
+        super(BertWCEClassifier, self).__init__()
+
+        emb_dim = token2bert_embeddings.dim() + (0 if token2wce_embeddings is None else token2wce_embeddings.dim())
+        print(f'Embedding dimensions {emb_dim}')
+
+        self.token2bert_embeddings = token2bert_embeddings
+        self.token2wce_embeddings = token2wce_embeddings
+        
+        self.projection = init__projection(net_type)(emb_dim, hidden_size)
+        
+        self.label = nn.Linear(self.projection.dim(), output_size)
+
+
+    def forward(self, input):                   # list of lists of tokens
+        """
+        Forward pass of the BertWCEClassifier.
+
+        Parameters:
+        ----------
+        input : list of lists of tokens
+            Input tokenized text.
+
+        Returns:
+        -------
+        torch.Tensor
+            Logits of shape (batch_size, output_size).
+        """
+
+        # convert tokens to id for Bert, pad, and get contextualized embeddings
+        contextualized_embeddings = self.token2bert_embeddings.embeddings(input)
+
+        # convert tokens to ids for WCE, pad, and get WCEs
+        if self.token2wce_embeddings is not None:
+            wce_embeddings = self.token2wce_embeddings(input)
+            # concatenate Bert embeddings with WCEs
+            assert contextualized_embeddings.shape[1] == wce_embeddings.shape[1], 'shape mismatch between Bert and WCE'
+            word_emb = torch.cat([contextualized_embeddings, wce_embeddings], dim=-1)
+        else:
+            word_emb = contextualized_embeddings
+
+        doc_emb = self.projection(word_emb)
+        logits = self.label(doc_emb)
+        return logits
+
+    def train(self, mode=True):
+        """
+        Set the model to training mode.
+
+        Parameters:
+        ----------
+        mode : bool
+            If True, set to training mode. Otherwise, evaluation mode.
+        """
+        super(BertWCEClassifier, self).train(mode)
+        self.token2bert_embeddings.train(mode)
+        if self.token2wce_embeddings:
+            self.token2wce_embeddings.train(mode)
+
+    def eval(self):
+        """
+        Set the model to evaluation mode.
+        """
+        self.train(False)
+
+    def finetune_pretrained(self):
+        """
+        Enable fine-tuning for the pretrained embeddings in both BERT and WCE.
+        """
+        self.token2bert_embeddings.finetune_pretrained()
+        if self.token2wce_embeddings:
+            self.token2wce_embeddings.finetune_pretrained()
+
+    def xavier_uniform(self):
+        """
+        Apply Xavier uniform initialization to all learnable parameters.
+        """
+        for model in [self.token2wce_embeddings, self.projection, self.label]:
+            if model is None:
+                continue
+            for p in model.parameters():
+                if p.dim() > 1 and p.requires_grad:
+                    nn.init.xavier_uniform_(p)
+
