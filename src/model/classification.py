@@ -724,6 +724,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         self.supervised = supervised
         self.tce_matrix = tce_matrix
         self.comb_method = comb_method
+        self.normalize_tces = normalize_tces
 
         # Load the transformer model
         self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
@@ -749,7 +750,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                 if self.normalize_tces:
 
                     # compute the mean and std from the core model embeddings
-                    embedding_layer = self.transformer.get_input_embeddings()
+                    embedding_layer = self.l1.get_input_embeddings()
                     embedding_mean = embedding_layer.weight.mean(dim=0).to(device)
                     embedding_std = embedding_layer.weight.std(dim=0).to(device)
                     if (self.debug):
