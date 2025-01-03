@@ -43,9 +43,11 @@ class NeuralClassifier(nn.Module):
         return logits
 
     def finetune_pretrained(self):
+        print("finetune_pretrained...")
         self.embed.finetune_pretrained()
 
     def xavier_uniform(self):
+        print("xavier_uniform...")        
         for p in self.parameters():
             if p.dim() > 1 and p.requires_grad:
                 nn.init.xavier_uniform_(p)

@@ -70,7 +70,7 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, opt):
 
     model.xavier_uniform()
     model = model.to(opt.device)
-    if opt.tunable:
+    if opt.tunable == 'pretrained':
         model.finetune_pretrained()
 
     embsizeX, embsizeY = model.get_embedding_size()
@@ -685,18 +685,17 @@ if __name__ == '__main__':
                         help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
     parser.add_argument('--force', action='store_true', default=False,
                         help='do not check if this experiment has already been run')
+    """
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    """
+    parser.add_argument('--tunable', type=str, default='none', 
+                        help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to none.')
+
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
 
     opt = parser.parse_args()
-
-    """
-    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(f'running on {opt.device}')
-    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
-    """
     
     # Setup device prioritizing CUDA, then MPS, then CPU
     if torch.cuda.is_available():

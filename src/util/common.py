@@ -471,10 +471,14 @@ def set_method_name(opt, add_model=False):
         if opt.droptype != 'sup':
             method_name += f'-drop{opt.droptype}{opt.dropprob}'
     
-    if (opt.pretrained or opt.supervised) and opt.tunable:
-        method_name+='-tunable'
-    elif (opt.pretrained or opt.supervised) and not opt.tunable:
-        method_name+='-static'
+    if (opt.pretrained or opt.supervised):
+        
+        if opt.tunable == 'pretrained':
+            method_name += '-tunable[pretrained]'
+        elif opt.tunable == 'classifier':
+            method_name += '-tunable[classifier]'
+        else:
+            method_name += '-static'
 
     if opt.weight_decay > 0:
         method_name+=f'_wd{opt.weight_decay}'

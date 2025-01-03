@@ -478,7 +478,6 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
             class_weights=class_weights,                                # class weights for loss function
             supervised=args.supervised,
             tce_matrix=tce_matrix,
-            finetune=args.tunable,                                      # embeddings are trainable (True), default is False (static)
             normalize_tces=args.normalize,                              # normalize TCE matrix using underlying embedding mean and std                     
             dropout_rate=args.dropprob,                                 # dropout rate for TCEs
             comb_method=args.sup_mode,                                  # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
