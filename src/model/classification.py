@@ -617,7 +617,8 @@ class LCTransformerClassifier(nn.Module):
         self.classifier = None  # To be initialized after getting hidden size
 
 
-    def finetune(self):
+    def finetune_pretrained(self):
+        print("finetune_pretrained...")
         # Freeze gradient computation for all base model parameters
         for param in self.l1.parameters():
             param.requires_grad = False
@@ -632,6 +633,7 @@ class LCTransformerClassifier(nn.Module):
 
 
     def xavier_uniform(self):
+        print("xavier_uniform...")
         for p in self.parameters():
             if p.dim() > 1 and p.requires_grad:
                 nn.init.xavier_uniform_(p)
