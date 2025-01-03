@@ -54,18 +54,18 @@ datasets=(
 #
 embedding_names=(
     "ROBERTA"
-    "DISTILBERT"
-    "XLNET"
+#    "DISTILBERT"
+#    "XLNET"
     "GPT2"
-    "BERT"
+#    "BERT"
 )
 
 embedding_args=(    
     "--pretrained roberta"
-    "--pretrained distilbert"
-    "--pretrained xlnet"
+ #   "--pretrained distilbert"
+ #   "--pretrained xlnet"
     "--pretrained gpt2" 
-    "--pretrained bert"
+ #   "--pretrained bert"
 )
 
 # ------------------------------------------------------------------------------
@@ -78,15 +78,15 @@ for dataset in "${datasets[@]}"; do
         embed_name="${embedding_names[$i]}"
         embed_arg="${embedding_args[$i]}"
         
-        #echo
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL"
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
-        #echo
+        echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL"
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+        echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
-        #echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
+        echo
 
         echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
         echo

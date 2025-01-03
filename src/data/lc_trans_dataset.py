@@ -121,24 +121,20 @@ def trans_lc_load_dataset(name, seed):
 
     if name == "20newsgroups":
 
-        """
-        train_data = fetch_20newsgroups(subset='train', remove=('headers', 'footers', 'quotes'))
-        test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
-        """
+        import os
+
+        data_path = os.path.join(DATASET_DIR, '20newsgroups')    
+        print("data_path:", data_path)  
+
+        class_type = 'single-label'
 
         metadata = ('headers', 'footers', 'quotes')
-        train_data = fetch_20newsgroups(subset='train', remove=metadata)
-        test_data = fetch_20newsgroups(subset='test', remove=metadata)
+        train_data = fetch_20newsgroups(subset='train', remove=metadata, data_home=data_path, random_state=seed)
+        test_data = fetch_20newsgroups(subset='test', remove=metadata, data_home=data_path, random_state=seed)
 
         target_names = list(set(train_data.target_names))  # Ensures unique class names
         num_classes = len(target_names)
   
-        # Preprocess text data
-        """
-        train_data_processed = preprocess_text(train_data.data)
-        test_data_processed = preprocess_text(test_data.data)
-        """
-
         train_data_processed = preprocess(
             pd.Series(train_data.data), 
             remove_punctuation=False, 
@@ -152,8 +148,6 @@ def trans_lc_load_dataset(name, seed):
             lowercase=True, 
             remove_stopwords=False
             )
-
-        class_type = 'single-label'
 
         return (train_data_processed, train_data.target), (test_data_processed, test_data.target), num_classes, target_names, class_type
         

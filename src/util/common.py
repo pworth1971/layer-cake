@@ -1038,6 +1038,79 @@ def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False,
 
     # Function to process each text
     def process_text(text):
+        if lowercase:
+            text = text.lower()
+
+        # for arxiv data
+        if remove_special_chars:
+            text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)            # Remove special LaTeX-like symbols and tags
+            text = re.sub(unmatched_pattern, '', text)                              # Remove unmatched token patterns
+    
+        if remove_punctuation:
+            text = text.translate(punctuation_table)
+
+        if remove_stopwords:
+            for stopword in stop_words:
+                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
+
+        # Ensure extra spaces are removed after stopwords are deleted
+        return ' '.join(text.split())
+
+    # Track and warn about empty rows
+    empty_row_indices = []
+
+    def check_empty_and_process(text, index):
+        processed = process_text(text)
+        if not processed.strip():  # Check if the processed text is empty
+            empty_row_indices.append((index, text))
+        return processed
+
+    # Use Parallel processing with multiple cores
+    processed_texts = Parallel(n_jobs=-1)(
+        delayed(check_empty_and_process)(text, idx) for idx, text in text_series.items()
+    )
+
+    # Print warnings for empty rows
+    if empty_row_indices:
+        print("[WARNING] The following rows are empty after preprocessing:")
+        for idx, original_text in empty_row_indices:
+            print(f"Row {idx}: '{original_text}'")
+
+    # Return as a list
+    return list(processed_texts)
+
+
+
+def preprocess_orig(text_series: pd.Series, remove_punctuation=True, lowercase=False, remove_stopwords=False, remove_special_chars=False):
+    """
+    Preprocess a pandas Series of texts by removing punctuation, optionally lowercasing, 
+    and optionally removing stopwords. Unmatched tokens, warnings, and unwanted patterns 
+    are also removed.
+
+    Parameters:
+    - text_series: A pandas Series containing text data (strings).
+    - remove_punctuation: Boolean indicating whether to remove punctuation.
+    - lowercase: Boolean indicating whether to convert text to lowercase.
+    - remove_stopwords: Boolean indicating whether to remove stopwords.
+    - remove_special_chars: Boolean indicating whether to remove special LaTeX-like symbols. 
+
+    Returns:
+    - processed_texts: A list containing processed text strings.
+    """
+
+    print("preprocessing...")
+    print("text_series:", type(text_series), text_series.shape)
+    
+    # Load stop words once outside the loop
+    stop_words = set(stopwords.words('english')) if remove_stopwords else set()
+    punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
+
+    # Regular expression for the specific pattern: '['^', '^', ...]...'
+    # from arxiv data, post preprocessing
+    unmatched_pattern = r"\[\s*'(\^)',?\s*(?:'(?:\^)',?\s*)*\]\.{3}"
+
+    # Function to process each text
+    def process_text(text):
 
         if lowercase:
             text = text.lower()

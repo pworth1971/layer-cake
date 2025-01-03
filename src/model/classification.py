@@ -95,7 +95,6 @@ class LCSequenceClassifier(nn.Module):
                 class_weights: torch.Tensor = None, 
                 supervised: bool = False, 
                 tce_matrix: torch.Tensor = None, 
-                finetune: bool = False, 
                 normalize_tces: bool = True,
                 dropout_rate: float = 0.3, 
                 comb_method: str = "cat", 
@@ -112,7 +111,6 @@ class LCSequenceClassifier(nn.Module):
             class_weights: Class weights for loss function.
             supervised: Boolean indicating if supervised embeddings are used.
             tce_matrix: Precomputed TCE matrix (Tensor) with shape [vocab_size, num_classes].
-            finetune: Boolean indicating whether or not the Embedding layer is trainable.
             normalize_tce: Boolean indicating if TCE matrix is normalized.
             dropout: Dropout rate for TCE matrix.
             comb-method: Method to integrate WCE embeddings ("add", "dot" or "cat").            
@@ -120,7 +118,7 @@ class LCSequenceClassifier(nn.Module):
         """
         super(LCSequenceClassifier, self).__init__()
 
-        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, finetune: {finetune}, supervised: {supervised}, debug: {debug}')
+        print(f'LCSequenceClassifier:__init__()... class_type: {class_type}, num_classes: {num_classes}, supervised: {supervised}, debug: {debug}')
 
         if (supervised):
             print(f'normalize_tces: {normalize_tces}, dropout_rate: {dropout_rate}, comb_method: {comb_method}')
@@ -139,7 +137,6 @@ class LCSequenceClassifier(nn.Module):
         self.supervised = supervised
         self.comb_method = comb_method
         self.normalize_tces = normalize_tces
-        self.finetune = finetune
         self.class_weights = class_weights
 
         # --------------------------------------------------------------
@@ -182,33 +179,6 @@ class LCSequenceClassifier(nn.Module):
             else:
                 raise ValueError("class_type must be 'single-label' or 'multi-label'")
             print("loss_fn:", self.loss_fn)
-
-        #
-        # Optionally unfreeze the embedding layer if finetune is True
-        #
-        if self.finetune:
-            print("finetuning == True, making the embedding layer (only) trainable")    
-
-            # Freeze gradient computation for all transformer parameters
-            for param in self.transformer.parameters():
-                param.requires_grad = False
-
-            # Enable training of only the embedding layer
-            if hasattr(self.transformer, 'bert'):
-                embedding_layer = self.transformer.bert.embeddings
-            elif hasattr(self.transformer, 'roberta'):
-                embedding_layer = self.transformer.roberta.embeddings
-            elif hasattr(self.transformer, 'transformer'):
-                embedding_layer = self.transformer.transformer.wte  # GPT-2
-            else:
-                raise AttributeError(f"Embeddings not found for the given model: {type(self.transformer)}")
-            print("embedding_layer:", type(embedding_layer), embedding_layer)
-
-            for param in embedding_layer.parameters():
-                param.requires_grad = True
-        else:            
-            print("finetune == False, default model configuration ...")
-
 
         # Assert that tce_matrix is provided if supervised is True
         if self.supervised:
@@ -295,6 +265,28 @@ class LCSequenceClassifier(nn.Module):
         for param in self.transformer.parameters():
             param.data = param.data.contiguous()
     
+
+    def finetune_pretrained(self):
+
+        # Freeze gradient computation for all transformer parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
+
+        # Enable training of only the embedding layer
+        if hasattr(self.transformer, 'bert'):
+            embedding_layer = self.transformer.bert.embeddings
+        elif hasattr(self.transformer, 'roberta'):
+            embedding_layer = self.transformer.roberta.embeddings
+        elif hasattr(self.transformer, 'transformer'):
+            embedding_layer = self.transformer.transformer.wte  # GPT-2
+        else:
+            raise AttributeError(f"Embeddings not found for the given model: {type(self.transformer)}")
+        print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+        for param in embedding_layer.parameters():
+            param.requires_grad = True
+
+
 
     def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
         """
@@ -561,6 +553,7 @@ class LCTransformerClassifier(nn.Module):
                 num_classes: int, 
                 class_type: str,
                 lc_tokenizer: LCTokenizer,
+                class_weights: torch.Tensor,
                 debug=False):
         
         super().__init__()
@@ -573,7 +566,9 @@ class LCTransformerClassifier(nn.Module):
         self.cache_dir = cache_dir
         self.num_classes = num_classes
         self.class_type = class_type
-        
+
+        self.class_weights = class_weights
+
         # --------------------------------------------------------------
         #
         # set up the tokenizer and vocab info to use for input_ind 
@@ -589,30 +584,76 @@ class LCTransformerClassifier(nn.Module):
         #
         # --------------------------------------------------------------
 
-
         self.hidden_size = None  # To be set dynamically
         
-        # Initialize loss function based on classification type
-        if class_type in ['multi-label', 'multilabel']:
-            self.loss_fn = nn.BCEWithLogitsLoss()
-        elif class_type in ['single-label', 'singlelabel']:
-            self.loss_fn = nn.CrossEntropyLoss()
+        if (self.class_weights is not None):
+            print("self.class_weights.shape:", self.class_weights.shape)
+            if (self.debug):
+                print("self.class_weights:", self.class_weights)
+
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_weights)
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
+
         else:
-            raise ValueError("class_type must be 'single-label' or 'multi-label'")
-        print("loss_fn:", self.loss_fn)
+            print("self.class_weights is None")
+
+            # Loss functions
+            if class_type == 'multi-label':
+                self.loss_fn = nn.BCEWithLogitsLoss()
+            elif class_type == 'single-label':
+                self.loss_fn = nn.CrossEntropyLoss()
+            else:
+                raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            print("loss_fn:", self.loss_fn)
 
         self.dropout = nn.Dropout(0.6)
 
         self.classifier = None  # To be initialized after getting hidden size
 
+
+    def finetune(self):
+        # Freeze gradient computation for all base model parameters
+        for param in self.l1.parameters():
+            param.requires_grad = False
+            param.weight.requires_grad = False
+
+        embedding_layer = self._get_embeddings()
+        print("embedding_layer:", type(embedding_layer), embedding_layer)
+
+        # enable gradient for embedding layer
+        for param in embedding_layer.parameters():
+            param.requires_grad = True
+
+
+    def xavier_uniform(self):
+        for p in self.parameters():
+            if p.dim() > 1 and p.requires_grad:
+                nn.init.xavier_uniform_(p)
+
+
     def forward(self, input_ids, attention_mask, labels=None):
         raise NotImplementedError("Subclasses must implement the forward method.")
+
 
     def get_embedding_dims(self):
         """
         Returns the dimensions of the embedding layer as (hidden_size, num_classes).
         """
         return self.l1.embeddings.word_embeddings.weight.shape
+
+
+    def _get_embeddings(self):
+        """
+        Returns embedding layer.
+        """
+        return self.l1.embeddings.word_embeddings
+
 
     def compute_loss(self, logits, labels):
         """
@@ -625,7 +666,6 @@ class LCTransformerClassifier(nn.Module):
             elif self.class_type in ['single-label', 'singlelabel']:
                 loss = self.loss_fn(logits, labels.long())
         return loss
-    
 
     def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
         """
@@ -689,8 +729,6 @@ class LCTransformerClassifier(nn.Module):
 
 
 
-
-
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------
 # CNN Transformer Classifier
 #
@@ -708,13 +746,13 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                  num_channels=256, 
                  supervised: bool = False, 
                  tce_matrix: torch.Tensor = None, 
-                 finetune: bool = False, 
+                 class_weights: torch.Tensor = None,
                  normalize_tces: bool = True,
                  dropout_rate: float = 0.5, 
                  comb_method: str = "cat",  
                  debug=False):
 
-        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, debug)
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, debug)
 
         print(f"LCCNNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, num_channels: {num_channels}, debug: {debug}")
 
@@ -886,14 +924,14 @@ class LCCNNBERTClassifier(LCCNNTransformerClassifier):
                  num_channels=256, 
                  supervised=False, 
                  tce_matrix=None,
-                 finetune=False, 
+                 class_weights=None,
                  normalize_tces=True, 
                  dropout_rate=0.5, 
                  comb_method='cat', 
                  debug=False):
         
-        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
-                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, \
+            tce_matrix, class_weights, normalize_tces, dropout_rate, comb_method, debug)
 
 
 class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
@@ -907,14 +945,14 @@ class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
                  num_channels=256, 
                  supervised=False, 
                  tce_matrix=None,
-                 finetune=False, 
+                 class_weights=None,
                  normalize_tces=True, 
                  dropout_rate=0.5, 
                  comb_method='cat', 
                  debug=False):
         
-        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
-                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, \
+            tce_matrix, class_weights, normalize_tces, dropout_rate, comb_method, debug)
         
 
 class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
@@ -928,14 +966,14 @@ class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
                  num_channels=256, 
                  supervised=False, 
                  tce_matrix=None,
-                 finetune=False, 
+                 class_weights=None,
                  normalize_tces=True, 
                  dropout_rate=0.5, 
                  comb_method='cat', 
                  debug=False):
         
-        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
-                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, \
+            tce_matrix, class_weights, normalize_tces, dropout_rate, comb_method, debug)
         
 
 
@@ -950,14 +988,14 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
                  num_channels=256, 
                  supervised=False, 
                  tce_matrix=None,
-                 finetune=False, 
+                 class_weights=None,
                  normalize_tces=True, 
                  dropout_rate=0.5, 
                  comb_method='cat', 
                  debug=False):
         
-        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
-                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, \
+            tce_matrix, class_weights, normalize_tces, dropout_rate, comb_method, debug)
         
     def get_embedding_dims(self):
         """
@@ -965,6 +1003,12 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
         """
         return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
     
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer for XLNet model.
+        """
+        return self.l1.word_embedding           # XLNet uses `word_embedding`
+   
 
 class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
 
@@ -977,20 +1021,26 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
                  num_channels=256, 
                  supervised=False, 
                  tce_matrix=None,
-                 finetune=False, 
+                 class_weights=None,
                  normalize_tces=True, 
                  dropout_rate=0.5, 
                  comb_method='cat', 
                  debug=False):
         
-        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, tce_matrix, \
-                         finetune, normalize_tces, dropout_rate, comb_method, debug)
+        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, num_channels, supervised, \
+            tce_matrix, class_weights, normalize_tces, dropout_rate, comb_method, debug)
         
     def get_embedding_dims(self):
         """
         Override to get embedding dimensions from GPT2's word embeddings.
         """
         return self.l1.wte.weight.shape  # GPT2 uses `wte`
+
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from GPT2 model.
+        """
+        return self.l1.wte      # GPT2 uses `wte`
 
 
 
@@ -1100,25 +1150,45 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
         return {"loss": loss, "logits": logits}
 
 
-# Model-specific subclasses
+
+#
+# Linear Classifier (simple)
+#
 class LCLinearBERTClassifier(LCLinearTransformerClassifier):
+
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, debug)
 
 class LCLinearRoBERTaClassifier(LCLinearTransformerClassifier):
+
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, debug)
 
 class LCLinearDistilBERTClassifier(LCLinearTransformerClassifier):
+
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, debug)
 
 # GPT-2 Classifiers
 class LCLinearGPT2Classifier(LCLinearTransformerClassifier):
+
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, debug)
 
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from GPT2's word embeddings.
+        """
+        return self.l1.wte.weight.shape  # GPT2 uses `wte`
+
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from GPT2 model.
+        """
+        return self.l1.wte      # GPT2 uses `wte`
+
 class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
+
     def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
         super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, debug)
 
@@ -1127,6 +1197,12 @@ class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
         Override to get embedding dimensions from XLNet's word embeddings.
         """
         return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
+
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from XLNet model.
+        """
+        return self.l1.word_embedding  # XLNet uses `word_embedding`
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------
 

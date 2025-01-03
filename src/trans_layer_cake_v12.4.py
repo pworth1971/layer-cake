@@ -372,7 +372,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             num_channels=args.channels, 
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
-                                            finetune=args.tunable, 
+                                            class_weights=class_weights,
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
@@ -387,7 +387,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             num_channels=args.channels, 
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
-                                            finetune=args.tunable, 
+                                            class_weights=class_weights,
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
@@ -402,7 +402,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             num_channels=args.channels, 
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
-                                            finetune=args.tunable, 
+                                            class_weights=class_weights,
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
@@ -417,7 +417,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             num_channels=args.channels, 
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
-                                            finetune=args.tunable, 
+                                            class_weights=class_weights,
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
@@ -432,7 +432,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             num_channels=args.channels, 
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
-                                            finetune=args.tunable, 
+                                            class_weights=class_weights,
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
@@ -573,8 +573,7 @@ if __name__ == "__main__":
     program = 'trans_layer_cake'
     version = '12.4'
 
-    print(f'\n\t--- TRANS_LAYER_CAKE Version: {version} ---')
-    print()
+    print(f'\t--- TRANS_LAYER_CAKE Version: {version} ---')
 
     args = parse_args()
     print("args:", args)
@@ -918,7 +917,14 @@ if __name__ == "__main__":
         class_type=class_type,
         lc_tokenizer=lc_tokenizer,
         args=args,
-        tce_matrix=tce_matrix).to(device)
+        tce_matrix=tce_matrix)
+
+    lc_model.xavier_uniform()
+    lc_model = lc_model.to(device)
+    if args.tunable:
+        print("finetuning pretrained model setup...")
+        model.finetune_pretrained()
+
     print("\n\t-- Final Model --:\n", lc_model)
 
     # Get embedding size from the model
