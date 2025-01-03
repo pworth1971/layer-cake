@@ -622,13 +622,14 @@ class LCTransformerClassifier(nn.Module):
         # Freeze gradient computation for all base model parameters
         for param in self.l1.parameters():
             param.requires_grad = False
-            param.weight.requires_grad = False
 
+        # Get the embedding layer
         embedding_layer = self._get_embeddings()
         print("embedding_layer:", type(embedding_layer), embedding_layer)
 
-        # enable gradient for embedding layer
-        for param in embedding_layer.parameters():
+        # Enable gradient computation for embedding layer
+        for name, param in embedding_layer.named_parameters():
+            print(f"Enabling fine-tuning for parameter: {name}")
             param.requires_grad = True
 
 
@@ -831,8 +832,6 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         print("self.classifier:", self.classifier)
 
         
-
-
     def forward(self, input_ids, attention_mask, labels=None):
         """
         Forward pass for the LCSequenceClassifier, includes support for integrated

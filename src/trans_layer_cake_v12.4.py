@@ -552,9 +552,9 @@ def parse_args():
                         help='Use supervised embeddings (TCEs')
     parser.add_argument('--sup-mode', type=str, default='cat', 
                         help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
-    parser.add_argument('--nozscore', action='store_true', default=True,
+    parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
-    parser.add_argument('--normalize', action='store_true', default=True,
+    parser.add_argument('--normalize', action='store_true', default=False,
                         help='normalizes TCE matrix using underlying embedding mean and std. Default == True')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
@@ -919,11 +919,11 @@ if __name__ == "__main__":
         args=args,
         tce_matrix=tce_matrix)
 
-    lc_model.xavier_uniform()
+    #lc_model.xavier_uniform()
     lc_model = lc_model.to(device)
     if args.tunable:
         print("finetuning pretrained model setup...")
-        model.finetune_pretrained()
+        lc_model.finetune_pretrained()
 
     print("\n\t-- Final Model --:\n", lc_model)
 
