@@ -617,6 +617,30 @@ class LCTransformerClassifier(nn.Module):
         self.classifier = None  # To be initialized after getting hidden size
 
 
+    def finetune_classifier(self):
+        """
+        Freezes the embedding layers of the transformer model and enables gradient updates
+        only for the classifier layer.
+        """
+        print("finetune_classifier...")
+
+        # Freeze all layers in the transformer model
+        for param in self.l1.parameters():
+            param.requires_grad = False
+
+        # Enable gradients only for the classifier layer
+        for param in self.classifier.parameters():
+            param.requires_grad = True
+
+        print("Classifier layer is now trainable:")
+        for name, param in self.classifier.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("Embedding layers are frozen:")
+        for name, param in self.l1.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+
     def finetune_pretrained(self):
         print("finetune_pretrained...")
         # Freeze gradient computation for all base model parameters

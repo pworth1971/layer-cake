@@ -99,11 +99,21 @@ for dataset in "${datasets[@]}"; do
         #echo
 
         echo
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable $MODEL"
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable $MODEL
         echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable $MODEL"
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable pretrained $MODEL"
+        #echo
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable $MODEL
+        #echo
+
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED --log_file $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable $MODEL
+        #echo
+
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable classifier $MODEL"
         #echo
         #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable $MODEL
         #echo
