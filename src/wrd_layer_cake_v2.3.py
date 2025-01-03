@@ -690,7 +690,7 @@ if __name__ == '__main__':
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     """
     parser.add_argument('--tunable', type=str, default='none', 
-                        help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to none.')
+                        help='whether or not to have model parameters (gradients) tunable. One of [embedding, none]. Default to none.')
 
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
