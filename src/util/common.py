@@ -173,7 +173,8 @@ def initialize_testing(args, program, version):
     optimized_val = 'none'
     if args.tunable is not None:
         optimized_val = args.tunable
-    logger.set_default('optimized', args.tunable)
+    print("optimized_val:", optimized_val)
+    logger.set_default('optimized', optimized_val)
 
     # Add the current timestamp
     current_timestamp = datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')

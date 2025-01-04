@@ -633,7 +633,7 @@ class LCTransformerClassifier(nn.Module):
 
         # Load Transformer Model
         self.l1 = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        print("self.l1:\n", self.l1)
+        #print("self.l1:\n", self.l1)
 
         self.hidden_size = self.l1.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
@@ -652,6 +652,10 @@ class LCTransformerClassifier(nn.Module):
             self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
             print(f"TCE Layer initialized with shape: {self.tce_layer.weight.shape}")
 
+            # Projection layer to match hidden size
+            self.tce_projection = nn.Linear(num_classes, self.hidden_size, bias=False)
+            print(f"TCE Projection layer initialized: {self.tce_projection}")
+            
             # Adjust combined size for concatenation
             if self.comb_method == "cat":
                 self.combined_size = self.hidden_size + self.tce_matrix.size(1)  # Hidden size + num_classes
@@ -700,15 +704,26 @@ class LCTransformerClassifier(nn.Module):
         hidden_states = output[0]
 
         if self.supervised and self.tce_layer:
+            
             tce_embeddings = self.tce_layer(input_ids)
+            if (self.debug):
+                print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
+
             if self.comb_method == "cat":
                 hidden_states = torch.cat((hidden_states, tce_embeddings), dim=2)
             elif self.comb_method == "add":
+                # Project TCE embeddings to match hidden size
+                tce_embeddings = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
                 hidden_states += tce_embeddings
             elif self.comb_method == "dot":
+                # Project TCE embeddings to match hidden size
+                tce_embeddings = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
                 hidden_states *= tce_embeddings
             else:
                 raise ValueError(f"Unsupported comb_method: {self.comb_method}")
+
+        if (self.debug):
+            print("hidden_states:", type(hidden_states), hidden_states.shape)
 
         return hidden_states  # Subclasses handle further processing
     
