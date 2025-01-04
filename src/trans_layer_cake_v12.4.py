@@ -541,8 +541,8 @@ def parse_args():
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
     """
-    parser.add_argument('--tunable', type=str, default='none', 
-                        help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to none.')
+    parser.add_argument('--tunable', type=str, default=None, metavar='str',
+                        help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to None.')
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
     """
