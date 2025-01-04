@@ -165,6 +165,14 @@ def initialize_testing(args, program, version):
     logger.set_default('run', args.seed)
     logger.set_default('representation', representation)
     logger.set_default('lm_type', lm_type)
+
+
+    #
+    # set optimized value (args.tunable) explcitly
+    #
+    optimized_val = 'none'
+    if args.tunable is not None:
+        optimized_val = args.tunable
     logger.set_default('optimized', args.tunable)
 
     # Add the current timestamp
@@ -191,7 +199,7 @@ def initialize_testing(args, program, version):
         representation=representation,
         mode=mode,
         run=args.seed,
-        optimized=args.tunable
+        optimized=optimized_val
         )
 
     print("already_modelled:", already_modelled)

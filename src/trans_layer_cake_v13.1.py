@@ -316,7 +316,7 @@ def compute_dataset_vocab(train_texts, val_texts, test_texts, tokenizer):
 
 
 
-def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, args, tce_matrix=None, debug=False):
+def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, class_weights, args, tce_matrix=None, debug=False):
     """
     build classifier model based on the specified model_name and model_path
     
@@ -326,6 +326,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
         -- num_classes: number of classes for classification
         -- class_type: classification type, either 'single-label' or 'multi-label'
         -- lc_tokenizer: LCTokenizer object
+        -- class_weights: class weights for loss function
         -- args: command line arguments
         -- tce_matrix: tensor of class embeddings
         -- debug: turn on debug mode
@@ -336,29 +337,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
 
     print(f"building classifier model... pretrained: {args.pretrained}, model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}")
 
-    #
-    # check to see which classifier we are using
-    #
-    if args.net == 'linear':
-
-        if (debug):
-            print("using linear classifier...")
-
-        if args.pretrained == 'bert':
-            linear_model = LCLinearBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
-        elif args.pretrained == 'roberta':
-            linear_model = LCLinearRoBERTaClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
-        elif args.pretrained == 'distilbert':
-            linear_model = LCLinearDistilBERTClassifier(model_name=model_name, cache_dir=model_path, num_classes=num_classes, class_type=class_type)
-        else:
-            raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
-
-        if (debug):
-            print("Linear Classifier Model:\n", linear_model)
-
-        lc_model = linear_model
-        
-    elif args.net == 'cnn':
+    if args.net == 'cnn':
         
         if (debug):
             print("using CNN classifier...")
@@ -376,7 +355,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
-                                            #debug=True
+                                            debug=debug
                                             )
         elif args.pretrained == 'roberta':
             cnn_model = LCCNNRoBERTaClassifier(model_name=model_name, 
@@ -391,7 +370,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
-                                            #debug=True
+                                            debug=debug
                                             )
         elif args.pretrained == 'distilbert':
             cnn_model = LCCNNDistilBERTClassifier(model_name=model_name, 
@@ -406,7 +385,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
-                                            #debug=True
+                                            debug=debug
                                             )
         elif args.pretrained == 'xlnet':
             cnn_model = LCCNNXLNetClassifier(model_name=model_name, 
@@ -421,7 +400,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
-                                            #debug=True
+                                            debug=debug
                                             )
         elif args.pretrained == 'gpt2':
             cnn_model = LCCNNGPT2Classifier(model_name=model_name, 
@@ -436,7 +415,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, a
                                             normalize_tces=args.normalize, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
-                                            #debug=True
+                                            debug=debug
                                             )
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
@@ -913,14 +892,20 @@ if __name__ == "__main__":
         print("--- not using class weights... ---")
         class_weights = None
 
+    
+    print("\n\t building model...")
+
     lc_model = build_model(
         model_name=model_name,
         model_path=model_path,
         num_classes=num_classes,
         class_type=class_type,
         lc_tokenizer=lc_tokenizer,
+        class_weights=class_weights,
         args=args,
-        tce_matrix=tce_matrix)
+        tce_matrix=tce_matrix,
+        #debug=True
+        )
 
     #lc_model.xavier_uniform()
     lc_model = lc_model.to(device)

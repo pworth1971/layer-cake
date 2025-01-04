@@ -76,10 +76,10 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
  
     if (debug):
         print("X:", type(X), X.shape)
-        print("X[0]:", type(X[0]), X[0])
+        #print("X[0]:", type(X[0]), X[0])
 
         print("Y:", type(y), y.shape)
-        print("Y[0]:", type(y[0]), y[0])
+        #print("Y[0]:", type(y[0]), y[0])
         
         print("nC:", {nC})
 
@@ -103,7 +103,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         print("F pre conversion:", type(F), F.shape)
 
     if isinstance(F, np.matrix):
-        F = np.asarray(data)
+        F = np.asarray(F)
     elif isinstance(F, np.ndarray):
         pass
     else:

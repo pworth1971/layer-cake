@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v12.4.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v13.1.py"
 
 # Network types
 network_types=(
@@ -36,6 +36,7 @@ SEED=33
 
 # Datasets array
 datasets=(
+    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes)
@@ -43,7 +44,6 @@ datasets=(
     "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes)   
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
  )   
 
 # -------------------------------------------------------------------------------
@@ -52,18 +52,18 @@ datasets=(
 # NB: issues with Albert so leaving out. LlaMa has not been tested
 #
 embedding_names=(
-    "XLNET"
-    "GPT2"
-    "ROBERTA"
-    "DISTILBERT"
+#    "XLNET"
+#    "GPT2"
+#    "ROBERTA"
+#    "DISTILBERT"
     "BERT"
 )
 
 embedding_args=(    
-    "--pretrained xlnet"
-    "--pretrained gpt2" 
-    "--pretrained roberta"
-    "--pretrained distilbert"
+#    "--pretrained xlnet"
+#    "--pretrained gpt2" 
+#    "--pretrained roberta"
+#    "--pretrained distilbert"
     "--pretrained bert"
 )
 
@@ -77,31 +77,31 @@ for dataset in "${datasets[@]}"; do
         embed_name="${embedding_names[$i]}"
         embed_arg="${embedding_args[$i]}"
         
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL"
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+        #echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
         echo
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL"
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
         echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
-        #echo
-
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
-        #echo
-
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
-        #echo
-
-
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
         echo
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
         echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
+        echo
+
+
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
+        #echo
 
         #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable pretrained $MODEL"
         #echo

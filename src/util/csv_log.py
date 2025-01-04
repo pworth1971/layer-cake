@@ -35,12 +35,12 @@ class CSVLog:
 
     def already_calculated(self, **kwargs):
         
-        #print("checking model already computed...")
+        print("checking model already computed...")
 
         df = self.df
         
-        #print("self.df:", df)
-        #print("kwargs:", kwargs)
+        print("self.df:", df)
+        print("kwargs:", kwargs)
         
         if df.shape[0] == 0:
             return False
@@ -49,7 +49,7 @@ class CSVLog:
             kwargs = self.defaults
         
         for key,val in kwargs.items():
-            #print("key, val:", key, val)
+            print("key, val:", key, val)
             
             # Convert to string and to lower case only if the column exists and is of type string
             if df[key].dtype == 'object':  # Typically, 'object' dtype in pandas means string
@@ -61,9 +61,9 @@ class CSVLog:
             else:
                 df = df[df[key] == val]  # Direct comparison without conversion if not string
             
-            #print("df:", df)
-            #print("df size:", df.size)
-            #print("df.shape[0]:", df.shape[0])
+            print("df:", df)
+            print("df size:", df.size)
+            print("df.shape[0]:", df.shape[0])
             
             if df.shape[0] == 0:
                 return False
