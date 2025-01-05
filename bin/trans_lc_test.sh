@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v13.1.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v13.2.py"
 
 # Network types
 network_types=(
@@ -28,22 +28,22 @@ MODEL='--net cnn'
 #
 # DEV settings
 #
-EPOCHS=16              # DEV
+EPOCHS=18               # DEV
 PATIENCE=2              # DEV
 LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
-SEED=33
+SEED=49
 
 # Datasets array
 datasets=(
+    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes)
-    "--dataset imdb"                            # imdb (single-label, 2 classes)    
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes)   
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
+    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
+    "--dataset imdb"                            # imdb (single-label, 2 classes)     
+    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
  )   
 
 # -------------------------------------------------------------------------------
@@ -55,16 +55,16 @@ embedding_names=(
 #    "XLNET"
 #    "GPT2"
 #    "ROBERTA"
-#    "DISTILBERT"
-    "BERT"
+    "DISTILBERT"
+#    "BERT"
 )
 
 embedding_args=(    
 #    "--pretrained xlnet"
 #    "--pretrained gpt2" 
 #    "--pretrained roberta"
-#    "--pretrained distilbert"
-    "--pretrained bert"
+    "--pretrained distilbert"
+#    "--pretrained bert"
 )
 
 # ------------------------------------------------------------------------------
@@ -87,15 +87,21 @@ for dataset in "${datasets[@]}"; do
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces $MODEL"
         echo
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
-        echo
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
-        echo
+
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
+        #echo
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
+        #echo
+
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
+        #echo
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
+        #echo
 
 
         #echo
@@ -108,15 +114,15 @@ for dataset in "${datasets[@]}"; do
         #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable pretrained $MODEL
         #echo
 
-        #echo
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL
-        #echo
+        echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL
+        echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable classifier $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable classifier $MODEL
-        #echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable classifier $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable classifier $MODEL
+        echo
 
     done
 done

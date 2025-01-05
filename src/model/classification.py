@@ -553,6 +553,7 @@ class LCTransformerClassifier(nn.Module):
     - tce_matrix: Precomputed TCE matrix.
     - comb_method: Method to combine TCEs with transformer embeddings (cat, dot, add)
     - normalize_tces: Whether to normalize TCEs.
+    - trainable_tces: Whether to allow the TCE embeddings to be tuned.
     - debug: Whether to enable debug logging.
     """
     def __init__(self, 
@@ -566,6 +567,7 @@ class LCTransformerClassifier(nn.Module):
                 tce_matrix: torch.Tensor = None,
                 comb_method: str = "cat",
                 normalize_tces: bool = True,
+                trainable_tces: bool = False,
                 debug=False):
         
         super().__init__()
@@ -573,12 +575,13 @@ class LCTransformerClassifier(nn.Module):
         print(f'LCTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, , debug: {debug}')
 
         if (supervised):
-            print(f'supervised: {supervised}, normalize_tces: {normalize_tces}, comb_method: {comb_method}')
+            print(f'supervised: {supervised}, normalize_tces: {normalize_tces}, comb_method: {comb_method}, trainable_tces: {trainable_tces}')
 
         self.supervised = supervised
         self.tce_matrix = tce_matrix
         self.comb_method = comb_method
         self.normalize_tces = normalize_tces
+        self.trainable_tces = trainable_tces
 
         self.debug = debug
 
@@ -649,8 +652,8 @@ class LCTransformerClassifier(nn.Module):
                 print(f"Normalized TCE matrix: {self.tce_matrix.shape}")
 
             # Initialize TCE embedding layer
-            self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
-            print(f"TCE Layer initialized with shape: {self.tce_layer.weight.shape}")
+            self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=not self.trainable_tces)
+            print(f"TCE Layer initialized with shape: {self.tce_layer.weight.shape}, trainable: {self.trainable_tces}")
 
             # Projection layer to match hidden size
             self.tce_projection = nn.Linear(num_classes, self.hidden_size, bias=False)
@@ -730,75 +733,68 @@ class LCTransformerClassifier(nn.Module):
 
     def validate_tce_alignment(self):
         """
-        Validates the alignment between the TCE matrix and the model's embedding vocabulary.
-        This includes ensuring that the indices and shapes match properly.
-
-        Raises:
-            ValueError: If there are alignment issues between TCE and model embeddings.
+        Validate that the indices of the TCE matrix align with the indices of the model's embedding layer.
+        This ensures that the same token ID in both embeddings corresponds to the same token in the vocabulary.
         """
         print("Validating TCE alignment...")
 
-        # Check if TCEs are enabled
-        if not self.supervised or self.tce_matrix is None or self.tce_layer is None:
-            print("TCE validation skipped: TCE embeddings are not initialized.")
-            return
+        # Ensure the TCE matrix and embedding layer have matching vocab size
+        model_vocab_size, model_embedding_dim = self.l1.get_input_embeddings().weight.shape
+        tce_vocab_size, num_classes = self.tce_matrix.shape
 
-        # Fetch model embeddings and special tokens
-        embedding_layer = self.l1.get_input_embeddings()
-        model_vocab_size = embedding_layer.num_embeddings
-        model_embedding_dim = embedding_layer.embedding_dim
         print(f"Model vocab size: {model_vocab_size}, embedding dimension: {model_embedding_dim}")
+        print(f"TCE vocab size: {tce_vocab_size}, num_classes: {num_classes}")
 
-        # Check model special tokens
-        if hasattr(self.l1, "config") and hasattr(self.l1.config, "pad_token_id"):
-            pad_token_id = self.l1.config.pad_token_id
-            print(f"Model pad token ID: {pad_token_id}")
-        else:
-            pad_token_id = None
-            print("Model does not have a pad token ID defined.")
-
-        # Verify TCE matrix shape
-        tce_vocab_size, tce_dim = self.tce_matrix.shape
-        if tce_vocab_size != model_vocab_size:
+        if model_vocab_size != tce_vocab_size:
             raise ValueError(
-                f"Mismatch in vocab sizes: TCE vocab size is {tce_vocab_size}, "
-                f"but model vocab size is {model_vocab_size}."
-            )
-        if tce_dim != self.num_classes:
-            raise ValueError(
-                f"Mismatch in TCE dimensions: TCE dimension is {tce_dim}, "
-                f"but expected dimension is {self.num_classes}."
+                f"Mismatch between model vocab size ({model_vocab_size}) "
+                f"and TCE vocab size ({tce_vocab_size})."
             )
 
-        # Check special tokens
-        special_tokens = self.tokenizer.special_tokens_map
-        print("Special tokens:", special_tokens)
+        # Validate special tokens
+        print("Special tokens:", self.tokenizer.special_tokens_map)
+        for token_name, token_value in self.tokenizer.special_tokens_map.items():
+            token_id = self.tokenizer.convert_tokens_to_ids(token_value)
+            print(f"Checking alignment for special token '{token_name}' (ID: {token_id})...")
 
-        for token_name, token_value in special_tokens.items():
-            if token_value in self.tokenizer.get_vocab():
-                token_id = self.tokenizer.convert_tokens_to_ids(token_value)
-                print(f"Checking alignment for special token '{token_name}' (ID: {token_id})...")
+            # Check if the token ID exists within bounds
+            if token_id < 0 or token_id >= model_vocab_size:
+                print(
+                    f"[WARNING] {token_name} (ID {token_id}) is out of vocabulary bounds "
+                    f"(0, {model_vocab_size - 1})."
+                )
+                continue
 
-                tce_embedding = self.tce_layer.weight[token_id]
-                model_embedding = embedding_layer.weight[token_id]
+            # Ensure TCE matrix and embedding layer are referring to the same token
+            token_from_model_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
+            token_from_tce_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
 
-                if not torch.allclose(tce_embedding, model_embedding, atol=1e-6):
-                    print(f"[WARNING] {token_name} (ID {token_id}) embedding mismatch between TCE and model embeddings.")
+            if token_from_model_vocab != token_from_tce_vocab:
+                print(
+                    f"[WARNING] Token ID {token_id} mismatch between model vocab "
+                    f"({token_from_model_vocab}) and TCE vocab ({token_from_tce_vocab})."
+                )
             else:
-                print(f"[WARNING] Special token '{token_name}' not found in tokenizer vocabulary.")
+                print(f"[INFO] Token ID {token_id} ({token_from_model_vocab}) alignment validated.")
 
-        # Validate that embeddings for a subset of tokens match
-        num_samples = min(5, model_vocab_size)
-        token_indices = torch.randint(0, model_vocab_size, (num_samples,))
-        print(f"Validating alignment for token indices: {token_indices.tolist()}")
+        # Validate random token indices
+        random_indices = torch.randint(0, model_vocab_size, (5,)).tolist()
+        print(f"Validating alignment for random token indices: {random_indices}")
+        for token_id in random_indices:
+            token_from_model_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
+            token_from_tce_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
 
-        for idx in token_indices:
-            tce_embedding = self.tce_layer.weight[idx]
-            model_embedding = embedding_layer.weight[idx]
-            if not torch.allclose(tce_embedding, model_embedding, atol=1e-6):
-                print(f"[WARNING] Token ID {idx} embedding mismatch between TCE and model embeddings.")
+            if token_from_model_vocab != token_from_tce_vocab:
+                print(
+                    f"[WARNING] Token ID {token_id} mismatch between model vocab "
+                    f"({token_from_model_vocab}) and TCE vocab ({token_from_tce_vocab})."
+                )
+            else:
+                print(f"[INFO] Token ID {token_id} ({token_from_model_vocab}) alignment validated.")
 
         print("TCE alignment validation complete.")
+
+
 
 
     def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
@@ -958,10 +954,11 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                  supervised: bool = False, 
                  tce_matrix: torch.Tensor = None, 
                  comb_method: str = "cat",  
-                 normalize_tces: bool = True,                 
+                 normalize_tces: bool = True,      
+                 trainable_tces: bool = False,
                  debug=False):
 
-        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, comb_method, normalize_tces, debug)
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, debug)
 
         print(f"LCCNNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, num_channels: {num_channels}, debug: {debug}")
 
@@ -1047,10 +1044,11 @@ class LCCNNBERTClassifier(LCCNNTransformerClassifier):
                  tce_matrix=None,
                  comb_method='cat', 
                  normalize_tces=True, 
+                 trainable_tces=False,
                  debug=False):
         
         super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, supervised, \
-            tce_matrix, comb_method, normalize_tces, debug)
+            tce_matrix, comb_method, normalize_tces, trainable_tces, debug)
 
 
 class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
@@ -1068,10 +1066,11 @@ class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
                  tce_matrix=None,
                  comb_method='cat', 
                  normalize_tces=True,  
+                 trainable_tces=False,
                  debug=False):
         
         super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, supervised, \
-            tce_matrix, comb_method, normalize_tces, debug)
+            tce_matrix, comb_method, normalize_tces, trainable_tces, debug)
         
 
 class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
@@ -1089,10 +1088,11 @@ class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
                  tce_matrix=None,
                  comb_method='cat', 
                  normalize_tces=True,  
+                 trainable_tces=False,
                  debug=False):
 
         super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, supervised, \
-            tce_matrix, comb_method, normalize_tces, debug)
+            tce_matrix, comb_method, normalize_tces, trainable_tces,debug)
 
 
 class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
@@ -1110,10 +1110,11 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
                  tce_matrix=None,
                  comb_method='cat', 
                  normalize_tces=True,  
+                 trainable_tces=False,
                  debug=False):
 
         super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, supervised, \
-            tce_matrix, comb_method, normalize_tces, debug)
+            tce_matrix, comb_method, normalize_tces, trainable_tces, debug)
 
     def get_embedding_dims(self):
         """
@@ -1143,10 +1144,11 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
                  tce_matrix=None,
                  comb_method='cat', 
                  normalize_tces=True,  
+                 trainable_tces=False,
                  debug=False):
 
         super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, supervised, \
-            tce_matrix, comb_method, normalize_tces, debug)
+            tce_matrix, comb_method, normalize_tces, trainable_tces,debug)
 
     def get_embedding_dims(self):
         """

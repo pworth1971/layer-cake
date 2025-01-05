@@ -431,7 +431,7 @@ def trans_lc_load_dataset(name, seed):
 
         class_type = 'single-label'
 
-        print("loading data...")
+        #print("loading data...")
 
         #
         # dataset from https://paperswithcode.com/dataset/arxiv-10
@@ -455,18 +455,22 @@ def trans_lc_load_dataset(name, seed):
             'label': full_data_set['label']
         })
 
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
 
         print("proeprocessing...")
+        """
 
         # preprocess text
         papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
         papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
         papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
 
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
+        """
 
         # Ensure the 'categories' column value counts are calculated and indexed properly
         categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
@@ -478,11 +482,10 @@ def trans_lc_load_dataset(name, seed):
             remove_stopwords=False
         )
         
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())        
-
-        # Shuffle DataFrame
-        #papers_df = papers_dataframe.sample(frac=1).reset_index(drop=True)
+        """
 
         # we split the train data into train and test here because that is
         # not done for us with the BBC News dataset (Test data is not labeled)
@@ -640,7 +643,7 @@ def show_class_distribution(labels, target_names, class_type, dataset_name, disp
 
     # Display text-based summary if requested
     if display_mode in ('both', 'text'):
-        print(f"\tClass Distribution and Weights in {dataset_name}:")
+        print(f"\n\tClass Distribution and Weights in {dataset_name}:")
         for idx, (class_name, count, weight) in enumerate(zip(target_names, class_counts, class_weights)):
             print(f"{idx:2d}: {class_name:<20} Count: {count:5d}, Weight: {weight:.4f}")
 

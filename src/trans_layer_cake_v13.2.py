@@ -353,6 +353,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
                                             normalize_tces=args.normalize, 
+                                            trainable_tces=args.tunable_tces,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -368,6 +369,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
                                             normalize_tces=args.normalize, 
+                                            trainable_tces=args.tunable_tces,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -382,7 +384,8 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize, 
+                                            normalize_tces=args.normalize,
+                                            trainable_tces=args.tunable_tces, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -397,7 +400,8 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize, 
+                                            normalize_tces=args.normalize,
+                                            trainable_tces=args.tunable_tces, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -412,7 +416,8 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize, 
+                                            normalize_tces=args.normalize,
+                                            trainable_tces=args.tunable_tces, 
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -534,9 +539,9 @@ def parse_args():
                         help='Use supervised embeddings (TCEs')
     parser.add_argument('--sup-mode', type=str, default='cat', 
                         help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
-    parser.add_argument('--nozscore', action='store_true', default=True,
+    parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
-    parser.add_argument('--normalize', action='store_true', default=True,
+    parser.add_argument('--normalize', action='store_true', default=False,
                         help='normalizes TCE matrix using underlying embedding mean and std. Default == True')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
@@ -544,6 +549,8 @@ def parse_args():
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
+    parser.add_argument('--tunable-tces', action='store_true', default=False, 
+                        help='whether or not to have the tce_matrix be tunable during training. Default False.')
 
     return parser.parse_args()
 
@@ -553,7 +560,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '13.1'
+    version = '13.2'
 
     print(f'\t--- TRANS_LAYER_CAKE Version: {version} ---')
 

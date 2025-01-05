@@ -227,8 +227,7 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         Ytr, 
         method=opt.supervised_method,
         max_label_space=opt.max_label_space,
-        #dozscore=(not opt.nozscore),
-        dozscore=False,                                 # normalize in the Classifier
+        dozscore=(not opt.nozscore),
         debug=debug
     )
     

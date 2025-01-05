@@ -253,7 +253,7 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
         remove_punctuation=False,
         lowercase=True,
         remove_stopwords=False,
-        remove_special_chars=True,
+        #remove_special_chars=True,
     )
 
     # Shuffle DataFrame
@@ -269,7 +269,7 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
 
     papers_dataframe = papers_dataframe[["text", "categories", "categories_encoded"]]
     del paper_titles, paper_intro, paper_type
-    #print(papers_dataframe.head())
+    print(papers_dataframe.head())
 
     # Convert encoded labels to a 2D array
     y = np.vstack(papers_dataframe['categories_encoded'].values)
