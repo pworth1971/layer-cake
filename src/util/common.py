@@ -1056,6 +1056,8 @@ def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False,
     # Function to process each text
     def process_text(text):
 
+        text = text.replace('\n', ' ')  # Replace \n characters with a space
+        
         if lowercase:
             text = text.lower()
 
