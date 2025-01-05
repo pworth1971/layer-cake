@@ -11,7 +11,8 @@ import torch
 from scipy.sparse import csr_matrix
 
 
-# ----------------------------------------------------------------------------------------------------------------------
+
+
 def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_problems=-1, method='dotn', dozscore=True, debug=False):
     """
     General function to compute supervised embeddings using different methods (e.g., TF-IDF, 
@@ -77,10 +78,8 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     if (debug):
         print("X:", type(X), X.shape)
         #print("X[0]:", type(X[0]), X[0])
-
         print("Y:", type(y), y.shape)
         #print("Y[0]:", type(y[0]), y[0])
-        
         print("nC:", {nC})
 
     if nC==2 and binary_structural_problems > nC:
@@ -131,6 +130,203 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         F = pca.fit(F).transform(F)
 
     return F
+
+
+def supervised_embeddings_tfidf(X, Y, debug=False):
+    """
+    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label information Y.
+
+    Computes a supervised embedding matrix by normalizing the dot product of X.T and y.
+
+    Steps:
+    Compute term frequencies (tfidf_norm).
+    Compute numerator as X.T.dot(y).
+    Divide numerator by term frequencies to get the final matrix.
+    """
+    
+    print("supervised_embeddings_tfidf()")
+
+    # Convert sparse matrices to dense arrays for debugging
+    if debug:
+        X_dense = X.toarray()
+        Y_dense = Y.toarray()
+        
+        print("\nDense Representation of X (Feature Matrix):")
+        print(f"X shape: {X_dense.shape}")
+        print(f"X[0]: {X_dense[0]}")
+        
+        print("\nDense Representation of Y (Label Matrix):")
+        print(f"Y shape: {Y_dense.shape}")
+        print(f"Y[0]: {Y_dense[0]}")
+
+        # Print non-zero elements of X and Y
+        """
+        print("\nNon-zero elements of X[0]:")
+        for index, value in enumerate(X_dense[0]):
+            if value != 0:
+                print(f"Index: {index}, Value: {value}")
+
+        print("\nNon-zero elements of Y[0]:")
+        for index, value in enumerate(Y_dense[0]):
+            if value != 0:
+                print(f"Index: {index}, Value: {value}")
+        """
+        
+    # Compute tf-idf normalization
+    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
+    epsilon = 1e-6  # Small constant to prevent division by zero
+    tfidf_norm = tfidf_norm + epsilon
+
+    if debug:
+        print("\nTF-IDF Normalization Vector (tfidf_norm):")
+        print(f"tfidf_norm shape: {tfidf_norm.shape}")
+        print(tfidf_norm)
+
+    # Compute numerator
+    numerator = X.T.dot(Y)
+
+    if debug:
+        print("\nNumerator (X.T.dot(Y)):")
+        print(f"Numerator shape: {numerator.shape}")
+        #print(numerator.toarray()[:5])  # Print first 5 rows for inspection
+
+    # Compute supervised TF-IDF matrix
+    F = numerator / tfidf_norm.T
+
+    """
+    if debug:
+        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
+        print(F)
+    """
+
+    return F
+
+
+
+def supervised_embeddings_ppmi(X,Y):
+    """
+    Calculates Positive Pointwise Mutual Information (PPMI) for embeddings, supervised by labels. 
+
+    Implementation: Converts the term matrix X into a binary presence matrix, calculates joint 
+    probabilities of terms and labels, and computes the PPMI.
+    """
+    Xbin = X>0
+    D = X.shape[0]
+    Pxy = (Xbin.T).dot(Y)/D
+    Px = Xbin.sum(axis=0)/D
+    Py = Y.sum(axis=0)/D
+    F = np.asarray(Pxy/(Px.T*Py))
+    F = np.maximum(F, 1.0)
+    F = np.log(F)
+    return F
+
+
+def supervised_embeddings_tsr(X,Y, tsr_function=information_gain, max_documents=25000):
+    """
+    Computes embeddings using a term specificity ranking (TSR) function, supervised by labels. 
+
+    Implementation: Potentially reduces the data size for efficiency, uses get_supervised_matrix 
+    to create a contingency matrix between terms and labels, then computes the TSR using various 
+    statistical measures (e.g., information gain).
+    """    
+    D = X.shape[0]
+    
+    if D>max_documents:
+        print(f'sampling {max_documents}')
+        random_sample = np.random.permutation(D)[:max_documents]
+        X = X[random_sample]
+        Y = Y[random_sample]
+    cell_matrix = get_supervised_matrix(X, Y)
+    
+    F = get_tsr_matrix(cell_matrix, tsr_score_funtion=tsr_function).T
+    
+    return F
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def normalize_zscores(data, debug=False):
+    """
+    Function to compute z-scores for each feature across all samples. Replacement for 
+    zscores() below, which is not working with the new numpy libraries.
+
+    Parameters:
+        data (numpy.ndarray): The input data array with shape (n_samples, n_features).
+ 
+    Returns:
+        numpy.ndarray: Z-score normalized data array.
+    """    
+    
+    if (debug):
+        print("--- normalize_zscores() ---")
+        print("data:", type(data), {data.shape})
+        print("data[0]:", type(data[0]), data[0].shape, data[0])
+
+    means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
+    stds = np.std(data, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
+    z_scores = (data - means) / stds    # Compute the z-scores: (x - mean) / std
+    
+    if np.isnan(z_scores).any() or np.isinf(z_scores).any():
+        #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
+        raise ValueError("[ERROR] z_scores (normalized TCEs) contain NaN or Inf values.")
+
+
+    return z_scores
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does not avoid division by 0, which can indeed occur
+    
+    if (debug):
+        print("x:", type(x), {x.shape})
+        print("x[0]:", x[0])
+        print("x dtype:", x.dtype)                  # Check data type
+        print("axis: ", {axis})
+                                                 
+    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
+    mean = np.mean(x, axis=axis)
+
+    if (debug):
+        print("std:", type(std), {std.shape})
+        print("mean:", type(mean), {mean.shape})
+
+    return (x - mean) / std
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+def zscores_old(x, axis=0, debug=False):                             #scipy.stats.zscores does not avoid division by 0
+    """
+    Normalizes an array X using z-score normalization.
+
+    Implementation: The standard deviation is calculated with a minimum clip value to 
+    prevent division by zero. This normalized form ensures each feature (column if axis=0) 
+    has zero mean and unit variance.
+    """    
+    if (debug):
+        print("\t--- zscores() ---")
+        print("x:", type(x), {x.shape})
+        #print("x[0]:", x[0])
+        print("x dtype:", x.dtype)                  # Check data type
+        print("axis: ", {axis})
+
+    #arrX = x.todense(x)
+    arrX = x.todense()                          # coo_matrix -> dense matrix
+    if (debug):
+        print("arrX shape:", {arrX.shape})
+    
+    np_std = np.std(arrX, ddof=1, axis=axis)
+    std = np.clip(np_std, 1e-5, None)
+
+    #std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
+    #mean = np.mean(x, axis=axis)
+    mean = np.mean(arrX, axis=axis)
+    
+    #return (x - mean) / std
+    return (arrX - mean) / std
 # ----------------------------------------------------------------------------------------------------------------------
 
 
@@ -200,19 +396,14 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
 
     Parameters:
-    - model: Hugging Face transformer model (e.g., `AutoModel.from_pretrained(...)`)
-    - tokenizer: Hugging Face tokenizer (e.g., `AutoTokenizer.from_pretrained(...)`)
     - vocabsize: Size of the vocabulary.
-    - word2index: Dictionary mapping words to their index.
-    - out_of_vocabulary: List of words not found in the pretrained model.
     - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
     - training_label_matrix: Multi-label binary matrix for training labels.
     - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+    - debug: Debug flag for verbose output.
 
     Returns:
-    - pretrained_embeddings: A tensor containing pretrained embeddings for the text at hand
-    - wce_matrix: computed supervised (Word-Class) embeddings, aka WCEs
-    - sup_range: Range in the embedding matrix where supervised embeddings are located.
+    - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
     """
 
     print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
@@ -396,282 +587,6 @@ def embedding_matrix(model, tokenizer, vocabsize, word2index, out_of_vocabulary,
 
 
 #
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-
-def supervised_embeddings_tfidf(X, Y, debug=False):
-    """
-    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label information Y.
-    """
-    print("supervised_embeddings_tfidf()")
-
-    # Convert sparse matrices to dense arrays for debugging
-    if debug:
-        X_dense = X.toarray()
-        Y_dense = Y.toarray()
-        
-        print("\nDense Representation of X (Feature Matrix):")
-        print(f"X shape: {X_dense.shape}")
-        print(f"X[0]: {X_dense[0]}")
-        
-        print("\nDense Representation of Y (Label Matrix):")
-        print(f"Y shape: {Y_dense.shape}")
-        print(f"Y[0]: {Y_dense[0]}")
-
-        # Print non-zero elements of X and Y
-        """
-        print("\nNon-zero elements of X[0]:")
-        for index, value in enumerate(X_dense[0]):
-            if value != 0:
-                print(f"Index: {index}, Value: {value}")
-
-        print("\nNon-zero elements of Y[0]:")
-        for index, value in enumerate(Y_dense[0]):
-            if value != 0:
-                print(f"Index: {index}, Value: {value}")
-        """
-        
-    # Compute tf-idf normalization
-    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
-    epsilon = 1e-6  # Small constant to prevent division by zero
-    tfidf_norm = tfidf_norm + epsilon
-
-    if debug:
-        print("\nTF-IDF Normalization Vector (tfidf_norm):")
-        print(f"tfidf_norm shape: {tfidf_norm.shape}")
-        print(tfidf_norm)
-
-    # Compute numerator
-    numerator = X.T.dot(Y)
-
-    if debug:
-        print("\nNumerator (X.T.dot(Y)):")
-        print(f"Numerator shape: {numerator.shape}")
-        #print(numerator.toarray()[:5])  # Print first 5 rows for inspection
-
-    # Compute supervised TF-IDF matrix
-    F = numerator / tfidf_norm.T
-
-    """
-    if debug:
-        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
-        print(F)
-    """
-
-    return F
-
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_tfidf_old(X, Y, debug=False):
-    """
-    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with 
-    label information Y.
-
-    Implementation: Uses the term frequencies X and a supervised label matrix Y to weight 
-    the term frequencies by how
-    """
-
-    print("supervised_embeddings_tfidf()")
-
-    if debug:
-        print("X:", type(X), X.shape)
-        print("Y:", type(Y), Y.shape)
-
-        """
-        # Print non-zero elements of X[0]
-        print("\nNon-zero elements of X[0]:")
-        X_row = X[0]
-        for idx, value in zip(X_row.indices, X_row.data):
-            print(f"Index: {idx}, Value: {value}")
-
-        # Print non-zero elements of Y[0]
-        print("\nNon-zero elements of Y[0]:")
-        Y_row = Y[0]
-        for idx, value in zip(Y_row.indices, Y_row.data):
-            print(f"Index: {idx}, Value: {value}")
-        """
-
-    # Compute tf-idf normalization
-    tfidf_norm = X.sum(axis=0)                  # Sum of term frequencies
-    epsilon = 1e-6                              # Small constant to prevent division by zero
-    tfidf_norm = tfidf_norm + epsilon
-
-    if debug:
-        print("\nTF-IDF Normalization Vector (tfidf_norm):")
-        print("tfidf_norm shape:", tfidf_norm.shape)
-        print(tfidf_norm)
-
-    # Check for near-zero or invalid values in tfidf_norm
-    invalid_norms = np.where(tfidf_norm < 1e-5)[1]
-    if len(invalid_norms) > 0:
-        print(f"[DEBUG] Found {len(invalid_norms)} near-zero tfidf_norm entries:")
-        print(invalid_norms)
-
-    # Compute supervised embeddings
-    numerator = X.T.dot(Y)
-
-    if debug:
-        print("\nNumerator (X.T.dot(Y)):")
-        for idx in range(numerator.shape[0]):
-            row = numerator.getrow(idx)
-            """
-            if row.nnz > 0:
-                print(f"Numerator Row {idx}: {row.toarray()}")
-            """
-
-    # Check for all-zero rows in numerator
-    all_zero_rows = np.where(numerator.sum(axis=1) == 0)[0]
-    if len(all_zero_rows) > 0:
-        print(f"[DEBUG] Found {len(all_zero_rows)} all-zero rows in numerator:")
-        print(all_zero_rows)
-    
-    # Debug for invalid values
-    if debug:
-        print("\nChecking for invalid values...")
-        if np.isnan(numerator.data).any() or np.isinf(numerator.data).any():
-            print("[ERROR] Numerator contains NaN or Inf values.")
-        if np.isnan(tfidf_norm).any() or np.isinf(tfidf_norm).any():
-            print("[ERROR] Denominator (tfidf_norm) contains NaN or Inf values.")
-        
-    F = (X.T).dot(Y) / tfidf_norm.T
-
-    # Check the result for NaN or Inf
-    F = np.nan_to_num(F, nan=0.0, posinf=0.0, neginf=0.0)
-
-    if debug:
-        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
-        print(F)
-    
-    return F
-# ----------------------------------------------------------------------------------------------------------------------
-
-# ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_ppmi(X,Y):
-    """
-    Calculates Positive Pointwise Mutual Information (PPMI) for embeddings, supervised by labels. 
-
-    Implementation: Converts the term matrix X into a binary presence matrix, calculates joint 
-    probabilities of terms and labels, and computes the PPMI.
-    """
-    Xbin = X>0
-    D = X.shape[0]
-    Pxy = (Xbin.T).dot(Y)/D
-    Px = Xbin.sum(axis=0)/D
-    Py = Y.sum(axis=0)/D
-    F = np.asarray(Pxy/(Px.T*Py))
-    F = np.maximum(F, 1.0)
-    F = np.log(F)
-    return F
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-def supervised_embeddings_tsr(X,Y, tsr_function=information_gain, max_documents=25000):
-    """
-    Computes embeddings using a term specificity ranking (TSR) function, supervised by labels. 
-
-    Implementation: Potentially reduces the data size for efficiency, uses get_supervised_matrix 
-    to create a contingency matrix between terms and labels, then computes the TSR using various 
-    statistical measures (e.g., information gain).
-    """    
-    D = X.shape[0]
-    
-    if D>max_documents:
-        print(f'sampling {max_documents}')
-        random_sample = np.random.permutation(D)[:max_documents]
-        X = X[random_sample]
-        Y = Y[random_sample]
-    cell_matrix = get_supervised_matrix(X, Y)
-    
-    F = get_tsr_matrix(cell_matrix, tsr_score_funtion=tsr_function).T
-    
-    return F
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-
-def normalize_zscores(data, debug=False):
-    """
-    Function to compute z-scores for each feature across all samples. Replacement for 
-    zscores() below, which is not working with the new numpy libraries.
-
-    Parameters:
-        data (numpy.ndarray): The input data array with shape (n_samples, n_features).
- 
-    Returns:
-        numpy.ndarray: Z-score normalized data array.
-    """    
-    
-    if (debug):
-        print("--- normalize_zscores() ---")
-        print("data:", type(data), {data.shape})
-        print("data[0]:", type(data[0]), data[0].shape, data[0])
-
-    means = np.mean(data, axis=0)       # Mean of the data (computing along the rows: axis=0)
-    stds = np.std(data, axis=0)         # Standard deviation of the data (computing along the rows: axis=0) 
-    z_scores = (data - means) / stds    # Compute the z-scores: (x - mean) / std
-    
-    if np.isnan(z_scores).any() or np.isinf(z_scores).any():
-        #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
-        raise ValueError("[ERROR] z_scores (normalized TCEs) contain NaN or Inf values.")
-
-
-    return z_scores
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does not avoid division by 0, which can indeed occur
-    
-    if (debug):
-        print("x:", type(x), {x.shape})
-        print("x[0]:", x[0])
-        print("x dtype:", x.dtype)                  # Check data type
-        print("axis: ", {axis})
-                                                 
-    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
-    mean = np.mean(x, axis=axis)
-
-    if (debug):
-        print("std:", type(std), {std.shape})
-        print("mean:", type(mean), {mean.shape})
-
-    return (x - mean) / std
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-def zscores_old(x, axis=0, debug=False):                             #scipy.stats.zscores does not avoid division by 0
-    """
-    Normalizes an array X using z-score normalization.
-
-    Implementation: The standard deviation is calculated with a minimum clip value to 
-    prevent division by zero. This normalized form ensures each feature (column if axis=0) 
-    has zero mean and unit variance.
-    """    
-    if (debug):
-        print("\t--- zscores() ---")
-        print("x:", type(x), {x.shape})
-        #print("x[0]:", x[0])
-        print("x dtype:", x.dtype)                  # Check data type
-        print("axis: ", {axis})
-
-    #arrX = x.todense(x)
-    arrX = x.todense()                          # coo_matrix -> dense matrix
-    if (debug):
-        print("arrX shape:", {arrX.shape})
-    
-    np_std = np.std(arrX, ddof=1, axis=axis)
-    std = np.clip(np_std, 1e-5, None)
-
-    #std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
-    #mean = np.mean(x, axis=axis)
-    mean = np.mean(arrX, axis=axis)
-    
-    #return (x - mean) / std
-    return (arrX - mean) / std
 # ----------------------------------------------------------------------------------------------------------------------
 
 
