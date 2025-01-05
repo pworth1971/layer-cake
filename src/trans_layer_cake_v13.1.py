@@ -916,6 +916,10 @@ if __name__ == "__main__":
     else:
         print(f"both classifier and embedding layers are not tunable...")
 
+    if (args.supervised):
+        print("validating tce alignment...")
+        lc_model.validate_tce_alignment()
+
     print("\n\t-- Final Model --:\n", lc_model)
 
     # Get embedding size from the model

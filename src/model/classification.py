@@ -728,6 +728,78 @@ class LCTransformerClassifier(nn.Module):
         return hidden_states  # Subclasses handle further processing
     
 
+    def validate_tce_alignment(self):
+        """
+        Validates the alignment between the TCE matrix and the model's embedding vocabulary.
+        This includes ensuring that the indices and shapes match properly.
+
+        Raises:
+            ValueError: If there are alignment issues between TCE and model embeddings.
+        """
+        print("Validating TCE alignment...")
+
+        # Check if TCEs are enabled
+        if not self.supervised or self.tce_matrix is None or self.tce_layer is None:
+            print("TCE validation skipped: TCE embeddings are not initialized.")
+            return
+
+        # Fetch model embeddings and special tokens
+        embedding_layer = self.l1.get_input_embeddings()
+        model_vocab_size = embedding_layer.num_embeddings
+        model_embedding_dim = embedding_layer.embedding_dim
+        print(f"Model vocab size: {model_vocab_size}, embedding dimension: {model_embedding_dim}")
+
+        # Check model special tokens
+        if hasattr(self.l1, "config") and hasattr(self.l1.config, "pad_token_id"):
+            pad_token_id = self.l1.config.pad_token_id
+            print(f"Model pad token ID: {pad_token_id}")
+        else:
+            pad_token_id = None
+            print("Model does not have a pad token ID defined.")
+
+        # Verify TCE matrix shape
+        tce_vocab_size, tce_dim = self.tce_matrix.shape
+        if tce_vocab_size != model_vocab_size:
+            raise ValueError(
+                f"Mismatch in vocab sizes: TCE vocab size is {tce_vocab_size}, "
+                f"but model vocab size is {model_vocab_size}."
+            )
+        if tce_dim != self.num_classes:
+            raise ValueError(
+                f"Mismatch in TCE dimensions: TCE dimension is {tce_dim}, "
+                f"but expected dimension is {self.num_classes}."
+            )
+
+        # Check special tokens
+        special_tokens = self.tokenizer.special_tokens_map
+        print("Special tokens:", special_tokens)
+
+        for token_name, token_value in special_tokens.items():
+            if token_value in self.tokenizer.get_vocab():
+                token_id = self.tokenizer.convert_tokens_to_ids(token_value)
+                print(f"Checking alignment for special token '{token_name}' (ID: {token_id})...")
+
+                tce_embedding = self.tce_layer.weight[token_id]
+                model_embedding = embedding_layer.weight[token_id]
+
+                if not torch.allclose(tce_embedding, model_embedding, atol=1e-6):
+                    print(f"[WARNING] {token_name} (ID {token_id}) embedding mismatch between TCE and model embeddings.")
+            else:
+                print(f"[WARNING] Special token '{token_name}' not found in tokenizer vocabulary.")
+
+        # Validate that embeddings for a subset of tokens match
+        num_samples = min(5, model_vocab_size)
+        token_indices = torch.randint(0, model_vocab_size, (num_samples,))
+        print(f"Validating alignment for token indices: {token_indices.tolist()}")
+
+        for idx in token_indices:
+            tce_embedding = self.tce_layer.weight[idx]
+            model_embedding = embedding_layer.weight[idx]
+            if not torch.allclose(tce_embedding, model_embedding, atol=1e-6):
+                print(f"[WARNING] Token ID {idx} embedding mismatch between TCE and model embeddings.")
+
+        print("TCE alignment validation complete.")
+
 
     def _normalize_tce(self, tce_matrix, embedding_mean, embedding_std):
         """
