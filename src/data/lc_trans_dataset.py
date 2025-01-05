@@ -1,28 +1,28 @@
 import os
-import numpy as np
-from tqdm import tqdm
 import re
-import pandas as pd
 import string
 import random
+import json
+import torch
+import unicodedata
+import pickle
+
+import numpy as np
+import pandas as pd
+
+from tqdm import tqdm
+
+from collections import defaultdict
+
+import matplotlib.pyplot as plt
 
 from scipy.sparse import csr_matrix
-
-import pickle
 
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.sparse import csr_matrix
-
-import unicodedata
-
-from collections import defaultdict
+from sklearn.utils.class_weight import compute_class_weight
 
 from transformers import AutoTokenizer
 
@@ -36,7 +36,6 @@ from data.arxiv_reader import fetch_arxiv, sci_field_map
 
 from util.common import PICKLE_DIR, VECTOR_CACHE, DATASET_DIR, OUT_DIR, preprocess
 
-import json
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -537,10 +536,6 @@ def trans_lc_load_dataset(name, seed):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-import torch
-from sklearn.utils.class_weight import compute_class_weight
 
 
 def lc_class_weights(labels, task_type="single-label"):
