@@ -248,7 +248,6 @@ def multilabel_eval(y, y_, debug=False):
     # Note: The above computations utilize the fact that tp, y, and y_ must 
     # be in compatible formats and that subtraction of two csr_matrices is directly supported.
 
-
     #macro-f1
     tp_macro = np.asarray(tp.sum(axis=0), dtype=int).flatten()
     fn_macro = np.asarray(fn.sum(axis=0), dtype=int).flatten()

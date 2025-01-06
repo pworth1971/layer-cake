@@ -940,6 +940,23 @@ if __name__ == "__main__":
     # Log the dimensions
     print("dimensions:", dimensions)
 
+    print("\n\t--- Loading dataset ---")
+    
+    print("texts_train:", type(texts_train), len(texts_train))
+    print("texts_train[0]:", type(texts_train[0]), texts_train[0])
+    print("labels_train:", type(labels_train), len(labels_train))
+    print("labels_train[0]:", type(labels_train[0]), labels_train[0].shape, labels_train[0])
+
+    print("texts_val:", type(texts_val), len(texts_val))
+    print("texts_val[0]:", type(texts_val[0]), texts_val[0])
+    print("labels_val:", type(labels_val), len(labels_val))
+    print("labels_val[0]:", type(labels_val[0]), labels_val[0].shape, labels_val[0])
+
+    print("test_data:", type(test_data), len(test_data))
+    print("test_data[0]:", type(test_data[0]), test_data[0])
+    print("labels_test:", type(labels_test), len(labels_test))
+    print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
+
     # Prepare datasets
     train_dataset = LCDataset(
         texts_train, 
@@ -1020,12 +1037,10 @@ if __name__ == "__main__":
     else:
         y_pred = (preds.predictions > 0.5).astype(int)
     
-    """
     print("labels_test:", type(labels_test), labels_test.shape)
     print("labels_test[0]:", type(labels_test[0]), labels_test[0].shape, labels_test[0])
     print("y_pred:", type(y_pred), y_pred.shape)
     print("y_pred[0]:", type(y_pred[0]), y_pred[0].shape, y_pred[0])
-    """
 
     print(classification_report(labels_test, y_pred, target_names=target_names, digits=4))
 

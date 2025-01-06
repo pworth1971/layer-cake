@@ -38,12 +38,12 @@ SEED=49
 datasets=(
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
-    "--dataset imdb"                            # imdb (single-label, 2 classes)     
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
+ #   "--dataset imdb"                            # imdb (single-label, 2 classes)     
+ #   "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
+ #   "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+ #   "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
+ #   "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
+ #   "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
 
 # -------------------------------------------------------------------------------
@@ -54,13 +54,13 @@ datasets=(
 embedding_names=(
 #    "XLNET"
 #    "GPT2"
-    "ROBERTA"
+#    "ROBERTA"
     "DISTILBERT"
 #    "BERT"
 )
 
 embedding_args=(    
-#    "--pretrained xlnet"
+    "--pretrained xlnet"
     "--pretrained gpt2" 
 #    "--pretrained roberta"
 #    "--pretrained distilbert"
@@ -82,47 +82,52 @@ for dataset in "${datasets[@]}"; do
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
         echo
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
         echo
-
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces $MODEL"
-        echo
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
-        echo
-
-
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
-        #echo
-
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
-        #echo
-
-
-        #echo
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
-        #echo
-
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable pretrained $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable pretrained $MODEL
-        #echo
 
         echo
         echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL
         echo
 
-        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --tunable classifier $MODEL"
+
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
         echo
-        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised tunable classifier $MODEL
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
         echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
+        echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
+        echo
+
+
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces   $MODEL
+        echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces   $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces  $MODEL
+        echo
+
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces    $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces   $MODEL
+        echo
+
+
+
 
     done
 done
