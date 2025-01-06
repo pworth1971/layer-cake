@@ -257,6 +257,7 @@ class Dataset:
         
         # Pass these reshaped arrays to the _label_matrix method
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1, 1), self.test_target.reshape(-1, 1))      
+
         """
         print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
         print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
@@ -532,6 +533,7 @@ class Dataset:
 
         self.devel_target, self.test_target = devel.target, test.target
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+
         self.target_names = devel.target_names
     
 

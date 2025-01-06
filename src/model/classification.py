@@ -57,7 +57,28 @@ class NeuralClassifier(nn.Module):
 
     def get_learnable_embedding_size(self):
         return self.embed.get_lrn_dimensions()
-    
+
+    def get_embedding_stats(self):
+        """
+        Computes the mean and standard deviation of the EmbeddingCustom layer weights.
+
+        Returns:
+            tuple: A tuple containing the mean and standard deviation tensors of the embedding weights.
+        """
+        try:
+            # Access the weights of the pretrained embeddings
+            embedding_weights = self.embed.pretrained_embeddings.weight
+            
+            # Compute mean and standard deviation
+            embedding_mean = embedding_weights.mean().item()
+            embedding_std = embedding_weights.std().item()
+
+            return embedding_mean, embedding_std
+
+        except AttributeError as e:
+            print(f"Error: {e}")
+            return None, None
+
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -507,33 +528,6 @@ class LCSequenceClassifier(nn.Module):
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------
-#
-# Simple Classifier modified form of original code from: https://github.com/ashfarhangi/Protoformer
-#
-
-"""
-
-RANDOM_SEED = 47
-torch.manual_seed(RANDOM_SEED) 
-
-
-MAX_LEN = 512
-TRAIN_BATCH_SIZE = 32
-VALID_BATCH_SIZE = 32
-EPOCHS = 20
-LEARNING_RATE = 1e-05
-WEIGHT_DECAY = 1e-05
-
-num_classes = len(df_profile.labels.unique())
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-baseline_model = BERTClass(num_classes)
-baseline_model.to(device)
-"""
-
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
 
 
 
@@ -794,6 +788,31 @@ class LCTransformerClassifier(nn.Module):
 
         print("TCE alignment validation complete.")
 
+
+
+    def get_model_embedding_stats(self):
+        """
+        Returns the mean and standard deviation of the model's embedding layer.
+        """
+        embedding_layer = self.l1.get_input_embeddings()
+        embedding_mean = embedding_layer.weight.mean(dim=0).detach().cpu()
+        embedding_std = embedding_layer.weight.std(dim=0).detach().cpu()
+
+        return embedding_mean, embedding_std
+
+
+    def get_tce_embedding_stats(self):
+        """
+        Returns the mean and standard deviation of the TCE embedding layer.
+        Requires supervised mode to be True.
+        """
+        if not self.supervised or self.tce_layer is None:
+            raise ValueError("TCE embeddings are not initialized because supervised mode is False or TCE layer is None.")
+
+        tce_mean = self.tce_layer.weight.mean(dim=0).detach().cpu()
+        tce_std = self.tce_layer.weight.std(dim=0).detach().cpu()
+
+        return tce_mean, tce_std
 
 
 

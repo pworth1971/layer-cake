@@ -22,19 +22,21 @@ We adhere to the common practice of outputting 1 in this case since the classifi
 classified all examples as negatives.
 """
 
-def evaluation_legacy(y_true, y_pred, classification_type):
+def evaluation_legacy(y_true, y_pred, classification_type, debug=False):
 
     if classification_type == 'multilabel':
         eval_function = multilabel_eval_legacy
     elif classification_type == 'singlelabel':
         eval_function = singlelabel_eval_legacy
 
-    Mf1, mf1, accuracy = eval_function(y_true, y_pred)
+    Mf1, mf1, accuracy = eval_function(y_true, y_pred, debug)
 
     return Mf1, mf1, accuracy
 
 
-def multilabel_eval_legacy(y, y_):
+def multilabel_eval_legacy(y, y_, debug):
+
+    print("multilabel_eval_legacy()...")
 
     tp = y.multiply(y_)
 
@@ -88,7 +90,9 @@ def multilabel_eval_legacy(y, y_):
     return macrof1,microf1,acc
 
 
-def singlelabel_eval_legacy(y, y_):
+def singlelabel_eval_legacy(y, y_, debug):
+    print("singlelabel_eval_legacy()...")
+    
     if issparse(y_): y_ = y_.toarray().flatten()
     macrof1 = f1_score(y, y_, average='macro')
     microf1 = f1_score(y, y_, average='micro')
@@ -125,11 +129,11 @@ def evaluation_nn(y_true, y_pred, classification_type='single-label', debug=Fals
     - j_index (float): Jacard Index
     """
 
-    """
-    print("-- util.metrics.evaluation() --")
-    print("y_true:", type(y_true), y_true.shape)
-    print("y_pred:", type(y_pred), y_pred.shape)
-    """
+    print("evaluation_nn...")
+
+    if (debug):    
+        print("y_true:", type(y_true), y_true.shape)
+        print("y_pred:", type(y_pred), y_pred.shape)
 
     #print("\n\tevaluating...")
     #print("classification_type:", classification_type)
@@ -322,7 +326,7 @@ def singlelabel_eval_nn(y, y_, debug=True):
     - j_index (float): Jacard Index
     """
     
-    #print("-- util.metrics.singlelabel_eval_nn() --")
+    print("singlelabel_eval_nn()...")
 
     if (debug):
         print("y:", type(y), y.shape)

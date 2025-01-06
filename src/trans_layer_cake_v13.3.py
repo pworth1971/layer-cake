@@ -924,8 +924,15 @@ if __name__ == "__main__":
         print(f"both classifier and embedding layers are not tunable...")
 
     if (args.supervised):
+
         print("validating tce alignment...")
         lc_model.validate_tce_alignment()
+
+        tce_mean, tce_std = lc_model.get_tce_embedding_stats()
+        pt_mean, pt_std = lc_model.get_model_embedding_stats()
+
+        print(f"PT Embedding Mean:Std: {pt_mean}:{pt_std}")
+        print(f"TCE Embedding Mean:Std: {tce_mean}:{tce_std}")
 
     print("\n\t-- Final Model --:\n", lc_model)
 

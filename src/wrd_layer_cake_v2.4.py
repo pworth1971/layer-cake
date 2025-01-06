@@ -3,14 +3,12 @@ import argparse
 from time import time
 
 import scipy
-from scipy.sparse import csr_matrix, issparse
-
+from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
 
-# custom imports
 from data.dataset import *
 
-from data.lc_trans_dataset import RANDOM_SEED
+from data.lc_trans_dataset import PICKLE_DIR, RANDOM_SEED
 from data.lc_trans_dataset import show_class_distribution
 
 from embedding.pretrained import *
@@ -20,17 +18,14 @@ from model.classification import NeuralClassifier, BertWCEClassifier
 from model.classification import Token2BertEmbeddings, Token2WCEmbeddings
 
 from util.early_stop import EarlyStopping
-
-from util.common import PICKLE_DIR, initialize_testing, index_dataset
-from util.common import get_word_list, batchify, clip_gradient, predict
-
+from util.common import *
 from util.csv_log import CSVLog
-
 from util.file import create_if_not_exist
-
 from util.metrics import *
 
 
+
+VECTOR_CACHE = '../.vector_cache'
 
 # batch sizes for pytorch encoding routines
 DEFAULT_CPU_BATCH_SIZE = 8
@@ -70,7 +65,7 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, opt):
 
     model.xavier_uniform()
     model = model.to(opt.device)
-    if opt.tunable == 'pretrained':
+    if opt.tunable:
         model.finetune_pretrained()
 
     embsizeX, embsizeY = model.get_embedding_size()
@@ -359,7 +354,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
         if to_ < from_:
             train_index = train_index[from_:] + train_index[:to_]
             if issparse(ytr):
-                ytr = np.vstack((ytr[from_:], ytr[:to_]))
+                ytr = vstack((ytr[from_:], ytr[:to_]))
             else:
                 ytr = np.concatenate((ytr[from_:], ytr[:to_]))
         else:
@@ -401,8 +396,10 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
         prediction = csr_matrix(predict(logits, classification_type=classification_type))
         predictions.append(prediction)
 
-    yte_ = np.vstack(predictions)
+    yte_ = scipy.sparse.vstack(predictions)
     
+    #Mf1, mf1, acc = evaluation_legacy(yte, yte_, classification_type)
+
     Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     
@@ -472,7 +469,7 @@ def main(opt):
     #
     # dataset split validation data from training data
     #
-    val_size = min(int(len(devel_index) * VAL_SIZE), 20000)
+    val_size = min(int(len(devel_index) * .2), 20000)
     train_index, val_index, ytr, yval = train_test_split(
         devel_index, dataset.devel_target, test_size=val_size, random_state=opt.seed, shuffle=True
     )
@@ -685,17 +682,18 @@ if __name__ == '__main__':
                         help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
     parser.add_argument('--force', action='store_true', default=False,
                         help='do not check if this experiment has already been run')
-    """
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
-    """
-    parser.add_argument('--tunable', type=str, default='none', 
-                        help='whether or not to have model parameters (gradients) tunable. One of [embedding, none]. Default to none.')
-
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
 
     opt = parser.parse_args()
+
+    """
+    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    print(f'running on {opt.device}')
+    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
+    """
     
     # Setup device prioritizing CUDA, then MPS, then CPU
     if torch.cuda.is_available():
