@@ -138,7 +138,7 @@ class Dataset:
         elif name == 'arxiv':
             self._load_arxiv()
         elif name == 'arxiv_protoformer':
-            self._load_arxiv_protoformer(seed)
+            self._load_arxiv_protoformer()
         else:
             raise ValueError(f"Unsupported dataset name: {name}")
 
@@ -323,6 +323,7 @@ class Dataset:
         categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
         #print("categories_counts:", categories_counts.shape)
 
+        """
         papers_dataframe['text'] = preprocess(
             papers_dataframe['text'],
             remove_punctuation=False,
@@ -330,6 +331,7 @@ class Dataset:
             remove_stopwords=False,
             remove_special_chars=True
         )
+        """
 
         #
         # we split the train data into train and test here 
@@ -355,22 +357,23 @@ class Dataset:
         """
 
         #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
-        """
+        
         self.devel_raw = preprocess(
             text_series=X_train_raw,
             remove_punctuation=False,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=False,
+            remove_special_chars=True
             )
 
         self.test_raw = preprocess(
             text_series=X_test_raw,
             remove_punctuation=False,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=False,
+            remove_special_chars=True
             )
-        """
-        
+
         # Convert target labels to 1D arrays
         self.devel_target = np.array(y_train)       # Flattening the training labels into a 1D array
         self.test_target = np.array(y_test)         # Flattening the test labels into a 1D array

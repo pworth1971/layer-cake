@@ -956,7 +956,7 @@ if __name__ == "__main__":
     if args.supervised:
         # Convert tce_matrix.shape to string before concatenating
         #dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
-        dimensions = f"{dimensions}:({tce_matrix[0]},{tce_matrix[1]})"
+        dimensions = f"{dimensions}:{tce_matrix.shape}"
     print("dimensions:", dimensions)
 
     print("\n\tpreparing dataset for model...")
