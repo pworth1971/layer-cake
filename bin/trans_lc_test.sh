@@ -28,8 +28,8 @@ MODEL='--net cnn'
 #
 # DEV settings
 #
-EPOCHS=18               # DEV
-PATIENCE=2              # DEV
+EPOCHS=19               # DEV
+PATIENCE=3              # DEV
 LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
 SEED=49
@@ -53,7 +53,7 @@ datasets=(
 #
 embedding_names=(
 #    "XLNET"
-#    "GPT2"
+    "GPT2"
     "ROBERTA"
     "DISTILBERT"
 #    "BERT"
@@ -61,7 +61,7 @@ embedding_names=(
 
 embedding_args=(    
 #    "--pretrained xlnet"
-#    "--pretrained gpt2" 
+    "--pretrained gpt2" 
     "--pretrained roberta"
     "--pretrained distilbert"
 #    "--pretrained bert"
@@ -82,33 +82,20 @@ for dataset in "${datasets[@]}"; do
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
         echo
 
-        #echo
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
-        #echo
-
-        #echo
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL
-        #echo
-
-
-
         echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL"
         echo
         $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat $MODEL
         echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
-        #echo
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add $MODEL
+        echo
 
-        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
-        #echo
-        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
-        #echo
-
+        echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL"
+        echo
+        $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot $MODEL
+        echo
 
 
         #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces $MODEL"
@@ -124,6 +111,17 @@ for dataset in "${datasets[@]}"; do
         #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces    $MODEL"
         #echo
         #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces   $MODEL
+        #echo
+
+
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL"
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable pretrained $MODEL
+        #echo
+
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL"
+        #$PROGRAM_NAME $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --tunable classifier $MODEL
         #echo
 
 
