@@ -65,9 +65,9 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, opt):
 
     model.xavier_uniform()
     model = model.to(opt.device)
-    if opt.tunable:
+    if opt.tunable == 'pretrained':
         model.finetune_pretrained()
-
+        
     embsizeX, embsizeY = model.get_embedding_size()
     #print("embsizeX:", embsizeX)
     #print("embsizeY:", embsizeY)
@@ -77,119 +77,6 @@ def init_Net(nC, vocabsize, pretrained_embeddings, sup_range, opt):
     #print("lrnsizeY:", lrnsizeY)
 
     return model, embsizeX, embsizeY, lrnsizeX, lrnsizeY
-
-
-def init_Net_Bert(nC, vocabsize, WCE, sup_range, opt):
-    """
-    Initializes the BertWCEClassifier model with BERT embeddings and optional WCE embeddings.
-
-    Parameters:
-    ----------
-    nC : int
-        Number of output classes.
-    vocabsize : int
-        Size of the vocabulary.
-    WCE : Word-Class Embeddings matrix or None.
-    sup_range : list or None
-        Range of supervised embeddings.
-    opt : argparse.Namespace
-        Command-line options/configuration.
-
-    Returns:
-    -------
-    tuple : (model, embsizeX, embsizeY, lrnsizeX, lrnsizeY)
-        - model: The initialized BertWCEClassifier instance.
-        - embsizeX: Embedding size X (BERT embedding dimension).
-        - embsizeY: Embedding size Y (WCE embedding dimension or 0).
-        - lrnsizeX, lrnsizeY: Learnable embedding sizes (if applicable, otherwise 0).
-    """
-    print("Initializing BERT-based neural model...")
-
-    # Determine model type
-    net_type = opt.net
-    hidden = opt.channels if net_type == 'cnn' else opt.hidden
-
-    # Determine model name
-    if opt.pretrained == 'bert':
-        model_name = BERT_MODEL
-    elif opt.pretrained == 'roberta':
-        model_name = ROBERTA_MODEL
-    elif opt.pretrained == 'distilbert':
-        model_name = DISTILBERT_MODEL
-    else:
-        raise ValueError(f"Unsupported pretrained model type: {opt.pretrained}")
-
-    # Initialize token-based BERT embeddings
-    token2bert_embeddings = Token2BertEmbeddings(
-        pretrained_model_name=model_name,
-        device=opt.device
-    )
-
-    # Allow fine-tuning of BERT embeddings if tunable
-    if opt.tunable:
-        print("Setting BERT embeddings to tunable mode...")
-        token2bert_embeddings.model.train()
-
-    # Initialize optional Word-Class Embeddings (WCE)
-    token2wce_embeddings = None
-    if opt.supervised and WCE is not None:
-        WCE_vocab = {key: idx for idx, key in enumerate(range(vocabsize))}
-        token2wce_embeddings = Token2WCEmbeddings(
-            WCE=WCE,
-            WCE_range=sup_range,
-            WCE_vocab=WCE_vocab,
-            drop_embedding_prop=opt.dropprob,
-            max_length=token2bert_embeddings.max_length,
-            device=opt.device
-        )
-
-    # Initialize BertWCEClassifier
-    model = BertWCEClassifier(
-        net_type=net_type,
-        output_size=nC,
-        hidden_size=hidden,
-        token2bert_embeddings=token2bert_embeddings,
-        token2wce_embeddings=token2wce_embeddings
-    )
-
-    # Apply Xavier initialization if required
-    model.xavier_uniform()
-
-    # Return embedding sizes for logging
-    embsizeX = token2bert_embeddings.dim()
-    embsizeY = token2wce_embeddings.dim() if token2wce_embeddings else 0
-    lrnsizeX, lrnsizeY = 0, 0  # No learnable embeddings for BertWCEClassifier
-
-    return model.to(opt.device), embsizeX, embsizeY, lrnsizeX, lrnsizeY
-
-
-
-
-
-def set_method_name():
-
-    method_name = opt.net
-
-    if opt.pretrained:
-        method_name += f'-{opt.pretrained}'
-    if opt.learnable > 0:
-        method_name += f'-learn{opt.learnable}'
-    if opt.supervised:
-        sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
-        method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
-    if opt.dropprob > 0:
-        if opt.droptype != 'sup':
-            method_name += f'-Drop{opt.droptype}{opt.dropprob}'
-    if (opt.pretrained or opt.supervised) and opt.tunable:
-        method_name+='-tunable'
-    if opt.weight_decay > 0:
-        method_name+=f'_wd{opt.weight_decay}'
-    if opt.net in {'lstm', 'attn'}:
-        method_name+=f'-h{opt.hidden}'
-    if opt.net== 'cnn':
-        method_name+=f'-ch{opt.channels}'
-    return method_name
-
 
 
 def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabulary, opt):
@@ -422,7 +309,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 def main(opt):
 
     program = 'wrd_layer_cake'
-    version = '2.3'
+    version = '2.4'
 
     print(f'\n\t--- WORD_LAYER_CAKE Version: {version} ---')
     print()
@@ -543,6 +430,9 @@ def main(opt):
     emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
     print("emb_size:", emb_size_str)
     
+    emb_mean, emb_std = lc_model.get_embedding_stats()
+    print(f"Embedding Mean:Std: {emb_mean}:{emb_std}")
+
     """
     lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
     print("lrn_size:", lrn_size_str)
@@ -682,8 +572,12 @@ if __name__ == '__main__':
                         help='number of (batched) training steps before considering an epoch over (None: full epoch)') #300 for wipo-sl-sc
     parser.add_argument('--force', action='store_true', default=False,
                         help='do not check if this experiment has already been run')
+    """
     parser.add_argument('--tunable', action='store_true', default=False,
                         help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+    """
+    parser.add_argument('--tunable', type=str, default='none', 
+                        help='whether or not to have model parameters (gradients) tunable. One of [pretrained, none]. Default to none.')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of WCE')
 
