@@ -352,8 +352,9 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize, 
+                                            normalize_tces=args.normalize_tces, 
                                             trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -368,8 +369,9 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize, 
+                                            normalize_tces=args.normalize_tces, 
                                             trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -384,8 +386,9 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize,
-                                            trainable_tces=args.tunable_tces, 
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -400,8 +403,9 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize,
-                                            trainable_tces=args.tunable_tces, 
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -416,8 +420,9 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
-                                            normalize_tces=args.normalize,
-                                            trainable_tces=args.tunable_tces, 
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
                                             dropout_rate=args.dropprob, 
                                             comb_method=args.sup_mode, 
                                             debug=debug
@@ -490,7 +495,7 @@ def parse_args():
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], 
                         help='supported language model types for dataset representation')
-    parser.add_argument('--net', type=str, default='hf.sc', metavar='str', 
+    parser.add_argument('--net', required=True, type=str, default='hf.sc', metavar='str', 
                         help=f'supported models, either hf.sc, linear, cnn, lstm or attn (defaults to hf.sc)')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', 
@@ -539,18 +544,26 @@ def parse_args():
                         help='Use supervised embeddings (TCEs')
     parser.add_argument('--sup-mode', type=str, default='cat', 
                         help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
-    parser.add_argument('--nozscore', action='store_true', default=True,
+    parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
+    """
     parser.add_argument('--normalize', action='store_true', default=True,
-                        help='normalizes TCE matrix using underlying embedding mean and std. Default == True')
+                        help='normalizes model embedding layer to mean  and std 1 to align with TCEs. Default == True')
+    """
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
                              'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
-    parser.add_argument('--tunable-tces', action='store_true', default=False, 
+    parser.add_argument('--normalize-tces', action='store_true', default=False, 
+                        help='Whether or not to normalize the tce_matrix values to the std and mean of the model embeddings. Default False.')
+    parser.add_argument('--tunable-tces', action='store_true', default=True, 
                         help='whether or not to have the tce_matrix be tunable during training. Default False.')
+    parser.add_argument('--tce-weight-init', type=float, default=1.0, metavar='[0.0, 1.0]', 
+                        help='initialized tce embedding layer weight, used with --supervised and --tunable-tces. Default: 1.0')
+    
+
 
     return parser.parse_args()
 
@@ -560,7 +573,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '13.3'
+    version = '13.3.2'
 
     print(f'\t--- TRANS_LAYER_CAKE Version: {version} ---')
 
@@ -914,7 +927,6 @@ if __name__ == "__main__":
         #debug=True
         )
 
-    #lc_model.xavier_uniform()
     lc_model = lc_model.to(device)
     if args.tunable == 'pretrained':
         lc_model.finetune_pretrained()
@@ -943,8 +955,8 @@ if __name__ == "__main__":
     # Concatenate supervised-specific dimensions if args.supervised is True
     if args.supervised:
         # Convert tce_matrix.shape to string before concatenating
-        dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
-    # Log the dimensions
+        #dimensions = f"{dimensions}:{str(tce_matrix.shape)}"
+        dimensions = f"{dimensions}:({tce_matrix[0]},{tce_matrix[1]})"
     print("dimensions:", dimensions)
 
     print("\n\tpreparing dataset for model...")

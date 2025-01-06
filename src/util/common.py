@@ -463,10 +463,12 @@ def set_method_name(opt, add_model=False):
 
         if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):
 
-            if opt.tunable_tces:
-                method_name += '-tce.tunable'
+            method_name += '-tce'
 
-            if opt.normalize:
+            if opt.tunable_tces:
+                method_name += '.tunable'
+
+            if opt.normalize_tces:
                 method_name += f'.norm[{opt.sup_mode}]'
             else:
                 method_name += f'[{opt.sup_mode}]'    
