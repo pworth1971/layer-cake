@@ -113,11 +113,17 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 
     if dozscore:
         print("zscoring...")
-        F = zscores(F, axis=0, debug=debug)
+        norm_F = zscores(F, axis=0, debug=debug)
         #F = normalize_zscores(F, debug=debug)
 
         if (debug):
-            print("F post zscoring:", type(F), {F.shape})
+            if not validate_zscores(F, norm_F):
+                raise ValueError("[ERROR] Z-Scores method failed validation.")
+            else:
+                print("[INFO] Z-Scores method passed validation.")
+                F = norm_F
+                print("F post zscoring:", type(F), {F.shape})
+
 
     if np.isnan(F).any() or np.isinf(F).any():
         #print("[WARNING}: tce_matrix contains NaN or Inf values during initialization.")
@@ -243,11 +249,25 @@ def supervised_embeddings_tsr(X,Y, tsr_function=information_gain, max_documents=
     return F
 
 
-# ----------------------------------------------------------------------------------------------------------------------
+
+def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does not avoid division by 0, which can indeed occur
+    
+    if (debug):
+        print("x:", type(x), {x.shape})
+        print("x[0]:", x[0])
+        print("x dtype:", x.dtype)                  # Check data type
+        print("axis: ", {axis})
+                                                 
+    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
+    mean = np.mean(x, axis=axis)
+
+    if (debug):
+        print("std:", type(std), {std.shape})
+        print("mean:", type(mean), {mean.shape})
+
+    return (x - mean) / std
 
 
-
-# ----------------------------------------------------------------------------------------------------------------------
 
 def normalize_zscores(data, debug=False):
     """
@@ -276,28 +296,10 @@ def normalize_zscores(data, debug=False):
 
 
     return z_scores
-# ----------------------------------------------------------------------------------------------------------------------
 
 
-def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does not avoid division by 0, which can indeed occur
-    
-    if (debug):
-        print("x:", type(x), {x.shape})
-        print("x[0]:", x[0])
-        print("x dtype:", x.dtype)                  # Check data type
-        print("axis: ", {axis})
-                                                 
-    std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
-    mean = np.mean(x, axis=axis)
-
-    if (debug):
-        print("std:", type(std), {std.shape})
-        print("mean:", type(mean), {mean.shape})
-
-    return (x - mean) / std
 
 
-# ----------------------------------------------------------------------------------------------------------------------
 def zscores_old(x, axis=0, debug=False):                             #scipy.stats.zscores does not avoid division by 0
     """
     Normalizes an array X using z-score normalization.
@@ -327,7 +329,50 @@ def zscores_old(x, axis=0, debug=False):                             #scipy.stat
     
     #return (x - mean) / std
     return (arrX - mean) / std
-# ----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+def validate_zscores(original_matrix, normalized_matrix):
+    """
+    Validates the zscores function by checking the mean and std of the output matrix.
+    
+    Parameters:
+    - original_matrix: The input matrix before normalization.
+    - normalized_matrix: The output matrix after applying zscores.
+    """
+    # Compute mean and std of the normalized matrix along the same axis
+    mean = np.mean(normalized_matrix, axis=0)
+    std = np.std(normalized_matrix, axis=0, ddof=1)  # ddof=1 for sample std
+    
+    # Print validation results
+    print("Original Matrix:")
+    print(original_matrix)
+    print("\nNormalized Matrix (Z-Scores):")
+    print(normalized_matrix)
+    print("\nMean of Normalized Matrix (should be close to 0):")
+    print(mean)
+    print("\nStandard Deviation of Normalized Matrix (should be close to 1):")
+    print(std)
+    
+    # Validation checks
+    mean_check = np.allclose(mean, 0, atol=1e-6)
+    std_check = np.allclose(std, 1, atol=1e-6)
+    
+    if mean_check and std_check:
+        print("\n[PASS] Z-Scores method works as expected.")
+
+        return True
+    else:
+        print("\n[FAIL] Z-Scores method failed validation.")
+        if not mean_check:
+            print("Mean is not close to 0.")
+        if not std_check:
+            print("Standard Deviation is not close to 1.")
+
+        return False
+
 
 
 
