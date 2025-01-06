@@ -217,9 +217,18 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
     })
 
     # preprocess text
-    papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
-    papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+    #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n"," "))
+    #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+
     papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
+
+    papers_dataframe['text'] = preprocess(
+        papers_dataframe['text'],
+        remove_punctuation=False,
+        lowercase=True,
+        remove_stopwords=False,
+        remove_special_chars=True,
+    )
 
     papers_dataframe['categories'] = papers_dataframe['categories'].apply(lambda x: tuple(x.split()))
     
@@ -228,34 +237,12 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
     
     # Filter for categories with a count greater than 250
     shortlisted_categories = categories_counts.query("count > 250")["categories"].tolist()
-    print("shortlisted_categories:", shortlisted_categories)
+    #print("shortlisted_categories:", shortlisted_categories)
 
     # Choosing paper categories based on their frequency & eliminating categories with very few papers
     #shortlisted_categories = papers_dataframe['categories'].value_counts().reset_index(name="count").query("count > 250")["index"].tolist()
     papers_dataframe = papers_dataframe[papers_dataframe["categories"].isin(shortlisted_categories)].reset_index(drop=True)
     
-    # clean the text, remove special chracters, etc
-    def clean_text(text):
-        text = text.lower()                                                 # Convert text to lowercase
-        # Mask numbers
-        text = re.sub(r'\d+', '<NUM>', text)                                # Mask numbers
-        # Remove special LaTeX-like symbols and tags
-        text = re.sub(r'\$\{[^}]*\}|\$|\\[a-z]+|[{}]', '', text)            # Remove LaTeX-like symbols
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()                            # Remove extra spaces
-        return text
-
-    # Apply cleaning to dataset texts
-    #papers_dataframe['text'] = papers_dataframe['text'].apply(clean_text)
-
-    papers_dataframe['text'] = preprocess(
-        pd.Series(papers_dataframe['text']),
-        remove_punctuation=False,
-        lowercase=True,
-        remove_stopwords=False,
-        #remove_special_chars=True,
-    )
-
     # Shuffle DataFrame
     papers_dataframe = papers_dataframe.sample(frac=1).reset_index(drop=True)
 

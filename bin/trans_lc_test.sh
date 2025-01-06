@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v13.2.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v13.3.py"
 
 # Network types
 network_types=(
@@ -61,9 +61,9 @@ embedding_names=(
 
 embedding_args=(    
 #    "--pretrained xlnet"
-#    "--pretrained gpt2" 
-    "--pretrained roberta"
-    "--pretrained distilbert"
+    "--pretrained gpt2" 
+#    "--pretrained roberta"
+#    "--pretrained distilbert"
 #    "--pretrained bert"
 )
 
