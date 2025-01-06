@@ -136,7 +136,7 @@ class Dataset:
         elif name == 'imdb':
             self._load_imdb()
         elif name == 'arxiv':
-            self._load_arxiv(seed)
+            self._load_arxiv()
         elif name == 'arxiv_protoformer':
             self._load_arxiv_protoformer(seed)
         else:
@@ -284,10 +284,12 @@ class Dataset:
         # Load datasets
         train_set = pd.read_csv(file_path)
 
+        """
         print("train_set:", train_set.shape)
         print("train_set columns:\n", train_set.columns)
         print("train_set:\n", train_set.head())
-        
+        """
+
         target_names = train_set['label'].unique()
         num_classes = len(train_set['label'].unique())
         print(f"num_classes: {len(target_names)}")
@@ -298,21 +300,36 @@ class Dataset:
             'abstract': train_set['abstract'],
             'label': train_set['label']
         })
+        
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
 
         print("proeprocessing...")
+        """
 
         # preprocess text
-        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
-        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        
         papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
+        
+        """
         print("papers_dataframe:", papers_dataframe.shape)
         print(papers_dataframe.head())
+        """
 
         # Ensure the 'categories' column value counts are calculated and indexed properly
         categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
-        print("categories_counts:", categories_counts.shape)
+        #print("categories_counts:", categories_counts.shape)
+
+        papers_dataframe['text'] = preprocess(
+            papers_dataframe['text'],
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False,
+            remove_special_chars=True
+        )
 
         #
         # we split the train data into train and test here 
@@ -338,6 +355,7 @@ class Dataset:
         """
 
         #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
+        """
         self.devel_raw = preprocess(
             text_series=X_train_raw,
             remove_punctuation=False,
@@ -351,7 +369,8 @@ class Dataset:
             lowercase=True,
             remove_stopwords=False
             )
-
+        """
+        
         # Convert target labels to 1D arrays
         self.devel_target = np.array(y_train)       # Flattening the training labels into a 1D array
         self.test_target = np.array(y_test)         # Flattening the test labels into a 1D array

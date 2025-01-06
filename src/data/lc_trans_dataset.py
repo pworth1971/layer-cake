@@ -462,8 +462,8 @@ def trans_lc_load_dataset(name, seed):
         """
 
         # preprocess text
-        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
-        papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
         papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
 
         """
@@ -475,10 +475,11 @@ def trans_lc_load_dataset(name, seed):
         categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
 
         papers_dataframe['text'] = preprocess(
-            pd.Series(papers_dataframe['text']),
+            papers_dataframe['text'],
             remove_punctuation=False,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=False,
+            remove_special_chars=True
         )
         
         """

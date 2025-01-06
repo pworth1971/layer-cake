@@ -635,15 +635,20 @@ class LCTransformerClassifier(nn.Module):
         self.hidden_size = self.l1.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
 
+        self.combined_size = self.hidden_size                   # default size
+
         # Supervised TCE Handling
         if self.supervised and self.tce_matrix is not None:
             print("supervised=True. Initializing TCE embeddings.")
+            
+            """
             if self.normalize_tces:
                 embedding_layer = self.l1.get_input_embeddings()
                 embedding_mean = embedding_layer.weight.mean(dim=0).to(self.l1.device)
                 embedding_std = embedding_layer.weight.std(dim=0).to(self.l1.device)
                 self.tce_matrix = self._normalize_tce(self.tce_matrix, embedding_mean, embedding_std)
                 print(f"Normalized TCE matrix: {self.tce_matrix.shape}")
+            """
 
             # Initialize TCE embedding layer
             self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=not self.trainable_tces)
@@ -661,10 +666,11 @@ class LCTransformerClassifier(nn.Module):
 
         else:
             self.tce_layer = None
-            self.combined_size = self.hidden_size
+            self.combined_size = self.hidden_size                   # redunadant but for clarity
+
         print(f"self.combined_size: {self.combined_size}")
 
-        self.classifier = None  # To be initialized after getting hidden size
+        self.classifier = None                                      # To be initialized by child classes per model type
 
 
     def forward(self, input_ids, attention_mask, labels=None):
@@ -700,12 +706,38 @@ class LCTransformerClassifier(nn.Module):
         output = self.l1(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         hidden_states = output[0]
 
+        if self.normalize_tces:
+
+            # Normalize Transformer embeddings
+            hidden_states_mean = hidden_states.mean(dim=-1, keepdim=True)
+            hidden_states_std = hidden_states.std(dim=-1, keepdim=True)
+            hidden_states_std = torch.where(hidden_states_std == 0, torch.ones_like(hidden_states_std), hidden_states_std)
+            hidden_states = (hidden_states - hidden_states_mean) / hidden_states_std
+
+            if self.debug:
+                print("hidden_states_mean:", hidden_states_mean)
+                print("hidden_states_std:", hidden_states_std)
+                print("hidden_states:", type(hidden_states), hidden_states.shape)
+
         if self.supervised and self.tce_layer:
             
+            # get tce (supervised) embeddings
             tce_embeddings = self.tce_layer(input_ids)
             if (self.debug):
                 print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
 
+            if self.normalize_tces:
+                # Normalize TCE embeddings    
+                tce_mean = tce_embeddings.mean(dim=-1, keepdim=True)
+                tce_std = tce_embeddings.std(dim=-1, keepdim=True)
+                tce_std = torch.where(tce_std == 0, torch.ones_like(tce_std), tce_std)
+                tce_embeddings = (tce_embeddings - tce_mean) / tce_std
+
+            if self.debug:
+                print("tce_mean:", tce_mean)
+                print("tce_std:", tce_std)
+                print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
+  
             if self.comb_method == "cat":
                 hidden_states = torch.cat((hidden_states, tce_embeddings), dim=2)
             elif self.comb_method == "add":

@@ -539,9 +539,9 @@ def parse_args():
                         help='Use supervised embeddings (TCEs')
     parser.add_argument('--sup-mode', type=str, default='cat', 
                         help=f'How to combine TCEs with model embeddings (in {SUPPORTED_OPS})')
-    parser.add_argument('--nozscore', action='store_true', default=False,
+    parser.add_argument('--nozscore', action='store_true', default=True,
                         help='disables z-scoring form the computation of TCE')
-    parser.add_argument('--normalize', action='store_true', default=False,
+    parser.add_argument('--normalize', action='store_true', default=True,
                         help='normalizes TCE matrix using underlying embedding mean and std. Default == True')
     parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
                         help='method used to create the supervised matrix. Available methods include dotn (default), '
