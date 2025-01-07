@@ -305,8 +305,8 @@ def get_representation(opt, add_model=False):
     if opt.net== 'cnn':
         method_name+=f'-ch{opt.channels}'
 
-    if opt.tunable == 'classifier':
-        method_name += '-tunable[classifier]'
+    if opt.tunable:
+        method_name += '-tunable'
     else:
         method_name += '-static'
 
@@ -338,8 +338,8 @@ def get_representation(opt, add_model=False):
             # Append to the method name
             method_name += f':{model_name}'
     
-        if opt.tunable == 'pretrained':
-            method_name += '.tunable[pretrained]'
+        if opt.tunable:
+            method_name += '.tunable'
         else:
             method_name += '.static'
     
