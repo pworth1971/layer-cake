@@ -474,7 +474,7 @@ def set_method_name(opt, add_model=False):
                 method_name += f'[{opt.sup_mode}]'    
         
         else:
-            method_name += f'-wce({opt.sup_mode}]'
+            method_name += f'-wce[{opt.sup_mode}]'
 
         method_name += f'-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
 
