@@ -369,7 +369,7 @@ def get_representation(opt, add_model=False):
         else:
             method_name += f'-wce[{opt.sup_mode}]'
 
-        method_name += f'-d{sup_drop}-{opt.supervised_method}-{opt.pretrained}'
+        method_name += f'-d{sup_drop}-{opt.supervised_method}'
 
         if not opt.nozscore:
             method_name += '.zscore'

@@ -696,10 +696,11 @@ if __name__ == "__main__":
     print(f"  Max length: {lc_tokenizer.max_length}")
 
     # Split off validation data from the training set
+    val_size = min(int(len(train_data) * VAL_SIZE), 20000)
     texts_train, texts_val, labels_train, labels_val = train_test_split(
                                                             train_data, 
                                                             train_target, 
-                                                            test_size=VAL_SIZE, 
+                                                            test_size=val_size, 
                                                             shuffle=True,
                                                             random_state=RANDOM_SEED
                                                             )
@@ -891,15 +892,17 @@ if __name__ == "__main__":
 
     lc_model = lc_model.to(device)
 
-    if args.tunable:
-        lc_model.finetune(base=True, classifier=True)
-    else:
+    if not args.tunable:
+        # model needs to be configured specifically to be static
         lc_model.finetune(base=False, classifier=False, embedding=False)
         print(f"static model...")
+    else:
+        # model is tunable (requires_grad=True) by default
+        print(f"tunable model...")
 
     print("\n\t model params...")
     lc_model.show_params()
-
+    
     if (args.supervised):
 
         print("validating tce alignment...")
@@ -912,7 +915,7 @@ if __name__ == "__main__":
         print(f"PT Embedding Mean:Std: {pt_mean}:{pt_std}")
         print(f"TCE Embedding Mean:Std: {tce_mean}:{tce_std}")
         """
-        
+
     print("\n\t-- Final Model --:\n", lc_model)
 
     # Get embedding size from the model
