@@ -306,6 +306,8 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
     return Mf1, mf1, acc, h_loss, precision, recall, j_index, loss
 
 
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 def main(opt):
 
     program = 'wrd_layer_cake'

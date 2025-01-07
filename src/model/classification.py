@@ -920,11 +920,6 @@ class LCTransformerClassifier(nn.Module):
             for param in self.l1.parameters():
                 param.requires_grad = True
             print("base model is trainable:")
-    
-        print("model layer parameters...")
-        for name, param in self.l1.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
-
 
 
     def xavier_uniform(self):
@@ -1100,6 +1095,13 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         # call base class with tunable params
         #
         super()._finetune(base=base)
+
+
+    def show_params(self):
+
+        print("base HF model layer parameters...")
+        for name, param in self.l1.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
 
         print("CNN layer parameters...")
         for name, param in self.named_parameters():
