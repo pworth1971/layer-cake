@@ -1112,6 +1112,11 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         for name, param in self.classifier.named_parameters():
             print(f"  {name}: requires_grad={param.requires_grad}")
 
+        if (self.supervised):
+            print("TCE layer parameters...")
+            for name, param in self.named_parameters():
+                if "tce" in name:
+                    print(f"  {name}: requires_grad={param.requires_grad}")
 
 
 # Model-specific subclasses
