@@ -527,7 +527,7 @@ def parse_args():
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=False,
-                        help='Whether or not to set pretrained embeddings, as well as classifier head layers, tunable. Default False, i.e., static)')
+                        help='Whether or not to set pretrained embeddings (as well as classifier layers), are tunable. Default False, i.e., static)')
     """
     parser.add_argument('--tunable', type=str, default=None, metavar='str',
                         help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to None.')
