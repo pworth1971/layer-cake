@@ -908,12 +908,9 @@ class LCTransformerClassifier(nn.Module):
         return normalized_tce
     
 
-    def finetune(self, base=False, classifier=False, embedding=False):
-        """
-        Freezes the embedding layers of the transformer model and enables gradient updates
-        only for the classifier layer.
-        """
-        print(f"finetuning model...: base={base}, classifier={classifier}, embedding={embedding}")
+    def _finetune(self, base=False):
+        
+        print(f"finetuning model...: base={base}")
 
         if not base:
             # Freeze all layers in the base transformer model
@@ -924,40 +921,8 @@ class LCTransformerClassifier(nn.Module):
                 param.requires_grad = True
             print("base model is trainable:")
     
-        # Get the embedding layer
-        embedding_layer = self._get_embeddings()
-        #print("embedding_layer:", type(embedding_layer), embedding_layer)
-
-        if embedding:
-            # Enable gradient computation for embedding layer
-            for name, param in embedding_layer.named_parameters():
-                #print(f"Enabling fine-tuning for parameter: {name}")
-                param.requires_grad = True
-            print("embedding layer is now trainable:")
-        else:
-            # Freeze all layers in the base transformer model
-            for param in embedding_layer.parameters():
-                param.requires_grad = False
-
-        if classifier:
-            # Enable gradients for the classifier layer
-            for param in self.classifier.parameters():
-                param.requires_grad = True
-            print("classifier layer is now trainable:")
-        else:
-            for param in self.classifier.parameters():
-                param.requires_grad = False
-            
         print("model layer parameters...")
         for name, param in self.l1.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
-
-        print("embedding layer parameters...")
-        for name, param in embedding_layer.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
-
-        print("classifier layer parameters...")
-        for name, param in self.classifier.named_parameters():
             print(f"  {name}: requires_grad={param.requires_grad}")
 
 
@@ -1091,6 +1056,59 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         # Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
+
+
+    def finetune(self, classifier=False, base=False):
+        
+        print(f"finetuning model...: classifier={classifier}, base={base}")
+
+        if not classifier:
+            # freeze CNN layer gradients            
+            for param in self.conv1.parameters():
+                param.requires_grad = False
+
+            for param in self.conv2.parameters():
+                param.requires_grad = False
+
+            for param in self.conv3.parameters():
+                param.requires_grad = False
+            print("CNN layers are frozen...")
+
+            # freeze classifier gradients
+            for param in self.classifier.parameters():
+                param.requires_grad = False
+            print("classifier layer now frozen...")
+
+        else:        
+            # finetune CNN layer gradients
+            for param in self.conv1.parameters():
+                param.requires_grad = True
+                
+            for param in self.conv2.parameters():
+                param.requires_grad = True
+
+            for param in self.conv3.parameters():
+                param.requires_grad = True
+            print("CNN layers are tunable...")
+
+            # Enable gradients for the classifier layer
+            for param in self.classifier.parameters():
+                param.requires_grad = True
+            print("classifier layer is now trainable:")
+
+        #
+        # call base class with tunable params
+        #
+        super()._finetune(base=base)
+
+        print("CNN layer parameters...")
+        for name, param in self.named_parameters():
+            if "conv1" in name or "conv2" in name or "conv3" in name:
+                print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("classifier layer parameters...")
+        for name, param in self.classifier.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
 
 
 

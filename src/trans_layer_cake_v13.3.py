@@ -892,7 +892,7 @@ if __name__ == "__main__":
     lc_model = lc_model.to(device)
 
     if args.tunable:
-        lc_model.finetune(base=True, classifier=True, embedding=True)
+        lc_model.finetune(base=True, classifier=True)
     else:
         lc_model.finetune(base=False, classifier=False, embedding=False)
         print(f"static model...")
