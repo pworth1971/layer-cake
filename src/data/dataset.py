@@ -688,7 +688,7 @@ class Dataset:
 
         # Get the tokenizer from the pretrained model
         tokenizer = pt_model.get_tokenizer()
-        print("tokenizer:\n", tokenizer)
+        #print("tokenizer:\n", tokenizer)
 
         if pickle_path:
             if os.path.exists(pickle_path):

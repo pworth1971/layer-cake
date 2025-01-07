@@ -785,44 +785,6 @@ if __name__ == "__main__":
     )    
 
     # -----------------------------------------------------------------------------------------------
-    #
-    # embedding filtering code, not working as expected but leaving here for future reference
-    #
-    # set relevant_tokens to None if we are not filtering embedding layer, otherwise filter the
-    # tokens in the LCTokenizer class to be fed into LCSequenceClassifier to update (filter) the
-    # nn.Embedding layer
-    #
-    # NB this is not working, the Classifier does not like this filtered Embedding layer for some reason
-    #
-    """
-    if not args.emb_filter:
-        print('not filtering embeddings...')
-        relevant_token_ids = None
-    else:
-        print('\n\tfiltering embeddings...')
-
-        all_docs = texts_train + texts_val + test_data                                             # accumulate all of the docs together
-        relevant_tokens, relevant_token_ids, mismatches = lc_tokenizer.filter_tokens(
-                                                                    texts=all_docs, 
-                                                                    dataset_name=args.dataset
-                                                                    )
-        
-        print("relevant_tokens:", type(relevant_tokens), len(relevant_tokens))
-        print("relevant_token_ids:", type(relevant_token_ids), len(relevant_token_ids))
-        print("mismatches:", type(mismatches), len(mismatches))
-
-        # Get the size of the dataset-specific vocabulary
-        filtered_vocab_size = len(relevant_tokens)
-        print(f"Relevant tokens size: {filtered_vocab_size}")
-
-        #
-        # TODO: may need to update the vocab_size variable here for downstream processing (eg. TCE computation)
-        #
-    """
-    # -----------------------------------------------------------------------------------------------
-
-
-    # -----------------------------------------------------------------------------------------------
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings
     # if args.supervised is True
@@ -930,9 +892,9 @@ if __name__ == "__main__":
     lc_model = lc_model.to(device)
 
     if args.tunable:
-        print("tunable, finetuning pretrained and aclassifier layers...")
-        lc_model.finetune_base()
+        lc_model.finetune(base=True, classifier=True, embedding=True)
     else:
+        lc_model.finetune(base=False, classifier=False, embedding=False)
         print(f"static model...")
 
     if (args.supervised):

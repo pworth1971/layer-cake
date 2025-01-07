@@ -908,36 +908,58 @@ class LCTransformerClassifier(nn.Module):
         return normalized_tce
     
 
-    def finetune_base(self):
+    def finetune(self, base=False, classifier=False, embedding=False):
         """
         Freezes the embedding layers of the transformer model and enables gradient updates
         only for the classifier layer.
         """
-        print("finetune_classifier...")
+        print(f"finetuning model...: base={base}, classifier={classifier}, embedding={embedding}")
 
-        # Freeze all layers in the base transformer model
-        for param in self.l1.parameters():
-            param.requires_grad = False
-
+        if not base:
+            # Freeze all layers in the base transformer model
+            for param in self.l1.parameters():
+                param.requires_grad = False
+        else:
+            for param in self.l1.parameters():
+                param.requires_grad = True
+            print("base model is trainable:")
+    
         # Get the embedding layer
         embedding_layer = self._get_embeddings()
-        print("embedding_layer:", type(embedding_layer), embedding_layer)
+        #print("embedding_layer:", type(embedding_layer), embedding_layer)
 
-        # Enable gradient computation for embedding layer
+        if embedding:
+            # Enable gradient computation for embedding layer
+            for name, param in embedding_layer.named_parameters():
+                #print(f"Enabling fine-tuning for parameter: {name}")
+                param.requires_grad = True
+            print("embedding layer is now trainable:")
+        else:
+            # Freeze all layers in the base transformer model
+            for param in embedding_layer.parameters():
+                param.requires_grad = False
+
+        if classifier:
+            # Enable gradients for the classifier layer
+            for param in self.classifier.parameters():
+                param.requires_grad = True
+            print("classifier layer is now trainable:")
+        else:
+            for param in self.classifier.parameters():
+                param.requires_grad = False
+            
+        print("model layer parameters...")
+        for name, param in self.l1.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("embedding layer parameters...")
         for name, param in embedding_layer.named_parameters():
-            print(f"Enabling fine-tuning for parameter: {name}")
-            param.requires_grad = True
+            print(f"  {name}: requires_grad={param.requires_grad}")
 
-        # Enable gradients for the classifier layer
-        for param in self.classifier.parameters():
-            param.requires_grad = True
-        print("Classifier layer is now trainable:")
+        print("classifier layer parameters...")
         for name, param in self.classifier.named_parameters():
             print(f"  {name}: requires_grad={param.requires_grad}")
 
-        print("Embedding layers are frozen:")
-        for name, param in self.l1.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
 
 
     def xavier_uniform(self):
