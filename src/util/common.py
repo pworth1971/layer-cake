@@ -65,7 +65,7 @@ def initialize_testing(args, program, version):
     else:
         gpus = 'None'
 
-    representation = set_method_name(args)
+    representation = get_representation(args)
     print("representation:", representation)
 
     logger = CSVLog(
@@ -209,151 +209,6 @@ def initialize_testing(args, program, version):
 
 
 
-def initialize_testing_deprecated(args, program, version):
-
-    print("\n\tinitializing...")
-
-    print("args:", args)
-
-    # get system info to be used for logging below
-    num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices = get_sysinfo()
-
-    cpus = f'physical:{num_physical_cores},logical:{num_logical_cores}'
-    mem = total_memory
-    if (num_cuda_devices >0):
-        #gpus = f'{num_cuda_devices}:type:{cuda_devices[0]}'
-        gpus = f'{num_cuda_devices}:{cuda_devices[0]}'
-    else:
-        gpus = 'None'
-
-    method_name = set_method_name(args)
-    print("method_name:", method_name)
-
-    logger = CSVLog(
-        file=args.log_file, 
-        columns=[
-            'source',
-            'version',
-            'os',
-            'cpus',
-            'mem',
-            'gpus',
-            'dataset', 
-            'class_type',
-            'model', 
-            'embeddings',
-            'lm_type',
-            'mode',
-            'comp_method',
-            'representation',
-            'optimized',
-            'dimensions',
-            'measure', 
-            'value',
-            'timelapse',
-            'epoch',
-            'run',
-            ], 
-        verbose=True, 
-        overwrite=False)
-
-    run_mode = method_name
-    print("run_mode:", {run_mode})
-
-    if args.pretrained:
-        pretrained = True
-    else:
-        pretrained = False
-
-    embeddings = args.pretrained
-    print("embeddings:", {embeddings})
-
-    lm_type = get_language_model_type(embeddings)
-    print("lm_type:", {lm_type})
-
-    """
-    if (args.supervised):
-        supervised = True
-        mode = 'supervised'
-    else:
-        supervised = False
-        mode = 'unsupervised'
-    """
-
-    if (args.supervised):
-        supervised = True
-        mode = f'supervised:{args.sup_mode}'
-
-        if not args.nozscore:
-            mode += '-zscore'
-    else:
-        supervised = False
-        mode = f'unsupervised'
-
-    # get the path to the embeddings
-    emb_path = get_embeddings_path(embeddings, args)
-    print("emb_path: ", {emb_path})
-
-    system = SystemResources()
-    print("system:\n", system)
-
-    if (args.dataset in ['bbc-news', '20newsgroups', 'imdb']):
-        logger.set_default('class_type', 'single-label')
-    else:
-        logger.set_default('class_type', 'multi-label')
-        
-    # set default system params
-    logger.set_default('os', system.get_os())
-    logger.set_default('cpus', system.get_cpu_details())
-    logger.set_default('mem', system.get_total_mem())
-    logger.set_default('mode', run_mode)
-
-    logger.set_default('source', program)
-    logger.set_default('version', version)
-
-    gpus = system.get_gpu_summary()
-    if gpus is None:
-        gpus = -1   
-    logger.set_default('gpus', gpus)
-
-    logger.set_default('dataset', args.dataset)
-    logger.set_default('model', args.net)
-    logger.set_default('mode', mode)
-    logger.set_default('embeddings', embeddings)
-    logger.set_default('run', args.seed)
-    logger.set_default('representation', method_name)
-    logger.set_default('lm_type', lm_type)
-    logger.set_default('optimized', args.tunable)
-
-    embedding_type = get_embedding_type(embeddings)
-    print("embedding_type:", embedding_type)
-
-    comp_method = get_model_computation_method(
-        vtype=args.vtype,
-        pretrained=embeddings, 
-        embedding_type=embedding_type, 
-        learner=args.net, 
-        mix=None
-        )
-    print("comp_method:", comp_method)
-    logger.set_default('comp_method', comp_method)
-
-    # check to see if the model has been run before
-    already_modelled = logger.already_calculated(
-        dataset=args.dataset,
-        #embeddings=embeddings,
-        model=args.net, 
-        representation=method_name,
-        mode=mode,
-        run=args.seed
-        )
-
-    print("already_modelled:", already_modelled)
-
-    return already_modelled, logger, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
-
-
-
 def get_embeddings_path(pretrained, args):
     
     if pretrained == 'glove':
@@ -424,10 +279,40 @@ def get_language_model_type(embeddings, model_name=None):
         return 'static:word:co-occurrence:global'  # Default to word embeddings
 
 
-def set_method_name(opt, add_model=False):
+
+def get_representation(opt, add_model=False):
     
-    method_name = opt.net
+    print("getting model representation...")
+
+    #
+    # core model options
+    #
+    method_name = opt.net               # set model type
     
+    if opt.learnable is not None and opt.learnable > 0:
+        method_name += f'-learn{opt.learnable}'
+
+    if opt.dropprob > 0:
+        if opt.droptype != 'sup':
+            method_name += f'-drop{opt.droptype}{opt.dropprob}'
+        
+    if opt.weight_decay > 0:
+        method_name+=f'_wd{opt.weight_decay}'
+    
+    if opt.net in {'lstm', 'attn'}:
+        method_name+=f'-h{opt.hidden}'
+    
+    if opt.net== 'cnn':
+        method_name+=f'-ch{opt.channels}'
+
+    if opt.tunable == 'classifier':
+        method_name += '-tunable[classifier]'
+    else:
+        method_name += '-static'
+
+    #
+    # add pretrained parameters
+    #    
     if opt.pretrained:
 
         method_name += f'-{opt.pretrained}'
@@ -453,10 +338,16 @@ def set_method_name(opt, add_model=False):
             # Append to the method name
             method_name += f':{model_name}'
     
-    if opt.learnable is not None and opt.learnable > 0:
-        method_name += f'-learn{opt.learnable}'
+        if opt.tunable == 'pretrained':
+            method_name += '.tunable[pretrained]'
+        else:
+            method_name += '.static'
     
+    #
+    # supervised options
+    #
     if opt.supervised:
+        
         sup_drop = 0 if opt.droptype != 'sup' else opt.dropprob
 
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
@@ -480,29 +371,8 @@ def set_method_name(opt, add_model=False):
 
         if not opt.nozscore:
             method_name += '.zscore'
-        
-    if opt.dropprob > 0:
-        if opt.droptype != 'sup':
-            method_name += f'-drop{opt.droptype}{opt.dropprob}'
     
-    if (opt.pretrained or opt.supervised):
-        
-        if opt.tunable == 'pretrained':
-            method_name += '-tunable[pretrained]'
-        elif opt.tunable == 'classifier':
-            method_name += '-tunable[classifier]'
-        else:
-            method_name += '-static'
 
-    if opt.weight_decay > 0:
-        method_name+=f'_wd{opt.weight_decay}'
-    
-    if opt.net in {'lstm', 'attn'}:
-        method_name+=f'-h{opt.hidden}'
-    
-    if opt.net== 'cnn':
-        method_name+=f'-ch{opt.channels}'
-    
     return method_name
 
 

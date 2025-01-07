@@ -526,12 +526,12 @@ def parse_args():
                              f'does not apply dropout (same as "sup" with no supervised embeddings), "full" which '
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
-    """
     parser.add_argument('--tunable', action='store_true', default=False,
-                        help='pretrained embeddings are tunable from the beginning (default False, i.e., static)')
+                        help='Whether or not to set pretrained embeddings, as well as classifier head layers, tunable. Default False, i.e., static)')
     """
     parser.add_argument('--tunable', type=str, default=None, metavar='str',
                         help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to None.')
+    """
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
     """
@@ -928,12 +928,12 @@ if __name__ == "__main__":
         )
 
     lc_model = lc_model.to(device)
-    if args.tunable == 'pretrained':
-        lc_model.finetune_pretrained()
-    elif args.tunable == 'classifier':
-        lc_model.finetune_classifier()
+
+    if args.tunable:
+        print("tunable, finetuning pretrained and aclassifier layers...")
+        lc_model.finetune_base()
     else:
-        print(f"both classifier and embedding layers are not tunable...")
+        print(f"static model...")
 
     if (args.supervised):
 

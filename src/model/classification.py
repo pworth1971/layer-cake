@@ -623,7 +623,9 @@ class LCTransformerClassifier(nn.Module):
             print("supervised=True. Initializing TCE embeddings.")
             
             if self.normalize_tces:
-                # normalize tce_matrix to embedding mean and std
+                #
+                # normalize tce_matrix using the embedding layer mean and std
+                #
                 embedding_layer = self.l1.get_input_embeddings()
                 embedding_mean = embedding_layer.weight.mean(dim=0).to(self.l1.device)
                 embedding_std = embedding_layer.weight.std(dim=0).to(self.l1.device)
@@ -640,9 +642,11 @@ class LCTransformerClassifier(nn.Module):
                 self.tce_layer = nn.Embedding.from_pretrained(self.tce_matrix, freeze=True)
             print("self.tce_layer:", self.tce_layer)
 
+            """
             # Learnable weight for TCE embeddings
             self.tce_weight = nn.Parameter(torch.tensor([tce_weight_init], device=self.l1.device))
             print(f"self.tce_weight initialized to {tce_weight_init}, self.tce_weight:", self.tce_weight)
+            """
 
             # Projection layer for add and dot combination methods to
             # project the tce_matrix into the same dimensional space as 
@@ -705,23 +709,43 @@ class LCTransformerClassifier(nn.Module):
             tce_embeddings = self.tce_layer(input_ids)
             if (self.debug):
                 print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
+                print("tce_weight:", self.tce_weight.item())
 
+            """
+            # Apply weight to TCE embeddings
+            weighted_tce_embeddings = tce_embeddings * self.tce_weight
+            
             #
             # now we combine the tce embeddings with the hidden states 
             # from the model to get the final embeddings
             #
             if self.comb_method == "cat":
+                hidden_states = torch.cat((hidden_states, weighted_tce_embeddings), dim=2)
+            elif self.comb_method == "add":
+                # Project TCE embeddings to match hidden size
+                tce_embeddings_projected = self.tce_projection(weighted_tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
+                hidden_states += tce_embeddings_projected
+            elif self.comb_method == "dot":
+                # Project TCE embeddings to match hidden size
+                tce_embeddings_projected = self.tce_projection(weighted_tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
+                hidden_states *= tce_embeddings_projected
+            else:
+                raise ValueError(f"Unsupported comb_method: {self.comb_method}")
+            """
+
+            if self.comb_method == "cat":
                 hidden_states = torch.cat((hidden_states, tce_embeddings), dim=2)
             elif self.comb_method == "add":
                 # Project TCE embeddings to match hidden size
-                tce_embeddings = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                hidden_states += tce_embeddings
+                tce_embeddings_projected = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
+                hidden_states += tce_embeddings_projected
             elif self.comb_method == "dot":
                 # Project TCE embeddings to match hidden size
-                tce_embeddings = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                hidden_states *= tce_embeddings
+                tce_embeddings_projected = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
+                hidden_states *= tce_embeddings_projected
             else:
                 raise ValueError(f"Unsupported comb_method: {self.comb_method}")
+            
 
         if (self.debug):
             print("hidden_states:", type(hidden_states), hidden_states.shape)
@@ -884,34 +908,14 @@ class LCTransformerClassifier(nn.Module):
         return normalized_tce
     
 
-
-    def finetune_classifier(self):
+    def finetune_base(self):
         """
         Freezes the embedding layers of the transformer model and enables gradient updates
         only for the classifier layer.
         """
         print("finetune_classifier...")
 
-        # Freeze all layers in the transformer model
-        for param in self.l1.parameters():
-            param.requires_grad = False
-
-        # Enable gradients only for the classifier layer
-        for param in self.classifier.parameters():
-            param.requires_grad = True
-
-        print("Classifier layer is now trainable:")
-        for name, param in self.classifier.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
-
-        print("Embedding layers are frozen:")
-        for name, param in self.l1.named_parameters():
-            print(f"  {name}: requires_grad={param.requires_grad}")
-
-
-    def finetune_pretrained(self):
-        print("finetune_pretrained...")
-        # Freeze gradient computation for all base model parameters
+        # Freeze all layers in the base transformer model
         for param in self.l1.parameters():
             param.requires_grad = False
 
@@ -923,6 +927,17 @@ class LCTransformerClassifier(nn.Module):
         for name, param in embedding_layer.named_parameters():
             print(f"Enabling fine-tuning for parameter: {name}")
             param.requires_grad = True
+
+        # Enable gradients for the classifier layer
+        for param in self.classifier.parameters():
+            param.requires_grad = True
+        print("Classifier layer is now trainable:")
+        for name, param in self.classifier.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("Embedding layers are frozen:")
+        for name, param in self.l1.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
 
 
     def xavier_uniform(self):
