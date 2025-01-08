@@ -171,8 +171,6 @@ class LCTransformerClassifier(nn.Module):
 
         self.debug = debug
 
-        self.learnable_length = learnable_length
-
         self.model_name = model_name
         self.cache_dir = cache_dir
         self.num_classes = num_classes
@@ -182,8 +180,10 @@ class LCTransformerClassifier(nn.Module):
         print("self.class_weights:", self.class_weights)
 
         # --------------------------------------------------------------
-        # Set up the tokenizer and vocab info to use for input_id validation in forward method
-        # -------------------------------------------------------------- 
+        #
+        # set up the tokenizer and vocab info to use for input_ind 
+        # validation in forward method
+        # 
         self.tokenizer = lc_tokenizer.tokenizer
         print("self.tokenizer:\n", self.tokenizer)
 
@@ -191,10 +191,10 @@ class LCTransformerClassifier(nn.Module):
         print("self.vocab_size:", self.vocab_size)
         self.vocab = self.tokenizer.get_vocab()
         self.vocab_set = set(self.vocab.values())
-       
+        #
         # --------------------------------------------------------------
+
         # Loss function setup
-        # --------------------------------------------------------------
         if (self.class_weights is not None):
             print("self.class_weights.shape:", self.class_weights.shape)
             if (self.debug):
@@ -217,46 +217,15 @@ class LCTransformerClassifier(nn.Module):
                 self.loss_fn = nn.CrossEntropyLoss()
             else:
                 raise ValueError("class_type must be 'single-label' or 'multi-label'")
+            
         print("loss_fn:", self.loss_fn)
 
-        # --------------------------------------------------------------
-        # Transformer model setup (optional, only if model_name is provided)
-        # --------------------------------------------------------------
-        if model_name is not None:
-            print(f"model_name provided ({self.model_name}), initiating pretrained_embeddings layer...")
-            self.pretrained_embeddings = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-            #print("self.pretrained_embeddings:\n", self.pretrained_embeddings)
+        # Load Transformer Model
+        self.l1 = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        #print("self.l1:\n", self.l1)
 
-            self.pretrained_length = self.pretrained_embeddings.config.hidden_size
-
-            self.hidden_size = self.pretrained_embeddings.config.hidden_size
-            
-        else:
-            print("no model name, pretrained_embeddings set to None")
-            self.pretrained_embeddings = None
-            self.pretrained_length = 0
-            self.hidden_size = 0
-
+        self.hidden_size = self.l1.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
-
-
-        # --------------------------------------------------------------
-        # Additional learnable embedding layer
-        # --------------------------------------------------------------
-        if self.learnable_length > 0:
-            self.learnable_embeddings = nn.Embedding(self.vocab_size, self.learnable_length)
-            nn.init.xavier_uniform_(self.learnable_embeddings.weight)
-            print(f"learnable embedding layer initialized: vocab_size={self.vocab_size}, learnable_length={self.learnable_length}")
-        else:
-            self.learnable_embeddings = None
-            self.learnable_length = 0
-
-
-        self.embedding_length = self.learnable_length + self.pretrained_length
-        assert self.embedding_length > 0, '0-size embeddings'
-
-
-
 
         self.combined_size = self.hidden_size                   # default size
 
@@ -286,7 +255,7 @@ class LCTransformerClassifier(nn.Module):
 
             """
             # Learnable weight for TCE embeddings
-            self.tce_weight = nn.Parameter(torch.tensor([tce_weight_init], device=self.pretrained_embeddings.device))
+            self.tce_weight = nn.Parameter(torch.tensor([tce_weight_init], device=self.l1.device))
             print(f"self.tce_weight initialized to {tce_weight_init}, self.tce_weight:", self.tce_weight)
             """
 
@@ -327,7 +296,7 @@ class LCTransformerClassifier(nn.Module):
         print("Normalizing TCE matrix to align with model embedding space...")
 
         # Ensure all tensors are on the same device
-        embedding_layer = self.pretrained_embeddings.get_input_embeddings()
+        embedding_layer = self.l1.get_input_embeddings()
         embedding_mean = embedding_layer.weight.mean(dim=0).to(tce_matrix.device)
         embedding_std = embedding_layer.weight.std(dim=0).to(tce_matrix.device)
 
@@ -381,7 +350,7 @@ class LCTransformerClassifier(nn.Module):
                 f"(total {len(invalid_tokens)}) out of tokenizer vocabulary size {len(self.vocab_set)}."
             )
 
-        output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         hidden_states = output[0]
 
         if self.supervised and self.tce_layer:
@@ -443,7 +412,7 @@ class LCTransformerClassifier(nn.Module):
         print("Validating TCE alignment...")
 
         # Ensure the TCE matrix and embedding layer have matching vocab size
-        model_vocab_size, model_embedding_dim = self.pretrained_embeddings.get_input_embeddings().weight.shape
+        model_vocab_size, model_embedding_dim = self.l1.get_input_embeddings().weight.shape
         tce_vocab_size, num_classes = self.tce_matrix.shape
 
         print(f"Model vocab size: {model_vocab_size}, embedding dimension: {model_embedding_dim}")
@@ -504,7 +473,7 @@ class LCTransformerClassifier(nn.Module):
         """
         Returns the mean and standard deviation of the model's embedding layer.
         """
-        embedding_layer = self.pretrained_embeddings.get_input_embeddings()
+        embedding_layer = self.l1.get_input_embeddings()
         embedding_mean = embedding_layer.weight.mean(dim=0).detach().cpu()
         embedding_std = embedding_layer.weight.std(dim=0).detach().cpu()
 
@@ -600,10 +569,10 @@ class LCTransformerClassifier(nn.Module):
 
         if not base:
             # Freeze all layers in the base transformer model
-            for param in self.pretrained_embeddings.parameters():
+            for param in self.l1.parameters():
                 param.requires_grad = False
         else:
-            for param in self.pretrained_embeddings.parameters():
+            for param in self.l1.parameters():
                 param.requires_grad = True
             print("base model is trainable:")
 
@@ -619,14 +588,14 @@ class LCTransformerClassifier(nn.Module):
         """
         Returns the dimensions of the embedding layer as (hidden_size, num_classes).
         """
-        return self.pretrained_embeddings.embeddings.word_embeddings.weight.shape
+        return self.l1.embeddings.word_embeddings.weight.shape
 
 
     def _get_embeddings(self):
         """
         Returns embedding layer.
         """
-        return self.pretrained_embeddings.embeddings.word_embeddings
+        return self.l1.embeddings.word_embeddings
 
 
     def compute_loss(self, logits, labels):
@@ -788,7 +757,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
     def show_params(self):
 
         print("base HF model layer parameters...")
-        for name, param in self.pretrained_embeddings.named_parameters():
+        for name, param in self.l1.named_parameters():
             print(f"  {name}: requires_grad={param.requires_grad}")
 
         print("CNN layer parameters...")
@@ -907,13 +876,13 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
         """
         Override to get embedding dimensions from XLNet's word embeddings.
         """
-        return self.pretrained_embeddings.word_embedding.weight.shape  # XLNet uses `word_embedding`
+        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
     
     def _get_embeddings(self):
         """
         Override to get embedding layer for XLNet model.
         """
-        return self.pretrained_embeddings.word_embedding           # XLNet uses `word_embedding`
+        return self.l1.word_embedding           # XLNet uses `word_embedding`
    
 
 class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
@@ -943,13 +912,13 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
         """
         Override to get embedding dimensions from GPT2's word embeddings.
         """
-        return self.pretrained_embeddings.wte.weight.shape  # GPT2 uses `wte`
+        return self.l1.wte.weight.shape  # GPT2 uses `wte`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from GPT2 model.
         """
-        return self.pretrained_embeddings.wte      # GPT2 uses `wte`
+        return self.l1.wte      # GPT2 uses `wte`
 
 
 
@@ -993,7 +962,7 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
         return new_hidden_state
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
+        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
 
         # Pass through LSTM
@@ -1021,15 +990,15 @@ class LC_LSTM_BERT_Classifier(LCTransformerClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, hidden_size=128, debug=False):
         super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.pretrained_embeddings = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.pretrained_embeddings.config.hidden_size
+        self.l1 = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
 
         # LSTM-based projection
         self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
         self.classifier = nn.Linear(hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
+        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
 
         # Pass through LSTM
@@ -1066,13 +1035,13 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
     def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
 
         super().__init__(model_name, cache_dir, num_classes, class_type, debug)
-        self.pretrained_embeddings = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.pretrained_embeddings.config.hidden_size
+        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.l1.config.hidden_size
         
         self.classifier = nn.Linear(self.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
+        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = output[0][:, 0]  # CLS token representation
         logits = self.classifier(self.dropout(pooled_output))
 
@@ -1113,13 +1082,13 @@ class LCLinearGPT2Classifier(LCLinearTransformerClassifier):
         """
         Override to get embedding dimensions from GPT2's word embeddings.
         """
-        return self.pretrained_embeddings.wte.weight.shape  # GPT2 uses `wte`
+        return self.l1.wte.weight.shape  # GPT2 uses `wte`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from GPT2 model.
         """
-        return self.pretrained_embeddings.wte      # GPT2 uses `wte`
+        return self.l1.wte      # GPT2 uses `wte`
 
 class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
 
@@ -1130,13 +1099,13 @@ class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
         """
         Override to get embedding dimensions from XLNet's word embeddings.
         """
-        return self.pretrained_embeddings.word_embedding.weight.shape  # XLNet uses `word_embedding`
+        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from XLNet model.
         """
-        return self.pretrained_embeddings.word_embedding  # XLNet uses `word_embedding`
+        return self.l1.word_embedding  # XLNet uses `word_embedding`
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------
 

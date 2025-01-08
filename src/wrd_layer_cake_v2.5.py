@@ -28,9 +28,9 @@ from util.metrics import *
 VECTOR_CACHE = '../.vector_cache'
 
 # batch sizes for pytorch encoding routines
-DEFAULT_CPU_BATCH_SIZE = 8
-DEFAULT_GPU_BATCH_SIZE = 8
-DEFAULT_MPS_BATCH_SIZE = 8
+DEFAULT_CPU_BATCH_SIZE = 16
+DEFAULT_GPU_BATCH_SIZE = 16
+DEFAULT_MPS_BATCH_SIZE = 16
 
 
 
@@ -181,7 +181,7 @@ def embedding_matrix(dataset, pretrained, vocabsize, word2index, out_of_vocabula
         pretrained_embeddings = [emb.to(opt.device) for emb in pretrained_embeddings]
         pretrained_embeddings = torch.cat(pretrained_embeddings, dim=1)
 
-    return pretrained_embeddings, WCE, sup_range, dynamic_vocabsize
+    return pretrained_embeddings, sup_range, dynamic_vocabsize
 
 
 def init_optimizer(model, lr, weight_decay):
@@ -293,12 +293,6 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
 def main(opt):
 
-    program = 'wrd_layer_cake'
-    version = '2.5'
-
-    print(f'\n\t--- WORD_LAYER_CAKE Version: {version} ---')
-    print()
-
     # initialize logging and other system run variables
     already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(opt, program=program, version=version)
 
@@ -358,20 +352,8 @@ def main(opt):
     # 
     # compute the embedding matrix
     #
-    if pt_model is not None:
-        pretrained_embeddings, WCE, sup_range, vocabsize = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
-        print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
-        print("WCE:", type(WCE), WCE.shape)
-        print("sup_range:", sup_range)    
-    else:
-        WCE = None
-        pretrained_embeddings = None
-        sup_range = None
-        print("pretrained_embeddings: None")
-        print("WCE: None")
+    pretrained_embeddings, sup_range, vocabsize = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
     
-    print("vocabsize:", vocabsize)
-
     #
     # if specified, show the cl;ass distribution
     # especially helpful for multi-label datasets
@@ -399,7 +381,6 @@ def main(opt):
             )
     
         print("\n")
-
 
     # Initialize the model
     lc_model, embedding_sizeX, embedding_sizeY, lrn_sizeX, lrn_sizeY = init_Net(
@@ -473,7 +454,14 @@ def main(opt):
 
 if __name__ == '__main__':
 
+    program = 'wrd_layer_cake'
+    version = '2.5'
+
+    print(f'\t--- WORD_LAYER_CAKE Version: {version} ---')
+
     available_datasets = Dataset.dataset_available
+    print("available_datasets:", available_datasets)
+
     available_dropouts = {'sup','none','full','learn'}
 
     # Training settings

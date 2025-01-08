@@ -276,7 +276,7 @@ def get_language_model_type(embeddings, model_name=None):
     elif embeddings in ['llama', 'gpt2']:
         return 'transformer:token:autoregressive:unidirectional:causal'
     else:
-        return 'static:word:co-occurrence:global'  # Default to word embeddings
+        return 'NA'  # Default to word embeddings
 
 
 

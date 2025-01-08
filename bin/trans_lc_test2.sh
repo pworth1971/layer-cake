@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v13.3.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v13.4.py"
 
 # Network types
 network_types=(
