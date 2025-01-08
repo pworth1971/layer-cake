@@ -679,17 +679,28 @@ class Dataset:
         Dataset
             The loaded or newly created Dataset object.
         """
-        model_type = pt_model.get_type()
-        model_name = pt_model.get_model()
-        pickle_filename = f"{name}.{vtype}.{model_type}.{model_name}.pickle"
-        pickle_path = os.path.join(pickle_dir, pickle_filename) if pickle_dir else None
+        if (pt_model is not None):
+            model_type = pt_model.get_type()
+            model_name = pt_model.get_model()
+        
+            pickle_filename = f"{name}.{vtype}.{model_type}.{model_name}.pickle"
+            pickle_path = os.path.join(pickle_dir, pickle_filename) if pickle_dir else None
 
-        print(f'\n\tloading dataset: {name}, vtype: {vtype}, pt_type: {model_type}, pt_model: {model_name}, pickle_path: {pickle_path}')
+            print(f'\n\tloading dataset: {name}, vtype: {vtype}, pt_type: {model_type}, pt_model: {model_name}, pickle_path: {pickle_path}')
 
-        # Get the tokenizer from the pretrained model
-        tokenizer = pt_model.get_tokenizer()
+            # Get the tokenizer from the pretrained model
+            tokenizer = pt_model.get_tokenizer()
+
+        else:
+            pickle_filename = f"{name}.{vtype}.na.na.pickle"
+            pickle_path = os.path.join(pickle_dir, pickle_filename) if pickle_dir else None
+
+            print(f'\n\tloading dataset: {name}, vtype: {vtype}, pt_type: na, pt_model: na, pickle_path: {pickle_path}')
+
+            tokenizer = None
+
         #print("tokenizer:\n", tokenizer)
-
+        
         if pickle_path:
             if os.path.exists(pickle_path):
                 print(f'loading pickled dataset from {pickle_path}')

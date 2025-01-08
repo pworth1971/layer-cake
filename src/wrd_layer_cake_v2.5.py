@@ -206,25 +206,8 @@ def load_pt_model(opt):
         return Word2VecEmbeddings(path=opt.word2vec_path+WORD2VEC_MODEL, limit=1000000)
     elif opt.pretrained == 'fasttext':
         return FastTextEmbeddings(path=opt.fasttext_path+FASTTEXT_MODEL, limit=1000000)
-    else:
-        raise ValueError(f"Unsupported pretrained model type: {opt.pretrained}")
-
-    """
-    elif opt.pretrained == 'bert':
-        return BERTEmbeddings(device=opt.device, batch_size=opt.batch_size, path=opt.bert_path)
-    elif opt.pretrained == 'roberta':
-        return RoBERTaEmbeddings(path=opt.roberta_path)
-    elif opt.pretrained == 'distilbert':
-        return DistilBERTEmbeddings(path=opt.distilbert_path)
-    elif opt.pretrained == 'xlnet':
-        return XLNetEmbeddings(path=opt.xlnet_path)
-    elif opt.pretrained == 'gpt2':
-        return GPT2Embeddings(path=opt.gpt2_path)
-    elif opt.pretrained == 'llama':
-        return LlamaEmbeddings(path=opt.llama_path)
-    """
-
-
+    elif opt.pretrained is None:
+        return None
 
 
 def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name):
@@ -375,14 +358,18 @@ def main(opt):
     # 
     # compute the embedding matrix
     #
-    pretrained_embeddings, WCE, sup_range, vocabsize = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
-
-    print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
-    if (WCE is not None):
+    if pt_model is not None:
+        pretrained_embeddings, WCE, sup_range, vocabsize = embedding_matrix(dataset, pt_model, vocabsize, word2index, out_of_vocabulary, opt)
+        print("pretrained_embeddings:", type(pretrained_embeddings), pretrained_embeddings.shape)
         print("WCE:", type(WCE), WCE.shape)
+        print("sup_range:", sup_range)    
     else:
+        WCE = None
+        pretrained_embeddings = None
+        sup_range = None
+        print("pretrained_embeddings: None")
         print("WCE: None")
-    print("sup_range:", sup_range)
+    
     print("vocabsize:", vocabsize)
 
     #
