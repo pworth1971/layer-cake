@@ -526,7 +526,7 @@ def parse_args():
                              f'does not apply dropout (same as "sup" with no supervised embeddings), "full" which '
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
-    parser.add_argument('--tunable', action='store_true', default=False,
+    parser.add_argument('--tunable', action='store_true', default=True,
                         help='Whether or not to set pretrained embeddings (as well as classifier layers), are tunable. Default False, i.e., static)')
     """
     parser.add_argument('--tunable', type=str, default=None, metavar='str',
@@ -785,6 +785,47 @@ if __name__ == "__main__":
         debug=True
     )    
 
+    #
+    # if specified, show the cl;ass distribution
+    # especially helpful for multi-label datasets
+    # where the class is unevenly distributed and hence
+    # affects micro-f1 scores out of testing (with smaller 
+    # samples where under represented classes in training 
+    # are further underrepresented in the test dataset)
+    #
+    if (args.show_dist):
+
+        train_cls_wghts = show_class_distribution(
+            labels=labels_train, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset+':train'
+            )
+        
+        """
+        val_cls_wghts = show_class_distribution(
+            labels=labels_val, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset+':val'
+            )
+        
+        test_cls_wghts = show_class_distribution(
+            labels=labels_test, 
+            target_names=target_names, 
+            class_type=class_type, 
+            dataset_name=args.dataset+':test'
+            )
+        """
+
+    if (args.weighted):
+        print("computing class weights for classifier loss function...")
+        class_weights = lc_class_weights(labels_train, task_type=class_type)
+    else:
+        print("--- not using class weights... ---")
+        class_weights = None
+
+        
     # -----------------------------------------------------------------------------------------------
     # 
     # compute supervised embeddings if need be by calling compute_supervised_embeddings
@@ -835,45 +876,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------------------------------
 
 
-    #
-    # if specified, show the cl;ass distribution
-    # especially helpful for multi-label datasets
-    # where the class is unevenly distributed and hence
-    # affects micro-f1 scores out of testing (with smaller 
-    # samples where under represented classes in training 
-    # are further underrepresented in the test dataset)
-    #
-    if (args.show_dist):
-
-        train_cls_wghts = show_class_distribution(
-            labels=labels_train, 
-            target_names=target_names, 
-            class_type=class_type, 
-            dataset_name=args.dataset+':train'
-            )
-        
-        """
-        val_cls_wghts = show_class_distribution(
-            labels=labels_val, 
-            target_names=target_names, 
-            class_type=class_type, 
-            dataset_name=args.dataset+':val'
-            )
-        
-        test_cls_wghts = show_class_distribution(
-            labels=labels_test, 
-            target_names=target_names, 
-            class_type=class_type, 
-            dataset_name=args.dataset+':test'
-            )
-        """
-
-    if (args.weighted):
-        print("computing class weights for classifier loss function...")
-        class_weights = lc_class_weights(labels_train, task_type=class_type)
-    else:
-        print("--- not using class weights... ---")
-        class_weights = None
+    
 
     
     print("\n\t building model...")
