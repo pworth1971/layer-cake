@@ -294,7 +294,7 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 def main(opt):
 
     program = 'wrd_layer_cake'
-    version = '2.4'
+    version = '2.5'
 
     print(f'\n\t--- WORD_LAYER_CAKE Version: {version} ---')
     print()
