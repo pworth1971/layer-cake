@@ -67,14 +67,17 @@ class NeuralClassifier(nn.Module):
             tuple: A tuple containing the mean and standard deviation tensors of the embedding weights.
         """
         try:
-            # Access the weights of the pretrained embeddings
-            embedding_weights = self.embed.pretrained_embeddings.weight
-            
-            # Compute mean and standard deviation
-            embedding_mean = embedding_weights.mean().item()
-            embedding_std = embedding_weights.std().item()
+            if self.embed.pretrained_embeddings is not None:
+                # Access the weights of the pretrained embeddings
+                embedding_weights = self.embed.pretrained_embeddings.weight
+                
+                # Compute mean and standard deviation
+                embedding_mean = embedding_weights.mean().item()
+                embedding_std = embedding_weights.std().item()
 
-            return embedding_mean, embedding_std
+                return embedding_mean, embedding_std
+            else:
+                return None, None
 
         except AttributeError as e:
             print(f"Error: {e}")

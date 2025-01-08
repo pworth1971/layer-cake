@@ -400,16 +400,12 @@ def main(opt):
     emb_size_str = f'({embedding_sizeX}, {embedding_sizeY})'
     print("emb_size:", emb_size_str)
     
-    emb_mean, emb_std = lc_model.get_embedding_stats()
-    print(f"Embedding Mean:Std: {emb_mean}:{emb_std}")
-
-    """
     lrn_size_str = f'({lrn_sizeX}, {lrn_sizeY})'
     print("lrn_size:", lrn_size_str)
-    emb_size_str = f'{emb_size_str}:{lrn_size_str}'
-    print("emb_size_str:", emb_size_str)
-    """
-
+    
+    if opt.pretrained:
+        emb_mean, emb_std = lc_model.get_embedding_stats()
+    
     # train-validate
     tinit = time()
     create_if_not_exist(opt.checkpoint_dir)
