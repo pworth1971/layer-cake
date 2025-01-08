@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Static configurable variables
-PROGRAM_NAME="python ../src/trans_layer_cake_v13.4.py"
+PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py"
 
 # Network types
 network_types=(
@@ -78,6 +78,7 @@ embedding_args=(
 # CNN Model Testing
 #
 
+
 dataset="--dataset reuters21578"
 
 MODEL="--net cnn"
@@ -108,7 +109,7 @@ for i in "${!embedding_names[@]}"; do
     #
     echo
     echo "Running: $PROGRAM_NAME    $MODEL  $channels --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
     echo
 
 
@@ -153,6 +154,7 @@ channels="--channels 128"
 #MODEL="--net attn"
 #attn_hidden="--hidden 1024"
 
+
 for i in "${!embedding_names[@]}"; do
     
     embed_name="${embedding_names[$i]}"
@@ -171,7 +173,7 @@ for i in "${!embedding_names[@]}"; do
     #
     echo
     echo "Running: $PROGRAM_NAME    $MODEL  $channels --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
     echo
 
 
@@ -211,6 +213,7 @@ channels="--channels 128"
 
 #MODEL="--net attn"
 #attn_hidden="--hidden 256"
+
 
 for i in "${!embedding_names[@]}"; do
     
@@ -271,6 +274,7 @@ channels="--channels 256"
 
 #MODEL="--net attn"
 #attn_hidden="--hidden 1024"
+
 
 for i in "${!embedding_names[@]}"; do
     

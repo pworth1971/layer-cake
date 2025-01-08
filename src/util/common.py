@@ -21,6 +21,7 @@ from util.csv_log import CSVLog
 from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
 from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
 from embedding.pretrained import XLNET_MODEL, GPT2_MODEL
+from embedding.pretrained import MODEL_MAP
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -133,8 +134,12 @@ def initialize_testing(args, program, version):
         mode = f'unsupervised'
 
     # get the path to the embeddings
-    emb_path = get_embeddings_path(embeddings, args)
-    print("emb_path: ", {emb_path})
+    if pretrained:
+        emb_path = get_embeddings_path(embeddings, args)
+        print("emb_path: ", {emb_path})
+    else:
+        emb_path = None
+        print("emb_path: None")
 
     system = SystemResources()
     print("system:\n", system)
@@ -207,6 +212,11 @@ def initialize_testing(args, program, version):
 
     return already_modelled, logger, representation, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
 
+
+def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
+    model_name = MODEL_MAP.get(pretrained, pretrained)
+    model_path = os.path.join(cache_dir, pretrained)
+    return model_name, model_path
 
 
 def get_embeddings_path(pretrained, args):

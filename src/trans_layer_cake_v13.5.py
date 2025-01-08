@@ -36,10 +36,9 @@ from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import compute_tces
-
-from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier
-from model.classification import LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier, LCCNNTransformerClassifier
-
+from embedding.pretrained import MODEL_MAP
+from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
+from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearRoBERTaClassifier, LCLinearXLNetClassifier, LCLinearGPT2Classifier
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -67,6 +66,16 @@ DEFAULT_MAX_CUDA_BATCH_SIZE = 32
 
     
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Get the full model identifier and load from local directory
+def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
+
+    model_name = MODEL_MAP.get(pretrained, pretrained)
+    model_path = os.path.join(cache_dir, pretrained)
+
+    return model_name, model_path
+    
 
 
 class LCDataset(Dataset):
@@ -307,7 +316,7 @@ def compute_dataset_vocab(train_texts, val_texts, test_texts, tokenizer):
 
 
 
-def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, class_weights, args, tce_matrix=None, learnable_length=0, debug=False):
+def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, class_weights, args, tce_matrix=None, debug=False):
     """
     build classifier model based on the specified model_name and model_path
     
@@ -320,49 +329,26 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
         -- class_weights: class weights for loss function
         -- args: command line arguments
         -- tce_matrix: tensor of class embeddings
-        -- learnable_length: length of learnable embeddings
         -- debug: turn on debug mode
 
     Returns:
         -- lc_model: the model to use for classification
     """
 
-    print(f"building classifier model... pretrained: {args.pretrained}, model_name: {model_name}, model_path: {model_path}, \
-          num_classes: {num_classes}, learnable_length: {learnable_length}, class_type: {class_type}, debug: {debug}")
+    print(f"building classifier model... pretrained: {args.pretrained}, model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}")
 
     if args.net == 'cnn':
         
         if (debug):
             print("using CNN classifier...")
         
-        if (args.pretrained is None):
-            cnn_model = LCCNNTransformerClassifier(model_class=None,
-                                                    model_name=model_name, 
-                                                    cache_dir=model_path, 
-                                                    num_classes=num_classes,
-                                                    class_type=class_type, 
-                                                    lc_tokenizer=lc_tokenizer, 
-                                                    num_channels=args.channels, 
-                                                    learnable_length=learnable_length,
-                                                    supervised=args.supervised, 
-                                                    tce_matrix=tce_matrix, 
-                                                    class_weights=class_weights,
-                                                    normalize_tces=args.normalize_tces, 
-                                                    trainable_tces=args.tunable_tces,
-                                                    tce_weight_init=args.tce_weight_init,
-                                                    dropout_rate=args.dropprob, 
-                                                    comb_method=args.sup_mode, 
-                                                    debug=debug
-                                                    )
-
-        elif args.pretrained == 'bert':
+        if args.pretrained == 'bert':
             cnn_model = LCCNNBERTClassifier(model_name=model_name, 
                                             cache_dir=model_path, 
                                             num_classes=num_classes,
                                             class_type=class_type, 
                                             lc_tokenizer=lc_tokenizer, 
                                             num_channels=args.channels, 
-                                            learnable_length=learnable_length,
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
@@ -380,7 +366,6 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             class_type=class_type, 
                                             lc_tokenizer=lc_tokenizer, 
                                             num_channels=args.channels, 
-                                            learnable_length=learnable_length,
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
@@ -398,7 +383,6 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             class_type=class_type, 
                                             lc_tokenizer=lc_tokenizer, 
                                             num_channels=args.channels, 
-                                            learnable_length=learnable_length,
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
@@ -416,7 +400,6 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             class_type=class_type, 
                                             lc_tokenizer=lc_tokenizer, 
                                             num_channels=args.channels, 
-                                            learnable_length=learnable_length,
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
@@ -434,7 +417,6 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             class_type=class_type, 
                                             lc_tokenizer=lc_tokenizer, 
                                             num_channels=args.channels, 
-                                            learnable_length=learnable_length,
                                             supervised=args.supervised, 
                                             tce_matrix=tce_matrix, 
                                             class_weights=class_weights,
@@ -536,6 +518,8 @@ def parse_args():
                         help='Patience for early stopping')
     parser.add_argument('--dropprob', type=float, default=0.5, metavar='[0.0, 1.0]', 
                         help='dropout probability for classifier head (default: 0.5)')
+    parser.add_argument('--learnable', type=int, default=0, metavar='int', 
+                        help='dimension of the learnable embeddings (default 0)')
     parser.add_argument('--droptype', type=str, default='sup', metavar='DROPTYPE',
                         help=f'chooses the type of dropout to apply after the embedding layer. Default is "sup" which '
                              f'only applies to word-class embeddings (if present). Other options include "none" which '
@@ -554,9 +538,7 @@ def parse_args():
     parser.add_argument('--emb-filter', action='store_true', default=True,
                         help='filter model embeddings to align with dataset vocabulary (default False)')
     """
-    parser.add_argument('--learnable', type=int, default=0, metavar='int',
-                        help='dimension of the learnable embeddings (default 0)')
-    
+
     # TCE params
     parser.add_argument('--supervised', action='store_true', 
                         help='Use supervised embeddings (TCEs')
@@ -591,39 +573,30 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '13.4'
+    version = '13.3.3'
 
     print(f'\t--- TRANS_LAYER_CAKE Version: {version} ---')
 
     args = parse_args()
     print("args:", args)
     
-    #
     # Get the full model identifier and cache directory path for tokenizer/model
-    # NB: defaults to BERT if pretrained is None
-    #
-    if (args.pretrained):
-        model_name, model_path = get_model_identifier(args.pretrained)
-    
-        print(f"model_name: {model_name}, model_path: {model_path}")
+    model_name, model_path = get_model_identifier(args.pretrained)
+    print("model_name:", model_name)
+    print("model_path:", model_path)
 
-        if (args.pretrained == 'bert'):
-            args.bert_path = model_path
-        elif (args.pretrained == 'roberta'):
-            args.roberta_path = model_path
-        elif (args.pretrained == 'distilbert'):
-            args.distilbert_path = model_path
-        elif (args.pretrained == 'xlnet'):
-            args.xlnet_path = model_path
-        elif (args.pretrained == 'gpt2'):
-            args.gpt2_path = model_path
-        else:
-            raise ValueError("Unsupported pretrained model:", args.pretrained)
+    if (args.pretrained == 'bert'):
+        args.bert_path = model_path
+    elif (args.pretrained == 'roberta'):
+        args.roberta_path = model_path
+    elif (args.pretrained == 'distilbert'):
+        args.distilbert_path = model_path
+    elif (args.pretrained == 'xlnet'):
+        args.xlnet_path = model_path
+    elif (args.pretrained == 'gpt2'):
+        args.gpt2_path = model_path
     else:
-        model_name = None
-        model_path = None
-
-        print(f"model_name: None, model_path: None")
+        raise ValueError("Unsupported pretrained model:", args.pretrained)
     
     print("args:", args)    
 
@@ -901,6 +874,10 @@ if __name__ == "__main__":
     else:
         tce_matrix = None
     # -----------------------------------------------------------------------------------------------
+
+
+    
+
     
     print("\n\t building model...")
 
@@ -911,10 +888,9 @@ if __name__ == "__main__":
         class_type=class_type,
         lc_tokenizer=lc_tokenizer,
         class_weights=class_weights,
-        tce_matrix=tce_matrix,
-        learnable_length=args.learnable,
         args=args,
-        debug=True
+        tce_matrix=tce_matrix,
+        #debug=True
         )
 
     lc_model = lc_model.to(device)
@@ -927,10 +903,8 @@ if __name__ == "__main__":
         # model is tunable (requires_grad=True) by default
         print(f"tunable model...")
 
-    """
     print("\n\t model params...")
     lc_model.show_params()
-    """
     
     if (args.supervised):
 

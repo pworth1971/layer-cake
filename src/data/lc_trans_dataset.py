@@ -34,8 +34,7 @@ from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
 from data.arxiv_reader import fetch_arxiv, sci_field_map
 
-from util.common import PICKLE_DIR, VECTOR_CACHE, DATASET_DIR, OUT_DIR, preprocess
-
+from util.common import PICKLE_DIR, VECTOR_CACHE, DATASET_DIR, OUT_DIR, preprocess, get_model_identifier
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -870,6 +869,10 @@ class LCTokenizer:
         self.remove_special_tokens = remove_special_tokens
         self.padding = padding
         self.truncation = truncation
+        
+        if (model_name is None) or (model_path is None):
+            print("model_name not provided, using default (BERT) tokenizer...")
+            self.model_name, self.model_path = get_model_identifier('bert')
         
         # Debugging information
         print("LCTokenizer initialized with the following parameters:")
