@@ -464,7 +464,6 @@ class LCTransformerClassifier(nn.Module):
 
 
 
-
     def get_model_embedding_stats(self):
         """
         Returns the mean and standard deviation of the model's embedding layer.
@@ -498,10 +497,11 @@ class LCTransformerClassifier(nn.Module):
             # Freeze all layers in the base transformer model
             for param in self.pretrained_embeddings.parameters():
                 param.requires_grad = False
+            print("pretrained embedding layers are frozen.")
         else:
             for param in self.pretrained_embeddings.parameters():
                 param.requires_grad = True
-            print("base model is trainable:")
+            print("pretrained embedding layers are trainable:")
 
 
     def xavier_uniform(self):
@@ -681,7 +681,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         #
         # call base class with tunable params
         #
-        super()._finetune(base=base)
+        #super()._finetune(base=base)
 
 
     def show_params(self):
@@ -912,6 +912,42 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
         # Step 4: Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
+
+
+    def finetune(self, projection=False, classifier=False, base=False):
+        """
+        Adjust gradient settings for the model layers:
+        - projection: If True, enable gradients for the ATTNProjection layer.
+        - classifier: If True, enable gradients for the classification layer.
+        - base: If True, enable gradients for the base transformer model.
+        """
+        print(f"finetuning model...: projection={projection}, classifier={classifier}, base={base}")
+
+        # Adjust ATTNProjection layer gradients
+        if projection:
+            for param in self.projection.parameters():
+                param.requires_grad = True
+            print("ATTNProjection layer is now trainable.")
+        else:
+            for param in self.projection.parameters():
+                param.requires_grad = False
+            print("ATTNProjection layer is frozen.")
+
+        # Adjust classifier layer gradients
+        if classifier:
+            for param in self.label.parameters():
+                param.requires_grad = True
+            print("Classifier layer is now trainable.")
+        else:
+            for param in self.label.parameters():
+                param.requires_grad = False
+            print("Classifier layer is frozen.")
+
+        #
+        # call base class with tunable params
+        #
+        #super()._finetune(base=base)
+
 
 
     def show_params(self):

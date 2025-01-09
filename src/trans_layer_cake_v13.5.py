@@ -986,9 +986,17 @@ if __name__ == "__main__":
     lc_model = lc_model.to(device)
 
     if not args.tunable:
-        # model needs to be configured specifically to be static
-        lc_model.finetune(base=False, classifier=False, embedding=False)
-        print(f"static model...")
+
+        if (args.net == 'attn'):
+            # model needs to be configured specifically to be static
+            lc_model.finetune(base=False, classifier=False, projection=False)
+        elif (args.net == 'cnn'):
+            # model needs to be configured specifically to be static
+            lc_model.finetune(base=False, classifier=False, embedding=False)
+        else:
+            raise ValueError(f"Unsupported model type: {args.net}")
+        print(f"LC Model is now static (not tunable)...")
+
     else:
         # model is tunable (requires_grad=True) by default
         print(f"tunable model...")
