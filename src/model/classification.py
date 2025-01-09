@@ -171,6 +171,8 @@ class LCTransformerClassifier(nn.Module):
         self.normalize_tces = normalize_tces
         self.trainable_tces = trainable_tces
 
+        self.tce_weight_init = tce_weight_init
+
         self.debug = debug
 
         self.model_name = model_name
@@ -370,7 +372,7 @@ class LCTransformerClassifier(nn.Module):
             tce_embeddings = self.tce_layer(input_ids)
             if (self.debug):
                 print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
-                print("tce_weight:", self.tce_weight.item())
+                #print("tce_weight:", self.tce_weight.item())
     
             # combine hidden states with TCE embeddings
             if self.comb_method == "cat":
@@ -640,11 +642,11 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
         return {"loss": loss, "logits": logits}
 
 
-    def finetune(self, classifier=False, base=False):
+    def finetune(self, cnn=False, classifier=False, base=False):
         
         print(f"finetuning model...: classifier={classifier}, base={base}")
 
-        if not classifier:
+        if not cnn:
             # freeze CNN layer gradients            
             for param in self.conv1.parameters():
                 param.requires_grad = False
@@ -655,12 +657,6 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
             for param in self.conv3.parameters():
                 param.requires_grad = False
             print("CNN layers are frozen...")
-
-            # freeze classifier gradients
-            for param in self.classifier.parameters():
-                param.requires_grad = False
-            print("classifier layer now frozen...")
-
         else:        
             # finetune CNN layer gradients
             for param in self.conv1.parameters():
@@ -673,6 +669,12 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                 param.requires_grad = True
             print("CNN layers are tunable...")
 
+        if not classifier:
+            # freeze classifier gradients
+            for param in self.classifier.parameters():
+                param.requires_grad = False
+            print("classifier layer now frozen...")
+        else:
             # Enable gradients for the classifier layer
             for param in self.classifier.parameters():
                 param.requires_grad = True
@@ -680,6 +682,9 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
 
         #
         # call base class with tunable params
+        #
+        # TODO:
+        # "An error occurred during training: element 0 of tensors does not require grad and does not have a grad_fn"
         #
         #super()._finetune(base=base)
 
@@ -975,6 +980,9 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
 
         #
         # call base class with tunable params
+        #
+        # TODO: 
+        # "An error occurred during training: element 0 of tensors does not require grad and does not have a grad_fn"
         #
         #super()._finetune(base=base)
 

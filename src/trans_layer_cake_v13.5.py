@@ -980,19 +980,19 @@ if __name__ == "__main__":
         class_weights=class_weights,
         args=args,
         tce_matrix=tce_matrix,
-        debug=True
+        #debug=True
         )
 
     lc_model = lc_model.to(device)
 
     if not args.tunable:
 
-        if (args.net == 'attn'):
+        if (args.net == 'cnn'):
+            # model needs to be configured specifically to be static
+            lc_model.finetune(base=False, classifier=False, cnn=False)
+        elif (args.net == 'attn'):
             # model needs to be configured specifically to be static
             lc_model.finetune(base=False, classifier=False, lstm=False)
-        elif (args.net == 'cnn'):
-            # model needs to be configured specifically to be static
-            lc_model.finetune(base=False, classifier=False, embedding=False)
         else:
             raise ValueError(f"Unsupported model type: {args.net}")
         print(f"LC Model is now static (not tunable)...")

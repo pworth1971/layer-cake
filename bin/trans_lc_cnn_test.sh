@@ -97,10 +97,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -161,10 +161,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -221,10 +221,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -282,10 +282,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -347,10 +347,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -412,10 +412,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -477,10 +477,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -549,10 +549,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
