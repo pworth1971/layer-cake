@@ -51,22 +51,20 @@ datasets=(
 # NB: issues with Albert so leaving out. LlaMa has not been tested
 #
 embedding_names=(
+    "BERT"
 #    "XLNET"
     "DISTILBERT"
     "ROBERTA"
-    "BERT"
 #    "GPT2"
 )
 
 embedding_args=(    
+    "--pretrained bert"
 #    "--pretrained xlnet"
     "--pretrained distilbert"
     "--pretrained roberta"
-    "--pretrained bert"
 #    "--pretrained gpt2" 
 )
-
-
 
 
 

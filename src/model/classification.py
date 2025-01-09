@@ -67,14 +67,17 @@ class NeuralClassifier(nn.Module):
             tuple: A tuple containing the mean and standard deviation tensors of the embedding weights.
         """
         try:
-            # Access the weights of the pretrained embeddings
-            embedding_weights = self.embed.pretrained_embeddings.weight
-            
-            # Compute mean and standard deviation
-            embedding_mean = embedding_weights.mean().item()
-            embedding_std = embedding_weights.std().item()
+            if self.embed.pretrained_embeddings is not None:
+                # Access the weights of the pretrained embeddings
+                embedding_weights = self.embed.pretrained_embeddings.weight
+                
+                # Compute mean and standard deviation
+                embedding_mean = embedding_weights.mean().item()
+                embedding_std = embedding_weights.std().item()
 
-            return embedding_mean, embedding_std
+                return embedding_mean, embedding_std
+            else:
+                return None, None
 
         except AttributeError as e:
             print(f"Error: {e}")
@@ -147,7 +150,6 @@ class LCTransformerClassifier(nn.Module):
                 class_type: str,
                 lc_tokenizer: LCTokenizer,
                 class_weights: torch.Tensor = None,
-                learnable_length: int = 0,
                 supervised: bool = False,
                 tce_matrix: torch.Tensor = None,
                 comb_method: str = "cat",
@@ -158,7 +160,7 @@ class LCTransformerClassifier(nn.Module):
         
         super().__init__()
         
-        print(f'LCTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, learnable_length: {learnable_length}, debug: {debug}')
+        print(f'LCTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}')
 
         if (supervised):
             print(f'supervised: {supervised}, normalize_tces: {normalize_tces}, trainable_tces: {trainable_tces}, comb_method: {comb_method}, tce_weight_init: {tce_weight_init}')
@@ -180,10 +182,8 @@ class LCTransformerClassifier(nn.Module):
         print("self.class_weights:", self.class_weights)
 
         # --------------------------------------------------------------
-        #
-        # set up the tokenizer and vocab info to use for input_ind 
-        # validation in forward method
-        # 
+        # Set up the tokenizer and vocab info to use for input_id validation in forward method
+        # -------------------------------------------------------------- 
         self.tokenizer = lc_tokenizer.tokenizer
         print("self.tokenizer:\n", self.tokenizer)
 
@@ -191,10 +191,10 @@ class LCTransformerClassifier(nn.Module):
         print("self.vocab_size:", self.vocab_size)
         self.vocab = self.tokenizer.get_vocab()
         self.vocab_set = set(self.vocab.values())
-        #
+       
         # --------------------------------------------------------------
-
         # Loss function setup
+        # --------------------------------------------------------------
         if (self.class_weights is not None):
             print("self.class_weights.shape:", self.class_weights.shape)
             if (self.debug):
@@ -217,17 +217,20 @@ class LCTransformerClassifier(nn.Module):
                 self.loss_fn = nn.CrossEntropyLoss()
             else:
                 raise ValueError("class_type must be 'single-label' or 'multi-label'")
-            
         print("loss_fn:", self.loss_fn)
 
-        # Load Transformer Model
-        self.l1 = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        #print("self.l1:\n", self.l1)
+        # --------------------------------------------------------------
+        # Transformer model setup (optional, only if model_name is provided)
+        # --------------------------------------------------------------
+        
+        self.pretrained_embeddings = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        #print("self.pretrained_embeddings:\n", self.pretrained_embeddings)
 
-        self.hidden_size = self.l1.config.hidden_size
+        self.hidden_size = self.pretrained_embeddings.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
 
-        self.combined_size = self.hidden_size                   # default size
+        # initialize combined_size
+        self.combined_size = self.hidden_size       
 
         # Supervised TCE Handling
         if self.supervised and self.tce_matrix is not None:
@@ -255,7 +258,7 @@ class LCTransformerClassifier(nn.Module):
 
             """
             # Learnable weight for TCE embeddings
-            self.tce_weight = nn.Parameter(torch.tensor([tce_weight_init], device=self.l1.device))
+            self.tce_weight = nn.Parameter(torch.tensor([tce_weight_init], device=self.pretrained_embeddings.device))
             print(f"self.tce_weight initialized to {tce_weight_init}, self.tce_weight:", self.tce_weight)
             """
 
@@ -268,9 +271,9 @@ class LCTransformerClassifier(nn.Module):
             # Adjust combined size for concatenation
             # dot and add sizing taken care of by projection layer
             if self.comb_method == "cat":
-                self.combined_size = self.hidden_size + self.tce_matrix.size(1)  # Hidden size + num_classes
+                self.combined_size += self.tce_matrix.size(1)                   # combined_embedding size + num_classes
             else:
-                self.combined_size = self.hidden_size  # No size change for 'add' or 'dot'
+                pass                                                            # No size change for 'add' or 'dot'
 
         else:
             self.tce_layer = None
@@ -279,8 +282,6 @@ class LCTransformerClassifier(nn.Module):
         print(f"self.combined_size: {self.combined_size}")
 
         self.classifier = None                                      # To be initialized by child classes per model type
-
-
 
 
     def _normalize_tce(self, tce_matrix):
@@ -296,7 +297,7 @@ class LCTransformerClassifier(nn.Module):
         print("Normalizing TCE matrix to align with model embedding space...")
 
         # Ensure all tensors are on the same device
-        embedding_layer = self.l1.get_input_embeddings()
+        embedding_layer = self.pretrained_embeddings.get_input_embeddings()
         embedding_mean = embedding_layer.weight.mean(dim=0).to(tce_matrix.device)
         embedding_std = embedding_layer.weight.std(dim=0).to(tce_matrix.device)
 
@@ -318,6 +319,7 @@ class LCTransformerClassifier(nn.Module):
         print(f"Difference in std: {abs(tce_final_std - embedding_final_std):.6f}")
 
         return normalized_tce
+
 
 
     def forward(self, input_ids, attention_mask, labels=None):
@@ -350,9 +352,14 @@ class LCTransformerClassifier(nn.Module):
                 f"(total {len(invalid_tokens)}) out of tokenizer vocabulary size {len(self.vocab_set)}."
             )
 
-        output = self.l1(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+        # Step 1: Get transformer embeddings                
+        output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         hidden_states = output[0]
-
+        if (self.debug):
+            print("output:", type(output), len(output))
+            print("hidden_states:", type(hidden_states), hidden_states.shape)
+        
+        # Step 2: Add TCE embeddings if supervised mode is enabled
         if self.supervised and self.tce_layer:
             
             # get tce (supervised) embeddings
@@ -360,29 +367,7 @@ class LCTransformerClassifier(nn.Module):
             if (self.debug):
                 print("tce_embeddings:", type(tce_embeddings), tce_embeddings.shape)
                 print("tce_weight:", self.tce_weight.item())
-
-            """
-            # Apply weight to TCE embeddings
-            weighted_tce_embeddings = tce_embeddings * self.tce_weight
-            
-            #
-            # now we combine the tce embeddings with the hidden states 
-            # from the model to get the final embeddings
-            #
-            if self.comb_method == "cat":
-                hidden_states = torch.cat((hidden_states, weighted_tce_embeddings), dim=2)
-            elif self.comb_method == "add":
-                # Project TCE embeddings to match hidden size
-                tce_embeddings_projected = self.tce_projection(weighted_tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                hidden_states += tce_embeddings_projected
-            elif self.comb_method == "dot":
-                # Project TCE embeddings to match hidden size
-                tce_embeddings_projected = self.tce_projection(weighted_tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                hidden_states *= tce_embeddings_projected
-            else:
-                raise ValueError(f"Unsupported comb_method: {self.comb_method}")
-            """
-
+    
             # combine hidden states with TCE embeddings
             if self.comb_method == "cat":
                 # Concatenates the hidden_states and tce_embeddings along the last dimension (dim=2).
@@ -397,12 +382,12 @@ class LCTransformerClassifier(nn.Module):
                 hidden_states *= tce_embeddings_projected                       # Element-wise multiplies the projected TCE embeddings with the hidden_states.
             else:
                 raise ValueError(f"Unsupported comb_method: {self.comb_method}")
-
+    
         if (self.debug):
             print("hidden_states:", type(hidden_states), hidden_states.shape)
+        
+        return hidden_states            # Subclasses handle further processing
 
-        return hidden_states  # Subclasses handle further processing
-    
 
     def validate_tce_alignment(self):
         """
@@ -412,7 +397,7 @@ class LCTransformerClassifier(nn.Module):
         print("Validating TCE alignment...")
 
         # Ensure the TCE matrix and embedding layer have matching vocab size
-        model_vocab_size, model_embedding_dim = self.l1.get_input_embeddings().weight.shape
+        model_vocab_size, model_embedding_dim = self.pretrained_embeddings.get_input_embeddings().weight.shape
         tce_vocab_size, num_classes = self.tce_matrix.shape
 
         print(f"Model vocab size: {model_vocab_size}, embedding dimension: {model_embedding_dim}")
@@ -468,12 +453,11 @@ class LCTransformerClassifier(nn.Module):
         print("TCE alignment validation complete.")
 
 
-
     def get_model_embedding_stats(self):
         """
         Returns the mean and standard deviation of the model's embedding layer.
         """
-        embedding_layer = self.l1.get_input_embeddings()
+        embedding_layer = self.pretrained_embeddings.get_input_embeddings()
         embedding_mean = embedding_layer.weight.mean(dim=0).detach().cpu()
         embedding_std = embedding_layer.weight.std(dim=0).detach().cpu()
 
@@ -494,85 +478,16 @@ class LCTransformerClassifier(nn.Module):
         return tce_mean, tce_std
 
 
-
-
-    def _normalize_tce_old(self, tce_matrix, embedding_mean, embedding_std):
-        """
-        Normalize the TCE matrix to align with the transformer's embedding distribution.
-
-        Args:
-            tce_matrix: TCE matrix (vocab_size x num_classes).
-            embedding_mean: Mean of the transformer embeddings (1D tensor, size=model_dim).
-            embedding_std: Standard deviation of the transformer embeddings (1D tensor, size=model_dim).
-
-        Returns:
-            Normalized TCE matrix (vocab_size x num_classes).
-        """
-
-        print("normalizing tce matrix...")
-
-        print("embedding_mean:", embedding_mean.shape, embedding_mean.dtype)
-        print("embedding_std:", embedding_std.shape, embedding_std.dtype)
-
-        print(f"tce_matrix: {tce_matrix.shape}, {tce_matrix.dtype}")
-        #print("first row:", tce_matrix[0])
-        print(f"embedding_mean: {embedding_mean.shape}, {embedding_mean.dtype}")
-        #print(f'embedding_mean: {embedding_mean}')
-        print(f"embedding_std: {embedding_std.shape}, {embedding_std.dtype}")
-        #print(f'embedding_std: {embedding_std}')
-            
-        device = embedding_mean.device                      # Ensure all tensors are on the same device
-        tce_matrix = tce_matrix.to(device)
-
-        # 1 Normalize TCE matrix row-wise (i.e. ompute mean and std per row)
-        tce_mean = tce_matrix.mean(dim=1, keepdim=True)
-        tce_std = tce_matrix.std(dim=1, keepdim=True)
-        tce_std[tce_std == 0] = 1                           # Prevent division by zero
-
-        print(f"tce_mean: {tce_mean.shape}, {tce_mean.dtype}")
-        #print(f'tce_mean: {tce_mean}')
-        print(f"tce_std: {tce_std.shape}, {tce_std.dtype}")
-        #print(f'tce_std: {tce_std}')
-
-        normalized_tce = (tce_matrix - tce_mean) / tce_std
-
-        # 2. Scale to match embedding statistics
-        normalized_tce = normalized_tce * embedding_std.mean() + embedding_mean.mean()
-
-        """
-        
-        --
-        logic now handled via a projection layer for dot and add operations in init 
-        --
-
-        # 3. Project normalized TCE into the target dimension (e.g., 128)
-        projection = torch.nn.Linear(tce_matrix.size(1), target_dim, bias=False).to(device)
-        projected_tce = projection(normalized_tce)
-
-        if self.debug:
-            print(f"Projected TCE matrix: {projected_tce.shape}")
-
-        # check for Nan or Inf values after normalization
-        if torch.isnan(projected_tce).any() or torch.isinf(projected_tce).any():
-            print("[WARNING]: projected_tce contains NaN or Inf values after normalization.")
-            #raise ValueError("[ERROR] projected_tce contains NaN or Inf values after normalization.")
-
-        return projected_tce
-        """
-
-        return normalized_tce
-    
-
     def _finetune(self, base=False):
         
         print(f"finetuning model...: base={base}")
 
         if not base:
             # Freeze all layers in the base transformer model
-            for param in self.l1.parameters():
+            for param in self.pretrained_embeddings.parameters():
                 param.requires_grad = False
         else:
-            for param in self.l1.parameters():
+            for param in self.pretrained_embeddings.parameters():
                 param.requires_grad = True
             print("base model is trainable:")
 
@@ -588,14 +503,18 @@ class LCTransformerClassifier(nn.Module):
         """
         Returns the dimensions of the embedding layer as (hidden_size, num_classes).
         """
-        return self.l1.embeddings.word_embeddings.weight.shape
+
+        if (self.pretrained_embeddings is not None):
+            return self.pretrained_embeddings.embeddings.word_embeddings.weight.shape
+        else:
+            return (0, 0)
 
 
     def _get_embeddings(self):
         """
         Returns embedding layer.
         """
-        return self.l1.embeddings.word_embeddings
+        return self.pretrained_embeddings.embeddings.word_embeddings
 
 
     def compute_loss(self, logits, labels):
@@ -631,7 +550,6 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                  class_weights: torch.Tensor=None,
                  dropout_rate: float = 0.6, 
                  num_channels=256, 
-                 learnable_length=0,
                  supervised: bool = False, 
                  tce_matrix: torch.Tensor = None, 
                  comb_method: str = "cat",  
@@ -640,7 +558,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
                  tce_weight_init: float = 1.0,
                  debug=False):
 
-        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, learnable_length, supervised, tce_matrix, \
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, \
                          comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
         print(f"LCCNNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, num_channels: {num_channels}, debug: {debug}")
@@ -757,7 +675,7 @@ class LCCNNTransformerClassifier(LCTransformerClassifier):
     def show_params(self):
 
         print("base HF model layer parameters...")
-        for name, param in self.l1.named_parameters():
+        for name, param in self.pretrained_embeddings.named_parameters():
             print(f"  {name}: requires_grad={param.requires_grad}")
 
         print("CNN layer parameters...")
@@ -788,7 +706,6 @@ class LCCNNBERTClassifier(LCCNNTransformerClassifier):
                  class_weights=None,
                  dropout_rate=0.6, 
                  num_channels=256, 
-                 learnable_length=0,
                  supervised=False, 
                  tce_matrix=None,
                  comb_method='cat', 
@@ -797,7 +714,7 @@ class LCCNNBERTClassifier(LCCNNTransformerClassifier):
                  tce_weight_init=1.0,
                  debug=False):
         
-        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, learnable_length, \
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
                          supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
 
@@ -812,7 +729,6 @@ class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
                  class_weights=None,
                  dropout_rate=0.6,
                  num_channels=256, 
-                 learnable_length=0,
                  supervised=False, 
                  tce_matrix=None,
                  comb_method='cat', 
@@ -821,7 +737,7 @@ class LCCNNRoBERTaClassifier(LCCNNTransformerClassifier):
                  tce_weight_init=1.0,
                  debug=False):
         
-        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, learnable_length, \
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
                          supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
         
 
@@ -836,7 +752,6 @@ class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
                  class_weights=None,
                  dropout_rate=0.6,
                  num_channels=256, 
-                 learnable_length=0,
                  supervised=False, 
                  tce_matrix=None,
                  comb_method='cat', 
@@ -845,7 +760,7 @@ class LCCNNDistilBERTClassifier(LCCNNTransformerClassifier):
                  tce_weight_init=1.0,
                  debug=False):
 
-        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, learnable_length, \
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
                          supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
 
@@ -860,7 +775,6 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
                  class_weights=None,
                  dropout_rate=0.6,
                  num_channels=256, 
-                 learnable_length=0,
                  supervised=False, 
                  tce_matrix=None,
                  comb_method='cat', 
@@ -869,20 +783,20 @@ class LCCNNXLNetClassifier(LCCNNTransformerClassifier):
                  tce_weight_init=1.0,
                  debug=False):
 
-        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, learnable_length, \
+        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
                          supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
     def get_embedding_dims(self):
         """
         Override to get embedding dimensions from XLNet's word embeddings.
         """
-        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
+        return self.pretrained_embeddings.word_embedding.weight.shape  # XLNet uses `word_embedding`
     
     def _get_embeddings(self):
         """
         Override to get embedding layer for XLNet model.
         """
-        return self.l1.word_embedding           # XLNet uses `word_embedding`
+        return self.pretrained_embeddings.word_embedding           # XLNet uses `word_embedding`
    
 
 class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
@@ -896,7 +810,6 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
                  class_weights=None,
                  dropout_rate=0.6,
                  num_channels=256, 
-                 learnable_length=0,
                  supervised=False, 
                  tce_matrix=None,
                  comb_method='cat', 
@@ -905,20 +818,20 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
                  tce_weight_init=1.0,
                  debug=False):
 
-        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, learnable_length, \
+        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
                          supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
     def get_embedding_dims(self):
         """
         Override to get embedding dimensions from GPT2's word embeddings.
         """
-        return self.l1.wte.weight.shape  # GPT2 uses `wte`
+        return self.pretrained_embeddings.wte.weight.shape  # GPT2 uses `wte`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from GPT2 model.
         """
-        return self.l1.wte      # GPT2 uses `wte`
+        return self.pretrained_embeddings.wte      # GPT2 uses `wte`
 
 
 
@@ -962,7 +875,7 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
         return new_hidden_state
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
 
         # Pass through LSTM
@@ -990,15 +903,15 @@ class LC_LSTM_BERT_Classifier(LCTransformerClassifier):
 
     def __init__(self, model_name, cache_dir, num_classes, class_type, hidden_size=128, debug=False):
         super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.l1 = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
+        self.pretrained_embeddings = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.pretrained_embeddings.config.hidden_size
 
         # LSTM-based projection
         self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
         self.classifier = nn.Linear(hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
 
         # Pass through LSTM
@@ -1035,13 +948,13 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
     def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
 
         super().__init__(model_name, cache_dir, num_classes, class_type, debug)
-        self.l1 = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.l1.config.hidden_size
+        self.pretrained_embeddings = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.hidden_size = self.pretrained_embeddings.config.hidden_size
         
         self.classifier = nn.Linear(self.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.l1(input_ids=input_ids, attention_mask=attention_mask)
+        output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = output[0][:, 0]  # CLS token representation
         logits = self.classifier(self.dropout(pooled_output))
 
@@ -1082,13 +995,13 @@ class LCLinearGPT2Classifier(LCLinearTransformerClassifier):
         """
         Override to get embedding dimensions from GPT2's word embeddings.
         """
-        return self.l1.wte.weight.shape  # GPT2 uses `wte`
+        return self.pretrained_embeddings.wte.weight.shape  # GPT2 uses `wte`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from GPT2 model.
         """
-        return self.l1.wte      # GPT2 uses `wte`
+        return self.pretrained_embeddings.wte      # GPT2 uses `wte`
 
 class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
 
@@ -1099,13 +1012,13 @@ class LCLinearXLNetClassifier(LCLinearTransformerClassifier):
         """
         Override to get embedding dimensions from XLNet's word embeddings.
         """
-        return self.l1.word_embedding.weight.shape  # XLNet uses `word_embedding`
+        return self.pretrained_embeddings.word_embedding.weight.shape  # XLNet uses `word_embedding`
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from XLNet model.
         """
-        return self.l1.word_embedding  # XLNet uses `word_embedding`
+        return self.pretrained_embeddings.word_embedding  # XLNet uses `word_embedding`
     
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
