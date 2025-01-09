@@ -52,18 +52,18 @@ datasets=(
 #
 embedding_names=(
     "BERT"
-    "XLNET"
-    "DISTILBERT"
-    "ROBERTA"
-    "GPT2"
+#    "XLNET"
+#    "DISTILBERT"
+#    "ROBERTA"
+#    "GPT2"
 )
 
 embedding_args=(    
     "--pretrained bert"
-    "--pretrained xlnet"
-    "--pretrained distilbert"
-    "--pretrained roberta"
-    "--pretrained gpt2" 
+#    "--pretrained xlnet"
+#    "--pretrained distilbert"
+#    "--pretrained roberta"
+#    "--pretrained gpt2" 
 )
 
 
@@ -91,10 +91,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -108,20 +108,20 @@ for i in "${!embedding_names[@]}"; do
     #
     # TUNABLE model, supervised (cat, add, dot), tunable tce layer        
     #
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden  --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden  --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
+    #echo
 
 done
 
@@ -149,10 +149,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -166,20 +166,20 @@ for i in "${!embedding_names[@]}"; do
     #
     # TUNABLE model, supervised (cat, add, dot), tunable tce layer        
     #
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
+    #echo
 
 done
 
@@ -209,10 +209,10 @@ for i in "${!embedding_names[@]}"; do
     #
     # STATIC model, unsupervised        
     #
-    echo
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    echo
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $attn_hidden    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
 
     #
     # TUNABLE model, unsupervised        
@@ -226,20 +226,20 @@ for i in "${!embedding_names[@]}"; do
     #
     # TUNABLE model, supervised (cat, add, dot), tunable tce layer        
     #
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    #echo
 
-    echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
-    echo
+    #echo "Running: $PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $attn_hidden   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
+    #echo
 
 done
 

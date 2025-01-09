@@ -980,7 +980,7 @@ if __name__ == "__main__":
         class_weights=class_weights,
         args=args,
         tce_matrix=tce_matrix,
-        #debug=True
+        debug=True
         )
 
     lc_model = lc_model.to(device)
@@ -989,7 +989,7 @@ if __name__ == "__main__":
 
         if (args.net == 'attn'):
             # model needs to be configured specifically to be static
-            lc_model.finetune(base=False, classifier=False, projection=False)
+            lc_model.finetune(base=False, classifier=False, lstm=False)
         elif (args.net == 'cnn'):
             # model needs to be configured specifically to be static
             lc_model.finetune(base=False, classifier=False, embedding=False)

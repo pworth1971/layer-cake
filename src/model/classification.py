@@ -865,7 +865,7 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
                  lc_tokenizer: LCTokenizer,
                  class_weights: torch.Tensor = None,
                  dropout_rate: float = 0.6, 
-                 hidden_size: int = 1024,  # Matches the LSTM hidden size in ATTNprojection
+                 attn_hidden_size: int = 512,                  # Matches the LSTM hidden size in ATTNprojection
                  supervised: bool = False, 
                  tce_matrix: torch.Tensor = None, 
                  comb_method: str = "cat",  
@@ -877,57 +877,87 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
         super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, \
                          comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
-        print(f"LCATTNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, hidden_size: {hidden_size}, debug: {debug}")
+        print(f"LCATTNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, attn_hidden_size: {attn_hidden_size}, debug: {debug}")
 
-        # Initialize ATTNProjection layer
-        self.projection = ATTNprojection(embedding_dim=self.combined_size, hidden_size=hidden_size)
+        self.attn_hidden_size = attn_hidden_size
+
+        # Initialize LSTM
+        self.lstm = nn.LSTM(self.combined_size, self.attn_hidden_size, batch_first=True)
+        print("self.lstm:", self.lstm)
 
         # Classification layer
-        self.label = nn.Linear(hidden_size, num_classes)  # Final classification layer
-        print("self.label:", self.label)    
+        self.classifier = nn.Linear(self.attn_hidden_size, num_classes)  # Final classification layer
+        print("self.classifier:", self.classifier)    
 
 
     def forward(self, input_ids, attention_mask, labels=None):
+        
         if self.debug:
             print("LCATTNTransformerClassifier:forward()...")
 
-        # Step 1: Get transformer embeddings from the base class
-        hidden_states = super().forward(input_ids, attention_mask, labels)  # Shape: (batch_size, seq_len, embedding_dim)
+        # Step 1: Get transformer embeddings
+        hidden_states = super().forward(input_ids, attention_mask, labels)  # Shape: (batch_size, seq_len, combined_size)
 
         if self.debug:
             print(f"Transformer hidden states shape: {hidden_states.shape}")
 
-        # Step 2: Pass embeddings through ATTNProjection
-        attn_output = self.projection(hidden_states)  # Shape: (batch_size, hidden_size)
+        # Step 2: LSTM
+        batch_size = hidden_states.shape[0]
+        h_0 = torch.zeros(1, batch_size, self.attn_hidden_size).to(hidden_states.device)
+        c_0 = torch.zeros(1, batch_size, self.attn_hidden_size).to(hidden_states.device)
+        lstm_output, (final_hidden_state, _) = self.lstm(hidden_states, (h_0, c_0))  # Shape: (batch_size, seq_len, hidden_size)
+
+        if self.debug:
+            print(f"LSTM output shape: {lstm_output.shape}")
+
+        # Step 3: Attention
+        attn_output = self._attention_net(lstm_output, final_hidden_state, attention_mask)  # Shape: (batch_size, hidden_size)
 
         if self.debug:
             print(f"Attention output shape: {attn_output.shape}")
 
-        # Step 3: Pass the attention output through the final linear layer
-        logits = self.label(attn_output)  # Shape: (batch_size, num_classes)
+        # Step 4: Classification
+        logits = self.classifier(attn_output)  # Shape: (batch_size, num_classes)
 
         if self.debug:
             print(f"Logits shape: {logits.shape}")
 
-        # Step 4: Compute loss if labels are provided
+        # Step 5: Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
 
 
-    def finetune(self, projection=False, classifier=False, base=False):
+    def _attention_net(self, lstm_output, final_state, attention_mask=None):
+        """
+        Apply attention mechanism to LSTM output.
+        """
+        hidden = final_state.squeeze(0)  # Shape: (batch_size, hidden_size)
+        attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)  # Shape: (batch_size, seq_len)
+        
+        if attention_mask is not None:
+            # Apply attention mask (if provided)
+            attn_weights = attn_weights.masked_fill(attention_mask == 0, -float("inf"))
+
+        soft_attn_weights = F.softmax(attn_weights, dim=1)  # Shape: (batch_size, seq_len)
+        new_hidden_state = torch.bmm(lstm_output.transpose(1, 2), soft_attn_weights.unsqueeze(2)).squeeze(2)  # Shape: (batch_size, hidden_size)
+        return new_hidden_state
+
+
+
+    def finetune(self, lstm=False, classifier=False, base=False):
         """
         Adjust gradient settings for the model layers:
-        - projection: If True, enable gradients for the ATTNProjection layer.
+        - lstm: If True, enable gradients for the lstm layer.
         - classifier: If True, enable gradients for the classification layer.
         - base: If True, enable gradients for the base transformer model.
         """
         print(f"finetuning model...: projection={projection}, classifier={classifier}, base={base}")
 
         # Adjust ATTNProjection layer gradients
-        if projection:
-            for param in self.projection.parameters():
+        if lstm:
+            for param in self.lstm.parameters():
                 param.requires_grad = True
-            print("ATTNProjection layer is now trainable.")
+            print("lstm layer is now trainable.")
         else:
             for param in self.projection.parameters():
                 param.requires_grad = False
