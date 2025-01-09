@@ -573,7 +573,7 @@ def parse_args():
 if __name__ == "__main__":
 
     program = 'trans_layer_cake'
-    version = '13.3.3'
+    version = '13.5'
 
     print(f'\t--- TRANS_LAYER_CAKE Version: {version} ---')
 

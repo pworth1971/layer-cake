@@ -27,7 +27,7 @@ network_types=(
 #
 # DEV settings
 #
-EPOCHS=16               # DEV
+EPOCHS=19               # DEV
 PATIENCE=2              # DEV
 LOG_FILE="--log-file ../log/lc_nn_trans_test.dev"
 
@@ -121,10 +121,10 @@ for i in "${!embedding_names[@]}"; do
     $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
     echo
 
-    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    #echo
-    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    #echo
+    echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    echo
+    $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    echo
 
     echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
     echo
@@ -185,10 +185,10 @@ for i in "${!embedding_names[@]}"; do
     $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
     echo
 
-    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    #echo
-    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    #echo
+    echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    echo
+    $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    echo
 
     echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
     echo
