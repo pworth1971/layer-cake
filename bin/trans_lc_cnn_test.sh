@@ -86,7 +86,7 @@ channels="--channels 256"
 #lstm_hidden="--hidden 256"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 256"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -147,10 +147,10 @@ MODEL="--net cnn"
 channels="--channels 128"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 256"
+#lstm_hidden="--hidden 128"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 128"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -207,10 +207,10 @@ MODEL="--net cnn"
 channels="--channels 128"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 256"
+#lstm_hidden="--hidden 128"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 256"
+#attn_hidden="--hidden 128"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -265,13 +265,13 @@ done
 dataset="--dataset ohsumed"
 
 MODEL="--net cnn"
-channels="--channels 256"
+channels="--channels 512"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 1024"
+#lstm_hidden="--hidden 512"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 512"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -336,7 +336,7 @@ channels="--channels 256"
 #lstm_hidden="--hidden 256"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 256"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -395,13 +395,13 @@ done
 dataset="--dataset arxiv"
 
 MODEL="--net cnn"
-channels="--channels 256"
+channels="--channels 512"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 256"
+#lstm_hidden="--hidden 512"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 512"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -460,13 +460,13 @@ done
 dataset="--dataset imdb"
 
 MODEL="--net cnn"
-channels="--channels 128"
+channels="--channels 64"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 256"
+#lstm_hidden="--hidden 64"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 256"
+#attn_hidden="--hidden 64"
 
 
 for i in "${!embedding_names[@]}"; do
@@ -535,10 +535,10 @@ MODEL="--net cnn"
 channels="--channels 512"
 
 #MODEL="--net lstm"
-#lstm_hidden="--hidden 1024"
+#lstm_hidden="--hidden 512"
 
 #MODEL="--net attn"
-#attn_hidden="--hidden 1024"
+#attn_hidden="--hidden 512"
 
 
 for i in "${!embedding_names[@]}"; do
