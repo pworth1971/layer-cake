@@ -993,8 +993,10 @@ if __name__ == "__main__":
         # model is tunable (requires_grad=True) by default
         print(f"tunable model...")
 
+    """
     print("\n\t model params...")
     lc_model.show_params()
+    """
     
     if (args.supervised):
 

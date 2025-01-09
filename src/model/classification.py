@@ -226,6 +226,10 @@ class LCTransformerClassifier(nn.Module):
         self.pretrained_embeddings = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
         #print("self.pretrained_embeddings:\n", self.pretrained_embeddings)
 
+        # force all of the tensors to be stored contiguously in memory
+        for param in self.pretrained_embeddings.parameters():
+            param.data = param.data.contiguous()
+
         self.hidden_size = self.pretrained_embeddings.config.hidden_size
         print("self.hidden_size:", self.hidden_size)
 
@@ -412,28 +416,34 @@ class LCTransformerClassifier(nn.Module):
         # Validate special tokens
         print("Special tokens:", self.tokenizer.special_tokens_map)
         for token_name, token_value in self.tokenizer.special_tokens_map.items():
-            token_id = self.tokenizer.convert_tokens_to_ids(token_value)
-            print(f"Checking alignment for special token '{token_name}' (ID: {token_id})...")
+            token_ids = self.tokenizer.convert_tokens_to_ids(token_value)
 
-            # Check if the token ID exists within bounds
-            if token_id < 0 or token_id >= model_vocab_size:
-                print(
-                    f"[WARNING] {token_name} (ID {token_id}) is out of vocabulary bounds "
-                    f"(0, {model_vocab_size - 1})."
-                )
-                continue
+            # Ensure token_ids is always a list for consistent processing
+            if not isinstance(token_ids, list):
+                token_ids = [token_ids]
 
-            # Ensure TCE matrix and embedding layer are referring to the same token
-            token_from_model_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
-            token_from_tce_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
+            print(f"Checking alignment for special token '{token_name}' (IDs: {token_ids})...")
 
-            if token_from_model_vocab != token_from_tce_vocab:
-                print(
-                    f"[WARNING] Token ID {token_id} mismatch between model vocab "
-                    f"({token_from_model_vocab}) and TCE vocab ({token_from_tce_vocab})."
-                )
-            else:
-                print(f"[INFO] Token ID {token_id} ({token_from_model_vocab}) alignment validated.")
+            for token_id in token_ids:
+                # Check if the token ID exists within bounds
+                if token_id < 0 or token_id >= model_vocab_size:
+                    print(
+                        f"[WARNING] {token_name} (ID {token_id}) is out of vocabulary bounds "
+                        f"(0, {model_vocab_size - 1})."
+                    )
+                    continue
+
+                # Ensure TCE matrix and embedding layer are referring to the same token
+                token_from_model_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
+                token_from_tce_vocab = self.tokenizer.convert_ids_to_tokens(token_id)
+
+                if token_from_model_vocab != token_from_tce_vocab:
+                    print(
+                        f"[WARNING] Token ID {token_id} mismatch between model vocab "
+                        f"({token_from_model_vocab}) and TCE vocab ({token_from_tce_vocab})."
+                    )
+                else:
+                    print(f"[INFO] Token ID {token_id} ({token_from_model_vocab}) alignment validated.")
 
         # Validate random token indices
         random_indices = torch.randint(0, model_vocab_size, (5,)).tolist()
@@ -451,6 +461,8 @@ class LCTransformerClassifier(nn.Module):
                 print(f"[INFO] Token ID {token_id} ({token_from_model_vocab}) alignment validated.")
 
         print("TCE alignment validation complete.")
+
+
 
 
     def get_model_embedding_stats(self):
@@ -872,7 +884,7 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
 
         # Classification layer
         self.label = nn.Linear(hidden_size, num_classes)  # Final classification layer
-        print("self.label:", self.label)
+        print("self.label:", self.label)    
 
 
     def forward(self, input_ids, attention_mask, labels=None):
@@ -932,6 +944,12 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
 
 # Model-specific subclasses
 class LCATTNBERTClassifier(LCATTNTransformerClassifier):
+    """
+    Attention-based Transformer Classifier, integrating the ATTNprojection layer for LSTM + attention.
+    """
+
+    # Define `_keys_to_ignore_on_save` as a class attribute
+    _keys_to_ignore_on_save = []
 
     def __init__(self, 
                  model_name, 
