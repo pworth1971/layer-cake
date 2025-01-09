@@ -37,9 +37,9 @@ from util.common import initialize_testing, get_embedding_type
 
 from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
-from model.classification import SUPPORTED_OPS, LCSequenceClassifier, LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
-from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearRoBERTaClassifier, LCLinearXLNetClassifier, LCLinearGPT2Classifier
-
+from model.classification import SUPPORTED_OPS, LCSequenceClassifier
+from model.classification import LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
+from model.classification import LCATTNBERTClassifier, LCATTNDistilBERTClassifier, LCATTNRoBERTaClassifier, LCATTNXLNetClassifier, LCATTNGPT2Classifier
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 #
@@ -435,6 +435,105 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
         
         lc_model = cnn_model
 
+    if args.net == 'attn':
+        
+        if (debug):
+            print("using ATTN classifier...")
+        
+        if args.pretrained == 'bert':
+            attn_model = LCATTNBERTClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            hidden_size=args.hidden, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        elif args.pretrained == 'roberta':
+            attn_model = LCATTNRoBERTaClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            hidden_size=args.hidden, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        elif args.pretrained == 'distilbert':
+            attn_model = LCATTNDistilBERTClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            hidden_size=args.hidden, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        elif args.pretrained == 'xlnet':
+            attn_model = LCATTNXLNetClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            hidden_size=args.hidden, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        elif args.pretrained == 'gpt2':
+            attn_model = LCATTNGPT2Classifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            hidden_size=args.hidden, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        else:
+            raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
+        
+        if (debug):
+            print("\nATTN Classifier Model:\n", attn_model)
+        
+        lc_model = attn_model
+
+
     elif args.net == 'hf.sc':
         
         if (debug):
@@ -528,16 +627,11 @@ def parse_args():
                              f'learnable embedding.')
     parser.add_argument('--tunable', action='store_true', default=True,
                         help='Whether or not to set pretrained embeddings (as well as classifier layers), are tunable. Default False, i.e., static)')
-    """
-    parser.add_argument('--tunable', type=str, default=None, metavar='str',
-                        help='whether or not to have model parameters (gradients) tunable. One of [classifier, embedding, none]. Default to None.')
-    """
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
-    """
-    parser.add_argument('--emb-filter', action='store_true', default=True,
-                        help='filter model embeddings to align with dataset vocabulary (default False)')
-    """
+    parser.add_argument('--hidden', type=int, default=512, metavar='int',
+                        help='hidden lstm size (default: 512)')
+    
 
     # TCE params
     parser.add_argument('--supervised', action='store_true', 

@@ -833,12 +833,16 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
         """
         return self.pretrained_embeddings.wte      # GPT2 uses `wte`
 
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ATTN Transformer Classifier
+#
 class LCATTNTransformerClassifier(LCTransformerClassifier):
     """
-    Attention-based Transformer Classifier.
+    Attention-based Transformer Classifier, integrating the ATTNprojection layer for LSTM + attention.
     """
     def __init__(self, 
                  model_class: nn.Module,
@@ -849,7 +853,7 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
                  lc_tokenizer: LCTokenizer,
                  class_weights: torch.Tensor = None,
                  dropout_rate: float = 0.6, 
-                 hidden_size: int = 256, 
+                 hidden_size: int = 1024,  # Matches the LSTM hidden size in ATTNprojection
                  supervised: bool = False, 
                  tce_matrix: torch.Tensor = None, 
                  comb_method: str = "cat",  
@@ -863,129 +867,208 @@ class LCATTNTransformerClassifier(LCTransformerClassifier):
 
         print(f"LCATTNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, hidden_size: {hidden_size}, debug: {debug}")
 
-        # Initialize Attention projection layer
-        self.attention = ATTNprojection(embedding_dim=self.combined_size, hidden_size=hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
-        self.classifier = nn.Linear(hidden_size, num_classes)
-        print("self.classifier:", self.classifier)
+        # Initialize ATTNProjection layer
+        self.projection = ATTNprojection(embedding_dim=self.combined_size, hidden_size=hidden_size)
+
+        # Classification layer
+        self.label = nn.Linear(hidden_size, num_classes)  # Final classification layer
+        print("self.label:", self.label)
 
 
     def forward(self, input_ids, attention_mask, labels=None):
         if self.debug:
             print("LCATTNTransformerClassifier:forward()...")
-        
-        # Get transformer embeddings from the base class
-        hidden_states = super().forward(input_ids, attention_mask, labels)
-        
-        # Pass through attention mechanism
-        attn_output = self.attention(hidden_states)
 
-        # Apply dropout and classifier
-        features = self.dropout(attn_output)
-        logits = self.classifier(features)
+        # Step 1: Get transformer embeddings from the base class
+        hidden_states = super().forward(input_ids, attention_mask, labels)  # Shape: (batch_size, seq_len, embedding_dim)
 
         if self.debug:
-            print(f"logits: {logits.shape}")
+            print(f"Transformer hidden states shape: {hidden_states.shape}")
 
-        # Compute loss if labels are provided
+        # Step 2: Pass embeddings through ATTNProjection
+        attn_output = self.projection(hidden_states)  # Shape: (batch_size, hidden_size)
+
+        if self.debug:
+            print(f"Attention output shape: {attn_output.shape}")
+
+        # Step 3: Pass the attention output through the final linear layer
+        logits = self.label(attn_output)  # Shape: (batch_size, num_classes)
+
+        if self.debug:
+            print(f"Logits shape: {logits.shape}")
+
+        # Step 4: Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
         return {"loss": loss, "logits": logits}
 
 
+    def show_params(self):
+        """
+        Display the parameters of the model, including the transformer embeddings,
+        ATTNprojection layer, classification layer, and TCE layer (if supervised).
+        """
+
+        print("Base HF model layer parameters...")
+        for name, param in self.pretrained_embeddings.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("\nATTNprojection layer parameters...")
+        for name, param in self.projection.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        print("\nClassifier layer parameters...")
+        for name, param in self.label.named_parameters():
+            print(f"  {name}: requires_grad={param.requires_grad}")
+
+        if self.supervised:
+            print("\nTCE layer parameters...")
+            for name, param in self.named_parameters():
+                if "tce" in name:
+                    print(f"  {name}: requires_grad={param.requires_grad}")
 
 
-class LCATTNTransformerClassifier(LCTransformerClassifier):
 
-    """
-    Base class for ATTN Transformer based classifiers.
-    """
+
+
+# Model-specific subclasses
+class LCATTNBERTClassifier(LCATTNTransformerClassifier):
+
     def __init__(self, 
-                model_class: nn.Module,
-                model_name: str,
-                cache_dir: str, 
-                num_classes: int, 
-                class_type: str, 
-                lc_tokenizer: LCTokenizer,
-                class_weights: torch.Tensor=None,
-                dropout_rate: float = 0.6, 
-                supervised: bool = False, 
-                tce_matrix: torch.Tensor = None, 
-                comb_method: str = "cat",  
-                normalize_tces: bool = False,      
-                trainable_tces: bool = True,
-                tce_weight_init: float = 1.0,
-                debug=False):
-
-        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
-
-        print(f"LCCNNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}")
-
-        # Attention-based projection
-        self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
-        self.classifier = nn.Linear(hidden_size, num_classes)
-
-    def attention_net(self, lstm_output, final_state):
-        hidden = final_state.squeeze(0)  # (batch_size, hidden_size)
-        attn_weights = torch.bmm(lstm_output, hidden.unsqueeze(2)).squeeze(2)  # (batch_size, seq_len)
-        soft_attn_weights = torch.nn.functional.softmax(attn_weights, dim=1)
-        new_hidden_state = torch.bmm(lstm_output.transpose(1, 2), soft_attn_weights.unsqueeze(2)).squeeze(2)
-        return new_hidden_state
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
-
-        # Pass through LSTM
-        lstm_out, (final_hidden_state, _) = self.lstm(hidden_states)  # (batch_size, seq_len, hidden_size)
-
-        # Apply attention
-        attn_output = self.attention_net(lstm_out, final_hidden_state)
-
-        logits = self.fc(attn_output)
-
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6, 
+                 hidden_size=512, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False, 
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
+        
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, hidden_size, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
+        
 
 
+class LCATTNRoBERTaClassifier(LCATTNTransformerClassifier):
+    
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 hidden_size=512, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
+        
+        super().__init__(RobertaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, hidden_size, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
+        
+
+class LCATTNDistilBERTClassifier(LCATTNTransformerClassifier):
+    
+    def __init__(self, 
+                model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 hidden_size=512, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
+
+        super().__init__(DistilBertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, hidden_size, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+class LCATTNXLNetClassifier(LCATTNTransformerClassifier):
+    
+    def __init__(self, 
+                model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 hidden_size=512, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
 
-class LC_LSTM_BERT_Classifier(LCTransformerClassifier):
+        super().__init__(XLNetModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, hidden_size, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
-    def __init__(self, model_name, cache_dir, num_classes, class_type, hidden_size=128, debug=False):
-        super().__init__(model_name=model_name, cache_dir=cache_dir, num_classes=num_classes, class_type=class_type, debug=debug)
-        self.pretrained_embeddings = BertModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
-        self.hidden_size = self.pretrained_embeddings.config.hidden_size
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from XLNet's word embeddings.
+        """
+        return self.pretrained_embeddings.word_embedding.weight.shape  # XLNet uses `word_embedding`
+    
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer for XLNet model.
+        """
+        return self.pretrained_embeddings.word_embedding           # XLNet uses `word_embedding`
+   
 
-        # LSTM-based projection
-        self.lstm = nn.LSTM(self.hidden_size, hidden_size, batch_first=True)
-        self.classifier = nn.Linear(hidden_size, num_classes)
+class LCATTNGPT2Classifier(LCATTNTransformerClassifier):
 
-    def forward(self, input_ids, attention_mask, labels=None):
-        output_1 = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_states = output_1[0]  # Raw embeddings: (batch_size, seq_len, hidden_size)
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 hidden_size=512, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
 
-        # Pass through LSTM
-        lstm_out, _ = self.lstm(hidden_states)  # LSTM output: (batch_size, seq_len, hidden_size)
-        final_hidden_state = lstm_out[:, -1, :]  # Use the last hidden state
+        super().__init__(GPT2Model, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, hidden_size, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
 
-        logits = self.fc(final_hidden_state)
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from GPT2's word embeddings.
+        """
+        return self.pretrained_embeddings.wte.weight.shape  # GPT2 uses `wte`
 
-        if self.debug:
-            print(f"logits: {logits.shape}")
-
-        # Compute loss if labels are provided
-        loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
-
-
-
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from GPT2 model.
+        """
+        return self.pretrained_embeddings.wte      # GPT2 uses `wte`
 
 
 # -----------------------------------------------------------------------------------------------------------------------
