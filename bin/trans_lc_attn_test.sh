@@ -20,16 +20,16 @@ network_types=(
 #
 # TEST/STG settings
 #
-#EPOCHS=37              # TEST
-#PATIENCE=3             # TEST
-#LOG_FILE="--log-file ../log/lc_nn__attn_trans_test.test"
+EPOCHS=37              # TEST
+PATIENCE=3             # TEST
+LOG_FILE="--log-file ../log/lc_nn_attn_trans_test.test"
 
 #
 # DEV settings
 #
-EPOCHS=19               # DEV
-PATIENCE=2              # DEV
-LOG_FILE="--log-file ../log/lc_nn_attn_trans_test.dev"
+#EPOCHS=19               # DEV
+#PATIENCE=2              # DEV
+#LOG_FILE="--log-file ../log/lc_nn_attn_trans_test.dev"
 
 SEED=49
 
