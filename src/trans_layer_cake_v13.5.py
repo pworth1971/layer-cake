@@ -625,7 +625,7 @@ def parse_args():
                              f'does not apply dropout (same as "sup" with no supervised embeddings), "full" which '
                              f'applies dropout to the entire embedding, or "learn" that applies dropout only to the '
                              f'learnable embedding.')
-    parser.add_argument('--tunable', action='store_true', default=True,
+    parser.add_argument('--tunable', action='store_true', default=False,
                         help='Whether or not to set pretrained embeddings (as well as classifier layers), are tunable. Default False, i.e., static)')
     parser.add_argument('--channels', type=int, default=256, metavar='int',
                         help='number of cnn out-channels (default: 256)')
@@ -997,7 +997,7 @@ if __name__ == "__main__":
     print("\n\t model params...")
     lc_model.show_params()
     """
-    
+
     if (args.supervised):
 
         print("validating tce alignment...")
