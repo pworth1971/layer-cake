@@ -928,7 +928,7 @@ if __name__ == "__main__":
         dimensions = f"{dimensions}:{tce_matrix.shape}"
     print("dimensions:", dimensions)
 
-    print("\n\tpreparing dataset for model...")
+    print(f"\n\tpreparing {args.dataset} dataset for model...")
     
     print("texts_train:", type(texts_train), len(texts_train))
     print("texts_train[0]:", type(texts_train[0]), texts_train[0])

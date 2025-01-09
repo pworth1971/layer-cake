@@ -836,6 +836,63 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
 
 
 
+class LCATTNTransformerClassifier(LCTransformerClassifier):
+    """
+    Attention-based Transformer Classifier.
+    """
+    def __init__(self, 
+                 model_class: nn.Module,
+                 model_name: str,
+                 cache_dir: str, 
+                 num_classes: int, 
+                 class_type: str, 
+                 lc_tokenizer: LCTokenizer,
+                 class_weights: torch.Tensor = None,
+                 dropout_rate: float = 0.6, 
+                 hidden_size: int = 256, 
+                 supervised: bool = False, 
+                 tce_matrix: torch.Tensor = None, 
+                 comb_method: str = "cat",  
+                 normalize_tces: bool = False,      
+                 trainable_tces: bool = True,
+                 tce_weight_init: float = 1.0,
+                 debug=False):
+        
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, \
+                         comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
+
+        print(f"LCATTNTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, hidden_size: {hidden_size}, debug: {debug}")
+
+        # Initialize Attention projection layer
+        self.attention = ATTNprojection(embedding_dim=self.combined_size, hidden_size=hidden_size)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.classifier = nn.Linear(hidden_size, num_classes)
+        print("self.classifier:", self.classifier)
+
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        if self.debug:
+            print("LCATTNTransformerClassifier:forward()...")
+        
+        # Get transformer embeddings from the base class
+        hidden_states = super().forward(input_ids, attention_mask, labels)
+        
+        # Pass through attention mechanism
+        attn_output = self.attention(hidden_states)
+
+        # Apply dropout and classifier
+        features = self.dropout(attn_output)
+        logits = self.classifier(features)
+
+        if self.debug:
+            print(f"logits: {logits.shape}")
+
+        # Compute loss if labels are provided
+        loss = self.compute_loss(logits, labels)
+        return {"loss": loss, "logits": logits}
+
+
+
 
 class LCATTNTransformerClassifier(LCTransformerClassifier):
 
