@@ -435,7 +435,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
         
         lc_model = cnn_model
 
-    if args.net == 'attn':
+    elif args.net == 'attn':
         
         if (debug):
             print("using ATTN classifier...")
