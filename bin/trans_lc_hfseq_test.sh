@@ -91,7 +91,7 @@ for dataset in "${datasets[@]}"; do
         #
         echo
         echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-        $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+        $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
         echo
 
 
