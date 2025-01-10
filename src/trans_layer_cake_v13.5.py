@@ -447,6 +447,16 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type, 
+                lc_tokenizer=lc_tokenizer,
+                dropout_rate=args.dropprob,  
+                pooling_method=args.pooling,
+                supervised=args.supervised, 
+                tce_matrix=tce_matrix, 
+                class_weights=class_weights,
+                normalize_tces=args.normalize_tces, 
+                trainable_tces=args.tunable_tces,
+                tce_weight_init=args.tce_weight_init,
+                comb_method=args.sup_mode, 
                 debug=debug
                 )
         elif args.pretrained == 'roberta':
@@ -474,7 +484,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 debug=debug
                 )
         elif args.pretrained == 'gpt2':
-            linear_model = LCLinearGP2Classifier(
+            linear_model = LCLinearGPT2Classifier(
                 model_name=model_name, 
                 cache_dir=model_path, 
                 num_classes=num_classes,
@@ -483,6 +493,11 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 )
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
+
+        if (debug):
+            print("\nLinear Classifier Model:\n", linear_model)
+        
+        lc_model = linear_model
 
     elif args.net == 'hf.sc':
         
@@ -650,8 +665,6 @@ def parse_args():
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], 
                         help='supported language model types for dataset representation')
-    parser.add_argument('--net', required=True, type=str, default='linear', metavar='str', 
-                        help=f'supported models, either cnn, linear, hf.sc, (defaults to linear)')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', 
                         help='Path to log file')
@@ -661,6 +674,8 @@ def parse_args():
                         help='Whether or not to use class_weights in the loss funtion of the classifier (default False)')
 
     # model params
+    parser.add_argument('--net', required=True, type=str, default='linear', metavar='str', 
+                        help=f'supported models, either cnn, linear, hf.sc, (defaults to linear)')
     parser.add_argument('--class-model', action='store_true', default=True,
                         help='use simple transformer classifier if True, else use the HF Sequence Classifier (customizede) model.')
     parser.add_argument('--lr', type=float, default=LEARNING_RATE, 
@@ -687,7 +702,8 @@ def parse_args():
                         help='number of cnn out-channels (default: 256)')
     parser.add_argument('--hidden', type=int, default=512, metavar='int',
                         help='hidden lstm size (default: 512)')
-    
+    parser.add_argument('--pooling', type=str, default='mean',
+                        help=f'type of pooling method, used only with --net linear. Default is "mean"')
 
     # TCE params
     parser.add_argument('--supervised', action='store_true', 

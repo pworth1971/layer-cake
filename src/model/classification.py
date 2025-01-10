@@ -1177,26 +1177,71 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
     """
     Base class for linear classifiers.
     """
-    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, debug=False):
+    def __init__(self, model_class, model_name, cache_dir, num_classes, class_type, lc_tokenizer, dropout_rate, pooling_method, class_weights, supervised, tce_matrix, comb_method, \
+                         normalize_tces, trainable_tces, tce_weight_init, debug=False):
 
-        super().__init__(model_name, cache_dir, num_classes, class_type, debug)
+        super().__init__(model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, supervised, tce_matrix, comb_method, \
+                         normalize_tces, trainable_tces, tce_weight_init, debug)
+
+        print(f"LCLinearTransformerClassifier:__init__()... model_name: {model_name}, cache_dir: {cache_dir}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}")
+        print("dropout_rate:", dropout_rate)
+        print("pooling_method:", pooling_method)
+
+        self.dropout_rate = dropout_rate
+        self.pooling_method = pooling_method
+        
         self.pretrained_embeddings = model_class.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
         self.hidden_size = self.pretrained_embeddings.config.hidden_size
+
+        # Add dropout layer before classification
+        self.dropout = nn.Dropout(dropout_rate)
         
         self.classifier = nn.Linear(self.hidden_size, num_classes)
 
+        # Pooling method (mean or max)
+        assert pooling_method in ["mean", "max"], "pooling_method must be either 'mean' or 'max'"
+        self.pooling_method = pooling_method
+        print("self.pooling_method:", self.pooling_method)
+
+
     def forward(self, input_ids, attention_mask, labels=None):
+        """
+        Forward pass for the LCLinearTransformerClassifier.
+        """
+        if self.debug:
+            print("LCLinearTransformerClassifier:forward()...")
+            print(f"input_ids: {input_ids.shape}, attention_mask: {attention_mask.shape}")
+            print("labels:", labels)
+
+        # Step 1: Pass inputs through the transformer model
         output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = output[0][:, 0]  # CLS token representation
-        logits = self.classifier(self.dropout(pooled_output))
+        hidden_states = output.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
+        if self.debug:
+            print(f"Hidden states shape: {hidden_states.shape}")
+
+        # Step 2: Apply pooling (mean or max)
+        if self.pooling_method == "mean":
+            pooled_output = torch.sum(hidden_states * attention_mask.unsqueeze(-1), dim=1) / attention_mask.sum(dim=1, keepdim=True)
+        elif self.pooling_method == "max":
+            pooled_output = torch.max(hidden_states * attention_mask.unsqueeze(-1), dim=1).values
+        if self.debug:
+            print(f"Pooled output shape: {pooled_output.shape}")
+
+        # Step 3: Apply dropout and classification
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)  # Shape: (batch_size, num_classes)
+
+        #pooled_output = output[0][:, 0]  # CLS token representation
+        
+        #logits = self.classifier(self.dropout(pooled_output))
 
         if self.debug:
             print(f"logits: {logits.shape}")
 
         # Compute loss if labels are provided
         loss = self.compute_loss(logits, labels)
-        return {"loss": loss, "logits": logits}
 
+        return {"loss": loss, "logits": logits}
 
 
 #
@@ -1204,8 +1249,13 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
 #
 class LCLinearBERTClassifier(LCLinearTransformerClassifier):
 
-    def __init__(self, model_name, cache_dir, num_classes, class_type, debug=False):
-        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, debug)
+    def __init__(self, model_name, cache_dir, num_classes, class_type, lc_tokenizer, dropout_rate, pooling_method, class_weights, supervised, tce_matrix, comb_method, \
+                        normalize_tces, trainable_tces, tce_weight_init, debug=False):
+
+        super().__init__(BertModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, dropout_rate, pooling_method, class_weights, supervised, tce_matrix, comb_method, \
+                            normalize_tces, trainable_tces, tce_weight_init, debug)
+        
+
 
 class LCLinearRoBERTaClassifier(LCLinearTransformerClassifier):
 
