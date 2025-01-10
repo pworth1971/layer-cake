@@ -40,6 +40,7 @@ from embedding.pretrained import MODEL_MAP
 from model.classification import SUPPORTED_OPS, LCSequenceClassifier
 from model.classification import LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
 from model.classification import LCATTNBERTClassifier, LCATTNDistilBERTClassifier, LCATTNRoBERTaClassifier, LCATTNXLNetClassifier, LCATTNGPT2Classifier
+from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearGPT2Classifier, LCLinearRoBERTaClassifier, LCLinearXLNetClassifier
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 #
@@ -435,6 +436,101 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
         
         lc_model = cnn_model
 
+    elif args.net == 'linear':
+        
+        if (debug):
+            print("using linear transformer classifier...")
+
+        if args.pretrained == 'bert':
+            linear_model = LCLinearBERTClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes,
+                class_type=class_type, 
+                debug=debug
+                )
+        elif args.pretrained == 'roberta':
+            linear_model = LCLinearRoBERTaClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes,
+                class_type=class_type, 
+                debug=debug
+                )
+        elif args.pretrained == 'distilbert':
+            linear_model = LCLinearDistilBERTClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes,
+                class_type=class_type, 
+                debug=debug
+                )
+        elif args.pretrained == 'xlnet':
+            linear_model = LCLinearXLNetClassifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes,
+                class_type=class_type, 
+                debug=debug
+                )
+        elif args.pretrained == 'gpt2':
+            linear_model = LCLinearGP2Classifier(
+                model_name=model_name, 
+                cache_dir=model_path, 
+                num_classes=num_classes,
+                class_type=class_type, 
+                debug=debug
+                )
+        else:
+            raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
+
+    elif args.net == 'hf.sc':
+        
+        if (debug):
+            print("using HuggingFace Sequence Classifier...")
+        
+        hf_trans_model, hf_trans_class_model = get_hf_models(
+            model_name, 
+            model_path, 
+            num_classes=num_classes, 
+            tokenizer=tokenizer
+        )
+        hf_trans_model.to(device)
+        hf_trans_class_model.to(device)
+
+        print("\nhf_trans_model:\n", hf_trans_model)
+        print("\nhf_trans_class_model:\n", hf_trans_class_model)
+
+        hf_trans_model = hf_trans_class_model
+        print("\nHuggingFace Transformer Model:\n", hf_trans_model)
+
+        #
+        # note we instantiate only with relevant_tokens 
+        # from our custom tokenizer (lc_tokenizer)
+        #
+        lc_model = LCSequenceClassifier(
+            hf_model=hf_trans_model,                                    # HuggingFace transformer model being used
+            num_classes=num_classes,                                    # number of classes for classification
+            lc_tokenizer=lc_tokenizer,                                  # LCTokenizer (used for validation)
+            class_type=class_type,                                      # classification type, options 'single-label' or 'multi-label'
+            class_weights=class_weights,                                # class weights for loss function
+            supervised=args.supervised,
+            tce_matrix=tce_matrix,
+            normalize_tces=args.normalize,                              # normalize TCE matrix using underlying embedding mean and std                     
+            dropout_rate=args.dropprob,                                 # dropout rate for TCEs
+            comb_method=args.sup_mode,                                  # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
+            #debug=True                                                 # turns on active forware debugging
+        )
+
+    else:
+        raise ValueError(f"Unsupported neural model: {args.net}")
+    
+
+    """
+    #
+    # TODO: 
+    # multi-label not working for some reason for this model
+    #
     elif args.net == 'attn':
         
         if (debug):
@@ -532,48 +628,8 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
             print("\nATTN Classifier Model:\n", attn_model)
         
         lc_model = attn_model
+    """
 
-
-    elif args.net == 'hf.sc':
-        
-        if (debug):
-            print("using HuggingFace Sequence Classifier...")
-        
-        hf_trans_model, hf_trans_class_model = get_hf_models(
-            model_name, 
-            model_path, 
-            num_classes=num_classes, 
-            tokenizer=tokenizer
-        )
-        hf_trans_model.to(device)
-        hf_trans_class_model.to(device)
-
-        print("\nhf_trans_model:\n", hf_trans_model)
-        print("\nhf_trans_class_model:\n", hf_trans_class_model)
-
-        hf_trans_model = hf_trans_class_model
-        print("\nHuggingFace Transformer Model:\n", hf_trans_model)
-
-        #
-        # note we instantiate only with relevant_tokens 
-        # from our custom tokenizer (lc_tokenizer)
-        #
-        lc_model = LCSequenceClassifier(
-            hf_model=hf_trans_model,                                    # HuggingFace transformer model being used
-            num_classes=num_classes,                                    # number of classes for classification
-            lc_tokenizer=lc_tokenizer,                                  # LCTokenizer (used for validation)
-            class_type=class_type,                                      # classification type, options 'single-label' or 'multi-label'
-            class_weights=class_weights,                                # class weights for loss function
-            supervised=args.supervised,
-            tce_matrix=tce_matrix,
-            normalize_tces=args.normalize,                              # normalize TCE matrix using underlying embedding mean and std                     
-            dropout_rate=args.dropprob,                                 # dropout rate for TCEs
-            comb_method=args.sup_mode,                                  # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
-            #debug=True                                                 # turns on active forware debugging
-        )
-
-    else:
-        raise ValueError(f"Unsupported neural model: {args.net}")
     
     return lc_model
 
@@ -594,8 +650,8 @@ def parse_args():
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], 
                         help='supported language model types for dataset representation')
-    parser.add_argument('--net', required=True, type=str, default='hf.sc', metavar='str', 
-                        help=f'supported models, either hf.sc, linear, cnn, lstm or attn (defaults to hf.sc)')
+    parser.add_argument('--net', required=True, type=str, default='linear', metavar='str', 
+                        help=f'supported models, either cnn, linear, hf.sc, (defaults to linear)')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', 
                         help='Path to log file')
