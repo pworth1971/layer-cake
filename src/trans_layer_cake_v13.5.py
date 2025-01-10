@@ -465,6 +465,16 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type, 
+                lc_tokenizer=lc_tokenizer,
+                dropout_rate=args.dropprob,  
+                pooling_method=args.pooling,
+                supervised=args.supervised, 
+                tce_matrix=tce_matrix, 
+                class_weights=class_weights,
+                normalize_tces=args.normalize_tces, 
+                trainable_tces=args.tunable_tces,
+                tce_weight_init=args.tce_weight_init,
+                comb_method=args.sup_mode, 
                 debug=debug
                 )
         elif args.pretrained == 'distilbert':
@@ -473,6 +483,16 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type, 
+                lc_tokenizer=lc_tokenizer,
+                dropout_rate=args.dropprob,  
+                pooling_method=args.pooling,
+                supervised=args.supervised, 
+                tce_matrix=tce_matrix, 
+                class_weights=class_weights,
+                normalize_tces=args.normalize_tces, 
+                trainable_tces=args.tunable_tces,
+                tce_weight_init=args.tce_weight_init,
+                comb_method=args.sup_mode, 
                 debug=debug
                 )
         elif args.pretrained == 'xlnet':
@@ -481,6 +501,16 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type, 
+                lc_tokenizer=lc_tokenizer,
+                dropout_rate=args.dropprob,  
+                pooling_method=args.pooling,
+                supervised=args.supervised, 
+                tce_matrix=tce_matrix, 
+                class_weights=class_weights,
+                normalize_tces=args.normalize_tces, 
+                trainable_tces=args.tunable_tces,
+                tce_weight_init=args.tce_weight_init,
+                comb_method=args.sup_mode, 
                 debug=debug
                 )
         elif args.pretrained == 'gpt2':
@@ -489,6 +519,16 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                 cache_dir=model_path, 
                 num_classes=num_classes,
                 class_type=class_type, 
+                lc_tokenizer=lc_tokenizer,
+                dropout_rate=args.dropprob,  
+                pooling_method=args.pooling,
+                supervised=args.supervised, 
+                tce_matrix=tce_matrix, 
+                class_weights=class_weights,
+                normalize_tces=args.normalize_tces, 
+                trainable_tces=args.tunable_tces,
+                tce_weight_init=args.tce_weight_init,
+                comb_method=args.sup_mode, 
                 debug=debug
                 )
         else:
