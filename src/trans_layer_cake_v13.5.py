@@ -571,7 +571,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
             class_weights=class_weights,                                # class weights for loss function
             supervised=args.supervised,
             tce_matrix=tce_matrix,
-            normalize_tces=args.normalize,                              # normalize TCE matrix using underlying embedding mean and std                     
+            normalize_tces=args.normalize_tces,                         # normalize TCE matrix using underlying embedding mean and std                     
             dropout_rate=args.dropprob,                                 # dropout rate for TCEs
             comb_method=args.sup_mode,                                  # combination method for TCEs with model embeddings, options 'cat', 'add', 'dot'
             #debug=True                                                 # turns on active forware debugging
