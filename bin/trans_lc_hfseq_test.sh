@@ -8,18 +8,17 @@ PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py   --net hf.sc"
 #
 # DEV settings
 #
-EPOCHS=16               # DEV
-PATIENCE=2              # DEV
-LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.dev"
+#EPOCHS=16               # DEV
+#PATIENCE=2              # DEV
+#LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.dev"
 
 
 #
 # TEST/STG settings
 #
-#EPOCHS=37              # TEST
-#PATIENCE=3             # TEST
-#LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.test"
-
+EPOCHS=37              # TEST
+PATIENCE=3             # TEST
+LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.test"
 
 
 SEED=77
@@ -31,35 +30,34 @@ SEED=77
 # NB: issues with Albert so leaving out. LlaMa has not been tested
 #
 embedding_names=(
-#    "BERT"
-#    "XLNET"
+    "BERT"
+    "XLNET"
     "DISTILBERT"
-#    "ROBERTA"
-#    "GPT2"
+    "ROBERTA"
+    "GPT2"
 )
 
 embedding_args=(    
-#    "--pretrained bert"
-#   "--pretrained xlnet"
-   "--pretrained distilbert"
-#   "--pretrained roberta"
-#   "--pretrained gpt2" 
+    "--pretrained bert"
+    "--pretrained xlnet"
+    "--pretrained distilbert"
+    "--pretrained roberta"
+    "--pretrained gpt2" 
 )
 
 #
 # Datasets array
 #
 datasets=(
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
+    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
-
 
 
 for dataset in "${datasets[@]}"; do
