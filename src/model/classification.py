@@ -1210,12 +1210,15 @@ class LCLinearTransformerClassifier(LCTransformerClassifier):
         """
         if self.debug:
             print("LCLinearTransformerClassifier:forward()...")
-            print(f"input_ids: {input_ids.shape}, attention_mask: {attention_mask.shape}")
-            print("labels:", labels)
+            print(f"\tinput_ids: {type(input_ids)}, {input_ids.shape}")
+            #print("input_ids:", input_ids)
+            print(f"\tattention_mask: {type(attention_mask)}, {attention_mask.shape}")
+            print(f"\tlabels: {type(labels)}, {labels.shape}")
 
-        # Step 1: Pass inputs through the transformer model
-        output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_states = output.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
+        # Get transformer embeddings from parent
+        hidden_states = super().forward(input_ids, attention_mask, labels)
+        #output = self.pretrained_embeddings(input_ids=input_ids, attention_mask=attention_mask)
+        #hidden_states = output.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
         if self.debug:
             print(f"Hidden states shape: {hidden_states.shape}")
 

@@ -315,12 +315,8 @@ def get_representation(opt, add_model=False):
     if opt.net== 'cnn':
         method_name+=f'-ch{opt.channels}'
 
-    """
-    if opt.tunable:
-        method_name += '(tunable)'
-    else:
-        method_name += '(static)'
-    """
+    if opt.net == 'linear':
+        method_name += f'-drop:{opt.dropprob}-pooling:{opt.pooling}'
     
     #
     # add pretrained parameters
