@@ -49,14 +49,14 @@ embedding_args=(
 # Datasets array
 #
 datasets=(
-    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
+    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
+    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
+    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
+    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
  )   
 
 
