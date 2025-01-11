@@ -916,34 +916,30 @@ class LCSequenceClassifier(nn.Module):
             # combine hidden states with TCE embeddings
             if self.comb_method == "cat":
                 # Concatenates the hidden_states and tce_embeddings along the last dimension (dim=2).
-                combined_output = torch.cat((last_hidden_state, tce_embeddings), dim=2)
+                last_hidden_state = torch.cat((last_hidden_state, tce_embeddings), dim=2)
             elif self.comb_method == "add":
                 # Project TCE embeddings to match hidden size
                 tce_embeddings_projected = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                combined_output += tce_embeddings_projected                       # Element-wise adds the projected TCE embeddings to the hidden_states.
+                last_hidden_state += tce_embeddings_projected                       # Element-wise adds the projected TCE embeddings to the hidden_states.
             elif self.comb_method == "dot":
                 # Project TCE embeddings to match hidden size
                 tce_embeddings_projected = self.tce_projection(tce_embeddings)  # Shape: (batch_size, seq_length, hidden_size)
-                combined_output *= tce_embeddings_projected                       # Element-wise multiplies the projected TCE embeddings with the hidden_states.
+                last_hidden_state *= tce_embeddings_projected                       # Element-wise multiplies the projected TCE embeddings with the hidden_states.
             else:
                 raise ValueError(f"Unsupported comb_method: {self.comb_method}")
         # -----------------------------------------------------------------------------------------------
-        else:
-            # default 
-            combined_output = last_hidden_state     # Use only the transformer outputs
-
         if (self.debug):
-            print(f"combined_output: {type(combined_output)}, {combined_output.shape}")
+            print(f"last_hidden_state: {type(last_hidden_state)}, {last_hidden_state.shape}")
 
         if attention_mask is not None:
-            mask_expanded = attention_mask.unsqueeze(-1).expand(combined_output.size())
-            masked_output = combined_output * mask_expanded
+            mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size())
+            masked_output = last_hidden_state * mask_expanded
             sum_hidden_state = torch.sum(masked_output, dim=1)
             sum_mask = torch.sum(mask_expanded, dim=1).clamp(min=1e-9)  # Avoid division by zero
             pooled_output = sum_hidden_state / sum_mask
         else:
             print("WARNING: No attention mask provided for pooling.")
-            pooled_output = combined_output.mean(dim=1)  # Fallback to mean pooling
+            pooled_output = last_hidden_state.mean(dim=1)  # Fallback to mean pooling
 
         if self.debug:
             print(f"pooled_output: {type(pooled_output)}, {pooled_output.shape}")
