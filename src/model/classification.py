@@ -2100,3 +2100,499 @@ class BertWCEClassifier(nn.Module):
 
 
 
+
+#
+# ML Models
+#
+
+from scipy.sparse import issparse
+
+from time import time
+import numpy as np
+from model.layers import *
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, precision_score
+from sklearn.metrics import make_scorer, recall_score, hamming_loss
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.multiclass import OneVsRestClassifier
+
+from util.metrics import evaluation_ml
+from util.common import OUT_DIR
+
+import logging
+logging.basicConfig(level=logging.INFO)
+
+
+NUM_JOBS = -1                   # important to manage CUDA memory allocation
+#NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
+
+NUM_SAMPLED_PARAMS = 30         # Number of parameter settings that are sampled by RandomizedSearchCV
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+# ml_classification()
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def ml_classification(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+    
+    print("\n\tML classification...")
+
+    print('X_train:', type(X_train), X_train.shape)
+    print('X_test:', type(X_test), X_test.shape)
+
+    print('y_train:', type(y_train), y_train.shape)
+    print('y_test:', type(y_test), y_test.shape)
+
+    if issparse(X_train):
+
+        print("Converting sparse X matrices to dense arrays...")
+        X_train = X_train.toarray()
+        X_test = X_test.toarray()
+
+        print('X_train:', type(X_train), X_train.shape)
+        print('X_test:', type(X_test), X_test.shape)
+
+    if (issparse(y_train)):
+        print("Converting sparse y matrices to dense arrays...")
+        y_train = y_train.toarray()
+        y_test = y_test.toarray()
+
+        print('y_train:', type(y_train), y_train.shape)
+        print('y_test:', type(y_test), y_test.shape)
+        
+    #print("y_train:", y_train)
+    #print("y_test:", y_test)
+        
+    print("target_names:", target_names)
+    print("class_type:", class_type)
+
+    #
+    # if y matrices are one-hot encoded, convert them to class labels (one dimension with class value)
+    #
+    if (class_type in ['singlelabel', 'single-label']):
+        
+        # If y_train is one-hot encoded, convert it to class labels first
+        if len(y_train.shape) > 1 and y_train.shape[1] > 1:
+            y_train = convert_labels(y_train)
+
+        #print("y_train:", y_train)
+
+        # If y_train is one-hot encoded, convert it to class labels first
+        if len(y_test.shape) > 1 and y_test.shape[1] > 1:
+            y_test = convert_labels(y_test)
+
+        #print("y_test:", y_test)
+
+    tinit = time()
+
+    # Support Vector Machine Classifier
+    if (args.learner == 'svm'):                                     
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(
+            args.dataset,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
+    
+    # Logistic Regression Classifier
+    elif (args.learner == 'lr'):                                  
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(
+            args.dataset,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
+
+    # Naive Bayes (MultinomialNB) Classifier
+    elif (args.learner == 'nb'):                                  
+        Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(
+            args.dataset,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            args,
+            target_names,
+            class_type=class_type
+            )
+    
+    else:
+        print(f"Invalid learner '{args.learner}'")
+        return None
+
+    formatted_string = f'Macro F1: {Mf1:.4f} Micro F1: {mf1:.4f} Acc: {accuracy:.4f} Hamming Loss: {h_loss:.4f} Precision: {precision:.4f} Recall: {recall:.4f} Jaccard Index: {j_index:.4f}'
+    print(formatted_string)
+
+    tend = time() - tinit
+
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index, tend
+
+
+
+from sklearn.preprocessing import LabelEncoder
+
+def convert_labels(y):
+
+    # convert one hot encoded labels to single label
+    # Initialize the label encoder
+    label_encoder = LabelEncoder()
+
+    y = np.argmax(y, axis=1)
+    
+    # Fit the encoder on y and transform it
+    y_encoded = label_encoder.fit_transform(y)
+
+    return y_encoded
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_svm_model()
+# ---------------------------------------------------------------------------------------------------------------------
+def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+    
+    print("\n\trunning SVM model...")
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        
+        classifier = OneVsRestClassifier(
+            estimator=LinearSVC(class_weight='balanced', dual='auto', max_iter=1000),
+            n_jobs=NUM_JOBS                         # parallelize the training
+        )
+    else:
+        print("Single-label classification detected. Using regular SVM...")
+
+        classifier = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
+
+    if not args.optimc:
+
+        print("Running default SVM model params using LinearSVC and OneVsRestClassifier...")
+
+        svc = LinearSVC(class_weight='balanced', dual='auto', max_iter=1000)
+        
+        ovr_svc = OneVsRestClassifier(
+            estimator=svc, 
+            n_jobs=NUM_JOBS
+        )
+        ovr_svc.fit(X_train, y_train)
+
+        y_pred_default = ovr_svc.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_default
+
+    # Case with optimization using RandomizedSearchCV
+    else:
+
+        print("Optimizing SVM model with RandomizedSearchCV...")
+        
+        param_distributions = {
+            'estimator__penalty': ['l1', 'l2'],
+            'estimator__loss': ['hinge', 'squared_hinge'],
+            'estimator__C': np.logspace(-3, 3, 7)
+        } if class_type == 'multilabel' else {
+            'penalty': ['l1', 'l2'],
+            'loss': ['hinge', 'squared_hinge'],
+            'C': np.logspace(-3, 3, 7)
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=NUM_JOBS,
+            cv=5,
+            return_train_score=True,
+            n_iter=NUM_SAMPLED_PARAMS                       # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
+    
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_lr_model()
+# ---------------------------------------------------------------------------------------------------------------------
+def run_lr_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+
+    print("\n\tRunning Logistic Regression model...")
+
+    print("X_train:", type(X_train), X_train.shape)
+    print("X_test:", type(X_test), X_test.shape)
+    print("y_train:", type(y_train), y_train.shape)
+    print("y_test:", type(y_test), y_test.shape)
+    print("Target Names:", target_names)
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        
+        classifier = OneVsRestClassifier(
+            estimator=LogisticRegression(max_iter=1000, class_weight='balanced', dual=False),
+            n_jobs=NUM_JOBS
+        )
+    else:
+        print("Single-label classification detected. Using regular Logistic Regression...")
+        classifier = LogisticRegression(max_iter=1000, class_weight='balanced', dual=False)
+
+    if not args.optimc:
+        print("Running default Logistic Regression model using OneVsRestClassifier...")
+        
+        lr = LogisticRegression(max_iter=1000, class_weight='balanced', dual=False)
+        
+        ovr_lr = OneVsRestClassifier(
+            estimator=lr,
+            n_jobs=NUM_JOBS
+        )
+        
+        ovr_lr.fit(X_train, y_train)
+        y_pred_default = ovr_lr.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_default
+
+    # Case with optimization using GridSearchCV
+    else:
+        print("Optimizing Logistic Regression model with RandomizedSearchCV...")
+
+        param_distributions = {
+            'estimator__C': np.logspace(-3, 3, 7),                      # Regularization strength
+            'estimator__penalty': ['l1', 'l2'],                         # Regularization method
+            'estimator__solver': ['liblinear', 'saga']                  # Solvers compatible with L1 and L2 regularization
+        } if class_type == 'multilabel' else {
+            'C': np.logspace(-3, 3, 7),
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear', 'saga']
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=NUM_JOBS,
+            cv=5,
+            return_train_score=True,
+            n_iter=NUM_SAMPLED_PARAMS                       # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+        y_preds = y_pred_best
+
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
+    
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# run_nb_model()
+# ---------------------------------------------------------------------------------------------------------------------
+def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
+    
+    print("\n\trunning Naive Bayes model...")
+
+    # Check if it's a multilabel problem, and use OneVsRestClassifier if true
+    if class_type in ['multilabel', 'multi-label']:
+        print("Multilabel classification detected. Using OneVsRestClassifier...")
+        
+        classifier = OneVsRestClassifier(
+            estimator=MultinomialNB(),
+            n_jobs=NUM_JOBS
+        )
+    else:
+        print("Single-label classification detected. Using regular Naive Bayes...")
+        
+        classifier = MultinomialNB()
+
+    if not args.optimc:
+
+        print("Running default Naive Bayes model using MultinomialNB and OneVsRestClassifier...")
+
+        nb = MultinomialNB()
+        ovr_nb = OneVsRestClassifier(estimator=nb, n_jobs=NUM_JOBS) if class_type in ['multilabel', 'multi-label'] else nb
+        ovr_nb.fit(X_train, y_train)
+        
+        y_pred_default = ovr_nb.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_default, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_default
+
+    # Case with optimization using GridSearchCV
+    else:
+        print("Optimizing Naive Bayes model with RandomizedSearchCV...")
+
+        param_distributions = {
+            'estimator__alpha': [0.1, 0.5, 1.0, 2.0]  # Smoothing parameter for MultinomialNB
+        } if class_type == 'multilabel' else {
+            'alpha': [0.1, 0.5, 1.0, 2.0]
+        }
+
+        # Add zero_division=0 to precision and recall to suppress the warnings
+        scorers = {
+            'accuracy_score': make_scorer(accuracy_score),
+            'f1_score': make_scorer(f1_score, average='micro'),
+            'recall_score': make_scorer(recall_score, average='micro', zero_division=0),
+            'precision_score': make_scorer(precision_score, average='micro', zero_division=0),
+            'hamming_loss': make_scorer(hamming_loss),
+        }
+
+        print("estimator:", classifier)
+        print("param_distributions:", param_distributions)
+        
+        # Wrap RandomizedSearchCV around OneVsRestClassifier if multilabel
+        randomized_search = RandomizedSearchCV(
+            estimator=classifier,
+            param_distributions=param_distributions,
+            scoring=scorers,
+            refit='f1_score',
+            n_jobs=NUM_JOBS,
+            cv=5,
+            return_train_score=True,
+            n_iter=NUM_SAMPLED_PARAMS                   # Number of parameter settings sampled
+        )
+
+        randomized_search.fit(X_train, y_train)
+        
+        print('Best parameters:', randomized_search.best_params_)
+        best_model = randomized_search.best_estimator_
+        
+        # Predict on test set
+        y_pred_best = best_model.predict(X_test)
+
+        print(classification_report(y_true=y_test, y_pred=y_pred_best, target_names=target_names, digits=4, zero_division=0))
+
+        y_preds = y_pred_best
+
+    # Evaluate the model
+    Mf1, mf1, accuracy, h_loss, precision, recall, j_index =    \
+        evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
+    
+    return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
+
+
+
+import seaborn as sns
+import matplotlib as plt
+
+
+def create_confusion_matrix(y_test, y_pred, category_names, title, file_name=OUT_DIR+'confusion_matrix.png', debug=True):
+    """
+    Create and display a confusion matrix with actual category names. NB only works with single label datasets
+    
+    Args:
+    y_test (array-like): Ground truth (actual labels).
+    y_pred (array-like): Predicted labels by the model.
+    category_names (list): List of actual category names.
+    title (str): Title of the plot.
+    file_name (str): File name to save the confusion matrix.
+    debug (bool): If True, will print additional information for debugging purposes.
+    """
+
+    print("Creating confusion matrix...")
+
+    # Generate confusion matrix
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    # Plot the confusion matrix with category names on the axes
+    fig, ax = plt.subplots(figsize=(12, 8))  # Set figure size
+
+    # Display confusion matrix as a heatmap
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=category_names, yticklabels=category_names, ax=ax)
+
+    # Set axis labels and title
+    ax.set_xlabel('Predicted Categories', fontsize=14)
+    ax.set_ylabel('Actual Categories', fontsize=14)
+    plt.title(title, fontsize=16, pad=20)
+
+    # Adjust layout and save the plot to a file
+    plt.tight_layout()
+    plt.savefig(file_name, bbox_inches='tight')  # Save to file
+    plt.show()  # Display plot
+
+    print(f"Confusion matrix saved as {file_name}")
+
+    # Calculate and print accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Accuracy Score: {accuracy * 100:.2f}%")
+
+    # Optionally print more detailed information
+    if debug:
+        print("\nConfusion Matrix Debug Information:")
+        print("------------------------------------------------------")
+        print("Confusion matrix shows actual classes as rows and predicted classes as columns.")
+        print("\nConfusion Matrix Values:")
+        for i in range(len(conf_matrix)):
+            print(f"Actual category '{category_names[i]}':")
+            for j in range(len(conf_matrix[i])):
+                print(f"  Predicted as '{category_names[j]}': {conf_matrix[i][j]}")
+
+

@@ -36,6 +36,8 @@ from data.rcv_reader import fetch_RCV1
 
 from model.LCRepresentationModel import *
 
+from data.lc_trans_dataset import _label_matrix, RANDOM_SEED
+
 
 
 #SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
@@ -80,7 +82,7 @@ class LCDataset:
 
     dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
 
-    def __init__(self, name, vectorization_type='tfidf', pretrained=None, embedding_type='word', embedding_path=VECTOR_CACHE, embedding_comp_type='avg'):
+    def __init__(self, name, vectorization_type='tfidf', pretrained=None, embedding_type='word', embedding_path=VECTOR_CACHE, embedding_comp_type='avg', seed=RANDOM_SEED):
         """
         Initializes the LCDataset object with the specified dataset and vectorization parameters. This method
         both loads the dataset into the respective LCDataset variables as well as sets up the proper model and 
@@ -96,6 +98,9 @@ class LCDataset:
         print("\n\tinitializing LCDataset...")
 
         assert name in LCDataset.dataset_available, f'dataset {name} is not available'
+
+        self.seed = seed
+        print("seed:", self.seed)
 
         self.name = name
         print("self.name:", self.name) 
@@ -208,20 +213,20 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
-        elif (pretrained == 'gpt2'):
-            print("Using GPT2 pretrained embeddings...")
-
-            self.lcr_model = GPT2LCRepresentationModel(
-                model_name=GPT2_MODEL, 
-                model_dir=embedding_path,  
-                vtype=vectorization_type
-            )
-
         elif (pretrained == 'xlnet'):
             print("Using XLNet pretrained embeddings...")
 
             self.lcr_model = XLNetLCRepresentationModel(
                 model_name=XLNET_MODEL, 
+                model_dir=embedding_path,  
+                vtype=vectorization_type
+            )
+
+        elif (pretrained == 'gpt2'):
+            print("Using GPT2 pretrained embeddings...")
+
+            self.lcr_model = GPT2LCRepresentationModel(
+                model_name=GPT2_MODEL, 
                 model_dir=embedding_path,  
                 vtype=vectorization_type
             )
@@ -251,7 +256,6 @@ class LCDataset:
         self.initialized = True
 
         #print("LCDataset initialized...\n")
-
 
 
     # Function to remove stopwords before tokenization
@@ -333,7 +337,6 @@ class LCDataset:
         return self.Xtr_vectorized, self.Xte_vectorized
     
 
-
     def init_embedding_matrices(self):
         """
         Initialize the dataset with pretrained embeddings.
@@ -388,7 +391,7 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'llama']):      
+        if (self.pretrained in ['fasttext', 'bert', 'roberta', 'distilbert', 'xlnet']):      
 
             print("generating token / subword based dataset representations...")
 
@@ -669,7 +672,7 @@ class LCDataset:
             train_set['Text'], 
             train_set['Category'], 
             train_size = 1-TEST_SIZE, 
-            random_state = seed
+            random_state = self.seed
         )
 
         # reset indeces
@@ -1556,8 +1559,7 @@ class LCDataset:
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
-def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg'):
+def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_CACHE, emb_type='word', embedding_comp_type='avg', seed=RANDOM_SEED):
 
     print(f'\n\tloading dataset:{dataset} with embedding:{pretrained} data...')
     
@@ -1569,9 +1571,8 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'bert': BERT_MODEL,
         'roberta': ROBERTA_MODEL,
         'distilbert': DISTILBERT_MODEL,
-        'gpt2': GPT2_MODEL,
         'xlnet': XLNET_MODEL,
-        'llama': LLAMA_MODEL
+        'gpt2': GPT2_MODEL,
     }
 
     # Look up the model name, or raise an error if not found
@@ -1596,12 +1597,13 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         print(f"'{pickle_file}' not found, loading {dataset}...")
         
         lcd = LCDataset(
-            name=dataset,                               # dataset name 
-            vectorization_type=vtype,                   # vectorization type (one of 'tfidf', 'count')
-            embedding_type=emb_type,                    # embedding type (one of 'word', 'token')
-            pretrained=pretrained,                      # pretrained embeddings (model type or None)
-            embedding_path=embedding_path,              # path to embeddings
-            embedding_comp_type=embedding_comp_type     # embedding computation type (one of 'avg', 'weighted', 'summary')
+            name=dataset,                                       # dataset name 
+            vectorization_type=vtype,                           # vectorization type (one of 'tfidf', 'count')
+            embedding_type=emb_type,                            # embedding type (one of 'word', 'token')
+            pretrained=pretrained,                              # pretrained embeddings (model type or None)
+            embedding_path=embedding_path,                      # path to embeddings
+            embedding_comp_type=embedding_comp_type,            # embedding computation type (one of 'avg', 'weighted', 'summary')
+            seed=seed
         )    
 
         lcd.vectorize()                             # vectorize the dataset
