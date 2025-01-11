@@ -87,10 +87,10 @@ for dataset in "${datasets[@]}"; do
         #
         # TUNABLE model, supervised (add), tunable tce layer        
         #
-        echo
-        echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-        $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-        echo
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+        #$PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+        #echo
 
 
     done
