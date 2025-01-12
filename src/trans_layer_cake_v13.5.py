@@ -33,7 +33,7 @@ from data.lc_trans_dataset import get_dataset_data, show_class_distribution, che
 from data.lc_trans_dataset import LCTokenizer, get_vectorized_data, lc_class_weights
 
 from util.metrics import evaluation_nn
-from util.common import initialize_testing, get_embedding_type
+from util.common import initialize_testing, get_embedding_type, get_model_identifier
 
 from embedding.supervised import compute_tces
 from embedding.pretrained import MODEL_MAP
@@ -67,16 +67,6 @@ DEFAULT_MAX_CUDA_BATCH_SIZE = 32
 
     
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-# Get the full model identifier and load from local directory
-def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
-
-    model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, pretrained)
-
-    return model_name, model_path
-    
 
 
 class LCDataset(Dataset):

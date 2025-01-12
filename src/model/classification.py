@@ -2189,7 +2189,7 @@ def ml_classification(X_train, X_test, y_train, y_test, args, target_names, clas
     tinit = time()
 
     # Support Vector Machine Classifier
-    if (args.learner == 'svm'):                                     
+    if (args.net == 'svm'):                                     
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_svm_model(
             args.dataset,
             X_train,
@@ -2202,7 +2202,7 @@ def ml_classification(X_train, X_test, y_train, y_test, args, target_names, clas
             )
     
     # Logistic Regression Classifier
-    elif (args.learner == 'lr'):                                  
+    elif (args.net == 'lr'):                                  
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_lr_model(
             args.dataset,
             X_train,
@@ -2215,7 +2215,7 @@ def ml_classification(X_train, X_test, y_train, y_test, args, target_names, clas
             )
 
     # Naive Bayes (MultinomialNB) Classifier
-    elif (args.learner == 'nb'):                                  
+    elif (args.net == 'nb'):                                  
         Mf1, mf1, accuracy, h_loss, precision, recall, j_index = run_nb_model(
             args.dataset,
             X_train,
@@ -2228,7 +2228,7 @@ def ml_classification(X_train, X_test, y_train, y_test, args, target_names, clas
             )
     
     else:
-        print(f"Invalid learner '{args.learner}'")
+        print(f"Invalid learner '{args.net}'")
         return None
 
     formatted_string = f'Macro F1: {Mf1:.4f} Micro F1: {mf1:.4f} Acc: {accuracy:.4f} Hamming Loss: {h_loss:.4f} Precision: {precision:.4f} Recall: {recall:.4f} Jaccard Index: {j_index:.4f}'

@@ -3,7 +3,8 @@ from tqdm import tqdm
 import os
 import pickle
 import torch
-
+import datetime
+    
 from scipy.sparse import vstack, issparse
 
 from joblib import Parallel, delayed
@@ -13,6 +14,10 @@ import itertools
 import platform
 import psutil
 import GPUtil
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.naive_bayes import MultinomialNB
 
 
 # custom importa
@@ -171,7 +176,6 @@ def initialize_testing(args, program, version):
     logger.set_default('representation', representation)
     logger.set_default('lm_type', lm_type)
 
-
     #
     # set optimized value (args.tunable) explcitly
     #
@@ -213,10 +217,318 @@ def initialize_testing(args, program, version):
     return already_modelled, logger, representation, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system
 
 
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------
+def initialize_ml_testing(args, program, version):
+
+    """
+    Initializes machine learning testing based on the provided arguments.
+
+    Args:
+    - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
+      Expected fields:
+        - net (str): Type of learner to use ('svm', 'lr', or 'nb').
+        - vtype (str): Vectorization type, either 'count' or 'tfidf'.
+        - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
+        - dataset (str): Name of the dataset.
+        - logfile (str): Path to the log file where results will be stored.
+        - mix (str): Dataset and embedding comparison method.
+        - dataset_emb_comp (str): Dataset embedding comparison method.
+    
+    Returns:
+    - already_computed (bool): Whether the current configuration has already been computed.
+    - vtype (str): Vectorization type ('count' or 'tfidf').
+    - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
+    - pretrained (bool): Whether to use a pretrained model or embeddings.
+    - embeddings (str): Type of embeddings to use.
+    - emb_path (str): Path to the embeddings or pretrained model files.
+    - mix (str): The dataset and embedding comparison method.
+    - representation (str): Type of data representation used for training.
+    - ml_logger (CSVLog): Logger object to store model run details.
+    - optimized (bool): Whether the model is optimized for performance.
+    """
+
+    print("\n\tinitializing ML testing...")
+    
+    print("args:", args)
+
+    # set up model type
+    if args.net == 'svm':
+        learner = LinearSVC
+        learner_name = 'SVM' 
+    elif args.net == 'lr':
+        learner = LogisticRegression
+        learner_name = 'LR'
+    elif args.net == 'nb':
+        learner = MultinomialNB
+        #learner = GaussianNB
+        learner_name = 'NB'
+    else:
+        print("** Unknown learner, possible values are svm, lr or nb **")
+        return
+
+    print("learner:", learner)
+    print("learner_name: ", {learner_name})
+
+    # default to tfidf vectorization type unless 'count' specified explicitly
+    if args.vtype == 'count':
+        vtype = 'count'
+    else:
+        vtype = 'tfidf'             
+    print("vtype:", {vtype})
+
+    if args.pretrained:
+        pretrained = True
+    else:
+        pretrained = False
+
+    embeddings = args.pretrained
+    print("embeddings:", {embeddings})
+
+    lm_type = get_language_model_type(embeddings)
+    print("lm_type:", {lm_type})
+
+    # get the path to the embeddings
+    emb_path = get_embeddings_path(args.pretrained, args)
+    print("emb_path: ", {emb_path})
+
+    model_type = f'{learner_name}:{args.vtype}-{args.mix}'
+    print("model_type:", {model_type})
+    
+    print("initializing baseline layered log file...")
+
+    logger = CSVLog(
+        file=args.logfile, 
+        columns=[
+            'source',
+            'version',
+            'os',
+            'cpus',
+            'mem',
+            'gpus',
+            'dataset', 
+            'class_type',
+            'model', 
+            'embeddings',
+            'lm_type',
+            'mode',
+            'comp_method',
+            'representation',
+            'optimized',
+            'dimensions',
+            'measure', 
+            'value',
+            'timelapse',
+            'epoch',
+            'run',
+            'timestamp'  # Added timestamp column
+            ], 
+        verbose=True, 
+        overwrite=False)
+
+    print("setting defaults...")
+    print("embeddings:", embeddings)
+
+    print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
+
+    lm_type = get_language_model_type(embeddings)
+    print("lm_type:", {lm_type})
+
+    if (args.mix in ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-wce']):
+        supervised = True
+        mode = f'supervised:zscore'         # always use zscore with ML-WCE models
+    else:
+        supervised = False
+        mode = f'unsupervised'
+
+    # get the path to the embeddings
+    if pretrained:
+        emb_path = get_embeddings_path(embeddings, args)
+        print("emb_path: ", {emb_path})
+    else:
+        emb_path = None
+        print("emb_path: None")
+    
+    system = SystemResources()
+    print("system:\n", system)
+
+    run_mode = args.dataset + ':' + args.net + ':' + args.pretrained + ':' + args.mix + ':' + args.dataset_emb_comp
+    print("run_mode:", {run_mode})
+
+    representation, optimized = get_ml_representation(args)
+    print("representation:", {representation})
+
+    # set default run time params
+    logger.set_default('os', system.get_os())
+    logger.set_default('cpus', system.get_cpu_details())
+    logger.set_default('mem', system.get_total_mem())
+    logger.set_default('mode', run_mode)
+
+    logger.set_default('source', program)
+    logger.set_default('version', version)
+
+    gpus = system.get_gpu_summary()
+    if gpus is None:
+        gpus = -1   
+    logger.set_default('gpus', gpus)
+
+    logger.set_default('dataset', args.dataset)
+    logger.set_default('model', args.net)
+    logger.set_default('mode', mode)
+    logger.set_default('embeddings', embeddings)
+    logger.set_default('run', args.seed)
+    logger.set_default('representation', representation)
+    logger.set_default('lm_type', lm_type)
+
+    #
+    # set optimized value (args.tunable) explcitly
+    #
+    optimized_val = args.optimc
+    print("optimized_val:", optimized_val)
+    logger.set_default('optimized', optimized_val)
+
+    # Add the current timestamp
+    current_timestamp = datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
+    logger.set_default('timestamp', current_timestamp)
+
+    embedding_type = get_embedding_type(embeddings)
+    print("embedding_type:", embedding_type)
+
+    comp_method = get_model_computation_method(
+        vtype=args.vtype,
+        pretrained=embeddings, 
+        embedding_type=embedding_type, 
+        learner=args.net, 
+        mix=args.mix
+        )
+    print("comp_method:", comp_method)
+    logger.set_default('comp_method', comp_method)
+
+    # epoch and run fields are deprecated
+    logger.set_default('epoch', -1)
+    logger.set_default('run', -1)
+
+    embeddings = get_embeddings_ml(args)
+    print("embeddings:", {embeddings})
+
+    lm_type = get_language_model_type(args.pretrained)
+    print("lm_type:", {lm_type})
+
+    # check to see if the model has been run before
+    already_computed = logger.already_calculated(
+        dataset=args.dataset,
+        model=args.net,
+        representation=representation,
+        #embeddings=embeddings
+        )
+
+    print("already_computed:", already_computed)
+
+    return already_computed, vtype, learner, pretrained, embeddings, lm_type, emb_path, args.mix, representation, logger, optimized
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+def get_embeddings_ml(args):
+
+    print("get_embeddings_ml...")
+
+    if (args.pretrained):
+        return args.pretrained + ':' + args.mix
+    else:
+        return args.mix
+    
+
+def get_ml_representation(args):
+
+    print("forming ML model representation...")
+
+    # set model and dataset
+    method_name = f'[{args.net}:{args.dataset}]:->'
+
+    #set representation form
+
+    if (args.mix == 'vmode'):
+        method_name += f'{args.vtype}[{args.pretrained}]'
+
+    # solo is when we project the doc, we represent it, in the 
+    # underlying pretrained embedding space - with three options 
+    # as to how that space is computed: 1) weighted, 2) avg, 3) summary
+    elif (args.mix == 'solo'):
+        method_name += f'{args.pretrained}({args.dataset_emb_comp})'
+
+    elif (args.mix == 'solo-wce'):
+        method_name += f'{args.pretrained}({args.dataset_emb_comp})+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+
+    # cat is when we concatenate the doc representation in the
+    # underlying pretrained embedding space with the tfidf vectors - 
+    # we have the same three options for the dataset embedding representation
+    elif (args.mix == 'cat-doc'):
+        method_name += f'{args.vtype}+{args.pretrained}({args.dataset_emb_comp})'
+
+    elif (args.mix == 'cat-wce'):
+        method_name += f'{args.vtype}+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+    
+    elif (args.mix == 'cat-doc-wce'):
+        method_name += f'{args.vtype}+{args.vtype}.({args.pretrained}+wce({args.vtype}))+{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+        
+    # dot is when we project the tfidf vectors into the underlying
+    # pretrained embedding space using matrix multiplication, i.e. dot product
+    # we have the same three options for the dataset embedding representation computation
+    elif (args.mix == 'dot'):
+        method_name += f'{args.vtype}.{args.pretrained}'
+
+    elif (args.mix == 'dot-wce'):
+        method_name += f'{args.vtype}.({args.pretrained}+wce({args.vtype}))'
+        
+    # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
+    # as the dataset representation into the model
+    elif (args.mix == 'vmode'):
+        method_name += f'{args.vtype}[{args.pretrained}]'
+    
+    # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
+    # the vectorized data set, LSA is a form of dimensionality reduction
+    elif (args.mix == 'lsa'):
+        method_name += f'{args.vtype}->LSA[{args.pretrained}].({args.pretrained})'
+
+    elif (args.mix == 'lsa-wce'):
+        method_name += f'{args.vtype}->LSA[{args.pretrained}]+({args.vtype}.{args.pretrained})+wce'
+
+    #
+    # set optimized field to true if its a neural model 
+    # and we are tuning (fine-tuning) it or if its an ML
+    # model and we are optimizing the prameters ofr best results
+    #
+    if (args.net in NEURAL_MODELS and args.tunable) or (args.net in ML_MODELS and args.optimc):
+        method_name += ':[opt]'
+        optimized = True
+    else:
+        method_name += ':[def]'
+        optimized = False
+    
+    print("method_name:", method_name)
+
+    return method_name, optimized
+
+
+
+
+
+# Get the full model identifier and load from local directory
+def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
+
+    model_name = MODEL_MAP.get(pretrained, pretrained)
+    model_path = os.path.join(cache_dir, pretrained)
+
+    return model_name, model_path
+    
+"""
 def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
     model_name = MODEL_MAP.get(pretrained, pretrained)
     model_path = os.path.join(cache_dir, pretrained)
     return model_name, model_path
+"""
 
 
 def get_embeddings_path(pretrained, args):
@@ -905,7 +1217,13 @@ import re
 
 
 
-def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False, remove_stopwords=False, remove_special_chars=False):
+def preprocess(
+        text_series: pd.Series, 
+        remove_punctuation: bool=True, 
+        lowercase: bool=False, 
+        remove_stopwords: bool=False, 
+        remove_special_chars: bool=False, 
+        array:  bool=False):
     """
     Preprocess a pandas Series of texts by removing punctuation, optionally lowercasing, 
     and optionally removing stopwords. Unmatched tokens, warnings, and unwanted patterns 
@@ -917,9 +1235,10 @@ def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False,
     - lowercase: Boolean indicating whether to convert text to lowercase.
     - remove_stopwords: Boolean indicating whether to remove stopwords.
     - remove_special_chars: Boolean indicating whether to remove special LaTeX-like symbols. 
+    - array: Boolean indicating whether to return as a NumPy array or as a list.
 
     Returns:
-    - processed_texts: A list containing processed text strings.
+    - processed_texts: processed text strings, eitehr as list or numpy array (depending on array argument)
     """
 
     print("preprocessing...")
@@ -976,8 +1295,13 @@ def preprocess(text_series: pd.Series, remove_punctuation=True, lowercase=False,
         for idx, original_text in empty_row_indices:
             print(f"Row {idx}: '{original_text}'")
 
-    # Return as a list
-    return list(processed_texts)
+    if (array):
+        # Return as a NumPy array
+        return np.array(processed_texts)
+    else:
+        # Return as a list
+        return list(processed_texts)
+
 
 
 def _mask_numbers(data, number_mask='[NUM]'):

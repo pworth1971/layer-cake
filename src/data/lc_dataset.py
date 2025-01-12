@@ -1,27 +1,35 @@
+
+"""
+Dataset loading and managemeht routines to support Layer Cake ML model testing
+#
+# LCDataset class to support dataset management for Layer Cake ML Model processing 
+# which includes word2vec, glove and fasttext, as well as BERT, RoBERTa, DistilBERT, XLNet, and GPT2 
+# transformer models. The ML models are trained with scikit-learn libraries 
+# 
+#
+"""
+
 import os
 import numpy as np
 from tqdm import tqdm
 import re
 import pandas as pd
 import string
-
 from pathlib import Path
 from urllib import request
 import tarfile
 import gzip
 import shutil
-
-from scipy.sparse import csr_matrix
-
 import pickle
 
-from scipy.special._precompute.expn_asy import generate_A
 
 import torch
 
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.model_selection import train_test_split
+
+from scipy.sparse import csr_matrix
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -30,22 +38,29 @@ from nltk.corpus import stopwords
 
 from joblib import Parallel, delayed
 
+
+#
+# custom imports
+#
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
+from data.arxiv_reader import fetch_arxiv
 
 from model.LCRepresentationModel import *
 
 from data.lc_trans_dataset import _label_matrix, RANDOM_SEED
+from util.common import preprocess
 
 
 
-#SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "cmu_movie_corpus"]
-SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv"]
+# ----------------------------------------------------------------------------------------------------------------------------------
+#
+# Constants
+#
+SUPPORTED_DATASETS = ["20newsgroups", "rcv1", "reuters21578", "bbc-news", "ohsumed", "imdb", "arxiv", "arxiv_protoformer"]
 
 DATASET_DIR = '../datasets/'                        # dataset directory
-
-
 
 #
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
@@ -56,7 +71,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
 TEST_SIZE = 0.175                   # test size for train/test split
 NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -66,12 +81,8 @@ nltk.download('punkt_tab')
 stop_words = set(stopwords.words('english'))
 
 
-#
-# LCDataset class for legacy Neural Model (supports word based models) which includes 
-# word2vec, glove and fasttext integrated with SVM and Logistic Regression ML models and 
-# CNN, LSTM and ATTN based neural models. The ML models are trained with scikit-learn
-# and also support various transformer models as well
-#
+
+
 
 class LCDataset:
 
@@ -80,9 +91,16 @@ class LCDataset:
     Supports multiple datasets including reuters21578, 20newsgroups, ohsumed, rcv1 (and imdb and arxiv coming).
     """
 
-    dataset_available = {'reuters21578', '20newsgroups', 'ohsumed', 'rcv1', 'bbc-news'}
+    dataset_available = SUPPORTED_DATASETS
 
-    def __init__(self, name, vectorization_type='tfidf', pretrained=None, embedding_type='word', embedding_path=VECTOR_CACHE, embedding_comp_type='avg', seed=RANDOM_SEED):
+    def __init__(self, 
+                 name, 
+                 vectorization_type='tfidf', 
+                 pretrained=None, 
+                 embedding_type='word', 
+                 embedding_path=VECTOR_CACHE, 
+                 embedding_comp_type='avg', 
+                 seed=RANDOM_SEED):
         """
         Initializes the LCDataset object with the specified dataset and vectorization parameters. This method
         both loads the dataset into the respective LCDataset variables as well as sets up the proper model and 
@@ -91,38 +109,29 @@ class LCDataset:
 
         - name: Name of the dataset to load.
         - vectorization_type: 'tfidf' or 'count', determines which vectorizer to use for tokenization.
-        - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for 
-        token-based models (BERT, RoBERTA, LLaMa).
+        - pretrained: type of pretraiend emebddings (eg glove, word2vec, bert, etc)
+        - embedding_type: 'word' for word-based embeddings (GloVe, Word2Vec, fastText) or 'token' for token-based models (BERT, RoBERTA, etc).
+        - embedding_path: Path to the pretrained embeddings.
+        - embedding_comp_type: 'avg' or 'weighted' for the type of embedding composition to use.
+        - seed: Random seed for reproducibility.
         """
 
         print("\n\tinitializing LCDataset...")
 
         assert name in LCDataset.dataset_available, f'dataset {name} is not available'
 
-        self.seed = seed
-        print("seed:", self.seed)
+        print(f"name: {name}, vectorization_type: {vectorization_type}, pretrained: {pretrained}, embedding_type: {embedding_type}, embedding_path: {embedding_path}, embedding_comp_type: {embedding_comp_type}, seed: {seed}")
 
         self.name = name
-        print("self.name:", self.name) 
-
         self.vectorization_type = vectorization_type
-        print("vectorization_type:", self.vectorization_type)
-
         self.pretrained = pretrained
-        print("pretrained:", self.pretrained)
-
         self.embedding_type = embedding_type
-        print("embedding_type:", self.embedding_type)
-
         self.embedding_path = embedding_path
-        print("embedding_path:", self.embedding_path)
-
         self.pretrained_path = embedding_path
-        print("pretrained_path:", self.pretrained_path)
-
         self.embedding_comp_type = embedding_comp_type
-        print("embedding_comp_type:", self.embedding_comp_type)
-
+        
+        self.seed = seed
+        
         self.loaded = False
         self.initialized = False
 
@@ -153,13 +162,24 @@ class LCDataset:
             self._load_ohsumed()
         elif name == 'bbc-news':
             self._load_bbc_news()
-
+        elif name == 'imdb':
+            self._load_imdb()
+        elif name == 'arxiv':
+            self._load_arxiv()
+        elif name == 'arxiv_protoformer':
+            self._load_arxiv_protoformer()
+        else:
+            raise ValueError(f"Dataset {name} not supported")
+        
         #
         # instantiate representation model if token/transformer based 
         # we offload this code to another class
         #
         self.lcr_model = None          # custom representation model class object
     
+        #
+        # load LCRepresentation class
+        #
         if (pretrained == 'word2vec'):
             print("Using Word2Vec pretrained embeddings...")
             
@@ -241,6 +261,9 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
+        #
+        # initialize model, tokenizer and vectorizer
+        #
         self.model = self.lcr_model.model
         self.max_length = self.lcr_model.max_length
         self.tokenizer = self.lcr_model.tokenizer           # note only transformer models have tokenizers
@@ -255,7 +278,7 @@ class LCDataset:
         self.loaded = True
         self.initialized = True
 
-        #print("LCDataset initialized...\n")
+        print("LCDataset initialized...\n")
 
 
     # Function to remove stopwords before tokenization
@@ -391,7 +414,7 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['fasttext', 'bert', 'roberta', 'distilbert', 'xlnet']):      
+        if (self.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):      
 
             print("generating token / subword based dataset representations...")
 
@@ -400,7 +423,6 @@ class LCDataset:
 
             # not supported weighted average comp method for transformer based models due to
             # complexity of vectorization and tokenization mapping across models 
-            # word embedding models like word2vec, GloVe or fasTtext
             self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
             self.Xte_weighted_embeddings = self.Xte_avg_embeddings
             
@@ -409,13 +431,11 @@ class LCDataset:
             print("generating word based dataset representations...")
 
             self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(
-                #self.Xtr.tolist(),
                 self.Xtr, 
                 self.embedding_vocab_matrix
             )
             
             self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(
-                #self.Xte.tolist(),
                 self.Xte, 
                 self.embedding_vocab_matrix
             )
@@ -424,32 +444,19 @@ class LCDataset:
             # word embedding models like word2vec, GloVe or fasTtext
             self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
             self.Xte_summary_embeddings = self.Xte_avg_embeddings
-
-        elif (self.pretrained in ['gpt2']):                        # GPT2, does not include a summary embedding token option
-
-            print("generating GPT2 based dataset repressentations...")
-
-            self.Xtr_avg_embeddings, first_tokens = self.lcr_model.encode_docs(
-                self.Xtr, 
-                self.embedding_vocab_matrix
-            )
+        
+        elif (self.pretrained in ['fasttext']):                        # subword based embeddings
             
-            self.Xte_avg_embeddings, first_tokens = self.lcr_model.encode_docs(
-                self.Xte, 
-                self.embedding_vocab_matrix
-            )
+            print("generating subword based dataset representations...")
 
-            # not supported weighted average comp method for transformer based models due to
-            # complexity of vectorization and tokenization mapping across models 
-            # word embedding models like word2vec, GloVe or fasTtext
-            self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
-            self.Xte_weighted_embeddings = self.Xte_avg_embeddings
+            self.Xtr_weighted_embeddings, self.Xtr_avg_embeddings = self.lcr_model.encode_docs(self.Xtr)
+            self.Xte_weighted_embeddings, self.Xte_avg_embeddings = self.lcr_model.encode_docs(self.Xte)
 
             # CLS token summary embeddings not supported in pretrained 
             # word embedding models like word2vec, GloVe or fasTtext
             self.Xtr_summary_embeddings = self.Xtr_avg_embeddings
             self.Xte_summary_embeddings = self.Xte_avg_embeddings
-
+        
         else:
             print("generating default (GloVe) based dataset representations...")
 
@@ -469,12 +476,14 @@ class LCDataset:
             self.Xte_summary_embeddings = self.Xte_avg_embeddings
 
         print("Xtr_avg_embeddings:", type(self.Xtr_avg_embeddings), self.Xtr_avg_embeddings.shape)
-        print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
         print("Xte_avg_embeddings:", type(self.Xte_avg_embeddings), self.Xte_avg_embeddings.shape)
-        print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+
         print("self.Xtr_weighted_embeddings:", type(self.Xtr_weighted_embeddings), self.Xtr_weighted_embeddings.shape)
         print("self.Xte_weighted_embeddings:", type(self.Xte_weighted_embeddings), self.Xte_weighted_embeddings.shape)
 
+        print("Xtr_summary_embeddings:", type(self.Xtr_summary_embeddings), self.Xtr_summary_embeddings.shape)
+        print("Xte_summary_embeddings:", type(self.Xte_summary_embeddings), self.Xte_summary_embeddings.shape)
+        
         return self.Xtr_weighted_embeddings, self.Xte_weighted_embeddings, self.Xtr_avg_embeddings, self.Xte_avg_embeddings, self.Xtr_summary_embeddings, self.Xte_summary_embeddings
     
 
@@ -865,6 +874,372 @@ class LCDataset:
 
         return self.target_names
 
+
+    def _load_imdb(self):
+        
+        print("\n\tloading IMDB dataset...")
+        
+        from datasets import load_dataset
+        import os
+
+        self.classification_type = 'singlelabel'
+        self.class_type = 'singlelabel'
+
+        data_path = os.path.join(DATASET_DIR, 'imdb')
+
+        # Load IMDB dataset using the Hugging Face Datasets library
+        imdb_dataset = load_dataset('imdb', cache_dir=data_path)
+
+        # Split dataset into training and test data
+
+        train_data = imdb_dataset['train']['text']
+        train_target = np.array(imdb_dataset['train']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        test_data = imdb_dataset['test']['text']
+        test_target = np.array(imdb_dataset['test']['label'], dtype=np.int64)  # Convert to numpy array of type int64
+
+        # Define target names
+        target_names = ['negative', 'positive']
+        num_classes = len(target_names)
+    
+        #
+        # preprocess: we remove stopwords, mask numbers and remove punctuation
+        # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
+        #
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(train_data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(test_data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(train_data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(test_data), 
+                remove_punctuation=False,
+                lowercase=True,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
+        print("...preprocessed text...")
+        print("self.Xtr:", type(self.Xtr), len(self.Xtr))
+        print("self.Xtr[0]:\n", self.Xtr[0])
+        
+        print("self.Xte:", type(self.Xte), len(self.Xte))
+        print("self.Xte[0]:\n", self.Xte[0])
+
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+                
+        self.devel_target, self.test_target = train_target, test_target        
+        print("self.devel_target:", type(self.devel_target), len(self.devel_target))
+        print("self.test_target:", type(self.test_target), len(self.test_target))
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("self.labels:", type(self.labels), len(self.labels))
+
+        self.label_names = target_names           # set self.labels to the class label names
+        print("self.label_names:\n", self.label_names) 
+
+        self.target_names = self.label_names
+        print("self.target_names:", self.target_names)
+
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        self.y_train_sparse = self.devel_labelmatrix
+        self.y_test_sparse = self.test_labelmatrix
+
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+
+        # encode the one-hot encoded label array into a 1d array with label
+        # Assuming self.y_train_sparse is a sparse matrix with one-hot encoding
+        y_train_dense = self.y_train_sparse.toarray()
+        y_test_dense = self.y_test_sparse.toarray()
+
+        # Convert the one-hot encoded rows to class indices (assuming single-label per row)
+        y_train_flat = np.argmax(y_train_dense, axis=1)
+        y_test_flat = np.argmax(y_test_dense, axis=1)
+
+        # Apply LabelEncoder to the flattened 1D array
+        label_encoder = LabelEncoder()
+        self.ytr_encoded = label_encoder.fit_transform(y_train_flat)
+        self.yte_encoded = label_encoder.transform(y_test_flat)
+
+        #print("label_encoder.classes_:", label_encoder.classes_)
+
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
+
+        return self.target_names
+    
+
+    def _load_arxiv(self):
+
+        print("\n\tloading arxiv dataset...")
+
+        import os
+
+        data_path = os.path.join(DATASET_DIR, 'arxiv')
+        
+        print("data_path:", data_path)  
+    
+        self.classification_type = 'multilabel'
+        self.class_type = 'multilabel'
+
+        import os
+
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+
+            # 
+            # word based models (remove punctuation and stop words)
+            #             
+            self.Xtr, ytrain, self.Xte, ytest, target_names, num_classes = fetch_arxiv(
+                                                                                data_path=data_path, 
+                                                                                test_size=TEST_SIZE, 
+                                                                                seed=self.seed,
+                                                                                static=True, 
+                                                                                array=True)
+
+        else:
+            #
+            # token based models (leave pucntiation and stop words)
+            #
+            self.Xtr, ytrain, self.Xte, ytest, target_names, num_classes = fetch_arxiv(
+                                                                                data_path=data_path, 
+                                                                                test_size=TEST_SIZE, 
+                                                                                seed=self.seed,
+                                                                                static=False, 
+                                                                                array=True)
+
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+        
+        #self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(ytrain, ytest)
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = ytrain, ytest, target_names
+
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("labels:\n", self.labels)
+
+        self.devel_target, self.test_target = self.devel_labelmatrix, self.test_labelmatrix
+        print("devel_target:", type(self.devel_target), self.devel_target.shape)
+        print("test_target:", type(self.test_target), self.test_target.shape)
+
+        self.label_names = target_names                       # Set labels to class label names
+        print("self.label_names:\n", self.label_names)
+        
+        self.target_names = self.label_names
+        print("target_names:", type(self.target_names), len(self.target_names))
+
+        self.num_labels = num_classes
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        # Now self.devel_target is already a dense NumPy array 
+        # with shape (9603, 115), so no need for MultiLabelBinarizer.
+
+        self.y_train = self.devel_target                                    # Transform multi-label targets into a binary matrix
+        self.y_test = self.test_target                                      # Transform multi-label targets into a binary matrix
+        print("self.y_train:", type(self.y_train), self.y_train.shape)
+        print("self.y_test:", type(self.y_test), self.y_test.shape)
+        
+        # Convert Y to a sparse matrix
+        self.y_train_sparse = csr_matrix(self.y_train)                                       # without Transpose to match the expected shape
+        self.y_test_sparse = csr_matrix(self.y_test)                                         # without Transpose to match the expected shape
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+
+        self.ytr_encoded = self.y_train
+        self.yte_encoded = self.y_test
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
+
+        return self.label_names
+    
+
+    def _load_arxiv_protoformer(self):
+
+        print("\n\tloading arxiv_protoformer dataset...")
+
+        import os
+
+        self.classification_type = 'singlelabel'
+        self.class_type = 'singlelabel'
+        
+        #
+        # dataset from https://paperswithcode.com/dataset/arxiv-10
+        #
+        data_path = os.path.join(DATASET_DIR, 'arxiv_protoformer')
+
+        file_path = data_path + '/arxiv100.csv'
+        print("file_path:", file_path)
+
+        # Load datasets
+        full_data_set = pd.read_csv(file_path)
+        
+        target_names = full_data_set['label'].unique()
+        
+        """
+        self.num_classes = len(full_data_set['label'].unique())
+        print(f"self.num_classes: {len(self.target_names)}")
+        print("self.target_names:", self.target_names)
+        """
+
+        papers_dataframe = pd.DataFrame({
+            'title': full_data_set['title'],
+            'abstract': full_data_set['abstract'],
+            'label': full_data_set['label']
+        })
+
+        """
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+
+        print("proeprocessing...")
+        """
+
+        # preprocess text
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.replace("\n",""))
+        #papers_dataframe['abstract'] = papers_dataframe['abstract'].apply(lambda x: x.strip())
+        papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
+
+        """
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())
+        """
+
+        # Ensure the 'categories' column value counts are calculated and indexed properly
+        categories_counts = papers_dataframe['label'].value_counts().reset_index(name="count")
+
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            # 
+            # word based models (remove punctuation and stop words)
+            #             
+            papers_dataframe['text'] = preprocess(
+                papers_dataframe['text'],
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                remove_special_chars=True,          # we do this for arxiv data
+                array=True
+            )
+
+        else:
+            #
+            # token based models (leave punctiation and stop words)
+            #
+            papers_dataframe['text'] = preprocess(
+                papers_dataframe['text'],
+                remove_punctuation=False,
+                lowercase=True,
+                remove_stopwords=True,
+                remove_special_chars=True,           # we do this for arxiv data
+                array=True                           # return as array
+            )
+        
+        """
+        print("papers_dataframe:", papers_dataframe.shape)
+        print(papers_dataframe.head())        
+        """
+
+        # we split the train data into train and test here because that is
+        # not done for us with the BBC News dataset (Test data is not labeled)
+        self.Xtr, self.Xte, self.y_train, self.y_test = train_test_split(
+            papers_dataframe['text'], 
+            papers_dataframe['label'], 
+            train_size = 1-TEST_SIZE, 
+            random_state = self.seed,
+        )
+        
+        self.devel_raw = self.Xtr
+        self.test_raw = self.Xte
+
+        # Convert target labels to 1D arrays
+        self.devel_target = np.array(self.y_train)  # Flattening the training labels into a 1D array
+        self.test_target = np.array(self.y_test)    # Flattening the test labels into a 1D array
+
+        # Use LabelEncoder to encode the labels into label IDs
+        label_encoder = LabelEncoder()
+        label_encoder.fit(self.devel_target)  # Fit on training labels
+
+        # Transform labels to numeric IDs
+        self.devel_target = label_encoder.transform(self.devel_target)
+        self.test_target = label_encoder.transform(self.test_target)
+
+        self.devel_labelmatrix, self.test_labelmatrix, self.labels = _label_matrix(self.devel_target.reshape(-1,1), self.test_target.reshape(-1,1))
+        print("devel_labelmatrix:", type(self.devel_labelmatrix), self.devel_labelmatrix.shape)
+        print("test_labelmatrix:", type(self.test_labelmatrix), self.test_labelmatrix.shape)
+        print("self.labels:", type(self.labels), len(self.labels))
+
+        # Save the original label names (classes)
+        self.target_names = label_encoder.classes_
+        print("self.target_names (original labels):\n", self.target_names)
+        
+        #self.target_names = train_set['Category'].unique()       
+        self.label_names = self.target_names           # set self.labels to the class label names   
+        print("self.label_names:\n", self.label_names)
+
+        self.labels = self.label_names
+        self.num_labels = len(self.labels)
+        self.num_label_names = len(self.label_names)
+        print("# labels, # label_names:", self.num_labels, self.num_label_names)
+        if (self.num_labels != self.num_label_names):
+            print("Warning, number of labels does not match number of label names.")
+            return None
+
+        self.y_train_sparse = self.devel_labelmatrix
+        self.y_test_sparse = self.test_labelmatrix
+        print("self.y_train_sparse:", type(self.y_train_sparse), self.y_train_sparse.shape)
+        print("self.y_test_sparse:", type(self.y_test_sparse), self.y_test_sparse.shape)
+
+        # encode the one-hot encoded label array into a 1d array with label
+        # Assuming self.y_train_sparse is a sparse matrix with one-hot encoding
+        y_train_dense = self.y_train_sparse.toarray()
+        y_test_dense = self.y_test_sparse.toarray()
+
+        # Convert the one-hot encoded rows to class indices (assuming single-label per row)
+        y_train_flat = np.argmax(y_train_dense, axis=1)
+        y_test_flat = np.argmax(y_test_dense, axis=1)
+
+        # Apply LabelEncoder to the flattened 1D array
+        label_encoder = LabelEncoder()
+        self.ytr_encoded = label_encoder.fit_transform(y_train_flat)
+        self.yte_encoded = label_encoder.transform(y_test_flat)
+
+        #print("label_encoder.classes_:", label_encoder.classes_)
+
+        print("self.ytr_encoded:", type(self.ytr_encoded), self.ytr_encoded.shape)
+        print("self.yte_encoded:", type(self.yte_encoded), self.yte_encoded.shape)
+
+        return self.target_names
+    
 
     def _load_reuters(self):
 
@@ -1427,52 +1802,6 @@ class LCDataset:
 
         # Return as NumPy array
         return np.array(processed_texts)
-    
-
-    def _preprocess_deprecated(self, text_series: pd.Series):
-        """
-        Preprocess a pandas Series of texts by removing punctuation, stopwords, and masking numbers.
-        We do NOT lowercase the text or tokenize the text, ensuring that the text remains in its original form.
-
-        Parameters:
-        - text_series: A pandas Series containing text data (strings).
-
-        Returns:
-        - processed_texts: A NumPy array containing processed text strings.
-        """
-
-        print("Preprocessing text without tokenization...")
-        print("text_series:", type(text_series), text_series.shape)
-
-        # Load stop words once outside the loop
-        stop_words = set(stopwords.words('english'))
-        punctuation_table = str.maketrans('', '', string.punctuation)  # Translation table to remove punctuation
-
-        # Function to mask numbers in the text
-        def _mask_numbers(text, number_mask='numbermask'):
-            mask = re.compile(r'\b[0-9][0-9.,-]*\b')
-            return mask.sub(number_mask, text)
-
-        # Function to process each text (masking numbers, removing punctuation, and stopwords)
-        def process_text(text):
-            # Mask numbers
-            text = _mask_numbers(text)
-
-            # Remove punctuation
-            text = text.translate(punctuation_table)
-
-            # Remove stopwords without tokenizing or lowercasing
-            for stopword in stop_words:
-                text = re.sub(r'\b' + re.escape(stopword) + r'\b', '', text)
-
-            # Ensure extra spaces are removed after stopwords are deleted
-            return ' '.join(text.split())
-
-        # Use Parallel processing with multiple cores
-        processed_texts = Parallel(n_jobs=-1)(delayed(process_text)(text) for text in text_series)
-
-        # Return as NumPy array
-        return np.array(processed_texts)
 
 
     def show(self):
@@ -1602,7 +1931,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
             embedding_type=emb_type,                            # embedding type (one of 'word', 'token')
             pretrained=pretrained,                              # pretrained embeddings (model type or None)
             embedding_path=embedding_path,                      # path to embeddings
-            embedding_comp_type=embedding_comp_type,            # embedding computation type (one of 'avg', 'weighted', 'summary')
+            embedding_comp_type=embedding_comp_type,            # embedding computation type (one of 'avg', 'summary')
             seed=seed
         )    
 

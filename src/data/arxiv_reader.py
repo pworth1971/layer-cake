@@ -173,7 +173,7 @@ sci_field_map = {'astro-ph': 'Astrophysics',
 
 
 
-def fetch_arxiv(data_path=None, test_size=.175, seed=1):
+def fetch_arxiv(data_path=None, test_size=.175, seed=1, static=False, array=False):
 
     print(f'fetching arxiv data... data_path: {data_path}, test_size: {test_size}, seed: {seed}')
 
@@ -222,13 +222,28 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
 
     papers_dataframe['text'] = papers_dataframe['title'] + '. ' + papers_dataframe['abstract']
 
-    papers_dataframe['text'] = preprocess(
-        papers_dataframe['text'],
-        remove_punctuation=False,
-        lowercase=True,
-        remove_stopwords=False,
-        remove_special_chars=True,
-    )
+    if (static):
+        #
+        # word based models (static is True), remove punctuation and stopwords
+        #
+        papers_dataframe['text'] = preprocess(
+            papers_dataframe['text'],
+            remove_punctuation=True,
+            lowercase=True,
+            remove_stopwords=True,
+            remove_special_chars=True,          # we do this for arxiv data
+        )
+    else:
+        #
+        # transformer based models (static = False), keep punctuation and stopwords
+        #
+        papers_dataframe['text'] = preprocess(
+            papers_dataframe['text'],
+            remove_punctuation=False,
+            lowercase=True,
+            remove_stopwords=False,
+            remove_special_chars=True,          # we do this for arxiv data
+        )
 
     papers_dataframe['categories'] = papers_dataframe['categories'].apply(lambda x: tuple(x.split()))
     
@@ -269,7 +284,10 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1):
     # split dataset into training and test set
     xtrain, xtest, ytrain, ytest = train_test_split(papers_dataframe['text'], y, test_size=test_size, random_state=seed)
 
-    return xtrain.tolist(), ytrain, xtest.tolist(), ytest, target_names, num_classes
+    if (array):
+        return xtrain, ytrain, xtest, ytest, target_names, num_classes
+    else:
+        return xtrain.tolist(), ytrain, xtest.tolist(), ytest, target_names, num_classes
     
 
 

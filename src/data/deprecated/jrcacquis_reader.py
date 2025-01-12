@@ -259,5 +259,3 @@ if __name__ == '__main__':
     JRC-train: 12615 documents, 300 cats
     JRC-test: 7055 documents, 300 cats
     """
-
-

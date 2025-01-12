@@ -292,7 +292,7 @@ def zscores(x, axis=0, debug=False):                #scipy.stats.zscores does no
 
 
 
-def validate_zscores(original_matrix, normalized_matrix, variance=1e-4):
+def validate_zscores(original_matrix, normalized_matrix, variance=1e-4, debug=False):
     """
     Validates the zscores function by checking the mean and std of the output matrix.
     
@@ -304,15 +304,16 @@ def validate_zscores(original_matrix, normalized_matrix, variance=1e-4):
     mean = np.mean(normalized_matrix, axis=0)
     std = np.std(normalized_matrix, axis=0, ddof=1)  # ddof=1 for sample std
     
-    # Print validation results
-    print("Original Matrix:")
-    print(original_matrix)
-    print("\nNormalized Matrix (Z-Scores):")
-    print(normalized_matrix)
-    print("\nMean of Normalized Matrix (should be close to 0):")
-    print(mean)
-    print("\nStandard Deviation of Normalized Matrix (should be close to 1):")
-    print(std)
+    if (debug):
+        # Print validation results
+        print("Original Matrix:")
+        print(original_matrix)
+        print("\nNormalized Matrix (Z-Scores):")
+        print(normalized_matrix)
+        print("\nMean of Normalized Matrix (should be close to 0):")
+        print(mean)
+        print("\nStandard Deviation of Normalized Matrix (should be close to 1):")
+        print(std)
     
     # Validation checks
     mean_check = np.allclose(mean, 0, atol=variance)
@@ -330,7 +331,6 @@ def validate_zscores(original_matrix, normalized_matrix, variance=1e-4):
             print("Standard Deviation is not close to 1.")
 
         return False
-
 
 
 

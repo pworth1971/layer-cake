@@ -9,7 +9,7 @@ from data.jrcacquis_reader import fetch_jrcacquis, JRCAcquis_Document
 from data.ohsumed_reader import fetch_ohsumed50k
 from data.reuters21578_reader import fetch_reuters21578
 from data.rcv_reader import fetch_RCV1
-from data.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
+from src.data.deprecated.wipo_reader import fetch_WIPOgamma, WipoGammaDocument
 
 import pickle
 import numpy as np

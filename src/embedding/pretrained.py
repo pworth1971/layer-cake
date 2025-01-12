@@ -81,6 +81,9 @@ GPT2_MODEL = 'gpt2'                                                             
 # Model Map for transformer based models (trans_layer_cake)
 #
 MODEL_MAP = {
+    "glove": GLOVE_MODEL,
+    "word2vec": WORD2VEC_MODEL,
+    "fasttext": FASTTEXT_MODEL,
     "bert": BERT_MODEL,
     "roberta": ROBERTA_MODEL,
     "distilbert": DISTILBERT_MODEL,

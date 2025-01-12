@@ -723,7 +723,7 @@ if __name__ == '__main__':
         exit(0)
                 
     program_name = "ml_classification_test"
-    version = '2.1' 
+    version = '3.0' 
     print(f"program_name: {program_name}, version: {version}")
 
     # initialize log file and run params
@@ -731,7 +731,7 @@ if __name__ == '__main__':
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
-        print(f'\n\t ----- [WARNING] model {representation} with embeddings {embeddings} for {args.dataset} already computed, run with --force option to override. -----")
+        print(f"\n\t ----- [WARNING] model {representation} with embeddings {embeddings} for {args.dataset} already computed, run with --force option to override. -----")
         exit(0)
 
     print("\n\tInitialization params:")    

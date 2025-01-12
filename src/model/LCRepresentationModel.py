@@ -848,7 +848,6 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix
 
 
-
     def encode_docs(self, texts):
         """
         Compute document embeddings using Gensim FastText API by averaging word and subword vectors.
@@ -890,7 +889,7 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
         print("OOV words:", oov)
 
-        return avg_document_embeddings, avg_document_embedding
+        return avg_document_embeddings, avg_document_embeddings
 
 
 
@@ -1154,14 +1153,13 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix
 
 
-
     def encode_docs(self, text_list, pooling_strategy='mean'):
         """
         Encode documents using Transformer-based embeddings.
 
         For each document:
         - Use vectorizer tokens (already tokenized by `_custom_tokenizer`).
-        - For each token, compute its embedding using subwords via pooling (mean or max).
+        - For each token, compute its embedding using subwords via pooling (mean or max or summ (CLS)).
         - Aggregate token embeddings to form the document embedding.
 
         Parameters:
@@ -1169,14 +1167,13 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         text_list : list of str
             List of documents to encode.
         pooling_strategy : str, optional
-            Pooling strategy for subwords ('mean' or 'max'), defaults to 'mean'.
+            Pooling strategy for subwords ('mean' or 'max or 'summ'), defaults to 'mean'.
 
         Returns:
         -------
         doc_embeddings : np.ndarray
             Array of document embeddings.
-        oov_tokens : list
-            List of OOV tokens encountered during processing.
+        doc_embeddings : np.ndarray (same as above)
         """
         print(f"Encoding documents using Transformer-based embeddings with {pooling_strategy} pooling...")
 
@@ -1184,56 +1181,52 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         self.model = self.model.to(self.device)
 
         doc_embeddings = []
+        summ_embeddings = []
         oov_tokens = []
-        token_cache = {}
 
-        def process_batch(batch_tokens):
-            inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
+
+        def process_document(document):
+    
+            inputs = self.tokenizer(
+                document, 
+                return_tensors='pt', 
+                truncation=True, 
+                max_length=self.max_length, 
+                padding=True
+            )
             input_ids = inputs['input_ids'].to(self.device)
             attention_mask = inputs['attention_mask'].to(self.device)
 
             with torch.no_grad():
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+                token_vectors = outputs.last_hidden_state          # Shape: [batch_size, seq_len, hidden_dim]
 
-            token_vectors = outputs.last_hidden_state
-            if pooling_strategy == 'mean':
-                return token_vectors.mean(dim=1).cpu().numpy()
-            elif pooling_strategy == 'max':
-                return token_vectors.max(dim=1).values.cpu().numpy()
+                # Extract the first token embedding (e.g., [CLS] or <s>)
+                first_token_embedding = token_vectors[:, 0, :].cpu().numpy()
 
-        for doc in tqdm(text_list, desc="Processing documents"):
-            tokens = self.vectorizer.build_analyzer()(doc)
-            token_embeddings = []
-
-            for token in tokens:
-                if token in token_cache:
-                    token_embeddings.append(token_cache[token])
-                elif token in self.tokenizer.get_vocab():
-                    embedding = process_batch([token])[0]
-                    token_cache[token] = embedding
-                    token_embeddings.append(embedding)
-                else:
-                    oov_tokens.append(token)
-                    token_embeddings.append(self.mean_embedding)
-
-            if token_embeddings:
-                token_embeddings = np.stack(token_embeddings)
+                # Aggregate all token embeddings for the document
                 if pooling_strategy == 'mean':
-                    doc_embedding = np.mean(token_embeddings, axis=0)
+                    pooled_embedding = token_vectors.mean(dim=1).cpu().numpy()
                 elif pooling_strategy == 'max':
-                    doc_embedding = np.max(token_embeddings, axis=0)
-            else:
-                doc_embedding = self.mean_embedding
+                    pooled_embedding = token_vectors.max(dim=1).values.cpu().numpy()
+                else:
+                    raise ValueError(f"Unsupported pooling strategy: {pooling_strategy}")
 
+            return pooled_embedding[0], first_token_embedding[0]
+        
+
+        for doc in tqdm(text_list, desc="encoding documents..."):
+            doc_embedding, summ_embedding = process_document(doc)
             doc_embeddings.append(doc_embedding)
-
+            summ_embeddings.append(summ_embedding)
+ 
         doc_embeddings = np.stack(doc_embeddings)
+        summ_embeddings = np.stack(summ_embeddings)
+
         print(f"Document embeddings shape: {doc_embeddings.shape}")
-        print(f"Number of OOV tokens encountered: {len(oov_tokens)}")
-
-        return doc_embeddings, doc_embeddings
-
-
+        print(f"Summary embeddings shape: {summ_embeddings.shape}")
+        
+        return doc_embeddings, summ_embeddings
 
 
 class BERTLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1322,7 +1315,6 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
         
         self.model.to(self.device)      # put the model on the appropriate device
-
 
 
 class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1510,7 +1502,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         return self.embedding_vocab_matrix
     
 
-    def encode_docs(self, text_list, embedding_vocab_matrix=None):
+    def encode_docs(self, text_list):
         """
         Encode documents using XLNet and extract token embeddings.
         """
@@ -1518,7 +1510,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
         self.model.eval()
         mean_embeddings = []
-        cls_embeddings = []
+        summ_embeddings = []
 
         with torch.no_grad():
             for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
@@ -1531,10 +1523,10 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
                 # Forward pass through the model
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
 
-                # Extract the [CLS] token embeddings (last token in XLNet)
-                token_vectors = outputs[0]  # Shape: [batch_size, sequence_length, hidden_size]
-                cls_embeddings_batch = token_vectors[:, -1, :].cpu().detach().numpy()  # Last token embedding
-                cls_embeddings.append(cls_embeddings_batch)
+                # Extract the summary token embeddings (last token in XLNet)
+                token_vectors = outputs[0]                                                      # Shape: [batch_size, sequence_length, hidden_size]
+                summ_embeddings_batch = token_vectors[:, -1, :].cpu().detach().numpy()          # Last token embedding
+                summ_embeddings.append(summ_embeddings_batch)
 
                 # Compute the mean of all token embeddings
                 mean_embeddings_batch = token_vectors.mean(dim=1).cpu().detach().numpy()
@@ -1542,12 +1534,12 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
         # Concatenate results
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
-        cls_embeddings = np.concatenate(cls_embeddings, axis=0)
+        summ_embeddings = np.concatenate(summ_embeddings, axis=0)
 
         print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
-        print("cls_embeddings:", type(cls_embeddings), cls_embeddings.shape)
+        print("summ_embeddings:", type(summ_embeddings), summ_embeddings.shape)
 
-        return mean_embeddings, cls_embeddings
+        return mean_embeddings, summ_embeddings
     
 
 
@@ -1690,9 +1682,44 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         return self.embedding_vocab_matrix
 
 
+    def encode_docs(self, text_list):
+        """
+        Encode documents using GPT2 model and extract token embeddings.
+        """
+        print("\n\tencoding docs using GPT2 embeddings...")
 
+        self.model.eval()
+        mean_embeddings = []
+        summ_embeddings = []
 
+        with torch.no_grad():
+            for batch in tqdm([text_list[i:i + self.batch_size] for i in range(0, len(text_list), self.batch_size)]):
+                input_ids, attention_mask = self._tokenize(batch)
 
+                # Move inputs to the appropriate device (MPS, CUDA, or CPU)
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
+
+                # Forward pass through the model
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                # Extract the summary token embeddings (last token in GPT2)
+                token_vectors = outputs[0]                                                          # Shape: [batch_size, sequence_length, hidden_size]
+                summ_embeddings_batch = token_vectors[:, -1, :].cpu().detach().numpy()              # Last token embedding
+                summ_embeddings.append(summ_embeddings_batch)
+
+                # Compute the mean of all token embeddings
+                mean_embeddings_batch = token_vectors.mean(dim=1).cpu().detach().numpy()
+                mean_embeddings.append(mean_embeddings_batch)
+
+        # Concatenate results
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
+        summ_embeddings = np.concatenate(summ_embeddings, axis=0)
+
+        print("mean_embeddings:", type(mean_embeddings), mean_embeddings.shape)
+        print("summ_embeddings:", type(summ_embeddings), summ_embeddings.shape)
+
+        return mean_embeddings, summ_embeddings
 
 
 
