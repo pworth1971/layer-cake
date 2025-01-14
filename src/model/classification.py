@@ -2138,7 +2138,7 @@ NUM_SAMPLED_PARAMS = 30         # Number of parameter settings that are sampled 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def ml_classification(X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
     
-    print("\n\tML classification...")
+    print(f"\n\tml_classification()... dataset: {args.dataset}, class_type: {class_type}")
 
     print('X_train:', type(X_train), X_train.shape)
     print('X_test:', type(X_test), X_test.shape)

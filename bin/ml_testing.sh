@@ -14,17 +14,17 @@ WCE="--wce"
 
 # Datasets array
 dataset_info=(
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
-    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
-    "--dataset imdb"                            # imdb (single-label, 2 classes)     
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
+    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
+    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
+    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
+    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
+    "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
 
-declare -a datasets=("arxiv_protoformer" "arxiv" "imdb" "rcv1" "bbc-news" "20newsgroups" "reuters21578" "ohsumed")
+declare -a datasets=( "bbc-news" "reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
 declare -a learners=("svm" "lr" "nb")
