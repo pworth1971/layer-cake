@@ -26,7 +26,7 @@ from util.csv_log import CSVLog
 from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
 from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
 from embedding.pretrained import XLNET_MODEL, GPT2_MODEL
-from embedding.pretrained import MODEL_MAP
+from embedding.pretrained import MODEL_MAP, MODEL_DIR
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -512,14 +512,14 @@ def get_ml_representation(args):
     return method_name, optimized
 
 
-
-
-
 # Get the full model identifier and load from local directory
 def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
 
     model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, pretrained)
+    
+    model_dir = MODEL_DIR.get(pretrained, pretrained)
+
+    model_path = os.path.join(cache_dir, model_dir)
 
     return model_name, model_path
     

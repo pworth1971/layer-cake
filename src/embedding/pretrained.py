@@ -91,6 +91,17 @@ MODEL_MAP = {
     "gpt2": GPT2_MODEL,
 }
 
+MODEL_DIR = {
+    "glove": 'GloVe',
+    "word2vec": 'Word2Vec',
+    "fasttext": 'fastText',
+    "bert": 'BERT',
+    "roberta": 'RoBERTa',
+    "distilbert": 'DistilBERT',
+    "xlnet": 'XLNet',
+    "gpt2": 'GPT2',
+}
+
 MAX_LENGTH = 512  # default max sequence length for the transformer models
 
 #
