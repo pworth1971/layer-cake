@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v3.0.py"
-LOG="--logfile ../log/ml_mps_full_test.test"
+LOG="--logfile ../log/ml_mps_full_opt_test.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -60,7 +60,7 @@ function run_command() {
     local dataset_flag="--dataset ${dataset}"
     #local pickle_flag="--pickle-dir ${pickle_path}"
     
-    local cmd="$PY $LOG $dataset_flag --net $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp"
+    local cmd="$PY $LOG $dataset_flag --net $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $OPTIMC"
     local cmd_opt="$PY $LOG $dataset_flag --net $learner --vtype $vtype --mix $mix $embedding_option $DATASET_EMB_COMP $emb_comp $OPTIMC"
     
     # Execute the base command
@@ -95,14 +95,14 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp" $OPTIMC
                 done
             done
         done
