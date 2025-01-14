@@ -353,7 +353,133 @@ import os
 import plotly.express as px
 from datetime import datetime
 
-def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False):
+
+def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=None):
+    # Filter the dataframe for the measures of interest right away
+    df = df[df['measure'].isin(MEASURES)]
+    
+    if df.empty:
+        print("No data available for the specified measures")
+        return
+
+    print("generating plotly charts to output directory:", output_path)
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    if neural:
+        # Extract the first term in the colon-delimited 'embeddings' field
+        df['embedding_type'] = df['embeddings']
+    else:
+        # Extract the first term in the colon-delimited 'embeddings' field
+        df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+
+    # Generate a separate chart for each measure within each dataset
+    for dataset in df['dataset'].unique():
+
+        print("processing dataset:", dataset)
+
+        for measure in MEASURES:
+
+            print(f"Generating plots for dataset {dataset} with measure {measure}...")
+
+            # Filter the dataframe for the current dataset and measure
+            subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
+            if debug:
+                print("subset_df1:\n", subset_df1)
+
+            # Group by representation, model, dimensions, and embeddings to find maximum values
+            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings', 'embedding_type']).agg({'value': 'max'}).reset_index()
+
+            if subset_df2.empty:
+                print(f"No data available for dataset {dataset} with measure {measure}")
+                continue
+
+            # Update the representation column to include the dimensions in curly brackets, italicized
+            subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} <i>{{{row['dimensions']}}}</i>", axis=1)
+
+            # Sort by performance value in descending order
+            subset_df2.sort_values(by='value', ascending=False, inplace=True)
+
+            # Filter to the top num_results if specified
+            if num_results is not None:
+                subset_df2 = subset_df2.head(num_results)
+
+            if debug:
+                print("subset_df2 sorted by value:\n", subset_df2)
+
+            # Define the sorted order for the x-axis based on performance
+            model_rep_order = subset_df2['representation'].tolist()
+
+            # Create the plot, coloring by the embedding type (extracted earlier)
+            fig = px.bar(subset_df2, 
+                         x='representation', 
+                         y='value', 
+                         color='embedding_type',                                                     # Color by embedding type
+                         title=f'{measure} Performance Comparison on {dataset}',
+                         labels={"value": "Performance Metric", "representation": "Representation"},
+                         hover_data=['representation', 'value', 'embedding_type'],                    # Include representation, value, and embedding type in hover
+                         category_orders={"representation": model_rep_order})                        # Explicit sorting order
+
+            # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
+            fig.update_layout(
+                title={
+                    'text': f'{dataset} {measure} model performance [by representation]',
+                    'y': 0.95,
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': dict(
+                        family="Arial",
+                        size=16,
+                        color='black',
+                        weight='bold'
+                    )
+                },
+                legend_title_text='Embedding Type',                                                  # Updated legend title to reflect embedding type
+                legend=dict(
+                    orientation="v",
+                    y=1,
+                    x=1,
+                    xanchor='right',
+                    yanchor='top'
+                ),
+                bargap=0.2,  # Increase spacing between bars
+            )
+
+            # Ensure the x-axis is treated as categorical and sorted, and rotate the labels
+            fig.update_xaxes(
+                title_text='Representation',
+                type='category',                                                # Treat x-axis as categorical to prevent reordering
+                tickangle=-45,                                                  # Rotate the x-axis labels
+                tickfont=dict(size=9)                                           # Make the x-axis labels slightly smaller
+            )
+
+            fig.update_yaxes(
+                title_text='Performance', 
+                range=[y_axis_threshold, 1]
+            )
+
+            # Get the current date in YYYY-MM-DD format
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Save the plot in the specified output directory
+            plot_file_name = f"{dataset}_{measure}_performance_comparison.{current_date}.html"
+            plot_file = os.path.join(output_path, plot_file_name)
+            fig.write_html(plot_file)
+
+            print(f"Saved plot for {measure} on dataset {dataset} at {plot_file}")
+
+            if show_charts:
+                fig.show()
+
+    return df
+
+
+
+
+def model_performance_comparison_all(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False):
     # Filter the dataframe for the measures of interest right away
     df = df[df['measure'].isin(MEASURES)]
     
@@ -724,6 +850,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
 # ----------------------------------------------------------------------------------------------------------------------------
 
 
+NUM_RESULTS = 50
 
 if __name__ == "__main__":
 
@@ -739,6 +866,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
     parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
+    parser.add_argument('-m', '--results', type=float, default=NUM_RESULTS, help='Y-axis starting value for the charts (default: 0.6)')
     parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
@@ -805,6 +933,7 @@ if __name__ == "__main__":
             neural=args.neural,
             show_charts=args.show, 
             y_axis_threshold=args.ystart,
+            num_results=args.results,
             debug=debug
         )
         

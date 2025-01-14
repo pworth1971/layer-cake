@@ -328,7 +328,7 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
 
     print(f"building classifier model... pretrained: {args.pretrained}, model_name: {model_name}, model_path: {model_path}, num_classes: {num_classes}, class_type: {class_type}, debug: {debug}")
 
-    if args.net == 'cnn':
+    if args.net == 'hf.cnn':
         
         if (debug):
             print("using CNN classifier...")
@@ -1089,7 +1089,7 @@ if __name__ == "__main__":
 
     if not args.tunable:
 
-        if (args.net == 'cnn'):
+        if (args.net == 'hf.cnn'):
             # model needs to be configured specifically to be static
             lc_model.finetune(base=False, classifier=False, cnn=False)
         elif (args.net == 'attn'):
