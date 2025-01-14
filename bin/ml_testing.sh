@@ -4,7 +4,7 @@
 # Base components
 #
 PY="python ../src/ml_classification_test_v3.0.py"
-LOG="--logfile ../log/ml_mps_full_opt_test.test"
+LOG="--logfile ../log/ml_full_opt_test.test"
 EMB="--embedding-dir ../.vector_cache"
 OPTIMC="--optimc"
 CONF_MATRIX="--cm"  
@@ -30,10 +30,12 @@ declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm" "lr" "nb")
 declare -a vtypes=("tfidf")
 
-declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
+#declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
+declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
-declare -a emb_comp_options=("avg" "summary")
+#declare -a emb_comp_options=("avg" "summary")
+declare -a emb_comp_options=("avg")
 
 
 # Embedding config params
