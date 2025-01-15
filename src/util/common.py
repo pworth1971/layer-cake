@@ -40,7 +40,7 @@ LOG_DIR = '../log/'                                                 # log direct
 VECTOR_CACHE = '../.vector_cache'                                   # vector cache directory (for language models)
 DATASET_DIR = '../datasets/'                                        # dataset directory
 
-NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'hf.sc', 'ff', 'linear', 'hf.cnn']
+NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'hf.sc.ff', 'hf.sc', 'hf.cnn', 'linear']
 ML_MODELS = ['svm', 'lr', 'nb']
 
 SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
