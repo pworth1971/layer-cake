@@ -601,18 +601,15 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 def gen_csvs(df, output_dir, neural=False, debug=False):
     """
-    generate CSVs for the model performance results
+    generate CSV summary performance data for each data set, grouped by model 
 
     Args:
-        df (_type_): _description_
-        output_dir (_type_): _description_
-        neural (bool, optional): _description_. Defaults to False.
-        debug (bool, optional): _description_. Defaults to False.
+        df (Dataframe, required): input data, NB: the input data should be filtered for the measures of interest before calling this function
+        output_dir (str, required): output directory of files
+        neural (bool, optional): whether or not data is from the deep learning / neural models or classic ML models
+        debug (bool, optional): whether or not to print out debug info.
     """
     
     # Define the measures to be included
@@ -668,7 +665,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     previous_mix = None
 
     # Prepare CSV data
-    csv_rows = [['dataset', 'class_type', 'M-Embeddings', 'comp_method', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+    csv_rows = [['dataset', 'class_type', 'comp_method', 'M-Embeddings', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
 
     for (embeddings, mix, class_type), group in grouped:
         
