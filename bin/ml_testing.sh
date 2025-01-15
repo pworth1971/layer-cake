@@ -24,7 +24,7 @@ dataset_info=(
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
 
-declare -a datasets=( "bbc-news" "reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1")
+declare -a datasets=("reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1" "bbc-news")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
 declare -a learners=("svm" "lr" "nb")
