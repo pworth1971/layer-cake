@@ -11,6 +11,8 @@ from tabulate import tabulate
 import matplotlib.pyplot as plt
 import csv
 
+
+
 from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
@@ -349,9 +351,6 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-import os
-import plotly.express as px
-from datetime import datetime
 
 
 def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=None):
@@ -362,7 +361,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
         print("No data available for the specified measures")
         return
 
-    print("generating plotly charts to output directory:", output_path)
+    print("\n\tgenerating plotly charts to output directory:", output_path)
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -604,51 +603,64 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
 def gen_csvs(df, output_dir, neural=False, debug=False):
+    """
+    generate CSVs for the model performance results
 
-    print("generating csvs...")
-
-    if (debug):
-        print("df:\n", df)
+    Args:
+        df (_type_): _description_
+        output_dir (_type_): _description_
+        neural (bool, optional): _description_. Defaults to False.
+        debug (bool, optional): _description_. Defaults to False.
+    """
     
-    if (neural):
-        df['M-Mix'] = 'solo'
-        df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Comp_Method']] = df[['dataset', 'model', 'embeddings', 'comp_method']]
-    else:
-        # Split the 'mode' column into separate columns for dataset, model, mode, and mix
-        #
-        # example mode value == 'reuters21578:svm:bert:vmode:avg'
-        #
-        df[['M-Dataset', 'M-Model', 'M-Pretrained', 'M-Mix', 'M-Comp_Method']] = df['mode'].str.split(':', expand=True)
+    # Define the measures to be included
+    CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
 
+    print("\n\tgenerating CSVs...")
+
+    if debug:
+        print("CSV DataFrame:\n", df)
+    
+    if not neural:
+        # split the 'embeddings' column into 'M-Embeddings' and 'M-Mix'
+        df['M-Embeddings'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+        df['M-Mix'] = df['embeddings'].apply(lambda x: x.split(':')[1])        
+    else:
+        df['M-Embeddings'] = df['embeddings']
+        df['M-Mix'] = 'solo'                        # default to solo for neural models
 
     # Filter the dataframe for the required measures
-    filtered_df = df[df['measure'].isin(MEASURES)]
-    
-    if (debug):
-        print("filtered_df:\n", filtered_df)
+    filtered_df = df[df['measure'].isin(CSV_MEASURES)]
+
+    if debug:
+        print("Filtered CSV DataFrame:\n", filtered_df)
 
     # Get the current date in YYYY-MM-DD format
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     # Iterate through each dataset and model to generate tables
-    for (dataset, model), group_df in filtered_df.groupby(['M-Dataset', 'M-Model']):
+    for (dataset, model), group_df in filtered_df.groupby(['dataset', 'model']):
         output_html = f"{output_dir}/{dataset}_{model}_results.{current_date}.html"
         output_csv = f"{output_dir}/{dataset}_{model}_results.{current_date}.csv"
+        # Assuming render_data is a function you have defined to output HTML and CSV
         render_data(group_df, dataset, model, output_html, output_csv)
+
+
 
 
 def render_data(dataframe, dataset, model, output_html, output_csv):
 
-    print("rendering data...")
+    print("\n\trendering data...")
 
     print("dataframe:\n", dataframe)
 
     # Group the data by embeddings and mix (formerly Mode) within each embedding
-    grouped = dataframe.groupby(['embeddings', 'M-Mix', 'class_type'], as_index=False)
-
+    grouped = dataframe.groupby(['M-Embeddings', 'M-Mix', 'class_type'], as_index=False)
+    
     # Select only the required columns, including the new 'dimensions' column
-    selected_columns = ['class_type', 'embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
+    selected_columns = ['class_type', 'comp_method', 'M-Embeddings', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
 
     # Create an HTML table manually, ensuring that embeddings and mix only display once per group
     rows = []
@@ -656,9 +668,10 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     previous_mix = None
 
     # Prepare CSV data
-    csv_rows = [['class_type', 'embeddings', 'M-Mix', 'M-Comp_Method', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+    csv_rows = [['dataset', 'class_type', 'M-Embeddings', 'comp_method', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
 
     for (embeddings, mix, class_type), group in grouped:
+        
         # Determine if we need a bold line for the first embeddings group
         group_border = "border-top: 3px solid black;" if embeddings != previous_embeddings else ""
 
@@ -671,7 +684,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
             # Prepare the HTML row
             if first_row:
                 # Display embeddings in bold and mix in italics, apply the bold border for new embeddings group
-                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['embeddings']}</b></td><td><i>{row['M-Mix']}</i></td>"
+                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['M-Embeddings']}</b></td><td><i>{row['M-Mix']}</i></td>"
                 first_row = False
             else:
                 # Leave the embeddings and mix columns empty for subsequent rows, apply dotted line between Mix combinations
@@ -683,7 +696,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
             rows.append(row_html)
 
             # Prepare the CSV row
-            csv_row = [row['embeddings'], row['M-Mix'], row['M-Comp_Method'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
+            csv_row = [row['dataset'], row['class_type'], row['comp_method'], row['M-Embeddings'], row['M-Mix'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
             csv_rows.append(csv_row)
 
         # Update previous_embeddings and previous_mix to track the current group
@@ -768,7 +781,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
     analyze the model performance results, print summary either to sdout or file
     """
 
-    print(f'generating summary to {output_path}...')
+    print(f'\n\tgenerating summary to {output_path}...')
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):

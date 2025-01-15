@@ -1,1 +1,1 @@
-python ../src/results_analysis.py ../log/ml_mps_full_test.test --charts --runtimes --neural --summary --debug
+python ../src/results_analysis.py ../log/ml_full_opt_test.test --charts --runtimes --summary --debug
