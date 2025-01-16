@@ -31,7 +31,8 @@ declare -a learners=("svm" "lr" "nb")
 declare -a vtypes=("tfidf")
 
 #declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
-declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
+#declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
+declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
 #declare -a emb_comp_options=("avg" "summary")
