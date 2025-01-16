@@ -1,19 +1,165 @@
-# Layer Cake
+# LAYER CAKE
 
 
-## Introduction 
+## Introduction
 
-Layer Cake is a platform for testing different word embeddings, within different underlying models, for a multi-label, multiclass text classification 
-problem against four data sets. The core of the code and modules are forked from a github repo that was designed to test 'word-class embeddings' as 
-described in a 2019 paper entitled 'Word-Class Embeddings for Multiclass Text Classification' authored by Alejandro Moreo, Andrea Esuli, and Fabrizio 
-Sebastiani who at the time at least were part of the Istituto di Scienza e Tecnologie dell’Informazione Consiglio Nazionale delle Ricerche in Pisa Italy, 
-which of course is where the Tower of Pisa is (random fact). 
+Layer Cake is a platform for testing the performance of different language models, ie word embeddings, for teh problem of text classification.
+Layer cake supports core machine learning models that are effective with text classification such as SVM , Logistic Regression and Naive Bayes, as well
+as neural models, ie deep learning architectures, which support CNN, ATTN and LSTM approaches (with some limitations). The platform is designed to
+support and test different model and data configurations, which include the tuning and testing of both hyperparametr settings for the various models 
+as well as various combinations of embeddings and underlying dataset representations.
 
-Word-Class Embeddings (WCEs) are a form of supervised embeddings specially suited for 
-multiclass text classification. WCEs are meant to be used as extensions (i.e., by concatenation) to pre-trained embeddings (e.g., GloVe or word2vec) 
-embeddings in order to improve the performance of neural classifiers. Original paper available https://arxiv.org/abs/1911.11506, original repo available 
-here https://github.com/AlexMoreo/word-class-embeddings. Layer Cake is designed to combine pretrained embeddings of different types, and different 
-geometries, together against standard NLP data sets such that their relative performance can be evaluated.
+The core of the code and modules are forked from a github repo that was designed to test 'word-class embeddings' as described in a 2019 paper 
+entitled 'Word-Class Embeddings for Multiclass Text Classification' authored by Alejandro Moreo, Andrea Esuli, and Fabrizio Sebastiani who at 
+the time at least were part of the Istituto di Scienza e Tecnologie dell’Informazione Consiglio Nazionale delle Ricerche in Pisa Italy (which 
+where the Tower of Pisa is - random fact). Word-Class Embeddings (WCEs) are a form of supervised embeddings specially suited for multiclass 
+text classification. WCEs are meant to be used as extensions (i.e., by concatenation) to pre-trained embeddings (e.g., GloVe or word2vec) 
+embeddings in order to improve the performance of neural classifiers. This work was outlined in the original paper which is available 
+at https://arxiv.org/abs/1911.11506, with the original repo which we forked from available here: https://github.com/AlexMoreo/word-class-embeddings.
+
+We extend this architecture to support fastText word embeddings, as well as Tranformer (token based) langugae models such as BERT, DistilBERT, RoBERTa,
+XLNet and GPT2, levergaing the huggingface libraries (transformers) for model creation and testing. In doing so we adapt these WCEs to TCEs, or token 
+class embeddings so that the underlying dataset representation data by the model, which uses a model sepcific tokenization strategy, can be properly 
+aligned with the TCEs themselves for testing. Our findings are that the TCEs are not effective in this setting but we leave the possibility open that 
+there is an alternative way to add them that could possiby be effective.
+
+
+## Datasets in Scope
+
+Layer Cake is designed to combine pretrained embeddings of different types with different datasets across the text classification spectrum, with support
+for a range of datasets that cover news, medical, and review type data, some of which are multi-label datasets where a given doc in a given dataset can
+belong to multiple classes, or single-label data where a given doc for a given dataset can belong to just one class or label.
+
+The following datasets are supported, each of which is generally available for research purposes but in some cases (like RCV1) must be requested
+specifically from the provider.
+
+
+### BBC News
+Description: A dataset consisting of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
+Classes: 5 (e.g., Business, Entertainment, Politics, Sport, Tech)
+Type: Single-label classification
+Size: Approximately 2,225 docs, 6.7MB
+License: Typically used for educational and research purposes, though the specific license terms are not detailed on the download page.
+Misc: good for testing as the relative size is small
+
+### Reuters-21578
+Description: One of the most commonly used datasets for text categorization. It contains thousands of documents categorized into multiple classes which makes it a multi-label dataset.
+Classes: 115
+Type: Multi-label classification
+Size: Roughly 21,578 docs, 64MB
+Access: Reuters-21578 on UCI
+License: Free for research purposes, but usage in commercial projects should be checked with Reuters.
+Misc: Classes are not very well balanced and this causes problems with sone of the f1 summary data for some models
+
+### 20 Newsgroups
+Description: A collection of approximately 20,000 newsgroup documents, partitioned (nearly) evenly across 20 different newsgroups.
+Classes: 20 (various topics such as sports, religion, hardware, etc.)
+Type: Single-label classification
+Size: About 20,000 docs, 15MB
+Access: Available via Scikit-Learn's dataset utilities or 20 Newsgroups
+License: Public domain
+Misc: good baseline single-label test case, very well benchmarked
+
+### ArXiv
+Description: A dataset derived from ArXiv papers, typically used for categorizing scientific papers into multiple classes based on their subjects.
+Classes: 58 (scientific fields)
+Type: Multi-label classification
+Size: 5.5GB
+License: Depends on the specifics of data usage; generally, data used for academic research without redistribution is allowed.
+Misc: Special preprocessing requirements due to nature of underlying docs.
+
+### ArXiv Protoformer
+Description: A potentially derivative dataset from the ArXiv collection focusing on a smaller subset of topics or a specific preprocessing pipeline.
+Classes: 10 (subset or specific topics within the broader ArXiv classification)
+Type: Single-label classification
+Size: 147 MB
+Access and License: Likely a custom dataset; access and licensing would depend on the creator's setup or the project specifications.
+
+### OHSUMED
+Description: A subset of the MEDLINE database, which is a bibliographic database of important, peer-reviewed medical literature maintained by the National Library of Medicine.
+Classes: 23 (medical subject headings)
+Type: Multi-label classification
+Size: Approximately 348,000 citations (abstracts), 387 MB
+Access: OHSUMED on UCI
+License: Generally used for academic and research purposes; specific licensing terms would need to be confirmed.
+
+### IMDb
+Description: A dataset for binary sentiment classification consisting of movie reviews from the IMDb site labeled as positive or negative.
+Classes: 2 (Positive, Negative)
+Type: Single-label classification
+Size: 694 MB
+Access: IMDb Reviews Dataset
+License: For non-commercial use only.
+
+### RCV1 (Reuters Corpus Volume 1)
+Description: An archive of over 800,000 manually categorized newswire stories made available by Reuters, Ltd. for research purposes.
+Classes: 101 (various topics)
+Type: Multi-label classification
+Size: Over 800,000 docs, 7.4 GB
+License: Available for research purposes; usage beyond this scope should be confirmed with the distributor (ie Reuters).
+Misc: Very large dataset, requires significant compute power. Good for testing scalaability of models and underlying representation.
+
+
+
+## Language Models in Scope
+
+### GloVe (Global Vectors for Word Representation)
+Model in use: GloVe 840B 300d
+Architecture: GloVe is an unsupervised learning algorithm for obtaining vector representations for words by aggregating global word-word co-occurrence statistics from a corpus.
+Training Data: The model is trained on 840 billion tokens from a dataset aggregated from web data (Common Crawl).
+Salient Features: Each word is represented by a 300-dimensional vector. The model captures both semantic and syntactic information of words.
+Reference: Pennington, Jeffrey, et al. "Glove: Global vectors for word representation." Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP). 2014.
+
+### Word2Vec
+Model in use: GoogleNews-vectors-negative300
+Architecture: Word2Vec is a group of related models used to produce word embeddings. These models are shallow, two-layer neural networks that are trained to reconstruct linguistic contexts of words.
+Training Data: Trained on roughly 100 billion words from the Google News dataset.
+Salient Features: The model uses 300-dimensional vectors and is case-sensitive.
+Reference: Mikolov, Tomas, et al. "Efficient Estimation of Word Representations in Vector Space." ICLR Workshop Papers. 2013.
+
+### FastText
+Model in use: crawl-300d-2M.vec
+Architecture: FastText extends Word2Vec to consider subword information (character n-grams), allowing it to generate word embeddings for out-of-vocabulary words.
+Training Data: Trained on Common Crawl and Wikipedia using CBOW with position-weights, with character n-grams of length 5, a window of size 5, and 10 negatives.
+Salient Features: Produces 300-dimensional vectors, supports 157 languages, and is case-insensitive.
+Reference: Bojanowski, Piotr, et al. "Enriching Word Vectors with Subword Information." Transactions of the Association for Computational Linguistics 5 (2017): 135-146.
+
+### BERT (Bidirectional Encoder Representations from Transformers)
+Model in use: bert-base-uncased
+Architecture: BERT is a transformer-based model known for its deep bidirectionality, which allows it to contextually understand both the left and right context in all layers.
+Training Data: Trained on the BooksCorpus (800M words) and English Wikipedia (2,500M words).
+Salient Features: The base model uses 12 layers (transformer blocks), has 768 hidden units, 12 heads, and is case-insensitive.
+Reference: Devlin, Jacob, et al. "BERT: Pre-training of deep bidirectional transformers for language understanding." NAACL HLT 2019.
+
+### RoBERTa (Robustly Optimized BERT Approach)
+Model in use: roberta-base
+Architecture: RoBERTa iterates on BERT's architecture by modifying key hyperparameters, removing the next-sentence pretraining objective, and training with much larger mini-batches and learning rates.
+Training Data: Trained on more data than BERT and also on more languages.
+Salient Features: Uses the same model size as BERT-base and is case-sensitive.
+Reference: Liu, Yinhan, et al. "RoBERTa: A robustly optimized BERT pretraining approach." arXiv preprint arXiv:1907.11692 (2019).
+
+### DistilBERT
+Model in use: distilbert-base-uncased
+Architecture: DistilBERT is a smaller, faster, cheaper, and lighter version of BERT. It distills 40% of the size of BERT while retaining 97% of its performance, using a technique called knowledge distillation.
+Training Data: Same as BERT.
+Salient Features: Uses 6 layers, with 768 hidden units and is case-insensitive.
+Reference: Sanh, Victor, et al. "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter." arXiv preprint arXiv:1910.01108 (2019).
+
+### XLNet
+Model in use: xlnet-base-cased
+Architecture: XLNet incorporates ideas from Transformer-XL, the state-of-the-art autoregressive model, into the pretraining objective of BERT by maximizing the expected likelihood over all permutations of the input sequence tokens.
+Training Data: Trained on a larger corpus that includes BooksCorpus, English Wikipedia, Giga5, ClueWeb, and Common Crawl.
+Salient Features: Uses 12 layers, with 768 hidden units and is case-sensitive.
+Reference: Yang, Zhilin, et al. "XLNet: Generalized Autoregressive Pretraining for Language Understanding." NeurIPS 2019.
+
+### GPT-2 (Generative Pre-trained Transformer 2)
+Model in use: gpt2
+Architecture: GPT-2 is an unsupervised language model that uses the Transformer architecture. It generates synthetic text samples in response to the input text.
+Training Data: Trained on a dataset called "WebText," a corpus consisting of over 8 million documents (40GB of text) scraped from the internet.
+Salient Features: The base model has 12 layers, 768 hidden units, and is case-sensitive.
+Reference: Radford, Alec, et al. "Language Models are Unsupervised Multitask Learners." OpenAI Blog (2019).
+These models are integral parts of modern NLP pipelines and provide a wide array of capabilities, from embedding generation to complex sentence understanding and generation tasks.
+
 
 
 
