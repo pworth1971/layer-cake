@@ -27,7 +27,8 @@ dataset_info=(
 declare -a datasets=("reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1" "bbc-news")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
-declare -a learners=("svm" "lr" "nb")
+#declare -a learners=("svm" "lr" "nb")
+declare -a learners=("svm" "nb")
 declare -a vtypes=("tfidf")
 
 #declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
