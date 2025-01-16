@@ -13,10 +13,8 @@ import csv
 
 
 
+
 from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
-
-
-#import imgkit
 
 
 # measures filter: report on these specific measures
@@ -381,7 +379,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
 
         for measure in MEASURES:
 
-            print(f"Generating plots for dataset {dataset} with measure {measure}...")
+            print(f"\n\tGenerating plots for dataset {dataset} with measure {measure}...")
 
             # Filter the dataframe for the current dataset and measure
             subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
@@ -601,18 +599,150 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def gen_csvs_all(df, output_dir, neural=False, debug=False):
+    """
+    Generate CSV and HTML summary performance data for each dataset, combining all models into one file.
+
+    Args:
+        df (DataFrame, required): Input data, already filtered for the measures of interest
+        output_dir (str, required): Output directory for files
+        neural (bool, optional): Whether the data is from deep learning models or classical ML models
+        debug (bool, optional): Whether to print debug information
+    """
+    
+    CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
+    
+    print("\n\tGenerating CSVs (all version)...")
+
+    if debug:
+        print("CSV DataFrame:\n", df)
+
+    if not neural:
+        df['M-Embeddings'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+        df['M-Mix'] = df['embeddings'].apply(lambda x: x.split(':')[1])
+    else:
+        df['M-Embeddings'] = df['embeddings']
+        df['M-Mix'] = 'solo'  
+
+    filtered_df = df[df['measure'].isin(CSV_MEASURES)]
+
+    if debug:
+        print("Filtered CSV DataFrame:\n", filtered_df)
+
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    for dataset_tuple, group_df in filtered_df.groupby(['dataset']):
+        dataset = dataset_tuple[0]                                              # dataset_tuple is a tuple, extract first element
+        output_html = f"{output_dir}/{dataset}_results_{current_date}.html"
+        output_csv = f"{output_dir}/{dataset}_results_{current_date}.csv"
+        render_data_all(group_df, dataset, output_html, output_csv, debug)
+
+
+
+def render_data_all(dataframe, dataset, output_html, output_csv, debug):
+    """
+    Render data for all models into a single file, either html or csv format
+    
+    Arguments:
+    - dataframe: the input data
+    - dataset: the dataset name
+    - output_html: the output HTML file name
+    - output_csv: the output CSV file name
+    
+    Returns:
+    - None
+    """
+    print("\n\tRendering data (all version)...")
+
+    if (debug):
+        print(f"dataset: {dataset}, output_html: {output_html}, output_csv: {output_csv}, debug: {debug}")
+        print("DataFrame:\n", dataframe)
+        
+    # Define measure order
+    measure_order = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-precision', 'te-recall']
+    # Ensure dataframe measures are sorted by predefined order
+    measure_category = pd.Categorical(dataframe['measure'], categories=measure_order, ordered=True)
+    dataframe['measure'] = measure_category
+    dataframe.sort_values(by=['measure'], inplace=True)
+
+    grouped = dataframe.groupby(['M-Embeddings', 'M-Mix', 'class_type', 'model'], as_index=False)
+    selected_columns = ['class_type', 'comp_method', 'M-Embeddings', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
+
+    rows = []
+    csv_rows = [['Dataset', 'Model', 'Class Type', 'Comp Method', 'Embeddings', 'Mix', 'Representation', 'Dimensions', 'Measure', 'Value', 'Timelapse (Seconds)']]
+    previous_embeddings = None
+    previous_mix = None
+
+    for (embeddings, mix, class_type, model), group in grouped:
+        group_border = "border-top: 3px solid black;" if embeddings != previous_embeddings else ""
+        first_row = True
+
+        for _, row in group.iterrows():
+            formatted_value = f"{row['value']:.3f}"
+            formatted_timelapse = f"{row['timelapse']:,.0f}"
+
+            if first_row:
+                row_html = f"<tr style='font-size: 12px; {group_border}'><td><b>{row['M-Embeddings']}</b></td><td><i>{row['M-Mix']}</i></td>"
+                first_row = False
+            else:
+                dotted_border = "border-bottom: 1px dotted gray;" if mix != previous_mix else ""
+                row_html = f"<tr style='font-size: 12px; {dotted_border}'><td></td><td></td>"
+
+            row_html += f"<td>{row['comp_method']}</td><td>{row['representation']}</td><td>{row['dimensions']}</td><td>{row['measure']}</td><td>{formatted_value}</td><td>{formatted_timelapse}</td></tr>"
+            rows.append(row_html)
+
+            csv_row = [dataset, model, row['class_type'], row['comp_method'], row['M-Embeddings'], row['M-Mix'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
+            csv_rows.append(csv_row)
+
+        previous_embeddings = embeddings
+        previous_mix = mix
+
+    table_html = """
+    <table border='1' style='border-collapse: collapse; font-size: 12px; table-layout: fixed; width: 100%;'>
+    <colgroup>
+        <col style='width: 8%;'>
+        <col style='width: 8%;'>
+        <col style='width: 12%;'>
+        <col style='width: 12%;'>
+        <col style='width: 10%;'> <!-- Dimensions column -->
+        <col style='width: 15%;'>
+        <col style='width: 10%;'>
+        <col style='width: 10%;'>
+    </colgroup>
+    <tr><th>Embeddings</th><th>Mix</th><th>Comp Method</th><th>Representation</th><th>Dimensions</th><th>Measure</th><th>Value</th><th>Timelapse (Seconds)</th></tr>
+    """
+    table_html += "".join(rows)
+    table_html += "</table>"
+
+    if (debug):
+        print("Dataset:", dataset)
+
+    with open(output_html, 'w') as f:
+        f.write(f"<h2>Results for Dataset: {dataset}</h2>")
+        f.write(table_html)
+
+    print(f"HTML Table saved as {output_html}.")
+
+    with open(output_csv, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerows(csv_rows)
+
+    print(f"CSV saved as {output_csv}.")
+
+
+
+
 
 
 def gen_csvs(df, output_dir, neural=False, debug=False):
     """
-    generate CSVs for the model performance results
+    generate CSV summary performance data for each data set, grouped by model 
 
     Args:
-        df (_type_): _description_
-        output_dir (_type_): _description_
-        neural (bool, optional): _description_. Defaults to False.
-        debug (bool, optional): _description_. Defaults to False.
+        df (Dataframe, required): input data, NB: the input data should be filtered for the measures of interest before calling this function
+        output_dir (str, required): output directory of files
+        neural (bool, optional): whether or not data is from the deep learning / neural models or classic ML models
+        debug (bool, optional): whether or not to print out debug info.
     """
     
     # Define the measures to be included
@@ -668,7 +798,7 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     previous_mix = None
 
     # Prepare CSV data
-    csv_rows = [['dataset', 'class_type', 'M-Embeddings', 'comp_method', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
+    csv_rows = [['dataset', 'class_type', 'comp_method', 'M-Embeddings', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse (seconds)']]
 
     for (embeddings, mix, class_type), group in grouped:
         
@@ -936,8 +1066,9 @@ if __name__ == "__main__":
         
         gen_summary(df, out_dir, debug=debug)
 
-        gen_csvs(df, out_dir, neural=args.neural, debug=debug)
-
+        # gen_csvs(df, out_dir, neural=args.neural, debug=debug)
+        gen_csvs_all(df, out_dir, neural=args.neural, debug=debug)
+        
     if args.charts:
         
         model_performance_comparison(
