@@ -598,7 +598,8 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
 
     tend += sup_tend
 
-    dims = X_train.shape[1]
+    #dims = X_train.shape[1]
+    dims = X_train.shape
     print("# dimensions:", dims)
 
     comp_method = get_model_computation_method(
