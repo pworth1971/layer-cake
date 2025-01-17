@@ -161,6 +161,105 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     return F
 
 
+
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
+    """
+    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
+
+    Parameters:
+    - vocabsize: Size of the vocabulary.
+    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
+    - training_label_matrix: Multi-label binary matrix for training labels.
+    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+    - debug: Debug flag for verbose output.
+
+    Returns:
+    - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
+    """
+
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
+    
+    Xtr = vectorized_training_data
+    Ytr = training_label_matrix
+    #print("\tXtr:", type(Xtr), Xtr.shape)
+    #print("\tYtr:", type(Ytr), Ytr.shape)
+
+    TCE = get_supervised_embeddings(
+        Xtr, 
+        Ytr, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore),
+        debug=debug
+    )
+    
+    # Adjust TCE matrix size
+    num_missing_rows = vocabsize - TCE.shape[0]
+    if (debug):
+        print("TCE:", type(TCE), TCE.shape)
+        print("TCE[0]:", type(TCE[0]), TCE[0])
+        print("num_missing_rows:", num_missing_rows)
+
+    if (num_missing_rows > 0):
+        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
+    
+    tce_matrix = torch.from_numpy(TCE).float()
+
+    return tce_matrix
+
+
+
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False, asarray=False):
+    """
+    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
+
+    Parameters:
+    - vocabsize: Size of the vocabulary.
+    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
+    - training_label_matrix: Multi-label binary matrix for training labels.
+    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+    - debug: Debug flag for verbose output.
+
+    Returns:
+    - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
+    """
+
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
+    
+    Xtr = vectorized_training_data
+    Ytr = training_label_matrix
+    #print("\tXtr:", type(Xtr), Xtr.shape)
+    #print("\tYtr:", type(Ytr), Ytr.shape)
+
+    TCE = get_supervised_embeddings(
+        Xtr, 
+        Ytr, 
+        method=opt.supervised_method,
+        max_label_space=opt.max_label_space,
+        dozscore=(not opt.nozscore),
+        debug=debug
+    )
+    
+    # Adjust TCE matrix size
+    num_missing_rows = vocabsize - TCE.shape[0]
+    if (debug):
+        print("TCE:", type(TCE), TCE.shape)
+        print("TCE[0]:", type(TCE[0]), TCE[0])
+        print("num_missing_rows:", num_missing_rows)
+
+    if (num_missing_rows > 0):
+        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
+    
+    if asarray:
+        tce_matrix = TCE
+    else:
+        tce_matrix = torch.from_numpy(TCE).float()
+
+    return tce_matrix
+
+
+
+
 def supervised_embeddings_tfidf(X, Y, debug=False):
     """
     Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label information Y.
@@ -460,52 +559,6 @@ def compute_supervised_embeddings(Xtr, Ytr, Xval, Yval, Xte, Yte, opt):
 
     return training_tces, val_tces, test_tces
 
-
-
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
-    """
-    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
-
-    Parameters:
-    - vocabsize: Size of the vocabulary.
-    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
-    - training_label_matrix: Multi-label binary matrix for training labels.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-    - debug: Debug flag for verbose output.
-
-    Returns:
-    - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
-    """
-
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
-    
-    Xtr = vectorized_training_data
-    Ytr = training_label_matrix
-    #print("\tXtr:", type(Xtr), Xtr.shape)
-    #print("\tYtr:", type(Ytr), Ytr.shape)
-
-    TCE = get_supervised_embeddings(
-        Xtr, 
-        Ytr, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore),
-        debug=debug
-    )
-    
-    # Adjust TCE matrix size
-    num_missing_rows = vocabsize - TCE.shape[0]
-    if (debug):
-        print("TCE:", type(TCE), TCE.shape)
-        print("TCE[0]:", type(TCE[0]), TCE[0])
-        print("num_missing_rows:", num_missing_rows)
-
-    if (num_missing_rows > 0):
-        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
-    
-    tce_matrix = torch.from_numpy(TCE).float()
-
-    return tce_matrix
 
 
 

@@ -179,40 +179,43 @@ the origianl capabilities in this department to include Logistic Regression (LR)
 Vector Machine (SVM) model which is quite handy and widely used for text classification problems - as is LR but primarily for binary classification
 type problems.
 
-The driver code for this module is in src/ml_class_baselines.py and it is a command line program that takes the following arguments:
+The driver code for this module is in src/ml_classification_test_v3.0.py and it is a command line program that takes the following arguments:
 
-usage: ml_class_baselines.py [-h] [--dataset N] [--pickle-dir str] [--log-file N] [--learner N] [--mode N] [--count] [--supervised] [--supervised-method dotn|ppmi|ig|chi] [--optimc] [--embedding-dir str] [--word2vec-path PATH] [--glove-path PATH] [--fasttext-path PATH] [--bert-path PATH] [--llama-path PATH] [--force-embeddings] [--batch-size int] [--force] [--nozscore] [--max-label-space int] [--scoring SCORING]
+Layer Cake ML Text Classification Testing
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  --dataset N           dataset, one in {'reuters21578', 'rcv1', '20newsgroups', 'ohsumed'}
-  --pickle-dir str      path where to load the pickled dataset from
-  --log-file N          path to the application log file
-  --learner N           learner (svm, lr, or nb)
-  --mode N              mode, in [tfidf, sup, glove, glove-sup, bert, bert-sup, word2vec, word2vec-sup, fasttext, fasttext-sup, llama, llama-sup]
-  --count               use CountVectorizer
-  --supervised          use supervised embeddings
-  --supervised-method   dotn|ppmi|ig|chi. method used to create the supervised matrix. Available methods include dotn (default), ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)
-  --optimc              optimize the C parameter in the SVM
-  --embedding-dir str   path where to load and save BERT document embeddings
-  --word2vec-path PATH  path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only with --pretrained word2vec
-  --glove-path PATH     directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove
-  --fasttext-path PATH  path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only with --pretrained fasttext
-  --bert-path PATH      directory to BERT pretrained vectors, used only with --pretrained bert
-  --llama-path PATH     directory to LLaMA pretrained vectors, used only with --pretrained llama
-  --force-embeddings    force the computation of embeddings even if a precomputed version is available
-  --batch-size int      batch size for computation of BERT document embeddings
+  --dataset DATASET     dataset, one in ['20newsgroups', 'rcv1', 'reuters21578', 'bbc-news', 'ohsumed', 'imdb', 'arxiv', 'arxiv_protoformer']
+  --pickle-dir DIR      path where to load the pickled dataset from
+  --logfile FILE        path to the application log file
+  --net MODEL           model / learner, one of [svm, lr, or nb]
+  --vtype VTYPE         dataset base vectorization strategy, in [tfidf, count]
+  --pretrained MODEL    Language model to use, either "None" or in ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], default None.
+  --dataset-emb-comp POOLING
+                        Pooling strategy for teh computation of dataset representation for transformer models. Eitehr "avg", or "summary" (cls), defaults to "avg".
+  --embedding-dir DIR   path where to load and save embeddings
+  --seed SEED           random seed (default: 29)
+  --mix MIX             way to prepare the embeddings, in [vmode, cat, cat-wce, dot, dot-wce, solo, solo-wce, lsa, lsa-wce]. NB presumes --pretrained is set
+  --cm                  create confusion matrix for underlying model
+  --optimc              optimize the model using relevant models params
   --force               force the execution of the experiment even if a log already exists
-  --nozscore            disables z-scoring form the computation of WCE
-  --max-label-space int larger dimension allowed for the feature-label embedding (if larger, then PCA with this number of components is applied (default 300)
-  --scoring SCORING     scoring parameter to GridSearchCV sklearn call. Must be one of sklearn scoring metricsd.
+
 
 A sample command may look like the following: 
 
-'python ../src/ml_class_baselines.py --log-file ../log/nb_20newsgroups.test --dataset 20newsgroups --pickle-dir ../pickles --embedding-dir ../.vector_cache --learner nb --mode llama-sup --llama-path ../.vector_cache --optimc'
+'python ../src/ml_class_baselines.py --log-file ../log/nb_20newsgroups.test --dataset 20newsgroups --pretrained bert --pickle-dir ../pickles --embedding-dir ../.vector_cache --net nb --mix vmode --seed 27 --optimc'
 
-This runs from the bin directory (which is presumed to be the run location of all scripts and programs) and looks to use the NB model against the 20newsgroups 
-dataset, with llama pretrained embeddings as well as word-class embeddings.
+This runs from the bin directory (which is presumed to be the run location of all scripts and programs) and looks to use the NB model against the 20newsgroups dataset, using the bert language mdoel, caching data in ../pickels dirctory, using the 'vmode' mix (tfidf representation). The mixes are summarized as follows, note that the pooling strategy used by the engine to compute the document (dataset) representation is determined by the '--dataset-emb-comp' parameter, which defaults to 'avg', aka mean pooling.
+
+- 'solo': uses the model embedding representation alone
+- 'solo-wce': uses the model embedding representation concatenated with the WCEs / TCEs
+- 'cat-doc': the vectorized text representation (either tfidf or count) concatenated with the embedding model representation
+- 'cat-wce': the vectorized dataset representation (either tfidf or count) combined with the WCEs / TCEs
+- 'cat-doc-wce': the vectorized dataset representation with the embedding model reprsentation and the WCEs / TCEs
+- 'dot': projection of the vectorized doc / dataset representation into the embedding space using dot product operation
+- 'dot-wce': projection of the vectorized doc / dataset representation into the embedding + WCE/TCE space using dot product operation
+- 'lsa': using Latent Semantic Analysis approch, i,e LSA/SVD computation, for feature selection.
+- 'lsa-wce': concatenation of LSA factorization of dataset with vectorized representation of dataset with WCE / TCEs
 
 
 

@@ -92,7 +92,10 @@ class LCDataset:
     """
 
     dataset_available = SUPPORTED_DATASETS
-
+    
+    single_label_datasets = ['20newsgroups', 'bbc-news', 'arxiv_protoformer', 'imdb']
+    multi_label_datasets = ['rcv1', 'reuters21578', 'ohsumed', 'arxiv']
+    
     def __init__(self, 
                  name, 
                  vectorization_type='tfidf', 
@@ -621,7 +624,6 @@ class LCDataset:
         print("split_val_data()...")
 
         val_size = min(int(len(self.devel_index) * val_ratio), min_samples)                   # dataset split tr/val/test
-
         X_train, X_val, y_train, y_val = train_test_split(
             self.devel_index, 
             self.devel_target, 

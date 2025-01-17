@@ -1,18 +1,11 @@
 #!/bin/bash
 
-#
-# Base components
-#
-PY="python ../src/ml_classification_test_v3.0.py"
-LOG="--logfile ../log/ml_full_opt_test.test"
-EMB="--embedding-dir ../.vector_cache"
-OPTIMC="--optimc"
-CONF_MATRIX="--cm"  
-DATASET_EMB_COMP="--dataset-emb-comp"
-WCE="--wce"
 
 
+#
 # Datasets array
+# this is simply for reference
+#
 dataset_info=(
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
@@ -23,8 +16,33 @@ dataset_info=(
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
+#
+#
 
-declare -a datasets=("reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1" "bbc-news")
+
+# ----------------------------------------------------------------------------------------------------------------------------
+#
+# Shell Script Arguments
+#
+PY="python ../src/ml_classification_test_v4.0.py"
+
+LOG="--logfile ../log/ml_tce_test.test"
+
+EMB="--embedding-dir ../.vector_cache"
+
+# optimize model
+#OPTIMC="--optimc"
+
+# default params
+OPTIMC=""
+
+CONF_MATRIX="--cm"  
+
+DATASET_EMB_COMP="--dataset-emb-comp"
+
+WCE="--wce"
+
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
 #declare -a learners=("svm" "lr" "nb")
@@ -32,12 +50,14 @@ declare -a learners=("svm" "nb")
 declare -a vtypes=("tfidf")
 
 #declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
+declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
+
 #declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
-declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
+#declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
-#declare -a emb_comp_options=("avg" "summary")
-declare -a emb_comp_options=("avg")
+declare -a emb_comp_options=("avg" "summary")
+#declare -a emb_comp_options=("avg")
 
 
 # Embedding config params
@@ -49,6 +69,7 @@ ROBERTA="--pretrained roberta"
 DISTILBERT="--pretrained distilbert"
 XLNET="--pretrained xlnet"
 GPT2="--pretrained gpt2"
+# ----------------------------------------------------------------------------------------------------------------------------
 
 
 # Function to run commands
