@@ -162,7 +162,7 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
 
 
 
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False):
+def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, asarray=False, debug=False):
     """
     Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
 
@@ -171,60 +171,14 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
     - training_label_matrix: Multi-label binary matrix for training labels.
     - opt: Options object with configuration (e.g., whether to include supervised embeddings).
+    - asarray: Whether to return the output as a numpy array or a PyTorch tensor.
     - debug: Debug flag for verbose output.
 
     Returns:
     - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
     """
 
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
-    
-    Xtr = vectorized_training_data
-    Ytr = training_label_matrix
-    #print("\tXtr:", type(Xtr), Xtr.shape)
-    #print("\tYtr:", type(Ytr), Ytr.shape)
-
-    TCE = get_supervised_embeddings(
-        Xtr, 
-        Ytr, 
-        method=opt.supervised_method,
-        max_label_space=opt.max_label_space,
-        dozscore=(not opt.nozscore),
-        debug=debug
-    )
-    
-    # Adjust TCE matrix size
-    num_missing_rows = vocabsize - TCE.shape[0]
-    if (debug):
-        print("TCE:", type(TCE), TCE.shape)
-        print("TCE[0]:", type(TCE[0]), TCE[0])
-        print("num_missing_rows:", num_missing_rows)
-
-    if (num_missing_rows > 0):
-        TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
-    
-    tce_matrix = torch.from_numpy(TCE).float()
-
-    return tce_matrix
-
-
-
-def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, debug=False, asarray=False):
-    """
-    Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
-
-    Parameters:
-    - vocabsize: Size of the vocabulary.
-    - vectorized_training_data: Vectorized training data (e.g., TF-IDF, count vectors).
-    - training_label_matrix: Multi-label binary matrix for training labels.
-    - opt: Options object with configuration (e.g., whether to include supervised embeddings).
-    - debug: Debug flag for verbose output.
-
-    Returns:
-    - tce_matrix: computed supervised (token-class) embeddings, aka TCEs
-    """
-
-    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}')
+    print(f'compute_tces(): vocabsize: {vocabsize}, opt.supervised: {opt.supervised}, opt.supervised_method: {opt.supervised_method}, opt.max_label_space: {opt.max_label_space}, asarray: {asarray}')
     
     Xtr = vectorized_training_data
     Ytr = training_label_matrix
@@ -251,9 +205,9 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
         TCE = np.vstack((TCE, np.zeros((num_missing_rows, TCE.shape[1]))))
     
     if asarray:
-        tce_matrix = TCE
+        tce_matrix = TCE                                # numpy array
     else:
-        tce_matrix = torch.from_numpy(TCE).float()
+        tce_matrix = torch.from_numpy(TCE).float()      # Pytorch tensor
 
     return tce_matrix
 
@@ -262,14 +216,20 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
 
 def supervised_embeddings_tfidf(X, Y, debug=False):
     """
-    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label information Y.
-
-    Computes a supervised embedding matrix by normalizing the dot product of X.T and y.
+    Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label 
+    information Y by normalizing the dot product of X.T and y.
 
     Steps:
     Compute term frequencies (tfidf_norm).
     Compute numerator as X.T.dot(y).
     Divide numerator by term frequencies to get the final matrix.
+    
+    Args:
+    - X: Feature matrix (sparse or dense).
+    - Y: Label matrix (sparse or dense).
+    
+    Returns:
+    - F: Supervised embedding matrix.
     """
     
     print("supervised_embeddings_tfidf()")
@@ -279,13 +239,10 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
         X_dense = X.toarray()
         Y_dense = Y.toarray()
         
-        print("\nDense Representation of X (Feature Matrix):")
-        print(f"X shape: {X_dense.shape}")
-        print(f"X[0]: {X_dense[0]}")
-        
-        print("\nDense Representation of Y (Label Matrix):")
-        print(f"Y shape: {Y_dense.shape}")
-        print(f"Y[0]: {Y_dense[0]}")
+        print(f"X: {type(X_dense)}, {X_dense.shape}")
+        print(f"X[0]: {type(X_dense[0])}, {X_dense[0]}")
+        print(f"Y: {type(Y_dense)}, {Y_dense.shape}")
+        print(f"Y[0]: {type(Y_dense[0])}, {Y_dense[0]}")
 
         # Print non-zero elements of X and Y
         """
@@ -306,7 +263,7 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
     tfidf_norm = tfidf_norm + epsilon
 
     if debug:
-        print("\nTF-IDF Normalization Vector (tfidf_norm):")
+        print("TF-IDF Normalization Vector (tfidf_norm):")
         print(f"tfidf_norm shape: {tfidf_norm.shape}")
         print(tfidf_norm)
 
@@ -314,18 +271,16 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
     numerator = X.T.dot(Y)
 
     if debug:
-        print("\nNumerator (X.T.dot(Y)):")
+        print("Numerator (X.T.dot(Y)):")
         print(f"Numerator shape: {numerator.shape}")
         #print(numerator.toarray()[:5])  # Print first 5 rows for inspection
 
     # Compute supervised TF-IDF matrix
     F = numerator / tfidf_norm.T
 
-    """
     if debug:
-        print("\nFinal TF-IDF Supervised Embedding Matrix (F):")
+        print("Final TF-IDF Supervised Embedding Matrix (F):")
         print(F)
-    """
 
     return F
 
@@ -407,11 +362,11 @@ def validate_zscores(original_matrix, normalized_matrix, variance=1e-4, debug=Fa
         # Print validation results
         print("Original Matrix:")
         print(original_matrix)
-        print("\nNormalized Matrix (Z-Scores):")
+        print("normalized matrix (zscores):")
         print(normalized_matrix)
-        print("\nMean of Normalized Matrix (should be close to 0):")
+        print("mean of normalized matrix (should be close to 0):")
         print(mean)
-        print("\nStandard Deviation of Normalized Matrix (should be close to 1):")
+        print("std of normalized matrix (should be close to 1):")
         print(std)
     
     # Validation checks
@@ -419,11 +374,11 @@ def validate_zscores(original_matrix, normalized_matrix, variance=1e-4, debug=Fa
     std_check = np.allclose(std, 1, atol=variance)
     
     if mean_check and std_check:
-        print("\n[PASS] Z-Scores method works as expected.")
+        print("[PASS] Z-Scores method works as expected.")
 
         return True
     else:
-        print("\n[FAIL] Z-Scores method failed validation.")
+        print("[FAIL] Z-Scores method failed validation.")
         if not mean_check:
             print("Mean is not close to 0.")
         if not std_check:
@@ -461,43 +416,6 @@ def normalize_zscores(data, debug=False):
 
 
     return z_scores
-
-
-
-
-def zscores_old(x, axis=0, debug=False):                             #scipy.stats.zscores does not avoid division by 0
-    """
-    Normalizes an array X using z-score normalization.
-
-    Implementation: The standard deviation is calculated with a minimum clip value to 
-    prevent division by zero. This normalized form ensures each feature (column if axis=0) 
-    has zero mean and unit variance.
-    """    
-    if (debug):
-        print("\t--- zscores() ---")
-        print("x:", type(x), {x.shape})
-        #print("x[0]:", x[0])
-        print("x dtype:", x.dtype)                  # Check data type
-        print("axis: ", {axis})
-
-    #arrX = x.todense(x)
-    arrX = x.todense()                          # coo_matrix -> dense matrix
-    if (debug):
-        print("arrX shape:", {arrX.shape})
-    
-    np_std = np.std(arrX, ddof=1, axis=axis)
-    std = np.clip(np_std, 1e-5, None)
-
-    #std = np.clip(np.std(x, ddof=1, axis=axis), 1e-5, None)
-    #mean = np.mean(x, axis=axis)
-    mean = np.mean(arrX, axis=axis)
-    
-    #return (x - mean) / std
-    return (arrX - mean) / std
-
-
-
-
 
 
 

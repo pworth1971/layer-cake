@@ -1,7 +1,5 @@
 #!/bin/bash
 
-
-
 #
 # Datasets array
 # this is simply for reference
@@ -40,24 +38,18 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-WCE="--wce"
-
 declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
-#declare -a learners=("svm" "lr" "nb")
-declare -a learners=("svm" "nb")
+declare -a learners=("svm" "lr" "nb")
 declare -a vtypes=("tfidf")
 
-#declare -a mixes=("dot" "dot-wce" "solo" "solo-wce" "vmode" "cat-doc" "cat-wce" "cat-doc-wce" "lsa" "lsa-wce")
 declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
-
 #declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
 #declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
-declare -a emb_comp_options=("avg" "summary")
-#declare -a emb_comp_options=("avg")
+declare -a emb_comp_options=("avg" "summary", "weighted")
 
 
 # Embedding config params

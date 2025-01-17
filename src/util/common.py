@@ -48,6 +48,8 @@ SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
 TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
+
+CLASS_EMBEDDING_MODES = ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-wce']
 #
 # --------------------------------------------------------------------------------------------------------------
 
@@ -281,6 +283,11 @@ def initialize_ml_testing(args, program, version):
         pretrained = True
     else:
         pretrained = False
+        
+    if args.supervised:
+        supervised = True
+    else:
+        supervised = False
 
     embeddings = args.pretrained
     print("embeddings:", {embeddings})
@@ -327,19 +334,23 @@ def initialize_ml_testing(args, program, version):
         overwrite=False)
 
     print("setting defaults...")
-    print("embeddings:", embeddings)
 
     print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
 
     lm_type = get_language_model_type(embeddings)
     print("lm_type:", {lm_type})
 
-    if (args.mix in ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-wce']):
+    if (args.mix in [CLASS_EMBEDDING_MODES]):
         supervised = True
-        mode = f'supervised:zscore'         # always use zscore with ML-WCE models
+        mode = f'supervised'
+        
+        if not args.nozscore:
+            mode += 'zscore'         # always use zscore with ML-WCE models
     else:
         supervised = False
         mode = f'unsupervised'
+
+    mode += f'-[{args.vtype}.{args.mix}.{args.dataset_emb_comp}]'
 
     # get the path to the embeddings
     if pretrained:
@@ -362,7 +373,7 @@ def initialize_ml_testing(args, program, version):
     logger.set_default('os', system.get_os())
     logger.set_default('cpus', system.get_cpu_details())
     logger.set_default('mem', system.get_total_mem())
-    logger.set_default('mode', run_mode)
+    #logger.set_default('mode', run_mode)
 
     logger.set_default('source', program)
     logger.set_default('version', version)
