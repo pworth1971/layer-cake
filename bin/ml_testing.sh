@@ -24,7 +24,7 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/ml_tce_test.test"
+LOG="--logfile ../log/lc_ml_all_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
