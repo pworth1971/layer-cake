@@ -49,7 +49,7 @@ declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode"
 #declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
-declare -a emb_comp_options=("avg" "summary", "weighted")
+declare -a emb_comp_options=("avg" "summary" "weighted")
 
 
 # Embedding config params
