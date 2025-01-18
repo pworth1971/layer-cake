@@ -272,7 +272,7 @@ def gen_xdata(Xtr_raw,
             return None   
 
         #
-        # Next webuild the WCE representation by projecting 
+        # Next we build the WCE representation by projecting 
         # the tfidf vectors into the pretrained embedding (vocabulary) space
         # using matrix multiplication, i.e. dot product. 
         #

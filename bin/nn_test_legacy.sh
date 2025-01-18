@@ -18,6 +18,83 @@ export CUDA_VISIBLE_DEVICES=3                                               # GP
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 #
+# dataset bbc-news, 5 classes, single-label
+#
+dataset="--dataset bbc-news"
+
+##
+# CNN runs
+##
+$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
+
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--tunable
+$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained glove	--tunable --droptype learn
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--supervised
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--supervised	--tunable
+
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--tunable
+$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained word2vec	--tunable --droptype learn
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--supervised
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--supervised	--tunable
+
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--tunable
+$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained glove	--tunable --droptype learn
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--supervised
+$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--supervised	--tunable
+
+##
+# LSTM runs
+##
+$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128
+
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--tunable
+$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained glove	--tunable --droptype learn
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--supervised
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--supervised	--tunable
+
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--tunable
+$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained word2vec	--tunable --droptype learn
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--supervised
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--supervised	--tunable
+
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--tunable
+$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained fasttext	--tunable --droptype learn
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--supervised
+$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--supervised	--tunable
+
+##
+# ATTN runs
+##
+$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128
+
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--tunable
+$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained glove	--tunable --droptype learn
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--supervised
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--supervised	--tunable
+
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--tunable
+$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained word2vec	--tunable --droptype learn
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--supervised
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--supervised	--tunable
+
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--tunable
+$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained fasttext	--tunable --droptype learn
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised
+$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised	--tunable
+# ---------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+#
 # reuters21578 dataset, 115 classes, multi-label
 #
 dataset="--dataset reuters21578"
@@ -171,88 +248,6 @@ $PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised
 $PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised	--tunable
 # ---------------------------------------------------------------------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------------------------------------------------------------------
-#
-# dataset bbc-news, 5 classes, single-label
-#
-dataset="--dataset bbc-news"
-
-##
-# CNN runs
-##
-$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
-
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--tunable
-$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained glove	--tunable --droptype learn
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--supervised
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--supervised	--tunable
-
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--tunable
-$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained word2vec	--tunable --droptype learn
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--supervised
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained word2vec	--supervised	--tunable
-
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--tunable
-$PY $LOG $dataset	$CNN	--learnable 56	--channels 128	--pretrained glove	--tunable --droptype learn
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--supervised
-$PY $LOG $dataset	$CNN	--channels 128	--pretrained fasttext	--supervised	--tunable
-
-##
-# LSTM runs
-##
-$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128
-
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--tunable
-$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained glove	--tunable --droptype learn
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--supervised
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained glove	--supervised	--tunable
-
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--tunable
-$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained word2vec	--tunable --droptype learn
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--supervised
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained word2vec	--supervised	--tunable
-
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--tunable
-$PY $LOG $dataset	$LSTM	--learnable 56	--hidden 128	--pretrained fasttext	--tunable --droptype learn
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--supervised
-$PY $LOG $dataset	$LSTM	--hidden 128	--pretrained fasttext	--supervised	--tunable
-
-##
-# ATTN runs
-##
-$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128
-
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--tunable
-$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained glove	--tunable --droptype learn
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--supervised
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained glove	--supervised	--tunable
-
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--tunable
-$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained word2vec	--tunable --droptype learn
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--supervised
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained word2vec	--supervised	--tunable
-
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--tunable
-$PY $LOG $dataset	$ATTN	--learnable 56	--hidden 128	--pretrained fasttext	--tunable --droptype learn
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised
-$PY $LOG $dataset	$ATTN	--hidden 128	--pretrained fasttext	--supervised	--tunable
-# ---------------------------------------------------------------------------------------------------------------------------------------
 
 
 
