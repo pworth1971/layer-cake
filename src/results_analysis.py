@@ -903,15 +903,78 @@ def read_data_file(file_path=None, debug=False):
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
+import os
+from datetime import datetime
+import pandas as pd
+from tabulate import tabulate
 
-def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=False):
+def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=False):
     """
-    generate_summary()
+    Generate summaries for each dataset grouped by the first token in the embeddings type, writing to separate files for each dataset.
+    """
+    print(f'\n\tgenerating summary to {output_path}...')
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Filter for Macro and Micro F1 scores only
+    df_filtered = df[df['measure'].isin(['final-te-macro-f1', 'final-te-micro-f1'])]
+
+    # Extract the first part of the embeddings as 'language_model'
+    df_filtered['language_model'] = df_filtered['embeddings'].apply(lambda x: x.split(':')[0])
+
+    # Get the current date in YYYY-MM-DD format for file naming
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Loop through each dataset and create a summary file
+    for dataset in df_filtered['dataset'].unique():
+        dataset_filtered = df_filtered[df_filtered['dataset'] == dataset]
+        
+        # Sort by necessary columns
+        dataset_filtered.sort_values(by=['language_model', 'model', 'mode', 'representation', 'measure'], inplace=True)
+
+        # Generate output file for each dataset
+        file_name = f"{dataset}_summary_{current_date}.out"
+        output_file = os.path.join(output_path, file_name)
+
+        if gen_file:
+            with open(output_file, 'w') as f:
+                last_lang_model = None
+                for lang_model, group in dataset_filtered.groupby('language_model'):
+                    if last_lang_model is not None:
+                        f.write("\n" + "-" * 80 + "\n")  # Separator line
+
+                    # Formatting the table for the current language model group
+                    formatted_table = tabulate(group, headers='keys', tablefmt='pretty', showindex=False)
+                    f.write(f"Language Model: {lang_model}\n")
+                    f.write(formatted_table)
+                    f.write("\n")
+
+                    last_lang_model = lang_model  # Update last language model encountered
+
+            print(f"Output saved to {output_file}")
+
+        if stdout:
+            print(formatted_table)
+
+# ----------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------------
+
+
+
+def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug=False):
+    """
+    generate_summary_all()
     
     analyze the model performance results, print summary either to sdout or file
     """
 
-    print(f'\n\tgenerating summary to {output_path}...')
+    print(f'\n\tgenerating summary for all datasets to {output_path}...')
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -978,7 +1041,7 @@ def gen_summary(df, output_path='../out', gen_file=True, stdout=False, debug=Fal
         current_date = datetime.now().strftime("%Y-%m-%d")
 
         # Add the date to the file name
-        file_name = f"layercake_summary.{current_date}.out"
+        file_name = f"layercake.all.summary.{current_date}.out"
         output_file = os.path.join(output_path, file_name)
         
         # Write the output to the file
@@ -1064,8 +1127,20 @@ if __name__ == "__main__":
 
     if args.summary:
         
-        gen_summary(df, out_dir, debug=debug)
+        gen_summary_all(
+            df, 
+            out_dir, 
+            debug=debug
+        )
 
+        gen_summaries(
+            df, 
+            out_dir, 
+            gen_file=True, 
+            stdout=False, 
+            debug=debug
+        )
+        
         # gen_csvs(df, out_dir, neural=args.neural, debug=debug)
         gen_csvs_all(df, out_dir, neural=args.neural, debug=debug)
         
