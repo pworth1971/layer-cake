@@ -5,15 +5,15 @@
 # this is simply for reference
 #
 dataset_info=(
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
-    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
-    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
+    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
+    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
+    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+    "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
+    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
- )   
+)   
 #
 #
 
@@ -24,7 +24,7 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/lc_ml_all_test.test"
+LOG="--logfile ../log/lc_ml_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
@@ -38,19 +38,19 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "arxiv_protoformer" "ohsumed" "imdb" "rcv1")
+declare -a datasets=("20newsgroups" "reuters21578" "imdb" "ohsumed" "arxiv" "arxiv_protoformer" "rcv1" "bbc-news")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
-declare -a learners=("svm" "lr" "nb")
+#declare -a learners=("svm" "lr" "nb")
+declare -a learners=("svm")
+
 declare -a vtypes=("tfidf")
 
-declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
-#declare -a mixes=("vmode" "cat-wce" "lsa" "lsa-wce" "solo" "solo-wce")
-#declare -a mixes=("vmode" "cat-wce" "lsa" "solo" "solo-wce")
+#declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
+declare -a mixes=("vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce" )
 
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
 declare -a emb_comp_options=("avg" "summary" "weighted")
-
 
 # Embedding config params
 GLOVE="--pretrained glove" 
