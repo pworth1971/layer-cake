@@ -321,7 +321,7 @@ def main(opt):
         seed=opt.seed 
     )
     
-    print('\n\t]tDataset:', dataset.show())
+    print('\n\tDataset:', dataset.show())
     
     dataset.inspect_text()
     print("\n")
