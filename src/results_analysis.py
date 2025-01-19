@@ -1,16 +1,20 @@
-import pandas as pd
 import os
 import argparse
 import numpy as np
+import pandas as pd
 from datetime import datetime
 
 import plotly.express as px
 import seaborn as sns
-import plotly.express as px
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 import csv
 
+from bokeh.plotting import figure, output_file, save
+from bokeh.models import ColumnDataSource, HoverTool
+from bokeh.io import show
+from bokeh.transform import factor_cmap
+from bokeh.palettes import Category20  # A palette with up to 20 colors
 
 from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
@@ -256,13 +260,7 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-import os
-import pandas as pd
-from bokeh.plotting import figure, output_file, save
-from bokeh.models import ColumnDataSource, HoverTool
-from bokeh.io import show
-from bokeh.transform import factor_cmap
-from bokeh.palettes import Category20  # A palette with up to 20 colors
+
 
 def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
     """

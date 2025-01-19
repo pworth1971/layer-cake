@@ -21,3 +21,4 @@ fasttext
 seaborn
 huggingface-hub
 accelerate
+bokeh

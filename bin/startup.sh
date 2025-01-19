@@ -66,7 +66,7 @@ fi
 
 # Core package dependencies
 echo "Installing core package dependencies..."
-pip install scikit-learn transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale huggingface_hub accelerate
+pip install scikit-learn transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale huggingface_hub accelerate bokeh
 
 # Prompt user to log in to Hugging Face
 huggingface-cli login
