@@ -12,15 +12,32 @@ import matplotlib.pyplot as plt
 import csv
 
 
-
-
 from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
+
+# -----------------------------------------------------------------------------------------------------------------------------------
+#
 # measures filter: report on these specific measures
+#
 MEASURES = ['final-te-macro-f1', 'final-te-micro-f1']
 
+#
+# Define the measures to be included in CSV file output
+#
+CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
+
+
+#
+# number of results to display in performance plot (model by representation)
+#
+NUM_RESULTS = 80
+
+
 Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
+#
+# -----------------------------------------------------------------------------------------------------------------------------------
+
 
 
 
@@ -239,8 +256,107 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+import os
+import pandas as pd
+from bokeh.plotting import figure, output_file, save
+from bokeh.models import ColumnDataSource, HoverTool
+from bokeh.io import show
+from bokeh.transform import factor_cmap
+from bokeh.palettes import Category20  # A palette with up to 20 colors
 
 def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
+    """
+    Generate timelapse plots for each dataset, model, embeddings, representation, and dimensions
+    using Bokeh for interactive visualizations.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame containing timelapse data.
+        output_path (str): Directory to save the output files.
+        show_charts (bool): Whether to display the charts interactively.
+        debug (bool): Whether to enable debug mode for extra outputs.
+    """
+    print("Generating timelapse plots...")
+
+    # Ensure output directory exists
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    df_timelapse = df[['dataset', 'model', 'embeddings', 'representation', 'dimensions', 'timelapse']].drop_duplicates()
+
+    if df_timelapse.empty:
+        print("Error: No data available for timelapse analysis.")
+        return
+
+    for dataset in df_timelapse['dataset'].unique():
+        print(f"Generating timelapse plots for dataset {dataset}...")
+
+        subset_df = df_timelapse[df_timelapse['dataset'] == dataset].copy()
+
+        if subset_df.empty:
+            print(f"No timelapse data available for dataset {dataset}")
+            continue
+
+        subset_df.sort_values(by='dimensions', ascending=False, inplace=True)
+        subset_df['representation_with_dim'] = subset_df['representation'] + ' (' + subset_df['dimensions'].astype(str) + ')'
+        subset_df['embeddings_prefix'] = subset_df['embeddings'].apply(lambda x: x.split(':')[0])  # Extract prefix
+
+        avg_timelapse_df = subset_df.groupby(['model', 'embeddings_prefix', 'representation_with_dim']).agg({'timelapse': 'mean'}).reset_index()
+
+        source = ColumnDataSource(data=avg_timelapse_df)
+
+        num_colors = len(avg_timelapse_df['embeddings_prefix'].unique())
+        palette = Category20[20][:num_colors]  # Use Category20 for better color distribution
+
+        p = figure(
+            title=f"Timelapse Data for {dataset}",                              # Title
+            x_range=avg_timelapse_df['representation_with_dim'].unique(),
+            height=1400,                                                        # Increased plot height
+            width=1800,                                                         # Increased plot width
+            tools="pan,wheel_zoom,box_zoom,reset"
+        )
+        p.vbar(
+            x='representation_with_dim', top='timelapse', width=0.9, source=source,
+            legend_field='embeddings_prefix',
+            line_color='white',
+            fill_color=factor_cmap('embeddings_prefix', palette=palette, factors=avg_timelapse_df['embeddings_prefix'].unique())
+        )
+
+        p.add_tools(HoverTool(tooltips=[("Model", "@model"), ("Embeddings", "@embeddings_prefix"), ("Timelapse", "@timelapse")]))
+
+        p.title.text_font_size = '16pt'
+        p.xaxis.axis_label = "Representation (Dimensions)"
+        p.yaxis.axis_label = "Average Time (seconds)"
+        p.xaxis.major_label_orientation = 1
+        p.xaxis.major_label_text_font_size = "8pt"
+        p.legend.title = 'Embeddings'
+        p.legend.label_text_font_size = '8pt'
+
+        html_file = os.path.join(output_path, f"{dataset}_timelapse_plot_interactive.html")
+        output_file(html_file)
+        save(p)
+        print(f"Saved interactive HTML plot for dataset {dataset} at {html_file}")
+
+        if show_charts:
+            show(p)  # Open in browser
+
+    print("Timelapse plots generation completed.")
+
+
+
+
+def gen_timelapse_plots_orig(df, output_path='../out', show_charts=False, debug=False):
+    """
+    gen_timelapse_plots generates timelapse plots for each dataset, model, embeddings, representation, and dimensions from a given DataFrame.
+    
+    Arguments:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - show_charts (default: False): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during 
+    
+    Returns:
+    - None: The function saves the generated plots as HTML files in the specified output
+    """
 
     print("generating timelapse plots...")
 
@@ -352,6 +468,22 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
 
 def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=None):
+    """
+    model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
+    
+    Arguments:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during
+    - num_results (default: None): Number of top results to display in the plot (None for all results).
+    
+    Returns:
+    - None: The function saves the generated plots as HTML files in the specified output directory.
+    """
+    
     # Filter the dataframe for the measures of interest right away
     df = df[df['measure'].isin(MEASURES)]
     
@@ -413,11 +545,11 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             fig = px.bar(subset_df2, 
                          x='representation', 
                          y='value', 
-                         color='embedding_type',                                                     # Color by embedding type
+                         color='embedding_type',                                                                # Color by embedding type
                          title=f'{measure} Performance Comparison on {dataset}',
                          labels={"value": "Performance Metric", "representation": "Representation"},
-                         hover_data=['representation', 'value', 'embedding_type'],                    # Include representation, value, and embedding type in hover
-                         category_orders={"representation": model_rep_order})                        # Explicit sorting order
+                         hover_data=['representation', 'value', 'embedding_type'],                              # Include representation, value, and embedding type in hover
+                         category_orders={"representation": model_rep_order})                                   # Explicit sorting order
 
             # Adjust layout to ensure proper alignment and equal spacing, and add legend at the top-right
             fig.update_layout(
@@ -477,6 +609,22 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
 
 
 def model_performance_comparison_all(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False):
+    """
+    model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
+    
+    Arguments:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during
+    - num_results (default: None): Number of top results to display in the plot (None for all results).
+    
+    Returns:
+    - None: The function saves the generated plots as HTML files in the specified output directory.
+    """
+    
     # Filter the dataframe for the measures of interest right away
     df = df[df['measure'].isin(MEASURES)]
     
@@ -731,9 +879,6 @@ def render_data_all(dataframe, dataset, output_html, output_csv, debug):
 
 
 
-
-
-
 def gen_csvs(df, output_dir, neural=False, debug=False):
     """
     generate CSV summary performance data for each data set, grouped by model 
@@ -745,9 +890,6 @@ def gen_csvs(df, output_dir, neural=False, debug=False):
         debug (bool, optional): whether or not to print out debug info.
     """
     
-    # Define the measures to be included
-    CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
-
     print("\n\tgenerating CSVs...")
 
     if debug:
@@ -903,10 +1045,7 @@ def read_data_file(file_path=None, debug=False):
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
-import os
-from datetime import datetime
-import pandas as pd
-from tabulate import tabulate
+
 
 def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=False):
     """
@@ -957,11 +1096,6 @@ def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=F
 
         if stdout:
             print(formatted_table)
-
-# ----------------------------------------------------------------------------------------------------------------------------
-
-
-
 
 # ----------------------------------------------------------------------------------------------------------------------------
 
@@ -1056,8 +1190,6 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
 # ----------------------------------------------------------------------------------------------------------------------------
 
 
-NUM_RESULTS = 50
-
 if __name__ == "__main__":
 
     print("\n\t----- Results Analysis -----")
@@ -1076,7 +1208,6 @@ if __name__ == "__main__":
     parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
-
     print("args: ", args)
 
     # Ensure at least one operation is specified
@@ -1112,47 +1243,65 @@ if __name__ == "__main__":
 
     print("output directory:", out_dir)
 
+    summ_dir = os.path.join(out_dir, 'summaries')
+    timelapse_dir = os.path.join(out_dir, 'timelapse')
+    charts_dir = os.path.join(out_dir, 'charts')
+    
     # Check if output directory exists
     if not os.path.exists(out_dir):
 
-        print("\n\n")
+        print("\n")
 
         create_dir = input(f"Output directory {out_dir} does not exist. Do you want to create it? (y/n): ").strip().lower()
         if create_dir == 'y':
             os.makedirs(out_dir)
-            print(f"Directory {out_dir} created.")
+            os.makedirs(summ_dir)
+            os.makedirs(timelapse_dir)
+            os.makedirs(charts_dir)
+            print(f"Directory {out_dir} created, along with subdirectories")
         else:
             print(f"Directory {out_dir} was not created. Exiting.")
             exit()
 
+    #
+    # generate summaries
+    #
     if args.summary:
         
         gen_summary_all(
             df, 
-            out_dir, 
+            summ_dir, 
             debug=debug
         )
 
         gen_summaries(
             df, 
-            out_dir, 
+            summ_dir, 
             gen_file=True, 
             stdout=False, 
             debug=debug
         )
         
         # gen_csvs(df, out_dir, neural=args.neural, debug=debug)
-        gen_csvs_all(df, out_dir, neural=args.neural, debug=debug)
+        gen_csvs_all(
+            df, 
+            summ_dir, 
+            neural=args.neural, 
+            debug=debug
+        )
         
+    #
+    # generate charts
+    #
     if args.charts:
         
         model_performance_comparison(
             df, 
-            out_dir, 
+            charts_dir, 
             neural=args.neural,
             show_charts=args.show, 
             y_axis_threshold=args.ystart,
-            num_results=args.results,
+            num_results=args.results,               # number of top results to display in the plot
             debug=debug
         )
         
@@ -1162,17 +1311,20 @@ if __name__ == "__main__":
         #
         generate_charts_matplotlib(
             df, 
-            out_dir,
+            charts_dir,
             neural=args.neural,
             show_charts=args.show,
             y_axis_threshold=args.ystart,
             debug=debug
         )
-        
+
+    #
+    # generate timelapse plots
+    #        
     if (args.runtimes):
         gen_timelapse_plots(
             df, 
-            out_dir, 
+            timelapse_dir, 
             show_charts=args.show,
             debug=debug
         )
