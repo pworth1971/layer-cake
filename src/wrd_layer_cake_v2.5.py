@@ -461,7 +461,8 @@ if __name__ == '__main__':
     available_dropouts = {'sup','none','full','learn'}
 
     # Training settings
-    parser = argparse.ArgumentParser(description='Neural text classification with Word-Class Embeddings')
+    parser = argparse.ArgumentParser(description='Neural text classification with Static Word Embeddings')
+    
     parser.add_argument('--dataset', type=str, default='reuters21578', metavar='str',
                         help=f'dataset, one in {available_datasets}')
     parser.add_argument('--show-dist', action='store_true', default=True, help='Show dataset class distribution')

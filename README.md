@@ -172,7 +172,7 @@ The platform consists of three modules:
 - Results Analysis: code to analyze the results and report on them - summary tables and charts effectively
 
 
-### ML Baseline
+### ML Baseline: SVM, LR and NB Models
 
 The Machine Learning (ML) models were originally designed to baseline the NLP solve as a point of comparison against the neural models. We expanded 
 the origianl capabilities in this department to include Logistic Regression (LR) as well as Naive Bayes (NB) models on top of the original Support 
@@ -181,24 +181,27 @@ type problems.
 
 The driver code for this module is in src/ml_classification_test_v3.0.py and it is a command line program that takes the following arguments:
 
-Layer Cake ML Text Classification Testing
+
 
 options:
-  -h, --help            show this help message and exit
-  --dataset DATASET     dataset, one in ['20newsgroups', 'rcv1', 'reuters21578', 'bbc-news', 'ohsumed', 'imdb', 'arxiv', 'arxiv_protoformer']
-  --pickle-dir DIR      path where to load the pickled dataset from
-  --logfile FILE        path to the application log file
-  --net MODEL           model / learner, one of [svm, lr, or nb]
-  --vtype VTYPE         dataset base vectorization strategy, in [tfidf, count]
-  --pretrained MODEL    Language model to use, either "None" or in ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], default None.
-  --dataset-emb-comp POOLING
-                        Pooling strategy for teh computation of dataset representation for transformer models. Eitehr "avg", or "summary" (cls), defaults to "avg".
-  --embedding-dir DIR   path where to load and save embeddings
-  --seed SEED           random seed (default: 29)
-  --mix MIX             way to prepare the embeddings, in [vmode, cat, cat-wce, dot, dot-wce, solo, solo-wce, lsa, lsa-wce]. NB presumes --pretrained is set
-  --cm                  create confusion matrix for underlying model
-  --optimc              optimize the model using relevant models params
-  --force               force the execution of the experiment even if a log already exists
+  -h, --help                  show this help message and exit
+  --dataset DATASET           dataset, one in ['20newsgroups', 'rcv1', 'reuters21578', 'bbc-news', 'ohsumed', 'imdb', 'arxiv', 'arxiv_protoformer']
+  --pickle-dir DIR            path where to load the pickled dataset from
+  --logfile FILE              path to the application log file
+  --net MODEL                 model / learner, one of [svm, lr, or nb]
+  --vtype VTYPE               dataset base vectorization strategy, in [tfidf, count]
+  --pretrained MODEL          Language model to use, either "None" or in ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], default None.
+  --dataset-emb-comp POOLING  Pooling strategy for teh computation of dataset representation for transformer models. Eitehr "avg", or "summary" (cls), defaults to "avg".
+  --embedding-dir DIR         path where to load and save embeddings
+  --seed SEED                 random seed (default: 29)
+  --mix MIX                   way to prepare the embeddings, in [vmode, cat, cat-wce, dot, dot-wce, solo, solo-wce, lsa, lsa-wce]. NB presumes --pretrained is set
+  --cm                        create confusion matrix for underlying model
+  --optimc                    optimize the model using relevant models params
+  --force                     force the execution of the experiment even if a log already exists
+  --supervised                Use supervised embeddings (TCEs
+  --nozscore                  disables z-scoring form the computation of TCE
+  --supervised-method         method used to create the supervised matrix, one of 'dotn', 'ppmi', 'ig', 'chi', default is dotn, [ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)]
+  --max-label-space int       larger dimension allowed for the feature-label embedding (if larger, then PCA with this number of components is applied (default 300)
 
 
 A sample command may look like the following: 
@@ -217,185 +220,288 @@ This runs from the bin directory (which is presumed to be the run location of al
 - 'lsa': using Latent Semantic Analysis approch, i,e LSA/SVD computation, for feature selection.
 - 'lsa-wce': concatenation of LSA factorization of dataset with vectorized representation of dataset with WCE / TCEs
 
+The script that was used to generate test data is in bin/ml_testing.ml and it covers most of the options needed to benchmark the three models across the supported datasets.
 
 
-### Layer Cake
 
-Layer Cake is the module which tests the NLP solve against the neural models, with ATTN, CNN and LSTM models supported (see related paper or code for details). The
-command line program supports the following options:
+### Layer Cake: Static Word Embedding Models (GloVe, Word2Vec and fastText)
 
-usage: layer_cake.py [-h] [--dataset str] [--batch-size int] [--batch-size-test int] [--nepochs int] [--patience int] [--plotmode] [--hidden int] [--channels int] [--lr float] [--weight_decay float] [--droptype DROPTYPE] [--dropprob [0.0, 1.0]] [--seed int] [--log-interval int] [--log-file str] [--pickle-dir str] [--test-each int] [--checkpoint-dir str] [--net str] [--pretrained glove|word2vec|fasttext|bert] [--supervised] [--supervised-method dotn|ppmi|ig|chi] [--learnable int] [--val-epochs int] [--word2vec-path PATH] [--glove-path PATH] [--fasttext-path PATH] [--bert-path PATH] [--llama-path PATH] [--max-label-space int] [--max-epoch-length int] [--force] [--tunable] [--nozscore] [--batch-file str]
+Layer Cake is the module which tests the NLP solve against static word embedding models (GloVe, Word2Vec and fastText) using three different neural architcetures: 
+ATTN, CNN and LSTM models supported (see related paper or code for details). The command line program supports the following options:
 
-optional arguments:
+
+(python312) peter@Peters-MacBook-Pro-M1-2021 bin % python ../src/wrd_layer_cake_v2.5.py --help   
+
+	--- WORD_LAYER_CAKE Version: 2.5 ---
+available_datasets: {'bbc-news', 'reuters21578', 'ohsumed', '20newsgroups', 'rcv1', 'arxiv', 'imdb', 'arxiv_protoformer'}
+
+usage: 
+wrd_layer_cake_v2.5.py [-h] [--dataset str] [--show-dist] [--vtype N] [--batch-size int] [--batch-size-test int] [--nepochs int] [--patience int] [--plotmode] [--hidden int] [--channels int] [--lr float] [--weight_decay float] [--droptype DROPTYPE] [--dropprob [0.0, 1.0]] [--seed int] [--log-interval int] [--log-file str] [--pickle-dir str] [--test-each int] [--checkpoint-dir str] [--net str] [--pretrained glove|word2vec|fasttext] [--supervised] [--sup-mode SUP_MODE] [--supervised-method dotn|ppmi|ig|chi] [--learnable int] [--val-epochs int] [--glove-path PATH] [--word2vec-path PATH] [--fasttext-path PATH] [--bert-path PATH] [--max-label-space int] [--max-epoch-length int] [--force] [--tunable] [--nozscore]
+
+
+Neural text classification with Static Word Embeddings
+
+options:
   -h, --help            show this help message and exit
-  --dataset str         dataset, one in {'20newsgroups', 'ohsumed', 'reuters21578', 'rcv1'}
+  --dataset str         dataset, one in {'bbc-news', 'reuters21578', 'ohsumed', '20newsgroups', 'rcv1', 'arxiv', 'imdb', 'arxiv_protoformer'}
+  --show-dist           Show dataset class distribution
+  --vtype N             dataset base vectorization strategy, in [tfidf, count]
   --batch-size int      input batch size (default: 100)
-  --batch-size-test int batch size for testing (default: 250)
-  --nepochs int         number of epochs (default: 100)
+  --batch-size-test int
+                        batch size for testing (default: 250)
+  --nepochs int         number of epochs (default: 200)
   --patience int        patience for early-stop (default: 10)
   --plotmode            in plot mode, executes a long run in order to generate enough data to produce trend plots (test-each should be >0. This mode is used to produce plots, and does not perform a final evaluation on the test set other than those performed after test-each epochs).
   --hidden int          hidden lstm size (default: 512)
   --channels int        number of cnn out-channels (default: 256)
   --lr float            learning rate (default: 1e-3)
   --weight_decay float  weight decay (default: 0)
-  --droptype DROPTYPE   chooses the type of dropout to apply after the embedding layer. Default is "sup" which only applies to word-class embeddings (if present). Other options include "none" which does not apply dropout (same as "sup" with no supervised embeddings), "full" which applies dropout to the entire embedding, or "learn" that applies dropout only to the learnable embedding.
-  --dropprob [0.0, 1.0] dropout probability (default: 0.5)
-  --seed int            random seed (default: 1)
+  --droptype DROPTYPE   chooses the type of dropout to apply after the embedding layer. Default is "sup" which only applies to word-class embeddings (if present). Other options include "none" which does not apply dropout (same as "sup" with no supervised embeddings), "full" which applies dropout to the entire embedding, or
+                        "learn" that applies dropout only to the learnable embedding.
+  --dropprob [0.0, 1.0]
+                        dropout probability (default: 0.5)
+  --seed int            random seed (default: 29)
   --log-interval int    how many batches to wait before printing training status
   --log-file str        path to the log csv file
   --pickle-dir str      if set, specifies the path where to save/load the dataset pickled (set to None if you prefer not to retain the pickle file)
   --test-each int       how many epochs to wait before invoking test (default: 0, only at the end)
   --checkpoint-dir str  path to the directory containing checkpoints
-  --net str             net, one in {'cnn', 'attn', 'lstm'}
-  --pretrained          glove|word2vec|fasttext|bert. pretrained embeddings, use "glove", "word2vec", "fasttext", "bert", or "llama" (default None)
+  --net str             net, one in {'attn', 'cnn', 'lstm'}
+  --pretrained glove|word2vec|fasttext
+                        pretrained embeddings, use "glove", "word2vec", or "fasttext" (default None)
   --supervised          use supervised embeddings
-  --supervised-method   dotn|ppmi|ig|chi. method used to create the supervised matrix. Available methods include dotn (default), ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)
+  --sup-mode SUP_MODE   How WCEs are combined with model embeddings (cat)
+  --supervised-method dotn|ppmi|ig|chi
+                        method used to create the supervised matrix. Available methods include dotn (default), ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)
   --learnable int       dimension of the learnable embeddings (default 0)
   --val-epochs int      number of training epochs to perform on the validation set once training is over (default 1)
-  --word2vec-path PATH  path + filename to Word2Vec pretrained vectors (e.g. ../.vector_cache/GoogleNews-vectors-negative300.bin), used only with --pretrained word2vec
-  --glove-path PATH     directory to pretrained glove embeddings (glove.840B.300d.txt.pt file), used only with --pretrained glove
-  --fasttext-path PATH  path + filename to fastText pretrained vectors (e.g. --fasttext-path ../.vector_cache/crawl-300d-2M.vec), used only with --pretrained fasttext
-  --bert-path PATH      directory to BERT pretrained vectors (e.g. bert-base-uncased-20newsgroups.pkl), used only with --pretrained bert
-  --llama-path PATH     directory to LLaMA pretrained vectors, used only with --pretrained llama
-  --max-label-space int larger dimension allowed for the feature-label embedding (if larger, then PCA with this number of components is applied (default 300)
-  --max-epoch-length intnumber of (batched) training steps before considering an epoch over (None: full epoch)
+  --glove-path PATH     path to glove.840B.300d pretrained vectors (used only with --pretrained glove)
+  --word2vec-path PATH  path to GoogleNews-vectors-negative300.bin pretrained vectors (used only with --pretrained word2vec)
+  --fasttext-path PATH  path to crawl-300d-2M.vec pretrained vectors (used only with --pretrained fasttext)
+  --bert-path PATH      Directory to BERT pretrained vectors, defaults to ../.vector_cache/BERT. Used only with --pretrained bert
+  --max-label-space int
+                        larger dimension allowed for the feature-label embedding (if larger, then PCA with this number of components is applied (default 300)
+  --max-epoch-length int
+                        number of (batched) training steps before considering an epoch over (None: full epoch)
   --force               do not check if this experiment has already been run
   --tunable             pretrained embeddings are tunable from the beginning (default False, i.e., static)
   --nozscore            disables z-scoring form the computation of WCE
-  --batch-file str      path to the config file used for batch processing of multiple experiments
+
+
+NB: The script used to generate the data across the supported models, options and datasets can be found in bin/nn_test_legacy.sh
+
+
+
+### Layer Cake: Dynamic Word Embedding Models, i.e. Transformers
+
+We support BERT, RoBERTa, DistilBERT, XLNet and GPT2 base models across the same available datasets. The code is encapsulated in the 
+trans_layer_cake python script which takes the following arguments:
+
+(python312) peter@Peters-MacBook-Pro-M1-2021 bin % python ../src/trans_layer_cake_v13.5.py --help 
+
+	--- TRANS_LAYER_CAKE Version: 13.5 ---
+
+usage: 
+trans_layer_cake_v13.5.py [-h] --dataset {20newsgroups,rcv1,reuters21578,bbc-news,ohsumed,imdb,arxiv,arxiv_protoformer} [--show-dist] [--vtype N] [--pretrained {bert,roberta,distilbert,xlnet,gpt2}] [--seed SEED] [--log-file LOG_FILE] [--force] [--weighted] --net str [--class-model] [--lr LR] [--weight_decay WEIGHT_DECAY] [--epochs EPOCHS] [--patience PATIENCE] [--dropprob [0.0, 1.0]] [--learnable int] [--droptype DROPTYPE] [--tunable] [--channels int] [--hidden int] [--pooling POOLING] [--supervised] [--sup-mode SUP_MODE] [--nozscore] [--supervised-method dotn|ppmi|ig|chi] [--max-label-space int] [--normalize-tces] [--tunable-tces] [--tce-weight-init [0.0, 1.0]]
+
+
+Transformer Layer Cake: Text Classification with Transformer Models.
+
+options:
+  -h, --help            show this help message and exit
+  --dataset {20newsgroups,rcv1,reuters21578,bbc-news,ohsumed,imdb,arxiv,arxiv_protoformer}
+                        Dataset to use
+  --show-dist           Show dataset class distribution
+  --vtype N             dataset base vectorization strategy, in [tfidf, count]
+  --pretrained {bert,roberta,distilbert,xlnet,gpt2}
+                        supported language model types for dataset representation
+  --seed SEED           Random seed
+  --log-file LOG_FILE   Path to log file
+  --force               do not check if this experiment has already been run
+  --weighted            Whether or not to use class_weights in the loss funtion of the classifier (default False)
+  --net str             supported models, either cnn, linear, hf.sc, (defaults to linear)
+  --class-model         use simple transformer classifier if True, else use the HF Sequence Classifier (customizede) model.
+  --lr LR               Learning rate
+  --weight_decay WEIGHT_DECAY
+                        Weight decay
+  --epochs EPOCHS       Number of epochs
+  --patience PATIENCE   Patience for early stopping
+  --dropprob [0.0, 1.0]
+                        dropout probability for classifier head (default: 0.5)
+  --learnable int       dimension of the learnable embeddings (default 0)
+  --droptype DROPTYPE   chooses the type of dropout to apply after the embedding layer. Default is "sup" which only applies to word-class embeddings (if present). Other options include "none" which does not apply dropout (same as "sup" with no supervised embeddings), "full" which applies dropout to the entire embedding, or
+                        "learn" that applies dropout only to the learnable embedding.
+  --tunable             Whether or not to set pretrained embeddings (as well as classifier layers), are tunable. Default False, i.e., static)
+  --channels int        number of cnn out-channels (default: 256)
+  --hidden int          hidden lstm size (default: 512)
+  --pooling POOLING     type of pooling method, used only with --net linear. Default is "mean"
+  --supervised          Use supervised embeddings (TCEs
+  --sup-mode SUP_MODE   How to combine TCEs with model embeddings (in ['cat', 'add', 'dot'])
+  --nozscore            disables z-scoring form the computation of TCE
+  --supervised-method dotn|ppmi|ig|chi
+                        method used to create the supervised matrix. Available methods include dotn (default), ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)
+  --max-label-space int
+                        larger dimension allowed for the feature-label embedding (if larger, then PCA with this number of components is applied (default 300)
+  --normalize-tces      Whether or not to normalize the tce_matrix values to the std and mean of the model embeddings. Default False.
+  --tunable-tces        whether or not to have the tce_matrix be tunable during training. Default False.
+  --tce-weight-init [0.0, 1.0]
+                        initialized tce embedding layer weight, used with --supervised and --tunable-tces. Default: 1.0
+
+We have two models that are tested HF SEQ, Hugging Face Sequence Classifier, and a CNN variant which also leverages HuggingFace transformers, each of these
+is driven and tested by the bin/trans_lc_hfseq_test.sh and bin/trans_lc_hfcnn_test.sh scripts which test the different variants of datasets and options for the
+different models.
 
 
 
 
+### Logging and Results Analysis
 
-### Results Analysis
+Each of the modules described above outputs results to log files, typically generated in the log/ directory which have a lot of information about the underlying 
+system and program parameters, and model definitions, of each run. These log files are then in turn analyzed various charts and summary output capabilities are
+provided by the src/results_analysis.py code. The results_analysis module looks at the raw output of either the ML or NN (neural network) model runs and then parses 
+the data to provide a summary report and/or interactive, html charts that show the relative performance of different pretrained or other embeddings against 
+different data sets and in different models. 
 
-The results_analysis module looks at the raw output of either the ML or NN (neural network) model runs and then parses the data to provide a summary
-report and/or interactive, html charts that show the relative performance of different pretrained or other embeddings against different data sets and 
-in different models. 
 
-The command line program takes the following arguments:
+	----- Results Analysis -----
+usage: results_analysis.py [-h] [-c] [-r] [-n] [-s] [-o] [-d] [-y YSTART] [-m RESULTS] [-show] file_path
 
-usage: results_analysis.py [-h] [--output_dir OUTPUT_DIR] [-c] [-s] [-d] [--show] file_path
+Analyze model results and generate charts and/or summaries
 
 positional arguments:
-  file_path             Path to the CSV file with the data
+  file_path             Path to the TSV file with the data
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  --output_dir          OUTPUT_DIR. Directory to save the output files, default is "../out"
   -c, --charts          Generate charts
+  -r, --runtimes        Generate timrlapse charts
+  -n, --neural          Output from Neural Nets
   -s, --summary         Generate summary
-  -d                    debug mode
-  --show                Display charts interactively (requires -c)
+  -o, --output_dir      Directory to write output files. If not provided, defaults to ../out/ + the base file name of the input file.
+  -d, --debug           debug mode
+  -y YSTART, --ystart YSTART
+                        Y-axis starting value for the charts (default: 0.6)
+  -m RESULTS, --results RESULTS
+                        Y-axis starting value for the charts (default: 0.6)
+  -show                 Display charts interactively (requires -c)
+
 
 A sample run might look something like:
 
-'python ../src/results_analysis.py --output_dir ../out -c --show ../log/ML/ml_baselines_newsgroups.test -d'
+python ../src/results_analysis.py ../log/lc_ml_test.test --charts --runtimes --summary --debug
 
-Again running from the bin directory, specifying the file to be processed (in this case ml_baselines_newsgroups.test in the ../log dircetory), that we are
-running in debug mode (-d) and we are generaating charts (-c) which we are both saving (to the output directory ../out) and showing, in a browser. Note 
-that to generate a summary file, along with the charts, simply add the -s option to the same command.
-
-
+But shell scripts for ML and NN model analysis are provided in the bin directory for reference.
 
 
 ## Technical Requirements & Dependencies
 
-This code was developed n both a Mac with Apple silicon (Apple M1 Max) as well as, for the neural models specifically which are GPU dependent, a Ubuntu Linux
+This code was developed n both a Mac with Apple silicon (Apple M1 and M3 chips) as well as, for the neural models specifically which are GPU dependent, a Ubuntu Linux
 host that has CUDA support, the latter of which is a core technical dependency for this code to run - along with the rest of the python and conda requirements 
 outlined in setup.sh and requirements.txt. 
 
-The code runs using the latest (as of summer of 2024) python 3.8 libraries. Specifically we use a miniconda python 3.8 environment which is built with the 
-following commands (from startup.sh):
-
-
--- begin bin/startup.sh:
-
-#!/bin/bash
-
-conda init
-conda create -n python38 python=3.8
-conda activate python38
-pip install scikit-learn fasttext transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly
-conda install pytorch torchtext cudatoolkit=11.8 -c pytorch -c nvidia
-apt update
-apt install zip
-
---- end bin/startup.sh
-
-
-These should be run individually from a command line to make sure they take, and the CUDA library support should be confirmed once complete - if on a CUDA 
-supported Linux environment. This can be done by starting a python environment (type 'python' at the command line) and then running the following code:
-
-import torch
-torch.cuda.is_available()
-
-This should return True if on a CUDA enabled environment, or False otherwise (for example on my Mac which althogh has GPU support does not support CUDA which 
-is a NVIDIA specific solution)
-
-
-
-## Directory Tree
-
-
-### /bin
-
-Shell scripts and other commands.
-
-### /src
-
-All source code
-
-### ./vector_cache
-
-Cache for embeddings and their variants
-
-### /pickles
-
-Cache for datasets after they have been 'pickled'
-
-### /log
-
-Output log file
-
-### /datasets
-
-directory of dataset files
+The code runs using the latest (as of summer of 2024) python 3.12 libraries. Specifically we use a miniconda python 3.12 environment which is built 
+with the bin/startup.sh script which can be run from a command line from a new system. The startup shell script runs on both Apple MacOS and Ubuntu Linux.
 
 
 ## Supported Data sets
 
-TODO: describe supported data sets here
+As of the time of this writing the datasets we support are outlined below, each of which has its own source that must be downloaded and 
+configured in the proper datasets/ subdirectory.
 
 
-### BBC News (Single Label)
+### Reuters-21578
 
-#### Download
+The Reuters-21578 dataset is one of the most widely used benchmarks in text classification. It consists of news articles that appeared on the Reuters newswire in 1987.
 
-https://www.kaggle.com/datasets/hgultekin/bbcnewsarchive?resource=download
-
-https://www.kaggle.com/competitions/learn-ai-bbc/data?select=BBC+News+Train.csv
-
-
-#### Context
-News article datasets, originating from BBC News, provided for use as benchmarks for machine learning research. The original data is processed to form a single csv 
-file for ease of use, the news title and the related text file name is preserved along with the news content and its category. This dataset is made available for 
-non-commercial and research purposes only. All rights, including copyright, in the content of the original articles are owned by the BBC.
-
-#### Content
-Consists of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
-Class Labels: 5 (business, entertainment, politics, sport, tech)
-
-#### Acknowledgements
-The original source of the data may be accessed through this link and it might be interesting to read the associated research article.
-
-#### Associated Official Research Papers
-D. Greene and P. Cunningham. "Practical Solutions to the Problem of Diagonal Dominance in Kernel Document Clustering", Proc. ICML 2006.
+•	Type: Multi-label
+•	Classes: 115
+•	Characteristics:
+o	Articles are categorized into one or more topics.
+o	Examples include categories like "earnings," "acquisitions," "grain," and "crude."
+o	Often used to evaluate multi-label classification models.
+•	Challenge: Imbalanced class distribution, with some classes having very few samples.
 
 
+### BBC News
 
-### 20newsgroups (Single Label)
+The BBC News dataset consists of articles from the BBC news website, categorized into distinct topics.
+
+•	Type: Single-label
+•	Classes: 5
+•	Classes:
+o	Business
+o	Entertainment
+o	Politics
+o	Sport
+o	Tech
+•	Characteristics:
+o	Relatively balanced class distribution.
+o	Clean and well-structured dataset.
+
+
+### arXiv
+
+The arXiv dataset consists of research papers categorized into different scientific topics based on their metadata and abstracts.
+•	Type: Multi-label
+•	Classes: 58
+•	Characteristics:
+o	Articles can belong to multiple categories, reflecting the interdisciplinary nature of research.
+o	Categories include fields like "Computer Science," "Mathematics," "Physics," and "Quantitative Biology."
+•	Challenge: Managing overlapping and nuanced classes.
+
+
+###	arXiv Protoformer
+
+A derived or curated version of the arXiv dataset, often used in experiments with prototype-based models (e.g., Protoformer).
+•	Type: Single-label
+•	Classes: 10
+•	Characteristics:
+o	Simplified compared to the full arXiv dataset.
+o	Focused on distinct topics, avoiding overlapping categories.
+
+
+### IMDB
+
+The IMDB dataset contains movie reviews, each labeled with the sentiment (positive or negative) expressed in the review.
+•	Type: Single-label
+•	Classes: 2
+o	Positive
+o	Negative
+•	Characteristics:
+o	Balanced dataset with 25,000 training samples and 25,000 test samples.
+o	Text length varies, with some reviews being long and detailed.
+
+
+
+### OHSUMED
+
+The OHSUMED dataset consists of medical abstracts from the Medline database, labeled with MeSH (Medical Subject Headings) terms.
+
+•	Type: Multi-label
+•	Classes: 23
+•	Characteristics:
+o	Each document can belong to multiple categories.
+o	Focused on medical topics, making it highly domain-specific.
+o	Categories include diseases, treatments, and medical specialties.
+•	Challenge: High label sparsity and the complexity of medical terminology.
+
+
+
+### RCV1-v2
+
+The Reuters Corpus Volume I (RCV1-v2) is a benchmark dataset consisting of over 800,000 news articles categorized into multiple topics.
+You must request permission to use the dataset from reuters after which they will release it to you.
+
+•	Type: Multi-label
+•	Classes: 101
+•	Characteristics:
+o	Covers diverse topics, including "Politics," "Economy," and "Technology."
+o	Rich metadata and hierarchical class organization.
+•	Challenge: Large size and high class overlap.
+
+
+
+### Newsgroups
 
 The 20 newsgroups dataset comprises around 18000 newsgroups posts on 20 topics split in two subsets: one for training (or development) 
 and the other one for testing (or for performance evaluation). The split between the train and test set is based upon a messages posted before 
@@ -411,51 +517,61 @@ target_names:
   'misc.forsale', 'rec.autos', 'rec.motorcycles', 'rec.sport.baseball', 'rec.sport.hockey', 'sci.crypt', 'sci.electronics', 'sci.med', \
   'sci.space', 'soc.religion.christian', 'talk.politics.guns', 'talk.politics.mideast', 'talk.politics.misc', 'talk.religion.misc']
 
+•	Characteristics:
+o	Popular benchmark dataset.
+o	Moderate size, well-balanced classes.
 
 
 
 
-## Pre-Trained Word Embeddings
-
-We use four variants of pre-trained word embeddings to drive and test the various models, and upon which we add - and test - additional embeddings 
-(like word-class embeddings or Poincaire embeddings).
 
 
-The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following pre-trained embeddings are tested, and can be downloaded from the following URLs (as of June 2024)
+## Pre-Trained Language Models 
+
+We use both static word embeddings as part of our testing (GloVe, Word2Vec and fastText) as well as dynamic embeddings, i.e. transformers (BERT, RoBERTa, DistilBERT, XLNet and 
+GPT2). The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following 
+pre-trained embeddings are tested, and can be downloaded from the following URLs (as of June 2024)
+
 
 
 ### GloVe (Global Vectors for Word Representation)
 
-Model: glove.42B.300d.txt
+Model in use: GloVe 840B 300d
+
+Architecture: GloVe is an unsupervised learning algorithm for obtaining vector representations for words by aggregating global word-word co-occurrence statistics from a corpus.
+Training Data: The model is trained on 840 billion tokens from a dataset aggregated from web data (Common Crawl).
+Salient Features: Each word is represented by a 300-dimensional vector. The model captures both semantic and syntactic information of words.
+Reference: Pennington, Jeffrey, et al. "Glove: Global vectors for word representation." Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP). 2014.
 
 Dimension: 300
-
-Architecture: GloVe is an unsupervised learning algorithm that generates word embeddings by aggregating global word-word co-occurrence statistics from a corpus. It learns representations by factoring the co-occurrence matrix of words in a corpus. Unlike Word2Vec, GloVe uses a matrix factorization approach rather than a neural network.
-
-Training Data: The referenced GloVe model (glove.42B.300d.txt) was trained on a massive corpus containing 42 billion tokens from Common Crawl. Another popular GloVe model is trained on Wikipedia and Gigaword.
 
 Training Objective: GloVe optimizes the embeddings such that word vectors are learned in a way that their dot products approximate word co-occurrence probabilities.
 
 Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. 
 
-We use, consistent with (Moreo et al 2019), the glove.840B.300d variant,
-which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
+We use, consistent with (Moreo et al 2019), the glove.840B.300d variant, which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
 
 
 
 ### Word2Vec
 
-Model: GoogleNews-vectors-negative300.bin
+Model in use: GoogleNews-vectors-negative300
 
-Dimension: 300
+Architecture: Word2Vec is a group of related models used to produce word embeddings. These models are shallow, two-layer neural networks that are trained to reconstruct 
+linguistic contexts of words. Word2Vec uses a shallow neural network to create word embeddings. It has two major approaches:
 
-Architecture: Word2Vec uses a shallow neural network to create word embeddings. It has two major approaches:
 - Skip-gram: Predicts context words given a target word.
 - CBOW (Continuous Bag of Words): Predicts the target word based on surrounding context words. Word2Vec treats words as independent units and doesn't consider subword information (which FastText later improved upon).
 
 Training Data: The GoogleNews-vectors-negative300.bin model was trained on part of the Google News dataset, consisting of 100 billion words. It provides 300-dimensional embeddings for 3 million words and phrases.
 
 Training Objective: The training objective is to predict words in context (either target-to-context or context-to-target), effectively learning dense word embeddings based on co-occurrence patterns.
+
+We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
+
+Salient Features: The model uses 300-dimensional vectors and is case-sensitive.
+
+Reference: Mikolov, Tomas, et al. "Efficient Estimation of Word Representations in Vector Space." ICLR Workshop Papers. 2013.
 
 We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
 
@@ -481,18 +597,28 @@ Other available downloads: https://wikipedia2vec.github.io/wikipedia2vec/pretrai
 
 ### FASTTEXT
 
-Model: crawl-300d-2M-subword.bin
+Model in use: crawl-300d-2M-subword.bin
 
-Dimension: 300
+Architecture: FastText extends Word2Vec to consider subword information (character n-grams), allowing it to generate word embeddings for out-of-vocabulary words. 
+FastText is a shallow neural network embedding model developed by Facebook. It builds on Word2Vec, but its key innovation is the use of subword information (i.e., it 
+learns vectors for character n-grams in addition to full words). This allows FastText to handle rare words or misspellings more robustly than Word2Vec or GloVe.
 
-Architecture: FastText is a shallow neural network embedding model developed by Facebook. It builds on Word2Vec, but its key innovation is the use of subword information (i.e., it learns vectors for character n-grams in addition to full words). This allows FastText to handle rare words or misspellings more robustly than Word2Vec or GloVe.
-
-Training Data: The model referenced here is trained on Common Crawl with 2 million word vectors. FastText models are trained on text corpora that consist of billions of words from across the web.
+Training Data: The model referenced here is trained on Common Crawl with 2 million word vectors. FastText models are trained on text corpora that consist of billions of words from across 
+the web. Trained on Common Crawl and Wikipedia using CBOW with position-weights, with character n-grams of length 5, a window of size 5, and 10 negatives.
 
 Training Objective: FastText uses the skip-gram model with negative sampling (like Word2Vec) but augments it by using subwords. This allows the model to predict not just individual words but subword representations.
 
+Salient Features: Produces 300-dimensional vectors, supports 157 languages, and is case-insensitive.
+
+Reference: Bojanowski, Piotr, et al. "Enriching Word Vectors with Subword Information." Transactions of the Association for Computational Linguistics 5 (2017): 135-146.
+
+Dimension: 300
+
+
 We use the crawl-300d-2M.vec set of fastText word embeddings which is 2 million word vectors (pre) trained on Common Crawl (600B tokens). These can
 be downloaded, along with other English variants, from https://fasttext.cc/docs/en/english-vectors.html, or directly from https://fasttext.cc/docs/en/crawl-vectors.html
+
+
 
 
 
@@ -505,7 +631,8 @@ Model: bert-base-cased
 Dimension: 768
 
 Architecture: BERT uses a transformer-based architecture with both encoder and decoder layers. The main innovation in BERT is its bidirectional training using the transformer encoder, 
-which allows the model to look at both the left and right context of a token in all layers. It is trained on two tasks:
+which allows the model to look at both the left and right context of a token in all layers. Architecture: BERT is a transformer-based model known for its deep bidirectionality, which allows 
+it to contextually understand both the left and right context in all layers. It is trained on two tasks:
 
 - Masked Language Modeling (MLM): A percentage of words in the input are randomly masked, and the model predicts the missing words.
 - Next Sentence Prediction (NSP): The model is trained to predict whether two sentences follow each other in a sequence.
@@ -520,6 +647,12 @@ BERT is trained using two unsupervised tasks:
 1) Masked Language Model (MLM): Random tokens are masked out of the input, and the model is trained to predict the original token based on its context.
 2) Next Sentence Prediction (NSP): Given pairs of sentences, the model predicts whether the second sentence in a pair is the actual next sentence in the original document.
 
+Salient Features: The base model uses 12 layers (transformer blocks), has 768 hidden units, 12 heads, and is case-insensitive.
+
+Reference: Devlin, Jacob, et al. "BERT: Pre-training of deep bidirectional transformers for language understanding." NAACL HLT 2019.
+
+
+
 
 
 ### RoBERTa (Robustly Optimized BERT Pretraining Approach)
@@ -528,25 +661,45 @@ Model: roberta-base
 
 Dimension: 768
 
-Architecture: RoBERTa is a variant of BERT, but it improves on BERT's pretraining process by optimizing the architecture. It removes the NSP task and trains with much larger batch sizes and datasets for longer periods, resulting in improved performance on various benchmarks. Like BERT, it is based on a transformer encoder and uses bidirectional training.
+Architecture: RoBERTa is a variant of BERT, but it improves on BERT's pretraining process by optimizing the architecture. It removes the NSP task and trains with much larger batch 
+sizes and datasets for longer periods, resulting in improved performance on various benchmarks. Like BERT, it is based on a transformer encoder and uses bidirectional training. RoBERTa 
+iterates on BERT's architecture by modifying key hyperparameters, removing the next-sentence pretraining objective, and training with much larger mini-batches and learning rates.
 
-Training Data: RoBERTa is trained on a larger and more diverse dataset compared to BERT. The dataset includes CommonCrawl News, OpenWebText, Stories, and Wikipedia, totaling over 160GB of text, making it significantly more data-rich.
+Training Data: RoBERTa is trained on a larger and more diverse dataset compared to BERT. The dataset includes CommonCrawl News, OpenWebText, Stories, and Wikipedia, totaling over 
+160GB of text, making it significantly more data-rich.
 
 Training Objective: RoBERTa is trained on the MLM task only, focusing on maximizing the model's ability to understand context within a sentence.
 
+Salient Features: Uses the same model size as BERT-base and is case-sensitive.
+
+Reference: Liu, Yinhan, et al. "RoBERTa: A robustly optimized BERT pretraining approach." arXiv preprint arXiv:1907.11692 (2019).
 
 
-### LLAMA (LLaMA 2)
+### XLNet
 
-Model: meta-llama/Llama-2-7b-hf or meta-llama/Llama-2-13b-hf
 
-Dimension: 4096
+Model in use: xlnet-base-cased
 
-Architecture: LLaMA (Large Language Model Meta AI) is a transformer-based architecture designed to handle large-scale language tasks. It uses a decoder-only architecture, meaning it's similar to GPT models, where the entire input is processed as a sequence, and the model autoregressively predicts the next token. It focuses on efficient scaling and reduced inference costs compared to GPT-3.
+Architecture: XLNet incorporates ideas from Transformer-XL, the state-of-the-art autoregressive model, into the pretraining objective of BERT by maximizing the expected likelihood over all permutations of the input sequence tokens.
 
-Training Data: LLaMA 2 is trained on a diverse set of publicly available text data, including CommonCrawl, Wikipedia, books, research papers, and more. The model has access to hundreds of billions of tokens, making it one of the largest language models to date.
+Training Data: Trained on a larger corpus that includes BooksCorpus, English Wikipedia, Giga5, ClueWeb, and Common Crawl.
 
-Training Objective: The model is trained using a standard autoregressive language modeling task, which means it predicts the next word in a sequence, given the previous context.
+Salient Features: Uses 12 layers, with 768 hidden units and is case-sensitive.
+
+Reference: Yang, Zhilin, et al. "XLNet: Generalized Autoregressive Pretraining for Language Understanding." NeurIPS 2019.
+
+
+### GPT-2 (Generative Pre-trained Transformer 2)
+
+Model in use: gpt2
+
+Architecture: GPT-2 is an unsupervised language model that uses the Transformer architecture. It generates synthetic text samples in response to the input text.
+
+Training Data: Trained on a dataset called "WebText," a corpus consisting of over 8 million documents (40GB of text) scraped from the internet.
+
+Salient Features: The base model has 12 layers, 768 hidden units, and is case-sensitive.
+
+Reference: Radford, Alec, et al. "Language Models are Unsupervised Multitask Learners." OpenAI Blog (2019).
 
 
 

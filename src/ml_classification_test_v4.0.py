@@ -732,8 +732,8 @@ if __name__ == '__main__':
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
     parser.add_argument('--pretrained', type=str, default=None, metavar='MODEL',
                         help=f'Language model to use, either "None" or in {SUPPORTED_LMS}, default None.')
-    parser.add_argument('--dataset-emb-comp', type=str, default='avg', metavar='POOLING',
-                        help='Pooling strategy for teh computation of dataset representation for transformer models. Eitehr "avg", or "summary" (cls), defaults to "avg".')
+    parser.add_argument('--dataset-emb-comp', type=str, default='avg',
+                        help='Pooling strategy transformer model dataset representation. One of "avg", "summary" (CLS) or "weighted", defaults to "avg".')
     parser.add_argument('--embedding-dir', type=str, default=VECTOR_CACHE, metavar='DIR',
                         help=f'path where to load and save embeddings')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, metavar='SEED',
@@ -752,9 +752,8 @@ if __name__ == '__main__':
                         help='Use supervised embeddings (TCEs')
     parser.add_argument('--nozscore', action='store_true', default=False,
                         help='disables z-scoring form the computation of TCE')
-    parser.add_argument('--supervised-method', type=str, default='dotn', metavar='dotn|ppmi|ig|chi',
-                        help='method used to create the supervised matrix. Available methods include dotn (default), '
-                             'ppmi (positive pointwise mutual information), ig (information gain) and chi (Chi-squared)')
+    parser.add_argument('--supervised-method', type=str, default='dotn',
+                        help='WCE/TCE matrix computation method. One of dotn (default), ppmi (positive pointwise mutual information), ig (information gain) or chi (Chi-squared)')
     parser.add_argument('--max-label-space', type=int, default=300, metavar='int',
                         help='larger dimension allowed for the feature-label embedding (if larger, then PCA with this '
                              'number of components is applied (default 300)')
