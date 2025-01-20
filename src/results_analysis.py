@@ -39,9 +39,12 @@ NUM_RESULTS = 80
 
 
 Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
+
+TOP_N_RESULTS = 20
+
+
 #
 # -----------------------------------------------------------------------------------------------------------------------------------
-
 
 
 
@@ -1098,12 +1101,16 @@ def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=F
 # ----------------------------------------------------------------------------------------------------------------------------
 
 
+import os
+import pandas as pd
+from tabulate import tabulate
+from datetime import datetime
 
 def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug=False):
     """
     generate_summary_all()
     
-    analyze the model performance results, print summary either to sdout or file
+    analyze the model performance results, print summary either to stdout or file
     """
 
     print(f'\n\tgenerating summary for all datasets to {output_path}...')
@@ -1111,6 +1118,9 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
+
+    # Define measures of interest
+    MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy']
 
     # Filter for Macro and Micro F1 scores only
     df_filtered = df[df['measure'].isin(MEASURES)]
@@ -1138,59 +1148,153 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
     if (debug):
         print("final result:\n", final_result)
 
-    # Format the table
+    # Generate CSV file
+    if gen_file:
+        csv_file_name = f"layercake.all.summary.{datetime.now().strftime('%Y-%m-%d')}.csv"
+        csv_output_file = os.path.join(output_path, csv_file_name)
+        final_result.to_csv(csv_output_file, index=False)
+        print(f"CSV summary saved to {csv_output_file}")
+
+    # Generate formatted ASCII table
     formatted_table = tabulate(final_result, headers='keys', tablefmt='pretty', showindex=False)
-    
-    # Split formatted table into lines
-    lines = formatted_table.split('\n')
 
-    # Determine the length of the header line to set the separator's length
-    header_line_length = len(lines[1])
-
-    # Add separators between groups based on changes in key columns (excluding 'measure')
-    grouped_lines = [lines[0], lines[1], '-' * header_line_length]  # Start with header, underline, and extra separator
-    last_values = None
-    
-    for i, row in enumerate(final_result.itertuples(index=False)):
-        # Access using index instead of attribute names to avoid potential attribute errors
-        current_values = (row[0], row[1], row[2], row[3], row[4])  # dataset, model, embeddings, representation, measure
-        if last_values and current_values != last_values:
-            grouped_lines.append('-' * header_line_length)  # Use a separator as wide as the header
-        last_values = current_values
-        line_index = i + 3  # Offset to align with the actual content in lines, adjusted by the extra line separator
-        grouped_lines.append(lines[line_index])
-
-    # Add a final border line
-    grouped_lines.append('-' * header_line_length)
-
-    final_formatted_table = '\n'.join(grouped_lines)
-
-    # Generate output
-    if (output_path and gen_file):
-        print("generating file to output directory:", output_path)
-
-        # Get the current date in YYYY-MM-DD format
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        # Add the date to the file name
-        file_name = f"layercake.all.summary.{current_date}.out"
+    # Write ASCII output
+    if gen_file:
+        file_name = f"layercake.all.summary.{datetime.now().strftime('%Y-%m-%d')}.out"
         output_file = os.path.join(output_path, file_name)
-        
-        # Write the output to the file
         with open(output_file, 'w') as f:
-            f.write(final_formatted_table)
-        
+            f.write(formatted_table)
         print(f"Output saved to {output_file}")
-    
-    if (output_path and stdout):
-        print(final_formatted_table)
+
+    if stdout:
+        print(formatted_table)
+
+
+
 
 # ----------------------------------------------------------------------------------------------------------------------------
 
+def generate_dataset_model_performance(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+    """
+    Generates combined bar charts for word-based, subword-based, and token-based models on the same chart.
+    Adds a secondary y-axis for timelapse values.
+    """
+    print("Generating combined charts for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df shape after filtering for measures:", df_measures.shape)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Set colorblind-friendly style
+    sns.set(style="whitegrid")
+
+    # Get today's date for file naming
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            for model in df['model'].unique():
+                # Filter data for the current combination
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    continue
+                else:
+                    pass
+                    
+                # Extract the base embeddings (everything before the colon)
+                if neural:
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+                # Combine representation and dimensions into a single label for x-axis
+                df_subset['rep_dim'] = df_subset.apply(
+                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+                )
+            
+                # Sort by measure value in descending order
+                df_subset = df_subset.sort_values(by='value', ascending=False)
+
+                if (debug):
+                    print("df_subset:\n", df_subset.shape, df_subset)
+                        
+                # Create a color palette based on unique embedding types
+                unique_embeddings = df_subset['embedding_type'].nunique()
+                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
+                # Create the plot
+                fig, ax1 = plt.subplots(figsize=(20, 12))
+
+                # Primary y-axis for the measure values
+                sns.barplot(
+                    data=df_subset,
+                    x='rep_dim',
+                    y='value',
+                    hue='embedding_type',
+                    palette=color_palette,
+                    order=df_subset['rep_dim'],
+                    ax=ax1
+                )
+
+                # Customize the primary y-axis
+                ax1.set_title(
+                    f"Model Performance for dataset:{dataset}, model: {model}, measure: {measure}",
+                    fontsize=18, weight='bold'
+                )
+                ax1.set_ylabel(measure, fontsize=14)
+                ax1.set_ylim(y_axis_threshold, 1)
+                ax1.tick_params(axis='y', labelsize=9)
+                ax1.legend(title="Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
+
+                # Secondary y-axis for timelapse values
+                ax2 = ax1.twinx()
+                ax2.scatter(
+                    df_subset['rep_dim'],
+                    df_subset['timelapse'],
+                    color='black',
+                    marker='x',
+                    s=50,                      # size of the marker points
+                    label='Timelapse'
+                )
+                ax2.set_ylabel('Timelapse', fontsize=14, color='red')
+                ax2.tick_params(axis='y', labelsize=9, labelcolor='red')
+                ax2.legend(loc='upper right', fontsize=12)
+
+                # Adjust x-axis labels using set_xlabel
+                ax1.set_xlabel("Representation:Dimensions", fontsize=14)
+                ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+
+                # Adjust layout
+                fig.tight_layout()
+
+                # Save the plot
+                plot_file_name = f"{dataset}_{measure}_{model}_combined_{today}.png"
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
+                print(f"Saved plot to {output_path}/{plot_file_name}")
+
+                # Optionally show the plot
+                if show_charts:
+                    plt.show()
+
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
 
-    print("\n\t----- Results Analysis -----")
+    print("\n\t----- Layer Cake Results Analysis -----")
     
     parser = argparse.ArgumentParser(description="Analyze model results and generate charts and/or summaries")
 
@@ -1262,6 +1366,44 @@ if __name__ == "__main__":
             exit()
 
     #
+    # generate charts
+    #
+    if args.charts:
+
+        #
+        # matplotlib option is less interactive but handles more test cases - its split by dataset 
+        # and model as opposed to just dataset as the plotly graphs are designed for 
+        #
+        generate_charts_matplotlib(
+            df, 
+            charts_dir,
+            neural=args.neural,
+            show_charts=args.show,
+            y_axis_threshold=args.ystart,
+            debug=debug
+        )
+        
+        
+        model_performance_comparison(
+            df, 
+            charts_dir, 
+            neural=args.neural,
+            show_charts=args.show, 
+            y_axis_threshold=args.ystart,
+            num_results=args.results,               # number of top results to display in the plot
+            debug=debug
+        )
+        
+        generate_dataset_model_performance(
+            df, 
+            charts_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        
+    #
     # generate summaries
     #
     if args.summary:
@@ -1287,35 +1429,8 @@ if __name__ == "__main__":
             neural=args.neural, 
             debug=debug
         )
+    
         
-    #
-    # generate charts
-    #
-    if args.charts:
-        
-        model_performance_comparison(
-            df, 
-            charts_dir, 
-            neural=args.neural,
-            show_charts=args.show, 
-            y_axis_threshold=args.ystart,
-            num_results=args.results,               # number of top results to display in the plot
-            debug=debug
-        )
-        
-        #
-        # matplotlib option is less interactive but handles more test cases - its split by dataset 
-        # and model as opposed to just dataset as the plotly graphs are designed for 
-        #
-        generate_charts_matplotlib(
-            df, 
-            charts_dir,
-            neural=args.neural,
-            show_charts=args.show,
-            y_axis_threshold=args.ystart,
-            debug=debug
-        )
-
     #
     # generate timelapse plots
     #        
