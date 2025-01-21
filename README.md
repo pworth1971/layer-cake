@@ -283,7 +283,7 @@ configured in the proper /datasets subdirectory.
 
 
 
-BBC NEWS 
+#### BBC NEWS 
 Description: A dataset consisting of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
 Classes: 5 (e.g., Business, Entertainment, Politics, Sport, Tech)
 Type: Single-label classification
@@ -291,7 +291,7 @@ Size: Approximately 2,225 docs, 6.7MB
 License: Typically used for educational and research purposes, though the specific license terms are not detailed on the download page.
 Misc: good for testing as the relative size is small
 
-REUTERS21578
+#### REUTERS21578
 Description: One of the most commonly used datasets for text categorization. It contains thousands of documents categorized into multiple classes which makes it a multi-label dataset.
 Classes: 115
 Type: Multi-label classification
@@ -300,7 +300,7 @@ Access: Reuters-21578 on UCI
 License: Free for research purposes, but usage in commercial projects should be checked with Reuters.
 Misc: Classes are not very well balanced and this causes problems with sone of the f1 summary data for some models
 
-20NEWSGROUPS
+#### 20NEWSGROUPS
 Description: A collection of approximately 20,000 newsgroup documents, partitioned (nearly) evenly across 20 different newsgroups. We download the 
 dataset from sklearn using sklearn.datasets.fetch_20newsgroups.
 Classes: 20 (various topics such as sports, religion, hardware, etc.)
@@ -310,7 +310,7 @@ Access: Available via Scikit-Learn's dataset utilities or 20 Newsgroups
 License: Public domain
 Misc: good baseline single-label test case, very well benchmarked
 
-ARXIV
+#### ARXIV
 Description: A dataset derived from ArXiv papers, typically used for categorizing scientific papers into multiple classes based on their subjects.
 Classes: 58 (scientific fields)
 Type: Multi-label classification
@@ -318,14 +318,14 @@ Size: 5.5GB
 License: Depends on the specifics of data usage; generally, data used for academic research without redistribution is allowed.
 Misc: Special preprocessing requirements due to nature of underlying docs.
 
-ARXIV PROTOFORMER
+#### ARXIV PROTOFORMER
 Description: A potentially derivative dataset from the ArXiv collection focusing on a smaller subset of topics or a specific preprocessing pipeline.
 Classes: 10 (subset or specific topics within the broader ArXiv classification)
 Type: Single-label classification
 Size: 147 MB
 Access and License: Likely a custom dataset; access and licensing would depend on the creator's setup or the project specifications.
 
-OHSUMED
+#### OHSUMED
 Description: A subset of the MEDLINE database, which is a bibliographic database of important, peer-reviewed medical literature maintained by the National Library of Medicine.
 Classes: 23 (medical subject headings)
 Type: Multi-label classification
@@ -333,7 +333,7 @@ Size: Approximately 348,000 citations (abstracts), 387 MB
 Access: OHSUMED on UCI
 License: Generally used for academic and research purposes; specific licensing terms would need to be confirmed.
 
-IMDB
+#### IMDB
 Description: A dataset for binary sentiment classification consisting of movie reviews from the IMDb site labeled as positive or negative.
 Classes: 2 (Positive, Negative)
 Type: Single-label classification
@@ -341,7 +341,7 @@ Size: 694 MB
 Access: IMDb Reviews Dataset
 License: For non-commercial use only.
 
-RCV1
+#### RCV1
 Description: An archive of over 800,000 manually categorized newswire stories made available by Reuters, Ltd. for research purposes.
 Classes: 101 (various topics)
 Type: Multi-label classification
