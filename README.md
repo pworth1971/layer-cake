@@ -24,145 +24,6 @@ aligned with the TCEs themselves for testing. Our findings are that the TCEs are
 there is an alternative way to add them that could possiby be effective.
 
 
-## Datasets in Scope
-
-Layer Cake is designed to combine pretrained embeddings of different types with different datasets across the text classification spectrum, with support
-for a range of datasets that cover news, medical, and review type data, some of which are multi-label datasets where a given doc in a given dataset can
-belong to multiple classes, or single-label data where a given doc for a given dataset can belong to just one class or label.
-
-The following datasets are supported, each of which is generally available for research purposes but in some cases (like RCV1) must be requested
-specifically from the provider.
-
-
-### BBC News
-Description: A dataset consisting of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
-Classes: 5 (e.g., Business, Entertainment, Politics, Sport, Tech)
-Type: Single-label classification
-Size: Approximately 2,225 docs, 6.7MB
-License: Typically used for educational and research purposes, though the specific license terms are not detailed on the download page.
-Misc: good for testing as the relative size is small
-
-### Reuters-21578
-Description: One of the most commonly used datasets for text categorization. It contains thousands of documents categorized into multiple classes which makes it a multi-label dataset.
-Classes: 115
-Type: Multi-label classification
-Size: Roughly 21,578 docs, 64MB
-Access: Reuters-21578 on UCI
-License: Free for research purposes, but usage in commercial projects should be checked with Reuters.
-Misc: Classes are not very well balanced and this causes problems with sone of the f1 summary data for some models
-
-### 20 Newsgroups
-Description: A collection of approximately 20,000 newsgroup documents, partitioned (nearly) evenly across 20 different newsgroups.
-Classes: 20 (various topics such as sports, religion, hardware, etc.)
-Type: Single-label classification
-Size: About 20,000 docs, 15MB
-Access: Available via Scikit-Learn's dataset utilities or 20 Newsgroups
-License: Public domain
-Misc: good baseline single-label test case, very well benchmarked
-
-### ArXiv
-Description: A dataset derived from ArXiv papers, typically used for categorizing scientific papers into multiple classes based on their subjects.
-Classes: 58 (scientific fields)
-Type: Multi-label classification
-Size: 5.5GB
-License: Depends on the specifics of data usage; generally, data used for academic research without redistribution is allowed.
-Misc: Special preprocessing requirements due to nature of underlying docs.
-
-### ArXiv Protoformer
-Description: A potentially derivative dataset from the ArXiv collection focusing on a smaller subset of topics or a specific preprocessing pipeline.
-Classes: 10 (subset or specific topics within the broader ArXiv classification)
-Type: Single-label classification
-Size: 147 MB
-Access and License: Likely a custom dataset; access and licensing would depend on the creator's setup or the project specifications.
-
-### OHSUMED
-Description: A subset of the MEDLINE database, which is a bibliographic database of important, peer-reviewed medical literature maintained by the National Library of Medicine.
-Classes: 23 (medical subject headings)
-Type: Multi-label classification
-Size: Approximately 348,000 citations (abstracts), 387 MB
-Access: OHSUMED on UCI
-License: Generally used for academic and research purposes; specific licensing terms would need to be confirmed.
-
-### IMDb
-Description: A dataset for binary sentiment classification consisting of movie reviews from the IMDb site labeled as positive or negative.
-Classes: 2 (Positive, Negative)
-Type: Single-label classification
-Size: 694 MB
-Access: IMDb Reviews Dataset
-License: For non-commercial use only.
-
-### RCV1 (Reuters Corpus Volume 1)
-Description: An archive of over 800,000 manually categorized newswire stories made available by Reuters, Ltd. for research purposes.
-Classes: 101 (various topics)
-Type: Multi-label classification
-Size: Over 800,000 docs, 7.4 GB
-License: Available for research purposes; usage beyond this scope should be confirmed with the distributor (ie Reuters).
-Misc: Very large dataset, requires significant compute power. Good for testing scalaability of models and underlying representation.
-
-
-
-## Language Models in Scope
-
-### GloVe (Global Vectors for Word Representation)
-Model in use: GloVe 840B 300d
-Architecture: GloVe is an unsupervised learning algorithm for obtaining vector representations for words by aggregating global word-word co-occurrence statistics from a corpus.
-Training Data: The model is trained on 840 billion tokens from a dataset aggregated from web data (Common Crawl).
-Salient Features: Each word is represented by a 300-dimensional vector. The model captures both semantic and syntactic information of words.
-Reference: Pennington, Jeffrey, et al. "Glove: Global vectors for word representation." Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP). 2014.
-
-### Word2Vec
-Model in use: GoogleNews-vectors-negative300
-Architecture: Word2Vec is a group of related models used to produce word embeddings. These models are shallow, two-layer neural networks that are trained to reconstruct linguistic contexts of words.
-Training Data: Trained on roughly 100 billion words from the Google News dataset.
-Salient Features: The model uses 300-dimensional vectors and is case-sensitive.
-Reference: Mikolov, Tomas, et al. "Efficient Estimation of Word Representations in Vector Space." ICLR Workshop Papers. 2013.
-
-### FastText
-Model in use: crawl-300d-2M.vec
-Architecture: FastText extends Word2Vec to consider subword information (character n-grams), allowing it to generate word embeddings for out-of-vocabulary words.
-Training Data: Trained on Common Crawl and Wikipedia using CBOW with position-weights, with character n-grams of length 5, a window of size 5, and 10 negatives.
-Salient Features: Produces 300-dimensional vectors, supports 157 languages, and is case-insensitive.
-Reference: Bojanowski, Piotr, et al. "Enriching Word Vectors with Subword Information." Transactions of the Association for Computational Linguistics 5 (2017): 135-146.
-
-### BERT (Bidirectional Encoder Representations from Transformers)
-Model in use: bert-base-uncased
-Architecture: BERT is a transformer-based model known for its deep bidirectionality, which allows it to contextually understand both the left and right context in all layers.
-Training Data: Trained on the BooksCorpus (800M words) and English Wikipedia (2,500M words).
-Salient Features: The base model uses 12 layers (transformer blocks), has 768 hidden units, 12 heads, and is case-insensitive.
-Reference: Devlin, Jacob, et al. "BERT: Pre-training of deep bidirectional transformers for language understanding." NAACL HLT 2019.
-
-### RoBERTa (Robustly Optimized BERT Approach)
-Model in use: roberta-base
-Architecture: RoBERTa iterates on BERT's architecture by modifying key hyperparameters, removing the next-sentence pretraining objective, and training with much larger mini-batches and learning rates.
-Training Data: Trained on more data than BERT and also on more languages.
-Salient Features: Uses the same model size as BERT-base and is case-sensitive.
-Reference: Liu, Yinhan, et al. "RoBERTa: A robustly optimized BERT pretraining approach." arXiv preprint arXiv:1907.11692 (2019).
-
-### DistilBERT
-Model in use: distilbert-base-uncased
-Architecture: DistilBERT is a smaller, faster, cheaper, and lighter version of BERT. It distills 40% of the size of BERT while retaining 97% of its performance, using a technique called knowledge distillation.
-Training Data: Same as BERT.
-Salient Features: Uses 6 layers, with 768 hidden units and is case-insensitive.
-Reference: Sanh, Victor, et al. "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter." arXiv preprint arXiv:1910.01108 (2019).
-
-### XLNet
-Model in use: xlnet-base-cased
-Architecture: XLNet incorporates ideas from Transformer-XL, the state-of-the-art autoregressive model, into the pretraining objective of BERT by maximizing the expected likelihood over all permutations of the input sequence tokens.
-Training Data: Trained on a larger corpus that includes BooksCorpus, English Wikipedia, Giga5, ClueWeb, and Common Crawl.
-Salient Features: Uses 12 layers, with 768 hidden units and is case-sensitive.
-Reference: Yang, Zhilin, et al. "XLNet: Generalized Autoregressive Pretraining for Language Understanding." NeurIPS 2019.
-
-### GPT-2 (Generative Pre-trained Transformer 2)
-Model in use: gpt2
-Architecture: GPT-2 is an unsupervised language model that uses the Transformer architecture. It generates synthetic text samples in response to the input text.
-Training Data: Trained on a dataset called "WebText," a corpus consisting of over 8 million documents (40GB of text) scraped from the internet.
-Salient Features: The base model has 12 layers, 768 hidden units, and is case-sensitive.
-Reference: Radford, Alec, et al. "Language Models are Unsupervised Multitask Learners." OpenAI Blog (2019).
-These models are integral parts of modern NLP pipelines and provide a wide array of capabilities, from embedding generation to complex sentence understanding and generation tasks.
-
-
-
-
 ## Platform Overview
 
 The platform consists of three modules:
@@ -353,7 +214,6 @@ different models.
 
 
 
-
 ### Logging and Results Analysis
 
 Each of the modules described above outputs results to log files, typically generated in the log/ directory which have a lot of information about the underlying 
@@ -392,6 +252,10 @@ python ../src/results_analysis.py ../log/lc_ml_test.test --charts --runtimes --s
 
 But shell scripts for ML and NN model analysis are provided in the bin directory for reference.
 
+Output defaults to /out directory and includes charts which show model and dataset performance (png, csv and html), as well as 
+summary files in CSV and HTML output, 
+
+
 
 ## Technical Requirements & Dependencies
 
@@ -399,134 +263,98 @@ This code was developed n both a Mac with Apple silicon (Apple M1 and M3 chips) 
 host that has CUDA support, the latter of which is a core technical dependency for this code to run - along with the rest of the python and conda requirements 
 outlined in setup.sh and requirements.txt. 
 
-The code runs using the latest (as of summer of 2024) python 3.12 libraries. Specifically we use a miniconda python 3.12 environment which is built 
+The code runs using the latest (as of winter of 2025) python 3.12 libraries. Specifically we use a miniconda python 3.12 environment which is built 
 with the bin/startup.sh script which can be run from a command line from a new system. The startup shell script runs on both Apple MacOS and Ubuntu Linux.
+
 
 
 ## Supported Data sets
 
+Layer Cake is designed to combine pretrained embeddings of different types with different datasets across the text classification spectrum, with support
+for a range of datasets that cover news, medical, and review type data, some of which are multi-label datasets where a given doc in a given dataset can
+belong to multiple classes, or single-label data where a given doc for a given dataset can belong to just one class or label.
+
+The following datasets are supported, each of which is generally available for research purposes but in some cases (like RCV1) must be requested
+specifically from the provider.
+
 As of the time of this writing the datasets we support are outlined below, each of which has its own source that must be downloaded and 
-configured in the proper datasets/ subdirectory.
-
-
-### Reuters-21578
-
-The Reuters-21578 dataset is one of the most widely used benchmarks in text classification. It consists of news articles that appeared on the Reuters newswire in 1987.
-
-•	Type: Multi-label
-•	Classes: 115
-•	Characteristics:
-o	Articles are categorized into one or more topics.
-o	Examples include categories like "earnings," "acquisitions," "grain," and "crude."
-o	Often used to evaluate multi-label classification models.
-•	Challenge: Imbalanced class distribution, with some classes having very few samples.
-
-
-### BBC News
-
-The BBC News dataset consists of articles from the BBC news website, categorized into distinct topics.
-
-•	Type: Single-label
-•	Classes: 5
-•	Classes:
-o	Business
-o	Entertainment
-o	Politics
-o	Sport
-o	Tech
-•	Characteristics:
-o	Relatively balanced class distribution.
-o	Clean and well-structured dataset.
-
-
-### arXiv
-
-The arXiv dataset consists of research papers categorized into different scientific topics based on their metadata and abstracts.
-•	Type: Multi-label
-•	Classes: 58
-•	Characteristics:
-o	Articles can belong to multiple categories, reflecting the interdisciplinary nature of research.
-o	Categories include fields like "Computer Science," "Mathematics," "Physics," and "Quantitative Biology."
-•	Challenge: Managing overlapping and nuanced classes.
-
-
-###	arXiv Protoformer
-
-A derived or curated version of the arXiv dataset, often used in experiments with prototype-based models (e.g., Protoformer).
-•	Type: Single-label
-•	Classes: 10
-•	Characteristics:
-o	Simplified compared to the full arXiv dataset.
-o	Focused on distinct topics, avoiding overlapping categories.
-
-
-### IMDB
-
-The IMDB dataset contains movie reviews, each labeled with the sentiment (positive or negative) expressed in the review.
-•	Type: Single-label
-•	Classes: 2
-o	Positive
-o	Negative
-•	Characteristics:
-o	Balanced dataset with 25,000 training samples and 25,000 test samples.
-o	Text length varies, with some reviews being long and detailed.
+configured in the proper /datasets subdirectory.
 
 
 
-### OHSUMED
 
-The OHSUMED dataset consists of medical abstracts from the Medline database, labeled with MeSH (Medical Subject Headings) terms.
+BBC NEWS 
+Description: A dataset consisting of 2225 documents from the BBC news website corresponding to stories in five topical areas from 2004-2005.
+Classes: 5 (e.g., Business, Entertainment, Politics, Sport, Tech)
+Type: Single-label classification
+Size: Approximately 2,225 docs, 6.7MB
+License: Typically used for educational and research purposes, though the specific license terms are not detailed on the download page.
+Misc: good for testing as the relative size is small
 
-•	Type: Multi-label
-•	Classes: 23
-•	Characteristics:
-o	Each document can belong to multiple categories.
-o	Focused on medical topics, making it highly domain-specific.
-o	Categories include diseases, treatments, and medical specialties.
-•	Challenge: High label sparsity and the complexity of medical terminology.
+REUTERS21578
+Description: One of the most commonly used datasets for text categorization. It contains thousands of documents categorized into multiple classes which makes it a multi-label dataset.
+Classes: 115
+Type: Multi-label classification
+Size: Roughly 21,578 docs, 64MB
+Access: Reuters-21578 on UCI
+License: Free for research purposes, but usage in commercial projects should be checked with Reuters.
+Misc: Classes are not very well balanced and this causes problems with sone of the f1 summary data for some models
 
+20NEWSGROUPS
+Description: A collection of approximately 20,000 newsgroup documents, partitioned (nearly) evenly across 20 different newsgroups. We download the 
+dataset from sklearn using sklearn.datasets.fetch_20newsgroups.
+Classes: 20 (various topics such as sports, religion, hardware, etc.)
+Type: Single-label classification
+Size: About 20,000 docs, 15MB
+Access: Available via Scikit-Learn's dataset utilities or 20 Newsgroups
+License: Public domain
+Misc: good baseline single-label test case, very well benchmarked
 
+ARXIV
+Description: A dataset derived from ArXiv papers, typically used for categorizing scientific papers into multiple classes based on their subjects.
+Classes: 58 (scientific fields)
+Type: Multi-label classification
+Size: 5.5GB
+License: Depends on the specifics of data usage; generally, data used for academic research without redistribution is allowed.
+Misc: Special preprocessing requirements due to nature of underlying docs.
 
-### RCV1-v2
+ARXIV PROTOFORMER
+Description: A potentially derivative dataset from the ArXiv collection focusing on a smaller subset of topics or a specific preprocessing pipeline.
+Classes: 10 (subset or specific topics within the broader ArXiv classification)
+Type: Single-label classification
+Size: 147 MB
+Access and License: Likely a custom dataset; access and licensing would depend on the creator's setup or the project specifications.
 
-The Reuters Corpus Volume I (RCV1-v2) is a benchmark dataset consisting of over 800,000 news articles categorized into multiple topics.
-You must request permission to use the dataset from reuters after which they will release it to you.
+OHSUMED
+Description: A subset of the MEDLINE database, which is a bibliographic database of important, peer-reviewed medical literature maintained by the National Library of Medicine.
+Classes: 23 (medical subject headings)
+Type: Multi-label classification
+Size: Approximately 348,000 citations (abstracts), 387 MB
+Access: OHSUMED on UCI
+License: Generally used for academic and research purposes; specific licensing terms would need to be confirmed.
 
-•	Type: Multi-label
-•	Classes: 101
-•	Characteristics:
-o	Covers diverse topics, including "Politics," "Economy," and "Technology."
-o	Rich metadata and hierarchical class organization.
-•	Challenge: Large size and high class overlap.
+IMDB
+Description: A dataset for binary sentiment classification consisting of movie reviews from the IMDb site labeled as positive or negative.
+Classes: 2 (Positive, Negative)
+Type: Single-label classification
+Size: 694 MB
+Access: IMDb Reviews Dataset
+License: For non-commercial use only.
 
-
-
-### Newsgroups
-
-The 20 newsgroups dataset comprises around 18000 newsgroups posts on 20 topics split in two subsets: one for training (or development) 
-and the other one for testing (or for performance evaluation). The split between the train and test set is based upon a messages posted before 
-and after a specific date.
-
-We download the dataset from sklearn using sklearn.datasets.fetch_20newsgroups.
-
-Single Label dataset, 20 categories
-
-target_names: 
-
-['alt.atheism', 'comp.graphics', 'comp.os.ms-windows.misc', 'comp.sys.ibm.pc.hardware', 'comp.sys.mac.hardware', 'comp.windows.x', \
-  'misc.forsale', 'rec.autos', 'rec.motorcycles', 'rec.sport.baseball', 'rec.sport.hockey', 'sci.crypt', 'sci.electronics', 'sci.med', \
-  'sci.space', 'soc.religion.christian', 'talk.politics.guns', 'talk.politics.mideast', 'talk.politics.misc', 'talk.religion.misc']
-
-•	Characteristics:
-o	Popular benchmark dataset.
-o	Moderate size, well-balanced classes.
+RCV1
+Description: An archive of over 800,000 manually categorized newswire stories made available by Reuters, Ltd. for research purposes.
+Classes: 101 (various topics)
+Type: Multi-label classification
+Size: Over 800,000 docs, 7.4 GB
+License: Available for research purposes; usage beyond this scope should be confirmed with the distributor (ie Reuters).
+Misc: Very large dataset, requires significant compute power. Good for testing scalaability of models and underlying representation.
 
 
 
 
 
 
-## Pre-Trained Language Models 
+## Language Models in Scope
 
 We use both static word embeddings as part of our testing (GloVe, Word2Vec and fastText) as well as dynamic embeddings, i.e. transformers (BERT, RoBERTa, DistilBERT, XLNet and 
 GPT2). The code depends upon word embeddings, pre-trained, being accessible. They are kept in the ./vector_cache directory that sits right off the main dircetory. The following 
@@ -534,46 +362,25 @@ pre-trained embeddings are tested, and can be downloaded from the following URLs
 
 
 
-### GloVe (Global Vectors for Word Representation)
+#### GloVe (Global Vectors for Word Representation)
+Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. We use, consistent with (Moreo et al 2019), the glove.840B.300d variant, which is 
+trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
 
 Model in use: GloVe 840B 300d
 
 Architecture: GloVe is an unsupervised learning algorithm for obtaining vector representations for words by aggregating global word-word co-occurrence statistics from a corpus.
+
 Training Data: The model is trained on 840 billion tokens from a dataset aggregated from web data (Common Crawl).
+
 Salient Features: Each word is represented by a 300-dimensional vector. The model captures both semantic and syntactic information of words.
+
 Reference: Pennington, Jeffrey, et al. "Glove: Global vectors for word representation." Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP). 2014.
-
-Dimension: 300
-
 Training Objective: GloVe optimizes the embeddings such that word vectors are learned in a way that their dot products approximate word co-occurrence probabilities.
 
-Pretrained embeddings described, and available for download here: https://nlp.stanford.edu/projects/glove/. 
-
-We use, consistent with (Moreo et al 2019), the glove.840B.300d variant, which is trained with Common Crawl inpiut - 840B tokens, 2.2M vocab, cased, 300d vectors, 2.03 GB.  
 
 
-
-### Word2Vec
-
-Model in use: GoogleNews-vectors-negative300
-
-Architecture: Word2Vec is a group of related models used to produce word embeddings. These models are shallow, two-layer neural networks that are trained to reconstruct 
-linguistic contexts of words. Word2Vec uses a shallow neural network to create word embeddings. It has two major approaches:
-
-- Skip-gram: Predicts context words given a target word.
-- CBOW (Continuous Bag of Words): Predicts the target word based on surrounding context words. Word2Vec treats words as independent units and doesn't consider subword information (which FastText later improved upon).
-
-Training Data: The GoogleNews-vectors-negative300.bin model was trained on part of the Google News dataset, consisting of 100 billion words. It provides 300-dimensional embeddings for 3 million words and phrases.
-
-Training Objective: The training objective is to predict words in context (either target-to-context or context-to-target), effectively learning dense word embeddings based on co-occurrence patterns.
-
-We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
-
-Salient Features: The model uses 300-dimensional vectors and is case-sensitive.
-
-Reference: Mikolov, Tomas, et al. "Efficient Estimation of Word Representations in Vector Space." ICLR Workshop Papers. 2013.
-
-We use GoogleNews-vectors-negative300 (GoogleNews-vectors-negative300.bin) trained on Google News, dimension == 300, but other models are also available from gensim:
+#### Word2Vec
+Model in use: GoogleNews-vectors-negative300, trained on Google News, dimension == 300, but other models are also available from gensim:
 
 ['fasttext-wiki-news-subwords-300',
  'conceptnet-numberbatch-17-06-300',
@@ -592,14 +399,30 @@ Also kaggle download: https://www.kaggle.com/datasets/leadbest/googlenewsvectors
 
 Other available downloads: https://wikipedia2vec.github.io/wikipedia2vec/pretrained/
 
+Architecture: Word2Vec is a group of related models used to produce word embeddings. These models are shallow, two-layer neural networks that are trained to reconstruct 
+linguistic contexts of words. Word2Vec uses a shallow neural network to create word embeddings. It has two major approaches:
+
+Training Data: The GoogleNews-vectors-negative300.bin model was trained on part of the Google News dataset, consisting of 100 billion words. It provides 300-dimensional 
+embeddings for 3 million words and phrases.
+
+Training Objective: The training objective is to predict words in context (either target-to-context or context-to-target), effectively learning dense word 
+embeddings based on co-occurrence patterns.
+
+Salient Features: The model uses 300-dimensional vectors and is case-sensitive.
+
+Reference: Mikolov, Tomas, et al. "Efficient Estimation of Word Representations in Vector Space." ICLR Workshop Papers. 2013.
 
 
-
-### FASTTEXT
+#### FastText
 
 Model in use: crawl-300d-2M-subword.bin
 
-Architecture: FastText extends Word2Vec to consider subword information (character n-grams), allowing it to generate word embeddings for out-of-vocabulary words. 
+We use the crawl-300d-2M.vec set of fastText word embeddings which is 2 million word vectors (pre) trained on Common Crawl (600B tokens). These can
+be downloaded, along with other English variants, from https://fasttext.cc/docs/en/english-vectors.html, or directly from https://fasttext.cc/docs/en/crawl-vectors.html
+
+Dimension: 300
+
+Architecture: FastText extends Word2Vec to consider subword information (character n-grams), allowing it to generate word embeddings for out-of-vocabulary words.
 FastText is a shallow neural network embedding model developed by Facebook. It builds on Word2Vec, but its key innovation is the use of subword information (i.e., it 
 learns vectors for character n-grams in addition to full words). This allows FastText to handle rare words or misspellings more robustly than Word2Vec or GloVe.
 
@@ -612,21 +435,13 @@ Salient Features: Produces 300-dimensional vectors, supports 157 languages, and 
 
 Reference: Bojanowski, Piotr, et al. "Enriching Word Vectors with Subword Information." Transactions of the Association for Computational Linguistics 5 (2017): 135-146.
 
-Dimension: 300
 
 
-We use the crawl-300d-2M.vec set of fastText word embeddings which is 2 million word vectors (pre) trained on Common Crawl (600B tokens). These can
-be downloaded, along with other English variants, from https://fasttext.cc/docs/en/english-vectors.html, or directly from https://fasttext.cc/docs/en/crawl-vectors.html
-
-
-
-
-
-### BERT (Bidirectional Encoder Representations from Transformers)
+#### BERT (Bidirectional Encoder Representations from Transformers)
 
 For BERT we use the (English) bert-base-uncased model which can be downloaded here: https://github.com/google-research/bert.
 
-Model: bert-base-cased
+Model in use: bert-base-uncased
 
 Dimension: 768
 
@@ -639,8 +454,8 @@ it to contextually understand both the left and right context in all layers. It 
 
 Training Data: BERT is pre-trained on the BooksCorpus (800M words) and English Wikipedia (2.5B words). This combination provides a large amount of general-domain text. The "cased" version 
 of BERT means that the text is case sensitive, ie case is not lowered, and it uses a vocabulary that distinguishes case. The "base" version of BERT includes 12 transformer 
-blocks (layers), with a hidden size of 768, and 12 self-attention heads, totaling about 110 million parameters. This makes it significantly smaller than the 
-"large" version of BERT but still quite powerful.
+blocks (layers), with a hidden size of 768, and 12 self-attention heads, totaling about 110 million parameters. This makes it significantly smaller than the "large" version of 
+BERT but still quite powerful.
 
 BERT is trained using two unsupervised tasks:
 
@@ -652,12 +467,8 @@ Salient Features: The base model uses 12 layers (transformer blocks), has 768 hi
 Reference: Devlin, Jacob, et al. "BERT: Pre-training of deep bidirectional transformers for language understanding." NAACL HLT 2019.
 
 
-
-
-
-### RoBERTa (Robustly Optimized BERT Pretraining Approach)
-
-Model: roberta-base
+#### RoBERTa (Robustly Optimized BERT Approach)
+Model in use: roberta-base
 
 Dimension: 768
 
@@ -675,9 +486,19 @@ Salient Features: Uses the same model size as BERT-base and is case-sensitive.
 Reference: Liu, Yinhan, et al. "RoBERTa: A robustly optimized BERT pretraining approach." arXiv preprint arXiv:1907.11692 (2019).
 
 
-### XLNet
+#### DistilBERT
+Model in use: distilbert-base-uncased
+
+Architecture: DistilBERT is a smaller, faster, cheaper, and lighter version of BERT. It distills 40% of the size of BERT while retaining 97% of its performance, using a technique called knowledge distillation.
+
+Training Data: Same as BERT.
+
+Salient Features: Uses 6 layers, with 768 hidden units and is case-insensitive.
+
+Reference: Sanh, Victor, et al. "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter." arXiv preprint arXiv:1910.01108 (2019).
 
 
+#### XLNet
 Model in use: xlnet-base-cased
 
 Architecture: XLNet incorporates ideas from Transformer-XL, the state-of-the-art autoregressive model, into the pretraining objective of BERT by maximizing the expected likelihood over all permutations of the input sequence tokens.
@@ -689,8 +510,7 @@ Salient Features: Uses 12 layers, with 768 hidden units and is case-sensitive.
 Reference: Yang, Zhilin, et al. "XLNet: Generalized Autoregressive Pretraining for Language Understanding." NeurIPS 2019.
 
 
-### GPT-2 (Generative Pre-trained Transformer 2)
-
+#### GPT-2 (Generative Pre-trained Transformer 2)
 Model in use: gpt2
 
 Architecture: GPT-2 is an unsupervised language model that uses the Transformer architecture. It generates synthetic text samples in response to the input text.
@@ -700,7 +520,6 @@ Training Data: Trained on a dataset called "WebText," a corpus consisting of ove
 Salient Features: The base model has 12 layers, 768 hidden units, and is case-sensitive.
 
 Reference: Radford, Alec, et al. "Language Models are Unsupervised Multitask Learners." OpenAI Blog (2019).
-
 
 
 
