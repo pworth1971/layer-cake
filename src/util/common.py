@@ -635,7 +635,7 @@ def get_representation(opt, add_model=False):
     if opt.net in {'lstm', 'attn'}:
         method_name+=f'-h{opt.hidden}'
     
-    if opt.net== 'cnn':
+    if opt.net in {'cnn', 'hf.cnn'}:
         method_name+=f'-ch{opt.channels}'
 
     if opt.net == 'linear':
