@@ -214,7 +214,7 @@ different models.
 
 
 
-### Logging and Results Analysis
+### Reporting & Analytics: results_analysis.py
 
 Each of the modules described above outputs results to log files, typically generated in the log/ directory which have a lot of information about the underlying 
 system and program parameters, and model definitions, of each run. These log files are then in turn analyzed various charts and summary output capabilities are
@@ -244,6 +244,24 @@ options:
   -m RESULTS, --results RESULTS
                         Y-axis starting value for the charts (default: 0.6)
   -show                 Display charts interactively (requires -c)
+
+
+Outputs:
+
+Chart Generation:
+- matplotlib bar charts comparing model performance across embedding types and representations. Dual y-axes showing performance metrics and runtime (timelapse) data as scatter points.
+- Plotly Interactive Charts: Interactive bar charts for detailed exploration of performance metrics. Hover tooltips and adjustable layouts for better visualization.
+- Bokeh Interactive Timelapse Plots: Interactive visualizations of runtime data by embedding type, model, and representation.
+
+Summary Generation:
+- Textual summaries grouped by dataset and embedding type. Summaries include performance metrics like macro/micro F1 scores, accuracy, recall, and precision. Outputs as .out (text) and .csv files.
+- CSV Export: Detailed CSV files summarizing performance for each dataset, model, and embedding type.
+- Text-based summaries (.out).
+- Tabular summaries in CSV format.
+
+Timelapse Charts:
+- Timelapse Plots: Interactive HTML visualizations showing average runtimes for various embeddings and models.
+
 
 
 A sample run might look something like:
