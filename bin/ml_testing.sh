@@ -24,15 +24,15 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/lc_ml_test.test"
+LOG="--logfile ../log/lc_ml_opt_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
 # optimize model
-#OPTIMC="--optimc"
+OPTIMC="--optimc"
 
 # default params
-OPTIMC=""
+#OPTIMC=""
 
 CONF_MATRIX="--cm"  
 
