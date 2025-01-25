@@ -2130,7 +2130,7 @@ logging.basicConfig(level=logging.INFO)
 NUM_JOBS = -1                   # important to manage CUDA memory allocation
 #NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
 
-NUM_SAMPLED_PARAMS = 30         # Number of parameter settings that are sampled by RandomizedSearchCV
+NUM_SAMPLED_PARAMS = 12         # Number of parameter settings that are sampled by RandomizedSearchCV
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
