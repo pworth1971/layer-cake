@@ -1,1 +1,1 @@
-python ../src/results_analysis.py ../log/lc_ml_test.test --charts --runtimes --summary --debug
+python ../src/results_analysis.py ../log/ml_full_opt_test.test --charts --runtimes --summary --debug

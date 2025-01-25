@@ -37,10 +37,9 @@ CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-rec
 #
 NUM_RESULTS = 80
 
-
 Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
 
-TOP_N_RESULTS = 20
+TOP_N_RESULTS = 10
 
 
 #
@@ -468,7 +467,7 @@ def gen_timelapse_plots_orig(df, output_path='../out', show_charts=False, debug=
 
 
 
-def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=None):
+def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=TOP_N_RESULTS):
     """
     model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
     
@@ -1101,10 +1100,6 @@ def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=F
 # ----------------------------------------------------------------------------------------------------------------------------
 
 
-import os
-import pandas as pd
-from tabulate import tabulate
-from datetime import datetime
 
 def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug=False):
     """
@@ -1223,6 +1218,13 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                     lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
                 )
             
+                # ---------------------------------------------------------------------------------------------
+                # filter data depeneding upon what we are showing
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]                
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+                # ---------------------------------------------------------------------------------------------
+                
                 # Sort by measure value in descending order
                 df_subset = df_subset.sort_values(by='value', ascending=False)
 
@@ -1237,7 +1239,7 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                 fig, ax1 = plt.subplots(figsize=(20, 12))
 
                 # Primary y-axis for the measure values
-                sns.barplot(
+                bars = sns.barplot(
                     data=df_subset,
                     x='rep_dim',
                     y='value',
@@ -1246,6 +1248,15 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                     order=df_subset['rep_dim'],
                     ax=ax1
                 )
+                
+                # Add metric values at the top of each bar
+                for bar, value in zip(bars.patches, df_subset['value']):
+                    ax1.text(
+                        bar.get_x() + bar.get_width() / 2,                          # x position
+                        bar.get_height(),                                           # y position (height of the bar)
+                        f"{value:.3f}",                                             # Text to display (rounded to 3 decimals)
+                        ha='center', va='bottom', fontsize=8, color='black'
+                    )
 
                 # Customize the primary y-axis
                 ax1.set_title(
@@ -1288,6 +1299,343 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                     plt.show()
 
 
+
+
+
+
+def generate_dataset_model_performance_horizontal(
+    df,
+    output_path='../out',
+    neural=False,
+    x_axis_threshold=0.0,
+    top_n_results=TOP_N_RESULTS,
+    show_charts=False,
+    debug=False
+):
+    """
+    Generates horizontal bar charts for word-based, subword-based, and token-based models on the same chart.
+    Adds a secondary x-axis for timelapse values, and fits the output on a portrait layout.
+    Filters to show only the top N results based on the metric value.
+    """
+    print("Generating horizontal charts for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df shape after filtering for measures:", df_measures.shape)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Set colorblind-friendly style
+    sns.set(style="whitegrid")
+
+    # Get today's date for file naming
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            for model in df['model'].unique():
+                # Filter data for the current combination
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    continue
+
+                # Extract the base embeddings (everything before the colon)
+                if neural:
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+                # Combine representation and dimensions into a single label for y-axis
+                df_subset['rep_dim'] = df_subset.apply(
+                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+                )
+
+                # ---------------------------------------------------------------------------------------------
+                # filter data to exclude specific embeddings
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
+                df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+                # ---------------------------------------------------------------------------------------------
+
+                # Sort by measure value in descending order and limit to top N results
+                df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
+
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset} after filtering.")
+                    continue
+
+                if debug:
+                    print("df_subset:\n", df_subset.shape, df_subset)
+
+                # Create a color palette based on unique embedding types
+                unique_embeddings = df_subset['embedding_type'].nunique()
+                color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
+                # Create the plot
+                fig, ax1 = plt.subplots(figsize=(14, 12))  # Increased width for better readability
+
+                # Primary x-axis for the measure values
+                bars = sns.barplot(
+                    data=df_subset,
+                    y='rep_dim',
+                    x='value',
+                    hue='embedding_type',
+                    palette=color_palette,
+                    order=df_subset['rep_dim'],
+                    ax=ax1,
+                    orient='h',  # Horizontal orientation
+                    dodge=False  # Ensures single bar per category
+                )
+
+                # Adjust bar height to make them wider
+                for bar in bars.patches:
+                    bar.set_height(bar.get_height() * .75)  # Increased bar height for better visibility
+
+                # Add metric values at the end of each bar
+                for bar, value in zip(bars.patches, df_subset['value']):
+                    ax1.text(
+                        bar.get_width() + 0.01,  # x position (slightly beyond the end of the bar)
+                        bar.get_y() + bar.get_height() / 2,  # y position (center of the bar)
+                        f"{value:.3f}",  # Text to display (rounded to 3 decimals)
+                        ha='left', va='center', fontsize=8, color='black', fontweight='normal'
+                    )
+
+                # Customize the primary x-axis
+                ax1.set_title(
+                    "Model Performance by Representation\n"
+                    f"Dataset: {dataset}, Model: {model}, Measure: {measure}",
+                    fontsize=14, weight='bold', ha='center'
+                )
+                ax1.set_xlabel(measure, fontsize=10, fontweight='normal')
+                ax1.set_xlim(x_axis_threshold, 1)
+                ax1.tick_params(axis='x', labelsize=9)
+                ax1.legend(title="Embedding Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
+
+                # Secondary x-axis for timelapse values
+                ax2 = ax1.twiny()
+                ax2.scatter(
+                    df_subset['timelapse'],
+                    df_subset['rep_dim'],
+                    color='black',
+                    marker='x',
+                    s=50,  # size of the marker points
+                    label='Timelapse'
+                )
+                ax2.set_xlabel('Timelapse', fontsize=10, fontweight='normal', color='red')
+                ax2.tick_params(axis='x', labelsize=9, labelcolor='red')
+                ax2.legend(loc='upper right', fontsize=10)
+
+                # Adjust y-axis labels
+                ax1.set_ylabel("Representation:Dimensions", fontsize=10, fontweight='normal')
+                ax1.tick_params(axis='y', labelsize=9)
+
+                # Adjust layout
+                fig.tight_layout()
+
+                # Save the plot
+                plot_file_name = f"{dataset}_{measure}_{model}_top{top_n_results}_horizontal_{today}.png"
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
+                print(f"Saved plot to {output_path}/{plot_file_name}")
+
+                # Optionally show the plot
+                if show_charts:
+                    plt.show()
+
+
+
+def generate_vertical_heatmap(
+    df, 
+    output_path='../out', 
+    neural=False,
+    top_n_results=None, 
+    debug=False):
+    """
+    Generates a heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    """
+    print("Generating heatmap for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df:", df_measures.shape, df_measures)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            for model in df['model'].unique():
+                
+                # Filter and prepare data
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    continue
+
+                # Extract the base embeddings (everything before the colon)
+                if neural:
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+                # Combine representation and dimensions into a single label for y-axis
+                df_subset['rep_dim'] = df_subset.apply(
+                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+                )
+
+                # Pivot the data for heatmap
+                heatmap_data = df_subset.pivot_table(
+                    index='rep_dim', 
+                    columns='embedding_type', 
+                    values='value'
+                )
+
+                # Sort rows by the mean of metric values
+                heatmap_data = heatmap_data.loc[heatmap_data.mean(axis=1).sort_values(ascending=False).index]
+
+                if (top_n_results is not None) and (heatmap_data.shape[0] > top_n_results):
+                    # Limit to top N results
+                    heatmap_data = heatmap_data.head(top_n_results)
+
+                # Plot heatmap
+                plt.figure(figsize=(12, len(heatmap_data) * 0.5))
+                sns.heatmap(
+                    heatmap_data, 
+                    annot=True, 
+                    fmt=".3f", 
+                    cmap="coolwarm", 
+                    cbar_kws={"label": measure}, 
+                    linewidths=0.5
+                )
+                plt.title(
+                    f"Heatmap of Model Performance\nDataset: {dataset}, Model: {model}, Measure: {measure}",
+                    fontsize=12, weight='bold'
+                )
+                plt.xlabel("Language Model", fontsize=12, weight='bold')
+                plt.ylabel("Representation:Dimensions", fontsize=12, weight='bold')
+                                
+                # Adjust the color bar label
+                cbar = plt.gca().collections[0].colorbar
+                cbar.ax.set_ylabel("Value", fontsize=12, weight='bold')  # Match the font size and bold weight
+                
+                plt.xticks(fontsize=8, rotation=45, ha="right")
+                plt.yticks(fontsize=8)
+
+                # Save the plot
+                plot_file_name = f"{dataset}_{measure}_{model}_vertical_heatmap.png"
+                plt.tight_layout()
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
+                print(f"Saved heatmap to {output_path}/{plot_file_name}")
+
+                plt.close()
+
+
+
+
+def generate_horizontal_heatmap(
+    df, 
+    output_path='../out', 
+    neural=False,
+    top_n_results=None, 
+    debug=False):
+    """
+    Generates a horizontal heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    """
+    print("Generating horizontal heatmap for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df:", df_measures.shape, df_measures)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            for model in df['model'].unique():
+                
+                # Filter and prepare data
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    continue
+
+                # Extract the base embeddings (everything before the colon)
+                if neural:
+                    df_subset['embedding_type'] = df_subset['embeddings']
+                else:
+                    df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+                # Combine representation and dimensions into a single label for x-axis
+                df_subset['rep_dim'] = df_subset.apply(
+                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+                )
+
+                # Pivot the data for heatmap
+                heatmap_data = df_subset.pivot_table(
+                    index='embedding_type',  # Embedding types on y-axis
+                    columns='rep_dim',       # Representations on x-axis
+                    values='value'
+                )
+
+                # Sort columns by the mean of metric values
+                heatmap_data = heatmap_data.loc[:, heatmap_data.mean(axis=0).sort_values(ascending=False).index]
+
+                if (top_n_results is not None) and (heatmap_data.shape[1] > top_n_results):
+                    # Limit to top N results
+                    heatmap_data = heatmap_data.iloc[:, :top_n_results]
+
+                # Plot heatmap
+                plt.figure(figsize=(len(heatmap_data.columns), 16))
+                sns.heatmap(
+                    heatmap_data, 
+                    annot=True, 
+                    fmt=".3f", 
+                    cmap="coolwarm", 
+                    cbar_kws={"label": "Value"},  # Change the label from the measure to "Value"
+                    linewidths=0.5
+                )
+                plt.title(
+                    f"Heatmap of Model Performance\nDataset: {dataset}, Model: {model}, Measure: {measure}",
+                    fontsize=16, weight='bold'  # Increase font size and make bold
+                )
+                plt.xlabel("Representation:Dimensions", fontsize=12, weight='bold')             # Increase font size and bold
+                plt.ylabel("Language Model", fontsize=12, weight='bold')                        # Increase font size and bold
+                
+                # Adjust the color bar label
+                cbar = plt.gca().collections[0].colorbar
+                cbar.ax.set_ylabel("Value", fontsize=12, weight='bold')  # Match the font size and bold weight
+                
+                plt.xticks(fontsize=10, rotation=45, ha="right")
+                plt.yticks(fontsize=10)
+
+                # Save the plot
+                plot_file_name = f"{dataset}_{measure}_{model}_horizontal_heatmap.png"
+                plt.tight_layout()
+                plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
+                print(f"Saved heatmap to {output_path}/{plot_file_name}")
+
+                plt.close()
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -1374,6 +1722,24 @@ if __name__ == "__main__":
         # matplotlib option is less interactive but handles more test cases - its split by dataset 
         # and model as opposed to just dataset as the plotly graphs are designed for 
         #
+        
+        
+        generate_vertical_heatmap(
+            df, 
+            output_path=charts_dir,
+            neural=args.neural,
+            top_n_results=15,
+            debug=debug
+        )
+        
+        generate_horizontal_heatmap(
+            df, 
+            output_path=charts_dir,
+            neural=args.neural,
+            top_n_results=TOP_N_RESULTS,
+            debug=debug
+        )
+        
         generate_charts_matplotlib(
             df, 
             charts_dir,
@@ -1390,7 +1756,6 @@ if __name__ == "__main__":
             neural=args.neural,
             show_charts=args.show, 
             y_axis_threshold=args.ystart,
-            num_results=args.results,               # number of top results to display in the plot
             debug=debug
         )
         
@@ -1399,6 +1764,15 @@ if __name__ == "__main__":
             charts_dir,
             neural=args.neural,
             y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        
+        generate_dataset_model_performance_horizontal(
+            df=df, 
+            output_path=charts_dir,
+            neural=args.neural,
+            x_axis_threshold=args.ystart,
             show_charts=args.show,
             debug=debug
         )
