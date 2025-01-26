@@ -5,6 +5,8 @@ import pandas as pd
 from datetime import datetime
 
 import plotly.express as px
+import plotly.graph_objects as go
+
 import seaborn as sns
 from tabulate import tabulate
 import matplotlib.pyplot as plt
@@ -16,40 +18,48 @@ from bokeh.io import show
 from bokeh.transform import factor_cmap
 from bokeh.palettes import Category20  # A palette with up to 20 colors
 
+
 from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 #
+
 # measures filter: report on these specific measures
-#
 MEASURES = ['final-te-macro-f1', 'final-te-micro-f1']
 
-#
 # Define the measures to be included in CSV file output
-#
 CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
 
-
-#
-# number of results to display in performance plot (model by representation)
-#
-NUM_RESULTS = 80
-
-Y_AXIS_THRESHOLD = 0.25                                     # when to start the Y axis to show differentiation in the plot
-
-TOP_N_RESULTS = 10
-
+Y_AXIS_THRESHOLD = 0.25                     # when to start the Y axis to show differentiation in the plot
+TOP_N_RESULTS = 10                          # default number of results to display
 
 #
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 
 
-def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+def generate_matplotlib_charts_by_model(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    y_axis_threshold=Y_AXIS_THRESHOLD, 
+    show_charts=False, 
+    debug=False):
     """
-    Generates combined bar charts for word-based, subword-based, and token-based models on the same chart.
+    Generates per model bar charts for word-based, subword-based, and token-based models. Includes timelapse values on separate y axis
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame containing the data to be plotted.
+        output_path (str): Directory to save the output files.
+        neural (bool): Whether the data is from deep learning models or classical ML models.
+        y_axis_threshold (float): The minimum value for the y-axis.
+        show_charts (bool): Whether to display the charts interactively.
+        debug (bool): Whether to print additional debug information during
+        
+    Returns:
+        None: The function saves the generated plots as PNG files in the specified output directory.
     """
     print("Generating combined charts for all embeddings...")
 
@@ -73,8 +83,11 @@ def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_th
     today = datetime.today().strftime('%Y-%m-%d')
 
     for measure in MEASURES:
+        
         for dataset in df['dataset'].unique():
+            
             for model in df['model'].unique():
+                
                 # Filter data for the current combination
                 df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
 
@@ -113,7 +126,7 @@ def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_th
 
                 # Customize the plot
                 plt.title(
-                    f"Dataset: {dataset}, Model: {model}, Measure: {measure}",
+                    f"Dataset: {dataset}, Model: {model}, Measure: {measure} [by representation]",
                     fontsize=20, weight='bold'
                 )
                 plt.xlabel("Embeddings-Representation:Dimensions", fontsize=14)
@@ -125,7 +138,7 @@ def generate_charts_matplotlib(df, output_path='../out', neural=False, y_axis_th
                 plt.tight_layout()
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_combined_{today}.png"
+                plot_file_name = f"{dataset}_{measure}_{model}.png"
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -244,7 +257,7 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
                     plt.tight_layout()
 
                     # Save the plot with today's date and 'matplotlib' in the filename
-                    plot_file_name = f"{dataset}_{measure}_{model}_{embedding_category}_{today}_matplotlib.png"
+                    plot_file_name = f"{dataset}_{measure}_{model}_{embedding_category}.png"
                     plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)                                     # Increased DPI for better resolution
                     print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -264,14 +277,19 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False):
+def gen_timelapse_plots(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    show_charts=False, 
+    debug=False):
     """
-    Generate timelapse plots for each dataset, model, embeddings, representation, and dimensions
-    using Bokeh for interactive visualizations.
+    Generate timelapse plots for each dataset, model, embeddings, representation, and dimensions using Bokeh for interactive visualizations.
     
     Args:
         df (pd.DataFrame): Input DataFrame containing timelapse data.
         output_path (str): Directory to save the output files.
+        neural (bool): Whether the data is from deep learning models or classical ML models.
         show_charts (bool): Whether to display the charts interactively.
         debug (bool): Whether to enable debug mode for extra outputs.
     """
@@ -298,8 +316,12 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
 
         subset_df.sort_values(by='dimensions', ascending=False, inplace=True)
         subset_df['representation_with_dim'] = subset_df['representation'] + ' (' + subset_df['dimensions'].astype(str) + ')'
-        subset_df['embeddings_prefix'] = subset_df['embeddings'].apply(lambda x: x.split(':')[0])  # Extract prefix
-
+        
+        if not neural:
+            subset_df['embeddings_prefix'] = subset_df['embeddings'].apply(lambda x: x.split(':')[0])  # Extract prefix
+        else:
+            subset_df['embeddings_prefix'] = subset_df['embeddings']
+            
         avg_timelapse_df = subset_df.groupby(['model', 'embeddings_prefix', 'representation_with_dim']).agg({'timelapse': 'mean'}).reset_index()
 
         source = ColumnDataSource(data=avg_timelapse_df)
@@ -342,143 +364,29 @@ def gen_timelapse_plots(df, output_path='../out', show_charts=False, debug=False
     print("Timelapse plots generation completed.")
 
 
-
-
-def gen_timelapse_plots_orig(df, output_path='../out', show_charts=False, debug=False):
-    """
-    gen_timelapse_plots generates timelapse plots for each dataset, model, embeddings, representation, and dimensions from a given DataFrame.
-    
-    Arguments:
-    - df: Pandas DataFrame that contains the data to be plotted.
-    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - show_charts (default: False): Whether to display the charts interactively.
-    - debug (default: False): Whether to print additional debug information during 
-    
-    Returns:
-    - None: The function saves the generated plots as HTML files in the specified output
-    """
-
-    print("generating timelapse plots...")
-
-    # Ensure that only relevant columns are used
-    df_timelapse = df[['dataset', 'model', 'embeddings', 'representation', 'dimensions', 'timelapse']].drop_duplicates()
-    print("df shape after filtering for timelapse:", df_timelapse.shape)
-
-    if df_timelapse.empty:
-        print("Error: No data available for timelapse analysis.")
-        return
-
-    # Generate charts for timelapse (time taken by each model and representation)
-    for dataset in df_timelapse['dataset'].unique():
-        print(f"Generating timelapse plots for dataset {dataset}...")
-
-        # Explicitly copy the subset to avoid SettingWithCopyWarning
-        subset_df = df_timelapse[df_timelapse['dataset'] == dataset].copy()
-
-        if subset_df.empty:
-            print(f"No timelapse data available for dataset {dataset}")
-            continue
-
-        # Sort by dimensions in descending order (highest dimension first)
-        subset_df = subset_df.sort_values(by='dimensions', ascending=False)
-        #print("subset_df:\n", subset_df)
-
-        # Create a new column to append the dimensions to the representation label
-        subset_df['representation_with_dim'] = subset_df['representation'] + ' (' + subset_df['dimensions'].astype(str) + ')'
-
-        # Aggregate to find the average timelapse per model, embeddings, and representation_with_dim
-        avg_timelapse_df = subset_df.groupby(['model', 'embeddings', 'representation_with_dim']).agg({'timelapse': 'mean'}).reset_index()
-
-        # Dynamically adjust the palette to match the number of unique embeddings
-        unique_vals = avg_timelapse_df['embeddings'].nunique()
-        print(f"unique_vals (embeddings): {unique_vals}")
-
-        # Use Seaborn palette and convert it to a list of hex colors for Plotly
-        color_palette = sns.color_palette("colorblind", n_colors=unique_vals).as_hex()
-
-        # Get the sorted order of representations with dimensions
-        sorted_representation_with_dim = subset_df['representation_with_dim'].tolist()
-
-        title_text = f'Dataset: {dataset.upper()}; Timelapse [by Model, Embeddings, and Representation]'
-
-        # Create the plot using Plotly Express, coloring by embeddings
-        fig = px.bar(avg_timelapse_df, 
-                     x='representation_with_dim',  # Representations with dimensions on the x-axis
-                     y='timelapse', 
-                     color='embeddings',  # Color by embeddings
-                     barmode='group',
-                     title=title_text,
-                     labels={'timelapse': "Average Time (seconds)", 'representation_with_dim': "Representation (Dimensions)"},
-                     color_discrete_sequence=color_palette,                                                                         # Use the corrected color palette
-                     hover_data=['model', 'embeddings', 'representation_with_dim'],                                                 # Include model, embeddings, and representation in hover
-                     category_orders={"representation_with_dim": sorted_representation_with_dim}                                    # Enforce sorted x-axis order
-                )
-
-        # Set up the layout, including the legend and x-axis configuration
-        fig.update_layout(
-            title={
-                'text': title_text,
-                'y': 0.95,
-                'x': 0.5,
-                'xanchor': 'center',
-                'yanchor': 'top',
-                'font': dict(
-                    family="Arial",
-                    size=16,
-                    color='black',
-                    weight='bold'
-                )
-            },
-            legend_title_text='Embeddings',  # Set legend title for embeddings
-            legend=dict(
-                orientation="v",
-                y=1,
-                x=1,
-                xanchor="right",
-                yanchor="top"
-            ),
-            bargap=0.2  # Control space between bars
-        )
-
-        # Angle the x-axis labels to make them easier to read
-        fig.update_xaxes(title_text='Representation (Dimensions)', tickangle=-45)  # Rotate the labels for readability
-        fig.update_yaxes(title_text='Average Time (seconds)', range=[0, avg_timelapse_df['timelapse'].max() * 1.1])
-
-        # Save each plot in the specified output directory
-        if output_path:
-            plot_file_name = f"{dataset}_timelapse_by_representation_with_dimensions.html"
-            plot_file = os.path.join(output_path, plot_file_name)
-            fig.write_html(plot_file)
-
-            print(f"Saved interactive plot for timelapse in dataset {dataset} at {plot_file}")
-
-        if show_charts:
-            fig.show()
-
-    print("Timelapse plots generation completed.")
-
-    return df_timelapse
-
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-def model_performance_comparison(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False, num_results=TOP_N_RESULTS):
+def plotly_model_performance_horizontal(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    y_axis_threshold=Y_AXIS_THRESHOLD, 
+    num_results=TOP_N_RESULTS, 
+    show_charts=True, 
+    debug=False):
     """
-    model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
+    plotly_model_performance_horizontal() generates interactive, horizontal bar charts for each combination of model, dataset, and measure from a given DataFrame.
     
     Arguments:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
     - neural (default: False): Whether the data is from deep learning models or classical ML models.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - num_results (default: None): Number of top results to display in the plot (None for all results).
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during
-    - num_results (default: None): Number of top results to display in the plot (None for all results).
     
     Returns:
     - None: The function saves the generated plots as HTML files in the specified output directory.
@@ -491,7 +399,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
         print("No data available for the specified measures")
         return
 
-    print("\n\tgenerating plotly charts to output directory:", output_path)
+    print("\n\tgenerating plotly summary charts to output directory:", output_path)
 
     # Create output directory if it doesn't exist
     if output_path and not os.path.exists(output_path):
@@ -507,11 +415,13 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
     # Generate a separate chart for each measure within each dataset
     for dataset in df['dataset'].unique():
 
-        print("processing dataset:", dataset)
+        if (debug):
+            print("processing dataset:", dataset)
 
         for measure in MEASURES:
 
-            print(f"\n\tGenerating plots for dataset {dataset} with measure {measure}...")
+            if (debug):
+                print(f"\n\tGenerating plots for dataset {dataset} with measure {measure}...")
 
             # Filter the dataframe for the current dataset and measure
             subset_df1 = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
@@ -526,7 +436,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
                 continue
 
             # Update the representation column to include the dimensions in curly brackets, italicized
-            subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} <i>{{{row['dimensions']}}}</i>", axis=1)
+            subset_df2['representation'] = subset_df2.apply(lambda row: f"{row['representation']} - {row['dimensions']}", axis=1)
 
             # Sort by performance value in descending order
             subset_df2.sort_values(by='value', ascending=False, inplace=True)
@@ -566,7 +476,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
                         weight='bold'
                     )
                 },
-                legend_title_text='Embedding Type',                                                  # Updated legend title to reflect embedding type
+                legend_title_text='Language Model',                                                  # Updated legend title to reflect embedding type
                 legend=dict(
                     orientation="v",
                     y=1,
@@ -574,19 +484,22 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
                     xanchor='right',
                     yanchor='top'
                 ),
-                bargap=0.2,  # Increase spacing between bars
+                bargap=0.15,            
+                height=1000,            # Height of the chart
+                width=1200              # Width of the chart
             )
 
             # Ensure the x-axis is treated as categorical and sorted, and rotate the labels
             fig.update_xaxes(
-                title_text='Representation',
+                title_text='Representation - Dimension',
                 type='category',                                                # Treat x-axis as categorical to prevent reordering
                 tickangle=-45,                                                  # Rotate the x-axis labels
                 tickfont=dict(size=9)                                           # Make the x-axis labels slightly smaller
             )
 
             fig.update_yaxes(
-                title_text='Performance', 
+                #title_text='Performance', 
+                title_text=measure,
                 range=[y_axis_threshold, 1]
             )
 
@@ -594,7 +507,7 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             current_date = datetime.now().strftime("%Y-%m-%d")
             
             # Save the plot in the specified output directory
-            plot_file_name = f"{dataset}_{measure}_performance_comparison.{current_date}.html"
+            plot_file_name = f"{dataset}_{measure}_performance_horizontal.html"
             plot_file = os.path.join(output_path, plot_file_name)
             fig.write_html(plot_file)
 
@@ -603,12 +516,160 @@ def model_performance_comparison(df, output_path='../out', neural=False, y_axis_
             if show_charts:
                 fig.show()
 
-    return df
+
+
+def plotly_model_performance_dual_yaxis(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    y_axis_threshold=0, 
+    num_results=20, 
+    show_charts=True, 
+    debug=False):
+    """
+    Generates a dual-y-axis bar chart using Plotly for performance and timelapse values.
+    The x-axis contains the representation labels, and the two y-axes show the measure value and timelapse values.
+
+    Args:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path: Directory to save the output files.
+    - neural: Whether the data is from deep learning models or classical ML models.
+    - y_axis_threshold: The minimum value for the measure y-axis.
+    - num_results: Number of top results to display.
+    - show_charts: Whether to display the charts interactively.
+    - debug: Whether to print debug information.
+
+    Returns:
+    - None: Saves the generated plots as HTML files.
+    """
+    # Filter for measures of interest
+    df = df[df['measure'].isin(MEASURES)]
+    if df.empty:
+        print("No data available for the specified measures")
+        return
+
+    print("\n\tGenerating dual-y-axis charts with Plotly...")
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    if neural:
+        df['embedding_type'] = df['embeddings']
+    else:
+        df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+
+    for dataset in df['dataset'].unique():
+        if debug:
+            print("Processing dataset:", dataset)
+
+        for measure in MEASURES:
+            if debug:
+                print(f"\n\tGenerating plots for dataset {dataset} with measure {measure}...")
+
+            # Filter for the current dataset and measure
+            subset_df = df[(df['dataset'] == dataset) & (df['measure'] == measure)]
+            if subset_df.empty:
+                print(f"No data available for dataset {dataset} with measure {measure}")
+                continue
+
+            subset_df = subset_df.groupby(['representation', 'model', 'dimensions', 'embeddings', 'embedding_type']).agg(
+                {'value': 'max', 'timelapse': 'max'}
+            ).reset_index()
+
+            # Update representation labels to include dimensions
+            subset_df['representation'] = subset_df.apply(lambda row: f"{row['representation']} - {row['dimensions']}", axis=1)
+
+            # Sort by performance values
+            subset_df.sort_values(by='value', ascending=False, inplace=True)
+
+            # Limit to top results
+            if num_results is not None:
+                subset_df = subset_df.head(num_results)
+
+            if debug:
+                print("Subset after sorting:\n", subset_df)
+
+            # Define the sorted order for the x-axis based on performance
+            model_rep_order = subset_df['representation'].tolist()
+
+            # Create the figure
+            fig = go.Figure()
+
+            # Add performance bars (color-coded by embedding type)
+            for embedding_type in subset_df['embedding_type'].unique():
+                embedding_data = subset_df[subset_df['embedding_type'] == embedding_type]
+                fig.add_trace(go.Bar(
+                    x=embedding_data['representation'],
+                    y=embedding_data['value'],
+                    name=embedding_type,
+                    hovertemplate="<b>Representation:</b> %{x}<br><b>Performance:</b> %{y:.3f}<extra></extra>"
+                ))
+
+            # Add timelapse as scatter points (secondary y-axis)
+            fig.add_trace(go.Scatter(
+                x=subset_df['representation'],
+                y=subset_df['timelapse'],
+                name='Timelapse',
+                yaxis='y2',
+                mode='markers',  # Only points, no lines
+                marker=dict(color='red', size=8, symbol='x'),
+                hovertemplate="<b>Representation:</b> %{x}<br><b>Timelapse:</b> %{y:.3f}<extra></extra>"
+            ))
+
+            # Update layout for dual y-axes
+            fig.update_layout(
+                title=dict(
+                    text=f'Dataset: {dataset}, Measure: {measure} Model Performance with Timelapse',
+                    x=0.5,
+                    y=0.95,
+                    font=dict(size=16, family='Arial', color='black', weight='bold')
+                ),
+                xaxis=dict(
+                    title="Representation - Dimension",
+                    title_font=dict(size=12, color='black', weight='bold'),
+                    tickangle=-45,
+                    tickfont=dict(size=9)
+                ),
+                yaxis=dict(
+                    title=measure,
+                    title_font=dict(size=12, color='blue', weight='bold'),
+                    range=[y_axis_threshold, 1],
+                    tickfont=dict(size=9)
+                ),
+                yaxis2=dict(
+                    title="Timelapse (seconds)",
+                    title_font=dict(size=12, color='red', weight='bold'),
+                    overlaying='y',
+                    side='right',
+                    tickfont=dict(size=9, color='red')
+                ),
+                legend=dict(
+                    title="Language Model",
+                    orientation="v",
+                    y=1,
+                    x=1,
+                    xanchor='right',
+                    yanchor='top'
+                ),
+                bargap=0.15,            
+                height=1000,            # Height of the chart
+                width=1200              # Width of the chart
+            )
+
+            # Save the plot
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            plot_file_name = f"{dataset}_{measure}_performance_with_timelapse.html"
+            plot_file = os.path.join(output_path, plot_file_name)
+            fig.write_html(plot_file)
+            print(f"Saved plot for {measure} on dataset {dataset} at {plot_file}")
+
+            if show_charts:
+                fig.show()
 
 
 
-
-def model_performance_comparison_all(df, output_path='../out', neural=False, y_axis_threshold=0, show_charts=True, debug=False):
+def model_performance_comparison_all(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=True, debug=False):
     """
     model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
     
@@ -731,7 +792,7 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
             current_date = datetime.now().strftime("%Y-%m-%d")
             
             # Save the plot in the specified output directory
-            plot_file_name = f"{dataset}_{measure}_performance_comparison.{current_date}.html"
+            plot_file_name = f"{dataset}_{measure}_performance_comparison.html"
             plot_file = os.path.join(output_path, plot_file_name)
             fig.write_html(plot_file)
 
@@ -1047,9 +1108,26 @@ def read_data_file(file_path=None, debug=False):
 # ----------------------------------------------------------------------------------------------------------------------------
 
 
-def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=False):
+def gen_dataset_summaries(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    gen_file=True, 
+    stdout=False, 
+    debug=False):
     """
     Generate summaries for each dataset grouped by the first token in the embeddings type, writing to separate files for each dataset.
+    
+    Args:
+        df (DataFrame, required): Input data, already filtered for the measures of interest
+        output_path (str, optional): Output directory for files
+        neural (bool, optional): Whether the data is from deep learning models or classical ML models
+        gen_file (bool, optional): Whether to generate output files
+        stdout (bool, optional): Whether to print output to stdout
+        debug (bool, optional): Whether to print debug information
+        
+    Returns:
+        None
     """
     print(f'\n\tgenerating summary to {output_path}...')
 
@@ -1060,9 +1138,12 @@ def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=F
     # Filter for Macro and Micro F1 scores only
     df_filtered = df[df['measure'].isin(['final-te-macro-f1', 'final-te-micro-f1'])]
 
-    # Extract the first part of the embeddings as 'language_model'
-    df_filtered['language_model'] = df_filtered['embeddings'].apply(lambda x: x.split(':')[0])
-
+    if not neural:
+        # Extract the first part of the embeddings as 'language_model'
+        df_filtered['language_model'] = df_filtered['embeddings'].apply(lambda x: x.split(':')[0])
+    else:
+        df_filtered['language_model'] = df_filtered['embeddings']
+           
     # Get the current date in YYYY-MM-DD format for file naming
     current_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -1074,7 +1155,7 @@ def gen_summaries(df, output_path='../out', gen_file=True, stdout=False, debug=F
         dataset_filtered.sort_values(by=['language_model', 'model', 'mode', 'representation', 'measure'], inplace=True)
 
         # Generate output file for each dataset
-        file_name = f"{dataset}_summary_{current_date}.out"
+        file_name = f"{dataset}_summary.out"
         output_file = os.path.join(output_path, file_name)
 
         if gen_file:
@@ -1167,12 +1248,183 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
 
 
 
-# ----------------------------------------------------------------------------------------------------------------------------
 
-def generate_dataset_model_performance(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=False, debug=False):
+def all_model_performance_time_horizontal(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    y_axis_threshold=Y_AXIS_THRESHOLD, 
+    top_n_results=TOP_N_RESULTS,
+    show_charts=False, 
+    debug=False):
     """
-    Generates combined bar charts for word-based, subword-based, and token-based models on the same chart.
-    Adds a secondary y-axis for timelapse values.
+    Generates dataset, moedel representation performance bar charts for word-based, subword-based, and token-based models. Adds a 
+    secondary y-axis for timelapse values.
+    
+    Args:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during processing.
+    
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output directory.
+    """
+    print("Generating combined charts for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df shape after filtering for measures:", df_measures.shape)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Set colorblind-friendly style
+    sns.set(style="whitegrid")
+
+    # Get today's date for file naming
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+            
+            # Filter data for the current combination
+            df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset)].copy()
+
+            if df_subset.empty:
+                print(f"No data available for {measure}, in dataset {dataset}.")
+                continue
+            else:
+                pass
+                
+            # Extract the base embeddings (everything before the colon)
+            if neural:
+                df_subset['embedding_type'] = df_subset['embeddings']
+            else:
+                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+            # Combine representation and dimensions into a single label for x-axis
+            df_subset['rep_dim'] = df_subset.apply(
+                lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+            )
+        
+            # ---------------------------------------------------------------------------------------------
+            # filter data depeneding upon what we are showing
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]                
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+            # ---------------------------------------------------------------------------------------------
+            
+            # Sort by measure value in descending order and limit to top N results
+            df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
+            
+            if df_subset.empty:
+                print(f"No data available for {measure}, in dataset {dataset} after filtering.")
+                continue
+
+            if debug:
+                print("df_subset:\n", df_subset.shape, df_subset)
+                    
+            # Create a color palette based on unique embedding types
+            unique_embeddings = df_subset['embedding_type'].nunique()
+            color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
+            # Create the plot
+            fig, ax1 = plt.subplots(figsize=(16, 10))
+
+            # Primary y-axis for the measure values
+            bars = sns.barplot(
+                data=df_subset,
+                x='rep_dim',
+                y='value',
+                hue='embedding_type',
+                palette=color_palette,
+                order=df_subset['rep_dim'],
+                ax=ax1,
+                orient='v',  # Vertical orientation
+                dodge=False  # Ensures single bar per category
+            )
+            
+            # Add metric values at the top of each bar
+            for bar, value in zip(bars.patches, df_subset['value']):
+                ax1.text(
+                    bar.get_x() + bar.get_width() / 2,                                                  # x position
+                    bar.get_height(),                                                                   # y position (height of the bar)
+                    f"{value:.3f}",                                                                     # Text to display (rounded to 3 decimals)
+                    ha='center', va='bottom', fontsize=8, color='black', fontweight='normal'
+                )
+
+            # Customize the primary y-axis
+            ax1.set_title(f"Dataset: {dataset}, Measure: {measure} [by representation]", fontsize=12, weight='bold')
+            ax1.set_ylabel(measure, fontsize=10, weight='bold')
+            ax1.set_ylim(y_axis_threshold, 1)
+            ax1.tick_params(axis='y', labelsize=8)
+            ax1.legend(title="Language Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, title_fontsize=10)
+
+            # Secondary y-axis for timelapse values
+            ax2 = ax1.twinx()
+            ax2.scatter(
+                df_subset['rep_dim'],
+                df_subset['timelapse'],
+                color='black',
+                marker='x',
+                s=20,                      # size of the marker points
+                label='Timelapse'
+            )
+            ax2.set_ylabel('Timelapse', fontsize=10, color='red', weight='bold')
+            ax2.tick_params(axis='y', labelsize=8, labelcolor='red')
+            ax2.legend(loc='upper right', fontsize=10)
+
+            # Adjust x-axis labels using set_xlabel
+            ax1.set_xlabel("Representation:Dimensions", fontsize=10, weight='bold')
+            ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right', fontsize=8)
+
+            # Adjust layout
+            fig.tight_layout()
+
+            # Save the plot
+            plot_file_name = f"{dataset}_{measure}_horizontal.png"
+            plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
+            print(f"Saved plot to {output_path}/{plot_file_name}")
+
+            # Optionally show the plot
+            if show_charts:
+                plt.show()
+
+
+
+
+
+def model_performance_time_horizontal(
+    df, 
+    output_path='../out', 
+    neural=False, 
+    y_axis_threshold=Y_AXIS_THRESHOLD, 
+    top_n_results=TOP_N_RESULTS,
+    show_charts=False, 
+    debug=False):
+    """
+    Generates dataset, moedel representation performance bar charts for word-based, subword-based, and token-based models. Adds a 
+    secondary y-axis for timelapse values.
+    
+    Args:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during processing.
+    
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output directory.
     """
     print("Generating combined charts for all embeddings...")
 
@@ -1225,10 +1477,14 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
                 # ---------------------------------------------------------------------------------------------
                 
-                # Sort by measure value in descending order
-                df_subset = df_subset.sort_values(by='value', ascending=False)
+                # Sort by measure value in descending order and limit to top N results
+                df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
+                
+                if df_subset.empty:
+                    print(f"No data available for {measure}, {model}, in dataset {dataset} after filtering.")
+                    continue
 
-                if (debug):
+                if debug:
                     print("df_subset:\n", df_subset.shape, df_subset)
                         
                 # Create a color palette based on unique embedding types
@@ -1236,7 +1492,7 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                 color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
 
                 # Create the plot
-                fig, ax1 = plt.subplots(figsize=(20, 12))
+                fig, ax1 = plt.subplots(figsize=(16, 10))
 
                 # Primary y-axis for the measure values
                 bars = sns.barplot(
@@ -1246,24 +1502,28 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                     hue='embedding_type',
                     palette=color_palette,
                     order=df_subset['rep_dim'],
-                    ax=ax1
+                    ax=ax1,
+                    orient='v',  # Vertical orientation
+                    dodge=False  # Ensures single bar per category
                 )
                 
                 # Add metric values at the top of each bar
                 for bar, value in zip(bars.patches, df_subset['value']):
                     ax1.text(
-                        bar.get_x() + bar.get_width() / 2,                          # x position
-                        bar.get_height(),                                           # y position (height of the bar)
-                        f"{value:.3f}",                                             # Text to display (rounded to 3 decimals)
-                        ha='center', va='bottom', fontsize=8, color='black'
+                        bar.get_x() + bar.get_width() / 2,                                                  # x position
+                        bar.get_height(),                                                                   # y position (height of the bar)
+                        f"{value:.3f}",                                                                     # Text to display (rounded to 3 decimals)
+                        ha='center', va='bottom', fontsize=8, color='black', fontweight='normal'
                     )
 
                 # Customize the primary y-axis
                 ax1.set_title(
-                    f"Model Performance for dataset:{dataset}, model: {model}, measure: {measure}",
+                    f"Dataset:{dataset}, Model: {model}, Measure: {measure} [by representation]",
                     fontsize=18, weight='bold'
                 )
-                ax1.set_ylabel(measure, fontsize=14)
+                
+                #ax1.set_ylabel(measure, fontsize=14)
+                ax1.set_ylabel("Value", fontsize=14)
                 ax1.set_ylim(y_axis_threshold, 1)
                 ax1.tick_params(axis='y', labelsize=9)
                 ax1.legend(title="Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
@@ -1275,7 +1535,7 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                     df_subset['timelapse'],
                     color='black',
                     marker='x',
-                    s=50,                      # size of the marker points
+                    s=30,                      # size of the marker points
                     label='Timelapse'
                 )
                 ax2.set_ylabel('Timelapse', fontsize=14, color='red')
@@ -1290,7 +1550,7 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
                 fig.tight_layout()
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_combined_{today}.png"
+                plot_file_name = f"{dataset}_{measure}_{model}_horizontal.png"
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -1300,10 +1560,7 @@ def generate_dataset_model_performance(df, output_path='../out', neural=False, y
 
 
 
-
-
-
-def generate_dataset_model_performance_horizontal(
+def model_performance_time_vertical(
     df,
     output_path='../out',
     neural=False,
@@ -1316,6 +1573,18 @@ def generate_dataset_model_performance_horizontal(
     Generates horizontal bar charts for word-based, subword-based, and token-based models on the same chart.
     Adds a secondary x-axis for timelapse values, and fits the output on a portrait layout.
     Filters to show only the top N results based on the metric value.
+    
+    Args:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
+    - top_n_results (default: 10): The number of top results to display.
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during processing.
+    
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output directory.
     """
     print("Generating horizontal charts for all embeddings...")
 
@@ -1397,22 +1666,23 @@ def generate_dataset_model_performance_horizontal(
                 )
 
                 # Adjust bar height to make them wider
+                """
                 for bar in bars.patches:
                     bar.set_height(bar.get_height() * .75)  # Increased bar height for better visibility
-
+                """
+                
                 # Add metric values at the end of each bar
                 for bar, value in zip(bars.patches, df_subset['value']):
                     ax1.text(
-                        bar.get_width() + 0.01,  # x position (slightly beyond the end of the bar)
-                        bar.get_y() + bar.get_height() / 2,  # y position (center of the bar)
-                        f"{value:.3f}",  # Text to display (rounded to 3 decimals)
+                        bar.get_width() + 0.01,                                                     # x position (slightly beyond the end of the bar)
+                        bar.get_y() + bar.get_height() / 2,                                         # y position (center of the bar)
+                        f"{value:.3f}",                                                             # Text to display (rounded to 3 decimals)
                         ha='left', va='center', fontsize=8, color='black', fontweight='normal'
                     )
 
                 # Customize the primary x-axis
                 ax1.set_title(
-                    "Model Performance by Representation\n"
-                    f"Dataset: {dataset}, Model: {model}, Measure: {measure}",
+                    f"Dataset: {dataset}, Model: {model}, Measure: {measure} [by representation]",
                     fontsize=14, weight='bold', ha='center'
                 )
                 ax1.set_xlabel(measure, fontsize=10, fontweight='normal')
@@ -1442,7 +1712,7 @@ def generate_dataset_model_performance_horizontal(
                 fig.tight_layout()
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_top{top_n_results}_horizontal_{today}.png"
+                plot_file_name = f"{dataset}_{measure}_{model}_vertical.png"
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -1452,7 +1722,164 @@ def generate_dataset_model_performance_horizontal(
 
 
 
-def generate_vertical_heatmap(
+
+def all_model_performance_time_vertical(
+    df,
+    output_path='../out',
+    neural=False,
+    x_axis_threshold=0.0,
+    top_n_results=TOP_N_RESULTS,
+    show_charts=False,
+    debug=False
+):
+    """
+    Generates horizontal bar charts for word-based, subword-based, and token-based language models for all classifier models on the same chart.
+    Adds a secondary x-axis for timelapse values, and fits the output on a portrait layout. Filters to show only the top N results based on the metric value.
+    
+    Args:
+    - df: Pandas DataFrame that contains the data to be plotted.
+    - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
+    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
+    - top_n_results (default: 10): The number of top results to display.
+    - show_charts (default: True): Whether to display the charts interactively.
+    - debug (default: False): Whether to print additional debug information during processing.
+    
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output directory.
+    """
+    print("Generating horizontal charts for all embeddings...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df shape after filtering for measures:", df_measures.shape)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Set colorblind-friendly style
+    sns.set(style="whitegrid")
+
+    # Get today's date for file naming
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    for measure in MEASURES:
+        
+        for dataset in df['dataset'].unique():
+
+            # Filter data for the current combination
+            df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset)].copy()
+
+            if df_subset.empty:
+                print(f"No data available for {measure} in dataset {dataset}.")
+                continue
+
+            # Extract the base embeddings (everything before the colon)
+            if neural:
+                df_subset['embedding_type'] = df_subset['embeddings']
+            else:
+                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+            # Combine representation and dimensions into a single label for y-axis
+            df_subset['rep_dim'] = df_subset.apply(
+                lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+            )
+
+            # ---------------------------------------------------------------------------------------------
+            # filter data to exclude specific embeddings
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
+            df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+            # ---------------------------------------------------------------------------------------------
+
+            # Sort by measure value in descending order and limit to top N results
+            df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
+
+            if df_subset.empty:
+                print(f"No data available for {measure} in dataset {dataset} after filtering.")
+                continue
+
+            if debug:
+                print("df_subset:\n", df_subset.shape, df_subset)
+
+            # Create a color palette based on unique embedding types
+            unique_embeddings = df_subset['embedding_type'].nunique()
+            color_palette = sns.color_palette("colorblind", n_colors=unique_embeddings)
+
+            # Create the plot
+            fig, ax1 = plt.subplots(figsize=(14, 12))  # Increased width for better readability
+
+            # Primary x-axis for the measure values
+            bars = sns.barplot(
+                data=df_subset,
+                y='rep_dim',
+                x='value',
+                hue='embedding_type',
+                palette=color_palette,
+                order=df_subset['rep_dim'],
+                ax=ax1,
+                orient='h',                                 # Horizontal orientation
+                dodge=False                                 # Ensures single bar per category
+            )
+            
+            # Add metric values at the end of each bar
+            for bar, value in zip(bars.patches, df_subset['value']):
+                ax1.text(
+                    bar.get_width() + 0.01,                                                     # x position (slightly beyond the end of the bar)
+                    bar.get_y() + bar.get_height() / 2,                                         # y position (center of the bar)
+                    f"{value:.3f}",                                                             # Text to display (rounded to 3 decimals)
+                    ha='left', va='center', fontsize=8, color='black', fontweight='normal'
+                )
+
+            # Customize the primary x-axis
+            ax1.set_title(
+                f"Dataset: {dataset}, Measure: {measure} [by representation]",
+                fontsize=12, weight='bold', ha='center'
+            )
+            ax1.set_xlabel(measure, fontsize=10, fontweight='bold')
+            ax1.set_xlim(x_axis_threshold, 1)
+            ax1.tick_params(axis='x', labelsize=8)
+            ax1.legend(title="Language Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, title_fontsize=10)
+
+            # Secondary x-axis for timelapse values
+            ax2 = ax1.twiny()
+            ax2.scatter(
+                df_subset['timelapse'],
+                df_subset['rep_dim'],
+                color='black',
+                marker='x',
+                s=20,                           # size of the marker points
+                label='Timelapse'
+            )
+            ax2.set_xlabel('Timelapse', fontsize=10, weight='bold', color='red')
+            ax2.tick_params(axis='x', labelsize=8, labelcolor='red')
+            ax2.legend(loc='upper right', fontsize=10)
+
+            # Adjust y-axis labels
+            ax1.set_ylabel("Representation:Dimensions", fontsize=10, fontweight='bold')
+            ax1.tick_params(axis='y', labelsize=8)
+
+            # Adjust layout
+            fig.tight_layout()
+
+            # Save the plot
+            plot_file_name = f"{dataset}_{measure}_vertical.png"
+            plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
+            print(f"Saved plot to {output_path}/{plot_file_name}")
+
+            # Optionally show the plot
+            if show_charts:
+                plt.show()
+
+
+
+def generate_vertical_heatmap_by_model(
     df, 
     output_path='../out', 
     neural=False,
@@ -1522,7 +1949,7 @@ def generate_vertical_heatmap(
                     linewidths=0.5
                 )
                 plt.title(
-                    f"Heatmap of Model Performance\nDataset: {dataset}, Model: {model}, Measure: {measure}",
+                    f"Dataset: {dataset}, Measure: {measure}, Model: {model} [by representation]",
                     fontsize=12, weight='bold'
                 )
                 plt.xlabel("Language Model", fontsize=12, weight='bold')
@@ -1545,8 +1972,102 @@ def generate_vertical_heatmap(
 
 
 
+def generate_vertical_heatmap_all_models(
+    df, 
+    output_path='../out', 
+    neural=False,
+    top_n_results=None, 
+    debug=False):
+    """
+    Generates a heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    """
 
-def generate_horizontal_heatmap(
+    print("Generating heatmap for all embeddings and all models...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df:", df_measures.shape, df_measures)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+#            for model in df['model'].unique():
+            
+            # Filter and prepare data
+            df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset)].copy()
+            if df_subset.empty:
+                print(f"No data available for {measure}, in dataset {dataset}.")
+                continue
+
+            # Extract the base embeddings (everything before the colon)
+            if neural:
+                df_subset['embedding_type'] = df_subset['embeddings']
+            else:
+                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+            # Combine representation and dimensions into a single label for y-axis
+            df_subset['rep_dim'] = df_subset.apply(
+                lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+            )
+
+            # Pivot the data for heatmap
+            heatmap_data = df_subset.pivot_table(
+                index='rep_dim', 
+                columns='embedding_type', 
+                values='value'
+            )
+
+            # Sort rows by the mean of metric values
+            heatmap_data = heatmap_data.loc[heatmap_data.mean(axis=1).sort_values(ascending=False).index]
+
+            if (top_n_results is not None) and (heatmap_data.shape[0] > top_n_results):
+                # Limit to top N results
+                heatmap_data = heatmap_data.head(top_n_results)
+
+            # Plot heatmap
+            plt.figure(figsize=(12, len(heatmap_data) * 0.5))
+            sns.heatmap(
+                heatmap_data, 
+                annot=True, 
+                fmt=".3f", 
+                cmap="coolwarm", 
+                cbar_kws={"label": measure}, 
+                linewidths=0.5
+            )
+            plt.title(
+                f"Dataset: {dataset}, Measure: {measure} [by representation]",
+                fontsize=12, weight='bold'
+            )
+            plt.xlabel("Language Model", fontsize=12, weight='bold')
+            plt.ylabel("Representation:Dimensions", fontsize=12, weight='bold')
+                            
+            # Adjust the color bar label
+            cbar = plt.gca().collections[0].colorbar
+            cbar.ax.set_ylabel("Value", fontsize=12, weight='bold')  # Match the font size and bold weight
+            
+            plt.xticks(fontsize=8, rotation=45, ha="right")
+            plt.yticks(fontsize=8)
+
+            # Save the plot
+            plot_file_name = f"{dataset}_{measure}_vertical_heatmap.png"
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
+            print(f"Saved heatmap to {output_path}/{plot_file_name}")
+
+            plt.close()
+
+
+
+
+def generate_horizontal_heatmap_by_model(
     df, 
     output_path='../out', 
     neural=False,
@@ -1616,7 +2137,7 @@ def generate_horizontal_heatmap(
                     linewidths=0.5
                 )
                 plt.title(
-                    f"Heatmap of Model Performance\nDataset: {dataset}, Model: {model}, Measure: {measure}",
+                    f"Dataset: {dataset}, Model: {model}, Measure: {measure} [by representation]",
                     fontsize=16, weight='bold'  # Increase font size and make bold
                 )
                 plt.xlabel("Representation:Dimensions", fontsize=12, weight='bold')             # Increase font size and bold
@@ -1636,6 +2157,100 @@ def generate_horizontal_heatmap(
                 print(f"Saved heatmap to {output_path}/{plot_file_name}")
 
                 plt.close()
+                
+                
+
+
+def generate_horizontal_heatmap_all_models(
+    df, 
+    output_path='../out', 
+    neural=False,
+    top_n_results=None, 
+    debug=False):
+    """
+    Generates a horizontal heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    """
+    
+    print("Generating horizontal heatmap for all embeddings and all models...")
+
+    # Filter for measures of interest
+    df_measures = df[df['measure'].isin(MEASURES)]
+    if debug:
+        print("df:", df_measures.shape, df_measures)
+
+    if df_measures.empty:
+        print("Error: No data available for the specified measures.")
+        return
+
+    # Create output directory if it doesn't exist
+    if output_path and not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    for measure in MEASURES:
+        for dataset in df['dataset'].unique():
+                
+            # Filter and prepare data
+            df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset)].copy()
+            if df_subset.empty:
+                print(f"No data available for {measure} in dataset {dataset}.")
+                continue
+
+            # Extract the base embeddings (everything before the colon)
+            if neural:
+                df_subset['embedding_type'] = df_subset['embeddings']
+            else:
+                df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+
+            # Combine representation and dimensions into a single label for x-axis
+            df_subset['rep_dim'] = df_subset.apply(
+                lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
+            )
+
+            # Pivot the data for heatmap
+            heatmap_data = df_subset.pivot_table(
+                index='embedding_type',  # Embedding types on y-axis
+                columns='rep_dim',       # Representations on x-axis
+                values='value'
+            )
+
+            # Sort columns by the mean of metric values
+            heatmap_data = heatmap_data.loc[:, heatmap_data.mean(axis=0).sort_values(ascending=False).index]
+
+            if (top_n_results is not None) and (heatmap_data.shape[1] > top_n_results):
+                # Limit to top N results
+                heatmap_data = heatmap_data.iloc[:, :top_n_results]
+
+            # Plot heatmap
+            plt.figure(figsize=(len(heatmap_data.columns), 16))
+            sns.heatmap(
+                heatmap_data, 
+                annot=True, 
+                fmt=".3f", 
+                cmap="coolwarm", 
+                cbar_kws={"label": "Value"},  # Change the label from the measure to "Value"
+                linewidths=0.5
+            )
+            plt.title(
+                f"Dataset: {dataset}, Measure: {measure} [by representation]",
+                fontsize=16, weight='bold'  # Increase font size and make bold
+            )
+            plt.xlabel("Representation:Dimensions", fontsize=12, weight='bold')             # Increase font size and bold
+            plt.ylabel("Language Model", fontsize=12, weight='bold')                        # Increase font size and bold
+            
+            # Adjust the color bar label
+            cbar = plt.gca().collections[0].colorbar
+            cbar.ax.set_ylabel("Value", fontsize=12, weight='bold')  # Match the font size and bold weight
+            
+            plt.xticks(fontsize=10, rotation=45, ha="right")
+            plt.yticks(fontsize=10)
+
+            # Save the plot
+            plot_file_name = f"{dataset}_{measure}_horizontal_heatmap.png"
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
+            print(f"Saved heatmap to {output_path}/{plot_file_name}")
+
+            plt.close()
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -1648,13 +2263,15 @@ if __name__ == "__main__":
 
     parser.add_argument('file_path', type=str, help='Path to the TSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
-    parser.add_argument('-r', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
+    parser.add_argument('-m', '--heatmaps', action='store_true', default=False, help='Generate heatmaps')
+    parser.add_argument('-t', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-n', '--neural', action='store_true', default=False, help='Output from Neural Nets')
+    parser.add_argument('-l', '--model', action='store_true', default=False, help='Generate model (classifier) specific charts')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
     parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
-    parser.add_argument('-m', '--results', type=float, default=NUM_RESULTS, help='Y-axis starting value for the charts (default: 0.6)')
+    parser.add_argument('-r', '--results', type=int, default=TOP_N_RESULTS, help=f'number of results to display (default: {TOP_N_RESULTS})')
     parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
 
     args = parser.parse_args()
@@ -1695,7 +2312,12 @@ if __name__ == "__main__":
 
     summ_dir = os.path.join(out_dir, 'summaries')
     timelapse_dir = os.path.join(out_dir, 'timelapse')
-    charts_dir = os.path.join(out_dir, 'charts')
+    
+    charts_model_dir = os.path.join(out_dir, 'model_charts')
+    charts_summ_dir = os.path.join(out_dir, 'summary_charts')
+    
+    heatmap_model_dir = os.path.join(out_dir, 'model_heatmaps')
+    heatmap_summ_dir = os.path.join(out_dir, 'summary_heatmaps')
     
     # Check if output directory exists
     if not os.path.exists(out_dir):
@@ -1703,80 +2325,168 @@ if __name__ == "__main__":
         print("\n")
 
         create_dir = input(f"Output directory {out_dir} does not exist. Do you want to create it? (y/n): ").strip().lower()
+        
         if create_dir == 'y':
             os.makedirs(out_dir)
             os.makedirs(summ_dir)
             os.makedirs(timelapse_dir)
-            os.makedirs(charts_dir)
+            
+            os.makedirs(charts_model_dir)
+            os.makedirs(charts_summ_dir)
+            
+            os.makedirs(heatmap_model_dir)
+            os.makedirs(heatmap_summ_dir)
+            
             print(f"Directory {out_dir} created, along with subdirectories")
         else:
             print(f"Directory {out_dir} was not created. Exiting.")
             exit()
 
+        
     #
     # generate charts
     #
     if args.charts:
-
-        #
-        # matplotlib option is less interactive but handles more test cases - its split by dataset 
-        # and model as opposed to just dataset as the plotly graphs are designed for 
-        #
         
-        
-        generate_vertical_heatmap(
-            df, 
-            output_path=charts_dir,
-            neural=args.neural,
-            top_n_results=15,
-            debug=debug
-        )
-        
-        generate_horizontal_heatmap(
-            df, 
-            output_path=charts_dir,
-            neural=args.neural,
-            top_n_results=TOP_N_RESULTS,
-            debug=debug
-        )
-        
-        generate_charts_matplotlib(
-            df, 
-            charts_dir,
-            neural=args.neural,
-            show_charts=args.show,
-            y_axis_threshold=args.ystart,
-            debug=debug
-        )
-        
-        
-        model_performance_comparison(
-            df, 
-            charts_dir, 
-            neural=args.neural,
-            show_charts=args.show, 
-            y_axis_threshold=args.ystart,
-            debug=debug
-        )
-        
-        generate_dataset_model_performance(
-            df, 
-            charts_dir,
-            neural=args.neural,
-            y_axis_threshold=args.ystart,
-            show_charts=args.show,
-            debug=debug
-        )
-        
-        generate_dataset_model_performance_horizontal(
+        """
+        #this generates matlibplots without timelapse data
+        generate_matplotlib_charts_by_model(
             df=df, 
-            output_path=charts_dir,
+            output_path=charts_model_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        """
+        
+        """
+        #this generates matlibplots without timelapse data for eaxch embedding type
+        generate_charts_matplotlib_split(
+            df=df, 
+            output_path=charts_model_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        """
+        
+        # --------------------------------------------
+        # across all models (classifiers)
+        #
+        
+        plotly_model_performance_dual_yaxis(
+                df=df, 
+                output_path=charts_summ_dir, 
+                neural=args.neural,
+                y_axis_threshold=args.ystart,
+                num_results=args.results,
+                show_charts=args.show, 
+                debug=debug
+            )
+         
+        plotly_model_performance_horizontal(
+                df=df, 
+                output_path=charts_summ_dir, 
+                neural=args.neural,
+                y_axis_threshold=args.ystart,
+                num_results=args.results,
+                show_charts=args.show, 
+                debug=debug
+            )
+        
+        all_model_performance_time_horizontal(
+            df=df, 
+            output_path=charts_summ_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            top_n_results=args.results,
+            show_charts=args.show,
+            debug=debug
+        )
+        
+        all_model_performance_time_vertical(
+            df=df, 
+            output_path=charts_summ_dir,
             neural=args.neural,
             x_axis_threshold=args.ystart,
+            top_n_results=args.results,
             show_charts=args.show,
             debug=debug
         )
         
+        #
+        # ---------------------------------------------
+        
+        
+        # --------------------------------------------
+        # by model (classifier)
+        #
+        if args.model:
+            
+            model_performance_time_horizontal(
+                df=df, 
+                output_path=charts_model_dir,
+                neural=args.neural,
+                y_axis_threshold=args.ystart,
+                top_n_results=args.results,
+                show_charts=args.show,
+                debug=debug
+            )
+            
+            model_performance_time_vertical(
+                df=df, 
+                output_path=charts_model_dir,
+                neural=args.neural,
+                x_axis_threshold=args.ystart,
+                top_n_results=args.results,
+                show_charts=args.show,
+                debug=debug
+            )
+        #
+        # ---------------------------------------------
+    
+    
+    #
+    # generate heatmaps
+    #
+    if args.heatmaps:
+
+        generate_vertical_heatmap_by_model(
+            df, 
+            output_path=heatmap_model_dir,
+            neural=args.neural,
+            top_n_results=args.results,
+            debug=debug
+        )
+
+        generate_vertical_heatmap_all_models(
+            df, 
+            output_path=heatmap_summ_dir,
+            neural=args.neural,
+            top_n_results=args.results,
+            debug=debug
+        )
+
+        
+        generate_horizontal_heatmap_by_model(
+            df, 
+            output_path=heatmap_model_dir,
+            neural=args.neural,
+            top_n_results=args.results,
+            debug=debug
+        )
+
+        generate_horizontal_heatmap_all_models(
+            df, 
+            output_path=heatmap_summ_dir,
+            neural=args.neural,
+            top_n_results=args.results,
+            debug=debug
+        )
+        
+            
     #
     # generate summaries
     #
@@ -1788,9 +2498,10 @@ if __name__ == "__main__":
             debug=debug
         )
 
-        gen_summaries(
-            df, 
-            summ_dir, 
+        gen_dataset_summaries(
+            df=df, 
+            output_path=summ_dir, 
+            neural=args.neural,
             gen_file=True, 
             stdout=False, 
             debug=debug
@@ -1809,9 +2520,11 @@ if __name__ == "__main__":
     # generate timelapse plots
     #        
     if (args.runtimes):
+        
         gen_timelapse_plots(
-            df, 
-            timelapse_dir, 
+            df=df, 
+            output_path=timelapse_dir, 
+            neural=args.neural,
             show_charts=args.show,
             debug=debug
         )
