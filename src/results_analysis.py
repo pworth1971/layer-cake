@@ -2493,8 +2493,9 @@ if __name__ == "__main__":
     if args.summary:
         
         gen_summary_all(
-            df, 
-            summ_dir, 
+            df=df, 
+            output_path=summ_dir, 
+            gen_file=True,
             debug=debug
         )
 
