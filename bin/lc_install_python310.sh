@@ -50,10 +50,10 @@ OS=$(detect_os)
 
 if [[ "$OS" == "macOS" ]]; then
     echo "Detected macOS (Apple Silicon). Installing PyTorch for macOS..."
-    conda install pytorch torchtext -c pytorch -y
+    pip install torch==2.4.1 torchvision==0.16.1 triton==3.0.0 --index-url https://download.pytorch.org/whl/cpu
 elif [[ "$OS" == "ubuntu" ]]; then
     echo "Detected Ubuntu. Installing PyTorch with CUDA support..."
-    conda install pytorch torchtext cudatoolkit -c pytorch -c nvidia -y
+    pip install torch==2.4.1 torchvision==0.16.1 triton==3.0.0 --index-url https://download.pytorch.org/whl/cu118
 else
     echo "Unsupported OS. This script only supports macOS and Ubuntu."
     exit 1
@@ -61,11 +61,7 @@ fi
 
 # Core package dependencies
 echo "Installing core package dependencies..."
-pip install scikit-learn transformers simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale huggingface_hub accelerate bokeh
-
-# Prompt user to log in to Hugging Face
-huggingface-cli login
-echo "Please enter your Hugging Face token for authentication to use LLaMa models."
+pip install transformers==4.46.3 safetensors==0.4.5 scikit-learn simpletransformers rdflib gensim fasttext matplotlib tabulate scipy datetime numpy pandas psutil GPUtil plotly nltk seaborn fairscale huggingface_hub accelerate bokeh
 
 # Handle optional Ubuntu-specific setup
 if [[ "$OS" == "ubuntu" ]]; then
