@@ -53,12 +53,10 @@ from data.lc_trans_dataset import _label_matrix, RANDOM_SEED
 from util.common import preprocess
 
 
-
 nltk.download('stopwords')
 nltk.download('punkt_tab')
 
 stop_words = set(stopwords.words('english'))
-
 
 
 
@@ -74,7 +72,6 @@ DATASET_DIR = '../datasets/'                        # dataset directory
 # Disable Hugging Face tokenizers parallelism to avoid fork issues
 #
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
 TEST_SIZE = 0.175                   # test size for train/test split
@@ -253,6 +250,15 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
+        elif (pretrained == 'llama'):
+            print("Using Llama langauge model embeddings...")
+
+            self.lcr_model = LlamaLCRepresentationModel(
+                model_name=LLAMA_MODEL, 
+                model_dir=embedding_path,  
+                vtype=vectorization_type
+            )
+
         elif (pretrained == 'deepseek'):
             print("Using DeepSeek language model embeddings...")
 
@@ -425,7 +431,7 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']):      
+        if (self.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']):      
 
             print("generating token (transformer) based dataset representations...")
 
@@ -1912,6 +1918,8 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'distilbert': DISTILBERT_MODEL,
         'xlnet': XLNET_MODEL,
         'gpt2': GPT2_MODEL,
+        'llama': LLAMA_MODEL,
+        'deepseek': DEEPSEEK_MODEL
     }
 
     # Look up the model name, or raise an error if not found

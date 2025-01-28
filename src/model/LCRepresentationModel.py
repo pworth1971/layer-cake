@@ -12,8 +12,10 @@ from abc import ABC, abstractmethod
 
 from simpletransformers.language_representation import RepresentationModel
 
-from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel, AutoModel
-from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast, AutoTokenizer
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel, LlamaModel, PreTrainedTokenizerFast
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizerFast, DistilBertTokenizerFast
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+
 from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_model
 from gensim.models import FastText
@@ -46,6 +48,7 @@ logging.getLogger('gensim.models.keyedvectors').setLevel(logging.ERROR)
 # tokens for LLAMA model access, must be requested from huggingface
 #
 from huggingface_hub import login
+
 
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
@@ -94,12 +97,26 @@ GPT2_MODEL = 'gpt2'                                          # dimension = 768, 
 #GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
 #GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
 
-XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, case sensitive
+XLNET_MODEL = 'xlnet-base-cased'                                            # dimension = 768, case sensitive
 #XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
 
-LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 
-DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1'                      # smallest DeepSeek model, case sensitive
+#
+# Hugging Face Login info for gated models (eg LlaMa)
+# needed for startup script which set this up
+#
+from huggingface_hub import login
+
+HF_TOKEN = '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'
+HF_TOKEN2 = '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'
+
+#LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimension = 4096, case sensitive
+LLAMA_MODEL = 'meta-llama/Llama-3.2-3B'                                  # dimension = 4096, case sensitive
+
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
+DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'
+
 #
 # ---------------------------------------------------------------------------------------------------------------------------
 MAX_VOCAB_SIZE = 20000                                      # max feature size for TF-IDF vectorization
@@ -120,6 +137,7 @@ MODEL_MAP = {
     "distilbert": DISTILBERT_MODEL,
     "xlnet": XLNET_MODEL,
     "gpt2": GPT2_MODEL,
+    "llama": LLAMA_MODEL,
     "deepseek": DEEPSEEK_MODEL,
 }
 
@@ -132,26 +150,11 @@ MODEL_DIR = {
     "distilbert": 'DistilBERT',
     "xlnet": 'XLNet',
     "gpt2": 'GPT2',
+    "llama": 'Llama',
     "deepseek": 'DeepSeek',
 }
 
 MAX_LENGTH = 512  # default max sequence length for the transformer models
-
-#
-# TODO: LlaMa model has not been tested (memory hog)
-# leabing in as placeholder only
-#
-
-#
-# Hugging Face Login info for gated models (eg LlaMa)
-# needed for startup script which set this up
-#
-from huggingface_hub import login
-
-HF_TOKEN = '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'
-HF_TOKEN2 = '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'
-
-LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 #
 # ----------------------------------------------------------------------------------------------------------------------------
 
@@ -1050,7 +1053,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         return mean_embedding
 
 
-
     def dim(self):
         # Return the hidden size of the Transformer model
         return self.model.config.hidden_size
@@ -1239,7 +1241,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         summ_embeddings = []
         oov_tokens = []
 
-
         def process_document(document):
     
             inputs = self.tokenizer(
@@ -1282,6 +1283,173 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         print(f"Summary embeddings shape: {summ_embeddings.shape}")
         
         return doc_embeddings, summ_embeddings
+
+
+
+
+class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    Llama representation model for text encoding and embeddings.
+    """
+
+    def __init__(self, model_name=LLAMA_MODEL, model_dir=VECTOR_CACHE+'/Llama', vtype='tfidf'):
+        """
+        Initialize the Llama representation model.
+        
+        Parameters:
+        ----------
+        model_name : str, optional
+            Name of the pretrained Llama model. Defaults to 'llama-7b'.
+        model_dir : str, optional
+            Directory to cache or load the model.
+        vtype : str, optional
+            Type of vectorization ('tfidf' or 'count'). Defaults to 'tfidf'.
+        """
+        print("Initializing Llama representation model...")
+
+        super().__init__(model_name, model_dir)  # Call parent constructor
+
+        # Load the Llama model and tokenizer
+        self.model = LlamaModel.from_pretrained(
+            model_name,
+            cache_dir=model_dir,
+            torch_dtype=torch.float16,                  # Mixed precision for memory efficiency
+        #    device_map="auto"                           # Automatically distribute the model across GPUs/CPU
+        )
+
+#        self.tokenizer = LlamaTokenizerFast.from_pretrained(
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            model_name,
+            cache_dir=model_dir,
+            #do_lower_case=False                 # keep tokenizer case sensitive
+        )
+
+        # Ensure the tokenizer has a pad token
+        if self.tokenizer.pad_token is None:
+            # Find the ID for '<|finetune_right_pad_id|>' in the tokenizer
+            finetune_right_pad_token = "<|finetune_right_pad_id|>"
+            if finetune_right_pad_token in self.tokenizer.get_vocab():
+                self.tokenizer.pad_token = finetune_right_pad_token
+                self.tokenizer.pad_token_id = self.tokenizer.convert_tokens_to_ids(finetune_right_pad_token)
+                print(f"PAD token set to '{finetune_right_pad_token}' with ID {self.tokenizer.pad_token_id}.")
+            else:
+                raise ValueError(f"Token '{finetune_right_pad_token}' not found in the tokenizer vocabulary.")
+
+        """
+        # Ensure the tokenizer has a pad token
+        if self.tokenizer.pad_token is None:
+            # Assign a unique PAD token
+            #self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # Use <eos> token for padding
+        """
+        
+        # Verify the PAD token
+        print("PAD token:", self.tokenizer.pad_token)
+        print("PAD token ID:", self.tokenizer.pad_token_id)
+
+        #self.max_length = self.tokenizer.model_max_length
+        self.max_length = MAX_LENGTH                                # need to set to default value
+        print(f"Llama max sequence length: {self.max_length}")
+
+        self.type = 'llama'
+
+        # Initialize vectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
+                sublinear_tf=True,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
+
+        
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the GPT-2 tokenizer, ensuring truncation and padding are applied.
+        This method returns tokenized strings (subwords) for use with TF-IDF/CountVectorizer.
+        """
+
+        # Tokenize the text with LlamaTokenizerFast, applying truncation to limit sequence length
+        tokenized_output = self.tokenizer(
+            text,
+            max_length=self.max_length,             # Limit to model's max length - set to 512)
+            truncation=True,                        # Ensure sequences longer than max_length are truncated
+            padding='max_length',                   # Optional: can pad to max length (if needed)
+            return_tensors=None,                    # Return token strings, not tensor IDs
+            add_special_tokens=False                 # Do not add special tokens like <|endoftext|> for TF-IDF use
+        )
+
+        # The tokenizer will return a dictionary, so we extract the tokenized sequence
+        tokens = tokenized_output['input_ids']
+
+        # Convert token IDs back to token strings for use with TF-IDF/CountVectorizer
+        tokens = self.tokenizer.convert_ids_to_tokens(tokens)
+
+        return tokens
+
+
+    def _compute_mean_embedding(self):
+        """
+        Compute the mean embedding vector using all tokens in the model's vocabulary.
+        This vector will be used for handling OOV tokens.
+        """
+        print("Computing mean embedding for model vocabulary...")
+
+        vocab = list(self.tokenizer.get_vocab().keys())
+        batch_size = self.batch_size
+        total_embeddings = []
+
+        # Get the tokenizer's vocabulary size
+        vocab_size = self.tokenizer.vocab_size
+        print("vocab_size:", vocab_size)
+
+        # Process the tokens in batches with a progress bar
+        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
+            for i in range(0, len(vocab), batch_size):
+                batch_tokens = vocab[i:i + batch_size]
+
+                # Tokenize the batch of tokens, ensuring attention_mask is created
+                inputs = self.tokenizer(
+                    batch_tokens, 
+                    return_tensors='pt', 
+                    padding=True, 
+                    truncation=True, 
+                    max_length=self.max_length
+                )
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
+
+                # Pass through the model to get token embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                total_embeddings.append(token_embeddings)
+
+                # Update the progress bar with the actual batch size
+                pbar.update(len(batch_tokens))
+
+        # Concatenate all embeddings and compute the mean embedding
+        total_embeddings = np.concatenate(total_embeddings, axis=0)
+        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
+
+        print(f"Mean embedding shape: {mean_embedding.shape}")
+
+        return mean_embedding
+
+
+
+
 
 
 class BERTLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1424,7 +1592,8 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
 
         # Load the XLNet model and tokenizer
         self.model = XLNetModel.from_pretrained(model_name, cache_dir=model_dir)
-        self.tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=model_dir)
+
+        self.tokenizer = XLNetTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
 
         # Ensure padding token is available
         if self.tokenizer.pad_token is None:
@@ -1603,7 +1772,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
     GPT-2 representation model implementing sentence encoding using GPT-2.
     """
 
-    def __init__(self, model_name='gpt2', model_dir=VECTOR_CACHE+'/GPT2', vtype='tfidf'):
+    def __init__(self, model_name=GPT2_MODEL, model_dir=VECTOR_CACHE+'/GPT2', vtype='tfidf'):
+
         print("Initializing GPT-2 representation model...")
 
         super().__init__(model_name, model_dir)  # parent constructor
@@ -1650,11 +1820,11 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         # Tokenize the text with GPT-2, applying truncation to limit sequence length
         tokenized_output = self.tokenizer(
             text,
-            max_length=self.max_length,  # Limit to model's max length (usually 1024)
-            truncation=True,  # Ensure sequences longer than max_length are truncated
-            padding='max_length',  # Optional: can pad to max length (if needed)
-            return_tensors=None,  # Return token strings, not tensor IDs
-            add_special_tokens=False  # Do not add special tokens like <|endoftext|> for TF-IDF use
+            max_length=self.max_length,                     # Limit to model's max length (usually 1024)
+            truncation=True,                                # Ensure sequences longer than max_length are truncated
+            padding='max_length',                           # Optional: can pad to max length (if needed)
+            return_tensors=None,                            # Return token strings, not tensor IDs
+            add_special_tokens=False                        # Do not add special tokens like <|endoftext|> for TF-IDF use
         )
 
         # The tokenizer will return a dictionary, so we extract the tokenized sequence
@@ -1778,6 +1948,11 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
 
 
 
+
+
+from typing import Optional, Union, Dict, Any, Tuple
+from transformers import AutoConfig, PreTrainedTokenizer, PreTrainedModel
+
 class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
     """
     DeepSeek representation model for text encoding and embeddings.
@@ -1796,10 +1971,21 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
 
         super().__init__(model_name, model_dir)  # Call parent constructor
 
-        # Load model and tokenizer
-        self.model = AutoModel.from_pretrained(model_name, cache_dir=model_dir)
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_dir)
+        # Load model and tokenizer with optimizations
+        self._load(
+            model_name=model_name,
+            cache_dir=model_dir,
+            device_map="auto",                                      # Automatically distribute layers across GPUs/CPU
+            max_memory={                                            # Restrict memory usage
+                0: "40GiB",                                         # GPU 0 memory limit
+                "cpu": "20GiB"                                      # CPU memory limit
+            },
+            offload_folder="./offload"                              # Folder for CPU offloading
+        )
+
+        # Ensure padding token is available
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id                   # Reuse the end-of-sequence token for padding
 
         self.max_length = self.tokenizer.model_max_length
         print("self.max_length:", self.max_length)
@@ -1823,6 +2009,232 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
 
-        self.model.to(self.device)  # Move model to the specified device
+        # Enable gradient checkpointing for memory savings
+        self.model.gradient_checkpointing_enable()
+
+        # Enable mixed precision to save memory and increase speed
+        self.mixed_precision = True                                 # Set to False to disable mixed precision
+        if self.mixed_precision:
+            self.model = self.model.half()                          # Convert model to half precision
+
         #print("DeepSeek model initialized and loaded onto device.")
 
+
+    def _load(
+        self,
+        model_name: str,
+        cache_dir: str,
+        trust_remote_code: bool = True,
+        device_map: Optional[Union[str, Dict[str, Any]]] = "auto",
+        max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+        offload_folder: Optional[str] = None,
+        **kwargs
+    ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+        """
+        Load the DeepSeek model and tokenizer with performance optimizations.
+        """
+        try:
+            # Load model with device map, max memory, and CPU offloading
+            self.model = AutoModel.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=trust_remote_code,
+                device_map=device_map,
+                max_memory=max_memory,
+                offload_folder=offload_folder,
+                **kwargs
+            )
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                trust_remote_code=trust_remote_code,
+            )
+            print("[INFO]: DeepSeek model loaded successfully with original configuration")
+
+        except ValueError as e:
+            if "Unknown quantization type" in str(e):
+                print("[WARNING]: Quantization type not supported directly. Attempting to load without quantization...")
+
+                # Load configuration and remove quantization if unsupported
+                self.config = AutoConfig.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=trust_remote_code,
+                )
+                if hasattr(self.config, "quantization_config"):
+                    delattr(self.config, "quantization_config")
+
+                # Attempt to reload model without quantization
+                self.model = AutoModel.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    config=self.config,
+                    trust_remote_code=trust_remote_code,
+                    device_map=device_map,
+                    max_memory=max_memory,
+                    offload_folder=offload_folder,
+                    **kwargs
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    model_name,
+                    cache_dir=cache_dir,
+                    trust_remote_code=trust_remote_code,
+                )
+                print("[INFO]: Model loaded successfully without quantization")
+
+            else:
+                print(f"[ERROR]: Unexpected error during model loading: {str(e)}")
+                raise
+
+
+    def extract(self, words, pooling='mean'):
+        """
+        Extract embeddings for a list of words using the Transformer model.
+        
+        Parameters:
+        ----------
+        words : list of str
+            List of words for which embeddings are to be extracted.
+        pooling : str, optional
+            Pooling strategy to aggregate subword embeddings. Choices: 'mean', 'max'. Defaults to 'mean'.
+            
+        Returns:
+        -------
+        torch.Tensor
+            Tensor of word embeddings where each row corresponds to a word.
+        """
+        if pooling not in ['mean', 'max']:
+            raise ValueError("Pooling must be 'mean' or 'max'.")
+
+        print(f"Extracting embeddings for words using {self.model_name} model with {pooling} pooling...")
+
+        embeddings = []
+        self.model.eval()
+
+        for batch in tqdm([words[i:i + self.batch_size] for i in range(0, len(words), self.batch_size)], desc="Extracting embeddings"):
+            inputs = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                return_tensors='pt',
+                max_length=self.max_length,
+                is_split_into_words=False
+            ).to(self.model.device)
+
+            with torch.no_grad():
+                with torch.cuda.amp.autocast():
+                    outputs = self.model(**inputs)
+                token_embeddings = outputs.last_hidden_state
+
+                if pooling == 'mean':
+                    batch_embeddings = token_embeddings.mean(dim=1)
+                elif pooling == 'max':
+                    batch_embeddings = token_embeddings.max(dim=1).values
+
+                embeddings.append(batch_embeddings.cpu().numpy())
+
+            torch.cuda.empty_cache()
+
+        embeddings = np.concatenate(embeddings, axis=0)
+        return torch.from_numpy(embeddings).float()
+
+
+    def build_embedding_vocab_matrix(self):
+        """
+        Build the embedding vocabulary matrix for the DeepSeek model.
+
+        Returns:
+        -------
+        np.ndarray
+            Embedding vocabulary matrix where each row corresponds to a token.
+        """
+        print("Building embedding vocab matrix for DeepSeek model...")
+
+        self.model.eval()
+        embedding_dim = self.model.config.hidden_size
+        vocabulary = list(self.vectorizer.vocabulary_.keys())
+
+        self.embedding_vocab_matrix = np.zeros((len(vocabulary), embedding_dim))
+        self.mean_embedding = self._compute_mean_embedding()
+        oov_list = []
+
+        with tqdm(total=len(vocabulary), desc="Processing vocabulary tokens", unit="token") as pbar:
+            for i, token in enumerate(vocabulary):
+                subwords = self.tokenizer.tokenize(token)
+                if subwords:
+                    inputs = self.tokenizer(
+                        subwords,
+                        return_tensors='pt',
+                        padding=True,
+                        truncation=True,
+                        max_length=self.max_length
+                    ).to(self.model.device)
+
+                    with torch.no_grad():
+                        outputs = self.model(**inputs)
+                        token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                    self.embedding_vocab_matrix[i] = token_embeddings.mean(axis=0)
+                else:
+                    oov_list.append(token)
+                    self.embedding_vocab_matrix[i] = self.mean_embedding
+
+                pbar.update(1)
+
+        print(f"Finished building embedding matrix. OOV tokens: {len(oov_list)}")
+        return self.embedding_vocab_matrix
+
+
+    def encode_docs(self, text_list, pooling_strategy='mean'):
+        """
+        Encode documents using Transformer-based embeddings.
+
+        Parameters:
+        ----------
+        text_list : list of str
+            List of documents to encode.
+        pooling_strategy : str, optional
+            Pooling strategy for subwords ('mean', 'max'). Defaults to 'mean'.
+
+        Returns:
+        -------
+        np.ndarray
+            Array of document embeddings.
+        np.ndarray
+            Array of summary embeddings.
+        """
+        print(f"Encoding documents using DeepSeek Transformer-based embeddings with {pooling_strategy} pooling...")
+
+        self.model.eval()
+        doc_embeddings = []
+        summ_embeddings = []
+
+        def process_document(document):
+            inputs = self.tokenizer(
+                document,
+                return_tensors='pt',
+                truncation=True,
+                max_length=self.max_length,
+                padding=True
+            ).to(self.model.device)
+
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                token_vectors = outputs.last_hidden_state
+
+                first_token_embedding = token_vectors[:, 0, :].cpu().numpy()
+                if pooling_strategy == 'mean':
+                    pooled_embedding = token_vectors.mean(dim=1).cpu().numpy()
+                elif pooling_strategy == 'max':
+                    pooled_embedding = token_vectors.max(dim=1).values.cpu().numpy()
+                else:
+                    raise ValueError(f"Unsupported pooling strategy: {pooling_strategy}")
+
+            return pooled_embedding[0], first_token_embedding[0]
+
+        for doc in tqdm(text_list, desc="Encoding documents"):
+            doc_embedding, summ_embedding = process_document(doc)
+            doc_embeddings.append(doc_embedding)
+            summ_embeddings.append(summ_embedding)
+
+        return np.stack(doc_embeddings), np.stack(summ_embeddings)

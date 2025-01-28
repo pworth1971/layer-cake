@@ -25,7 +25,7 @@ from util.csv_log import CSVLog
 
 from model.LCRepresentationModel import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
-from model.LCRepresentationModel import XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL
+from model.LCRepresentationModel import XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL, LLAMA_MODEL
 from model.LCRepresentationModel import MODEL_MAP, MODEL_DIR, VECTOR_CACHE, PICKLE_DIR
 
 import warnings
@@ -41,11 +41,11 @@ DATASET_DIR = '../datasets/'                                        # dataset di
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'hf.sc.ff', 'hf.sc', 'hf.cnn', 'linear']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
 
 CLASS_EMBEDDING_MODES = ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-wce']
 #
@@ -558,6 +558,8 @@ def get_embeddings_path(pretrained, args):
         return args.xlnet_path
     elif pretrained == 'gpt2':
         return args.gpt2_path
+    elif pretrained == 'llama':
+        return args.llama_path
     elif pretrained == 'deepseek':
         return args.deepseek_path
     else:
@@ -655,6 +657,8 @@ def get_representation(opt, add_model=False):
                 'distilbert': ('transformer', DISTILBERT_MODEL),
                 'xlnet': ('transformer', XLNET_MODEL),
                 'gpt2': ('transformer', GPT2_MODEL),
+                'llama': ('transformer', LLAMA_MODEL),
+                'deepseek': ('transformer', DEEPSEEK_MODEL),
             }
             
             # Extract the model type and specific model name
@@ -678,7 +682,7 @@ def get_representation(opt, add_model=False):
 
         #method_name += f'-supervised-d{sup_drop}-{opt.supervised_method}'
 
-        if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):
+        if (opt.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']):
 
             method_name += '-tce'
 
@@ -707,7 +711,7 @@ def get_embedding_type(pretrained):
 
     print("get_embedding_type():", {pretrained})
 
-    if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']):
+    if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama', 'deepseek']):
         embedding_type = 'token'
     elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
         embedding_type = 'word'
@@ -786,7 +790,7 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
     else:
         pt_type = 'pretrained-'
 
-        if (pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama']):
+        if (pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama', 'deepseek']):
             pt_type += 'attention:tokenized'
 
         elif (pretrained in ['glove', 'word2vec']):

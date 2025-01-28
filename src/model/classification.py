@@ -4,12 +4,10 @@ logging.basicConfig(level=logging.INFO)
 import torch
 from torch import nn
 from transformers import BertTokenizerFast, BertModel, AutoModel
-from transformers import DistilBertModel, RobertaModel, XLNetModel, GPT2Model
+from transformers import DistilBertModel, RobertaModel, XLNetModel, GPT2Model, LlamaModel
 
 # custom imports
 from model.layers import *
-
-from embedding.pretrained import BERT_MODEL
 
 from data.lc_trans_dataset import LCTokenizer
 
@@ -1796,6 +1794,7 @@ class LCATTNGPT2Classifier(LCATTNTransformerClassifier):
 
 
 
+from model.LCRepresentationModel import BERT_MODEL
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
 #

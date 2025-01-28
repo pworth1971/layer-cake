@@ -8,7 +8,7 @@ import torch
 from torchtext.vocab import GloVe as TorchTextGloVe
 
 from model.LCRepresentationModel import VECTOR_CACHE, GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
-from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL
+#from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL, LLAMA_MODEL
 
 # ----------------------------------------------------------------------------------------------------------------------------
 #
