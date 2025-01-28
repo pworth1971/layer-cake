@@ -99,7 +99,7 @@ XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, c
 
 LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 
-DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-V3-Base'                      # smallest DeepSeek model, case sensitive
+DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1'                      # smallest DeepSeek model, case sensitive
 #
 # ---------------------------------------------------------------------------------------------------------------------------
 MAX_VOCAB_SIZE = 20000                                      # max feature size for TF-IDF vectorization

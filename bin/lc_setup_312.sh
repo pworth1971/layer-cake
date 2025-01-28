@@ -26,9 +26,9 @@ detect_os() {
 
 # Function to check if conda environment is activated
 check_conda_env() {
-    if [[ "$CONDA_DEFAULT_ENV" != "python310" ]]; then
-        echo "ERROR: The conda environment 'python310' is not activated."
-        echo "Please ensure that 'conda activate python310' is successful before proceeding."
+    if [[ "$CONDA_DEFAULT_ENV" != "python312" ]]; then
+        echo "ERROR: The conda environment 'python312' is not activated."
+        echo "Please ensure that 'conda activate python312' is successful before proceeding."
         exit 1
     fi
 }
@@ -36,11 +36,11 @@ check_conda_env() {
 # Initialize conda environment
 echo "Initializing conda..."
 conda init
-conda create -n python310 python=3.10 -y
+conda create -n python312 python=3.12 -y
 
 # Activate the conda environment
 source $(conda info --base)/etc/profile.d/conda.sh
-conda activate python310
+conda activate python312
 
 # Check if the conda environment is activated correctly
 check_conda_env
