@@ -23,10 +23,10 @@ from sklearn.naive_bayes import MultinomialNB
 # custom importa
 from util.csv_log import CSVLog
 
-from embedding.pretrained import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
-from embedding.pretrained import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
-from embedding.pretrained import XLNET_MODEL, GPT2_MODEL
-from embedding.pretrained import MODEL_MAP, MODEL_DIR
+from model.LCRepresentationModel import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
+from model.LCRepresentationModel import XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL
+from model.LCRepresentationModel import MODEL_MAP, MODEL_DIR, VECTOR_CACHE, PICKLE_DIR
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -34,20 +34,18 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # --------------------------------------------------------------------------------------------------------------
 #
-PICKLE_DIR = '../pickles/'                                          # pickle directory
 OUT_DIR = '../out/'                                                 # output directory
 LOG_DIR = '../log/'                                                 # log directory
-VECTOR_CACHE = '../.vector_cache'                                   # vector cache directory (for language models)
 DATASET_DIR = '../datasets/'                                        # dataset directory
 
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'hf.sc.ff', 'hf.sc', 'hf.cnn', 'linear']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
-SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
+SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
-TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']
+TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']
 
 CLASS_EMBEDDING_MODES = ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-wce']
 #
@@ -560,15 +558,10 @@ def get_embeddings_path(pretrained, args):
         return args.xlnet_path
     elif pretrained == 'gpt2':
         return args.gpt2_path
+    elif pretrained == 'deepseek':
+        return args.deepseek_path
     else:
         return args.glove_path          # default to GloVe embeddings
-    
-    """
-    elif pretrained == 'albert':
-        return args.albert_path
-    elif pretrained == 'llama':
-        return args.llama_path
-    """
 
         
 
@@ -608,6 +601,8 @@ def get_language_model_type(embeddings, model_name=None):
         return 'transformer:token:autoregressive:bidirectional:permutated'
     elif embeddings in ['llama', 'gpt2']:
         return 'transformer:token:autoregressive:unidirectional:causal'
+    elif embeddings in ['deepseek']:
+        return 'transformer:token:autoregressive:bidirectional:docpacking'
     else:
         return 'NA'  # Default to word embeddings
 

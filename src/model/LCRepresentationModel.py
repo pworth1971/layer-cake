@@ -11,9 +11,9 @@ import requests
 from abc import ABC, abstractmethod
 
 from simpletransformers.language_representation import RepresentationModel
-from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel
-from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast
 
+from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel, AutoModel
+from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizer, DistilBertTokenizerFast, AutoTokenizer
 from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_model
 from gensim.models import FastText
@@ -21,14 +21,39 @@ from gensim.models.fasttext import load_facebook_vectors
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
+from joblib import Parallel, delayed
+import re
+
+
+import fasttext
+from concurrent.futures import ThreadPoolExecutor
+
+
 
 import logging
 
 # Set the logging level for gensim's FastText model to suppress specific warnings
 logging.getLogger('gensim.models.fasttext').setLevel(logging.ERROR)
 
-from joblib import Parallel, delayed
-import re
+import gensim
+
+# Set the logging level for gensim to suppress specific warnings
+logging.getLogger('gensim.models.keyedvectors').setLevel(logging.ERROR)
+
+
+
+# --------------------------------------------------------------------------------------------------------------------------
+# tokens for LLAMA model access, must be requested from huggingface
+#
+from huggingface_hub import login
+
+HF_TOKEN = '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'
+HF_TOKEN2 = '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'
+#
+# ---------------------------------------------------------------------------------------------------------------------------
+
+
+MAX_WORKER_THREADS = 10
 
 
 NUM_JOBS = -1           # number of jobs for parallel processing
@@ -43,7 +68,7 @@ VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
 PICKLE_DIR = '../pickles/'                          # pickled data directory
 
 
-# -------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
 # default pretrained models.
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
@@ -74,12 +99,65 @@ XLNET_MODEL = 'xlnet-base-cased'                            # dimension = 768, c
 
 LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
 
-
-
-# -------------------------------------------------------------------------------------------------------
+DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1'                      # smallest DeepSeek model, case sensitive
+#
+# ---------------------------------------------------------------------------------------------------------------------------
 MAX_VOCAB_SIZE = 20000                                      # max feature size for TF-IDF vectorization
 MIN_DF_COUNT = 5                                            # min document frequency for TF-IDF vectorization
-# -------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# 
+# Model Map for transformer based models (trans_layer_cake)
+#
+MODEL_MAP = {
+    "glove": GLOVE_MODEL,
+    "word2vec": WORD2VEC_MODEL,
+    "fasttext": FASTTEXT_MODEL,
+    "bert": BERT_MODEL,
+    "roberta": ROBERTA_MODEL,
+    "distilbert": DISTILBERT_MODEL,
+    "xlnet": XLNET_MODEL,
+    "gpt2": GPT2_MODEL,
+    "deepseek": DEEPSEEK_MODEL,
+}
+
+MODEL_DIR = {
+    "glove": 'GloVe',
+    "word2vec": 'Word2Vec',
+    "fasttext": 'fastText',
+    "bert": 'BERT',
+    "roberta": 'RoBERTa',
+    "distilbert": 'DistilBERT',
+    "xlnet": 'XLNet',
+    "gpt2": 'GPT2',
+    "deepseek": 'DeepSeek',
+}
+
+MAX_LENGTH = 512  # default max sequence length for the transformer models
+
+#
+# TODO: LlaMa model has not been tested (memory hog)
+# leabing in as placeholder only
+#
+
+#
+# Hugging Face Login info for gated models (eg LlaMa)
+# needed for startup script which set this up
+#
+from huggingface_hub import login
+
+HF_TOKEN = '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'
+HF_TOKEN2 = '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'
+
+LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
+#
+# ----------------------------------------------------------------------------------------------------------------------------
+
+
+
+
 
 # Setup device prioritizing CUDA, then MPS, then CPU
 if torch.cuda.is_available():
@@ -91,29 +169,6 @@ elif torch.backends.mps.is_available():
 else:
     DEVICE = torch.device("cpu")
     BATCH_SIZE = DEFAULT_CPU_BATCH_SIZE
-
-
-#
-# tokens for LLAMA model access, must be requested from huggingface
-#
-from huggingface_hub import login
-
-HF_TOKEN = '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'
-HF_TOKEN2 = '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'
-
-
-    
-
-import fasttext
-from concurrent.futures import ThreadPoolExecutor
-
-MAX_WORKER_THREADS = 10
-
-import logging
-import gensim
-
-# Set the logging level for gensim to suppress specific warnings
-logging.getLogger('gensim.models.keyedvectors').setLevel(logging.ERROR)
 
 
 
@@ -1722,4 +1777,52 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         return mean_embeddings, summ_embeddings
 
 
+
+class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    DeepSeek representation model for text encoding and embeddings.
+    """
+
+    def __init__(self, model_name=DEEPSEEK_MODEL, model_dir=VECTOR_CACHE + '/DeepSeek', vtype='tfidf'):
+        """
+        Initialize the DeepSeek representation model.
+        
+        Args:
+        - model_name: Name of the pretrained DeepSeek model (default: 'deepseek-small').
+        - model_dir: Directory to cache or load the model.
+        - vtype: Type of vectorization ('tfidf' or 'count').
+        """
+        print("Initializing DeepSeek representation model...")
+
+        super().__init__(model_name, model_dir)  # Call parent constructor
+
+        # Load model and tokenizer
+        self.model = AutoModel.from_pretrained(model_name, cache_dir=model_dir)
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_dir)
+
+        self.max_length = self.tokenizer.model_max_length
+        print("self.max_length:", self.max_length)
+
+        self.type = 'deepseek'
+
+        # Configure vectorizer with the custom tokenizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
+                sublinear_tf=True,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
+
+        self.model.to(self.device)  # Move model to the specified device
+        #print("DeepSeek model initialized and loaded onto device.")
 

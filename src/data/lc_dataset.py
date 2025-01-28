@@ -54,6 +54,14 @@ from util.common import preprocess
 
 
 
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+
+stop_words = set(stopwords.words('english'))
+
+
+
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 #
 # Constants
@@ -72,15 +80,6 @@ MIN_DF_COUNT = 5                    # minimum document frequency count for a ter
 TEST_SIZE = 0.175                   # test size for train/test split
 NUM_DL_WORKERS = 3                  # number of workers to handle DataLoader tasks
 # ----------------------------------------------------------------------------------------------------------------------------------
-
-
-
-nltk.download('stopwords')
-nltk.download('punkt_tab')
-
-stop_words = set(stopwords.words('english'))
-
-
 
 
 
@@ -184,7 +183,7 @@ class LCDataset:
         # load LCRepresentation class
         #
         if (pretrained == 'word2vec'):
-            print("Using Word2Vec pretrained embeddings...")
+            print("Using Word2Vec language model embeddings...")
             
             self.lcr_model = Word2VecLCRepresentationModel(
                 model_name=WORD2VEC_MODEL, 
@@ -192,7 +191,7 @@ class LCDataset:
                 vtype=vectorization_type
             )
         elif (pretrained == 'glove'):
-            print("Using GloVe pretrained embeddings...")
+            print("Using GloVe language model embeddings...")
             
             self.lcr_model = GloVeLCRepresentationModel(
                 model_name=GLOVE_MODEL, 
@@ -201,7 +200,7 @@ class LCDataset:
             )
 
         elif (pretrained == 'fasttext'):
-            print("Using FastText pretrained embeddings with subwords...")
+            print("Using FastText language model embeddings...")
 
             self.lcr_model = FastTextGensimLCRepresentationModel(
                 model_name=FASTTEXT_MODEL, 
@@ -210,7 +209,7 @@ class LCDataset:
             )
 
         elif (pretrained == 'bert'):
-            print("Using BERT pretrained embeddings...")
+            print("Using BERT language model embeddings...")
 
             self.lcr_model = BERTLCRepresentationModel(
                 model_name=BERT_MODEL, 
@@ -219,7 +218,7 @@ class LCDataset:
             )
         
         elif (pretrained == 'roberta'):
-            print("Using RoBERTa pretrained embeddings...")
+            print("Using RoBERTa language model embeddings...")
 
             self.lcr_model = RoBERTaLCRepresentationModel(
                 model_name=ROBERTA_MODEL, 
@@ -228,7 +227,7 @@ class LCDataset:
             )
 
         elif (pretrained == 'distilbert'):
-            print("Using DistilBERT pretrained embeddings...")
+            print("Using DistilBERT language model embeddings...")
 
             self.lcr_model = DistilBERTLCRepresentationModel(
                 model_name=DISTILBERT_MODEL, 
@@ -237,7 +236,7 @@ class LCDataset:
             )
 
         elif (pretrained == 'xlnet'):
-            print("Using XLNet pretrained embeddings...")
+            print("Using XLNet language model embeddings...")
 
             self.lcr_model = XLNetLCRepresentationModel(
                 model_name=XLNET_MODEL, 
@@ -246,7 +245,7 @@ class LCDataset:
             )
 
         elif (pretrained == 'gpt2'):
-            print("Using GPT2 pretrained embeddings...")
+            print("Using GPT2 langauge model embeddings...")
 
             self.lcr_model = GPT2LCRepresentationModel(
                 model_name=GPT2_MODEL, 
@@ -254,6 +253,15 @@ class LCDataset:
                 vtype=vectorization_type
             )
 
+        elif (pretrained == 'deepseek'):
+            print("Using DeepSeek language model embeddings...")
+
+            self.lcr_model = DeepSeekLCRepresentationModel(
+                model_name=DEEPSEEK_MODEL, 
+                model_dir=embedding_path,  
+                vtype=vectorization_type
+            )
+            
         else:
 
             print("Warning: pretrained not set, defaulting to GloVe pretrained embeddings...")

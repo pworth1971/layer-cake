@@ -4,13 +4,11 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-import torch, torchtext
+import torch
 from torchtext.vocab import GloVe as TorchTextGloVe
 
-from transformers import BertModel, BertTokenizerFast
-
-
-VECTOR_CACHE = "../.vector_cache"                               # cache directory for pretrained models
+from model.LCRepresentationModel import VECTOR_CACHE, GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
+from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL
 
 # ----------------------------------------------------------------------------------------------------------------------------
 #
@@ -18,109 +16,12 @@ VECTOR_CACHE = "../.vector_cache"                               # cache director
 #
 AVAILABLE_PRETRAINED = ['glove', 'word2vec', 'fasttext']        
 
-#
-# pretrained models supported by custom CNN, LSTM and ATTN neural models
-# NB issues with BERT model support in this context although we 
-# leave config here
-#   
-
 GLOVE_840B_300d_URL = 'https://nlp.stanford.edu/data/glove.840B.300d.zip'
 
-#GLOVE_MODEL = 'glove.6B.300d.txt'                          # dimension 300, case insensensitve
-#GLOVE_SET = '6B'                                          # GloVe set to use
-
-#GLOVE_MODEL = 'glove.42B.300d.txt'                          # dimensiomn 300, case sensitive
-#GLOVE_SET = '42B'                                          # GloVe set to use
-
-GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, case sensitive
 GLOVE_SET = '840B'                                          # GloVe set to use
-
-WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
-
-#FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
-FASTTEXT_MODEL = 'crawl-300d-2M.vec'                         # dimension 300, case insensitive
 #
 # ----------------------------------------------------------------------------------------------------------------------------
 
-
-
-# ----------------------------------------------------------------------------------------------------------------------------
-#
-# default pretrained models we are using - Hugging Face Library for Transformer models
-#
-
-BERT_MODEL = 'bert-base-uncased'                                                   # dimension = 768, case insensitive
-#BERT_MODEL = 'bert-base-cased'                                                     # dimension = 768, case sensitive
-#BERT_MODEL = 'bert-large-uncased'                                                   # dimension = 1024, case insensitive
-#BERT_MODEL = 'bert-large-cased'                                                    # dimension = 1024, case sensitive
-
-ROBERTA_MODEL = 'roberta-base'                                                     # dimension = 768, case sensitive
-#ROBERTA_MODEL = 'roberta-large'                                                     # dimension = 1024, case sensitive                 
-
-#DISTILBERT_MODEL = 'distilbert-base-cased'                                         # dimension = 768, case sensitive
-DISTILBERT_MODEL = 'distilbert-base-uncased'                                       # dimension = 768, case insensitive
-
-#
-# TODO: Issues with Albert model so leaving out for now
-#
-ALBERT_MODEL = 'albert-base-v2'                                                    # dimension = 128, case insensitive
-#ALBERT_MODE = 'albert-large-v2'                                                    # dimension = 128, case insensitive (uncased)  
-#ALBERT_MODEL = 'albert-xlarge-v2'                                                   # dimension = 128, case insensitive (uncased)      
-#ALBERT_MODE = 'albert-xxlarge-v2'                                                  # dimension = 128, case insensitive (uncased)      
-
-XLNET_MODEL = 'xlnet-base-cased'                                                   # dimension = 768, case sensitive
-#XLNET_MODEL = 'xlnet-large-cased'                                                   # dimension = 1024, case sensitive
-
-GPT2_MODEL = 'gpt2'                                                                # dimension = 768, case sensitive
-#GPT2_MODEL = 'gpt2-medium'                                                         # dimension = 1024, case sensitive
-#GPT2_MODEL = 'gpt2-large'                                                          # dimension = 1280, case sensitive
-#GPT2_MODEL = 'gpt2-xl'                                                              # dimension = 1280, case sensitive
-
-
-# 
-# Model Map for transformer based models (trans_layer_cake)
-#
-MODEL_MAP = {
-    "glove": GLOVE_MODEL,
-    "word2vec": WORD2VEC_MODEL,
-    "fasttext": FASTTEXT_MODEL,
-    "bert": BERT_MODEL,
-    "roberta": ROBERTA_MODEL,
-    "distilbert": DISTILBERT_MODEL,
-    "xlnet": XLNET_MODEL,
-    "gpt2": GPT2_MODEL,
-}
-
-MODEL_DIR = {
-    "glove": 'GloVe',
-    "word2vec": 'Word2Vec',
-    "fasttext": 'fastText',
-    "bert": 'BERT',
-    "roberta": 'RoBERTa',
-    "distilbert": 'DistilBERT',
-    "xlnet": 'XLNet',
-    "gpt2": 'GPT2',
-}
-
-MAX_LENGTH = 512  # default max sequence length for the transformer models
-
-#
-# TODO: LlaMa model has not been tested (memory hog)
-# leabing in as placeholder only
-#
-
-#
-# Hugging Face Login info for gated models (eg LlaMa)
-# needed for startup script which set this up
-#
-from huggingface_hub import login
-
-HF_TOKEN = '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'
-HF_TOKEN2 = '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'
-
-LLAMA_MODEL = 'llama-7b-hf'                                  # dimension = 4096, case sensitive
-#
-# ----------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -178,22 +79,6 @@ class PretrainedEmbeddings(ABC):
    
 
 
-"""
-class GloVe(Vectors):
-    url = {
-        '42B': 'http://nlp.stanford.edu/data/glove.42B.300d.zip',
-        '840B': 'http://nlp.stanford.edu/data/glove.840B.300d.zip',
-        'twitter.27B': 'http://nlp.stanford.edu/data/glove.twitter.27B.zip',
-        '6B': 'http://nlp.stanford.edu/data/glove.6B.zip',
-    }
-
-    def __init__(self, name='840B', dim=300, **kwargs):
-        url = self.url[name]
-        name = 'glove.{}.{}d.txt'.format(name, str(dim))
-        super(GloVe, self).__init__(name, url=url, **kwargs)
-"""
-
-
 class GloVeEmbeddings(PretrainedEmbeddings):
     """
     GloVeEmbeddings Class: Manages GloVe embeddings by loading them using torchtext.
@@ -235,7 +120,10 @@ class GloVeEmbeddings(PretrainedEmbeddings):
 
 
     def get_embeddings_file(self, target_dir, glove_url):
-        
+
+        import requests
+        import zipfile
+                
         print("GloVe::get_embeddings_file...")
 
         #os.makedirs(target_dir, exist_ok=True)
@@ -265,7 +153,7 @@ class GloVeEmbeddings(PretrainedEmbeddings):
                 return None
         
             print("Download complete. Extracting files...")
-            with ZipFile(local_filename, 'r') as zip_ref:
+            with zipfile.ZipFile(local_filename, 'r') as zip_ref:
                 zip_ref.extractall(target_dir)
 
             print("Files extracted.")
@@ -453,221 +341,3 @@ class FastTextEmbeddings(Word2VecEmbeddings):
 
     def save_binary(self, path):
         self.embed.save_word2vec_format(path, binary=True)
-
-
-
-class BERTEmbeddings(PretrainedEmbeddings):
-
-    def __init__(self, device, batch_size, path=None):
-
-        super().__init__()
-
-        print(f"Initializing BERTEmbeddings class with model {BERT_MODEL}, in path: {path}...")
-
-        self.device = device
-        self.batch_size = batch_size
-        self.type = 'bert'
-
-        # instantiate model and tokenizer
-        self.model = BertModel.from_pretrained(BERT_MODEL, cache_dir=path).to(self.device)
-        
-        self.tokenizer = BertTokenizerFast.from_pretrained(
-            BERT_MODEL, 
-            cache_dir=path,
-            do_lower_case=True                 # keep tokenizer case sensitive
-        )
-
-        self.max_length = self.tokenizer.model_max_length
-        
-        self.mean_embedding = self._compute_mean_embedding()
-           
-
-    def _compute_mean_embedding(self):
-        """
-        Compute the mean embedding vector using all tokens in the model's vocabulary.
-        This vector will be used for handling OOV tokens.
-        """
-        vocab = list(self.tokenizer.get_vocab().keys())
-        batch_size = self.batch_size
-        total_embeddings = []
-
-        # Process the tokens in batches with a progress bar
-        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
-            for i in range(0, len(vocab), batch_size):
-                batch_tokens = vocab[i:i + batch_size]
-                
-                # Tokenize the batch of tokens, ensuring attention_mask is created
-                inputs = self.tokenizer(batch_tokens, return_tensors='pt', padding=True, truncation=True, max_length=self.max_length)
-                input_ids = inputs['input_ids'].to(self.device)
-                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
-
-                # Pass through the model to get token embeddings
-                with torch.no_grad():
-                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
-                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-
-                total_embeddings.append(token_embeddings)
-
-                # Update the progress bar with the actual batch size
-                pbar.update(len(batch_tokens))
-
-        # Concatenate all embeddings and compute the mean embedding
-        total_embeddings = np.concatenate(total_embeddings, axis=0)
-        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
-        print(f"Mean embedding shape: {mean_embedding.shape}")
-
-        return mean_embedding
-
-
-    def get_model(self):
-        return BERT_MODEL
-    
-    def get_type(self):
-        return self.type
-
-    def get_tokenizer(self):
-        return self._custom_tokenizer
-    
-
-    def _custom_tokenizer(self, text):
-        """
-        Tokenize the text using the tokenizer, returning tokenized strings (not token IDs) for TF-IDF or CountVectorizer.
-        This tokenizer works for BERT, RoBERTa, and LLaMA models.
-        
-        Parameters:
-        - text: The input text to be tokenized.
-        
-        Returns:
-        - tokens: A list of tokens with special tokens removed based on the model in use.
-        """
-
-        tokens = self.tokenizer.tokenize(text, max_length=self.max_length, truncation=True)
-        
-        # Retrieve special tokens from the tokenizer object
-        special_tokens = self.tokenizer.all_special_tokens                  # Dynamically fetch special tokens like [CLS], [SEP], <s>, </s>, etc.
-        
-        # Optionally, remove special tokens
-        tokens = [token for token in tokens if token not in special_tokens]
-
-        return tokens
-    
-
-    def _tokenize(self, texts):
-        """
-        Tokenize a batch of texts using `encode_plus` to ensure truncation and padding.
-        """
-        input_ids = []
-        attention_masks = []
-
-        for text in texts:
-            # Use encode_plus to handle truncation, padding, and return attention mask
-            encoded = self.tokenizer.encode_plus(
-                text,
-                add_special_tokens=True,                                # Add special tokens like [CLS] and [SEP]
-                max_length=self.max_length,                             # Truncate sequences to this length
-                padding='max_length',                                   # Pad sequences to the max_length
-                return_attention_mask=True,                             # Generate attention mask
-                return_tensors='pt',                                    # Return PyTorch tensors
-                truncation=True                                         # Ensure truncation to max_length
-            )
-            input_ids.append(encoded['input_ids'])
-            attention_masks.append(encoded['attention_mask'])
-
-        # Convert lists of tensors to a single tensor
-        input_ids = torch.cat(input_ids, dim=0)
-        attention_masks = torch.cat(attention_masks, dim=0)
-
-        return input_ids, attention_masks
-         
-
-    def vocabulary(self):
-        """
-        Retrieves the entire vocabulary of the BERT model, including special tokens.
-
-        Returns:
-        -------
-        set:
-            A set containing all tokens in the BERT model's vocabulary.
-        """
-        vocab = self.tokenizer.get_vocab()
-        #print(f"Vocabulary size: {len(vocab)}")
-        return set(vocab.keys())
-    
-    
-    def dim(self):
-        return self.model.config.hidden_size
-
-
-    def extract(self, words):
-        """
-        Extracts embeddings for a list of words, aggregating subword embeddings if necessary.
-
-        Parameters:
-        ----------
-        words : list of str
-            List of words for which embeddings are to be extracted.
-        batch_size : int, optional, default=64
-            Number of words to process in a single batch for efficiency.
-
-        Returns:
-        -------
-        torch.Tensor
-            A tensor of shape (len(words), embedding_dim) containing the word embeddings.
-            Aggregates embeddings for multi-token words.
-        """
-        print("BERT::extract()...")
-        embeddings = []
-        
-        # Process words in batches
-        with tqdm(total=len(words), desc="extracting word embeddings from BERT model", unit="word") as pbar:
-            for i in range(0, len(words), self.batch_size):
-                batch_words = words[i:i + self.batch_size]
-
-                # Tokenize batch into subwords
-                tokenized = self.tokenizer(
-                    batch_words,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=self.max_length
-                )
-                input_ids = tokenized['input_ids'].to(self.device)
-                attention_mask = tokenized['attention_mask'].to(self.device)
-
-                # Pass through the model to get embeddings
-                with torch.no_grad():
-                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-
-                # Get the embeddings for all subwords
-                token_embeddings = outputs.last_hidden_state  # Shape: (batch_size, seq_len, hidden_size)
-
-                # Aggregate subword embeddings for each word (e.g., mean pooling)
-                batch_embeddings = token_embeddings.mean(dim=1)  # Shape: (batch_size, hidden_size)
-
-                # Append to the results
-                embeddings.append(batch_embeddings)
-
-                # Update progress bar
-                pbar.update(len(batch_words))
-
-        # Concatenate all batch embeddings
-        embeddings = torch.cat(embeddings, dim=0)  # Shape: (len(words), hidden_size)
-
-        return embeddings
-
-
-    @staticmethod
-    def reindex(words, word2index):
-        source_idx, target_idx = [], []
-        for i, word in enumerate(words):
-            if word not in word2index:
-                continue
-            j = word2index[word]
-            source_idx.append(i)
-            target_idx.append(j)
-        source_idx = np.asarray(source_idx)
-        target_idx = np.asarray(target_idx)
-        return source_idx, target_idx
-    
-
-

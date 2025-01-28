@@ -796,6 +796,8 @@ if __name__ == '__main__':
         args.xlnet_path = model_path
     elif (args.pretrained == 'gpt2'):
         args.gpt2_path = model_path
+    elif (args.pretrained == 'deepseek'):
+        args.deepseek_path = model_path
     else:
         raise ValueError("Unsupported pretrained model:", args.pretrained)
     

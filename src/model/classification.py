@@ -2260,7 +2260,61 @@ def convert_labels(y):
 # run_svm_model()
 # ---------------------------------------------------------------------------------------------------------------------
 def run_svm_model(dataset, X_train, X_test, y_train, y_test, args, target_names, class_type='singlelabel'):
-    
+    """
+    Train and evaluate an SVM model (single-label or multi-label) using either default 
+    parameters or optimized parameters via RandomizedSearchCV.
+
+    Parameters:
+    ----------
+    dataset : str
+        Name of the dataset being used (for reference/logging purposes).
+    X_train : array-like of shape (n_samples, n_features)
+        Feature matrix for training data.
+    X_test : array-like of shape (n_samples, n_features)
+        Feature matrix for testing data.
+    y_train : array-like of shape (n_samples,) or (n_samples, n_classes)
+        Target values for training data. For multi-label classification, it should be a
+        binary indicator matrix.
+    y_test : array-like of shape (n_samples,) or (n_samples, n_classes)
+        Target values for testing data. For multi-label classification, it should be a
+        binary indicator matrix.
+    args : Namespace
+        Parsed arguments or configuration object that contains hyperparameters and flags.
+        Expected attributes include:
+        - optimc (bool): Whether to optimize hyperparameters using RandomizedSearchCV.
+    target_names : list of str
+        List of class names corresponding to target labels, used in classification reports.
+    class_type : str, optional (default='singlelabel')
+        Specifies the type of classification:
+        - 'singlelabel' for single-label classification.
+        - 'multilabel' or 'multi-label' for multi-label classification.
+
+    Returns:
+    -------
+    Mf1 : float
+        Macro F1-score of the model on the test set.
+    mf1 : float
+        Micro F1-score of the model on the test set.
+    accuracy : float
+        Overall accuracy of the model on the test set.
+    h_loss : float
+        Hamming loss of the model on the test set (specific to multi-label classification).
+    precision : float
+        Micro-averaged precision score of the model on the test set.
+    recall : float
+        Micro-averaged recall score of the model on the test set.
+    j_index : float
+        Jaccard index of the model on the test set.
+
+    Notes:
+    ------
+    - If `class_type` is 'multilabel', the function uses `OneVsRestClassifier` to train 
+      separate classifiers for each label.
+    - If `args.optimc` is True, hyperparameter optimization is performed using 
+      `RandomizedSearchCV`.
+    - Evaluates the model using metrics like F1-score, accuracy, precision, recall, and 
+      Hamming loss.
+    """
     print("\n\trunning SVM model...")
 
     # Check if it's a multilabel problem, and use OneVsRestClassifier if true
