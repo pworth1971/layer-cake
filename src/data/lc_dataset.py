@@ -425,9 +425,9 @@ class LCDataset:
 
         # generate dataset embedding representations depending on underlyinbg 
         # pretrained embedding language model - transformaer based and then word based
-        if (self.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2']):      
+        if (self.pretrained in ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'deepseek']):      
 
-            print("generating token / subword based dataset representations...")
+            print("generating token (transformer) based dataset representations...")
 
             self.Xtr_avg_embeddings, self.Xtr_summary_embeddings = self.lcr_model.encode_docs(self.Xtr)                                  
             self.Xte_avg_embeddings, self.Xte_summary_embeddings = self.lcr_model.encode_docs(self.Xte)

@@ -602,7 +602,7 @@ def get_language_model_type(embeddings, model_name=None):
     elif embeddings in ['llama', 'gpt2']:
         return 'transformer:token:autoregressive:unidirectional:causal'
     elif embeddings in ['deepseek']:
-        return 'transformer:token:autoregressive:bidirectional:docpacking'
+        return 'transformer:token:autoregressive:bidirectional:causal'
     else:
         return 'NA'  # Default to word embeddings
 

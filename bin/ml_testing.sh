@@ -24,7 +24,7 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/ml_full_opt_test.test"
+LOG="--logfile ../log/ml_deepseek_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
