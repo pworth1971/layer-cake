@@ -3,27 +3,9 @@ import argparse
 import os
 
 from model.LCRepresentationModel import MODEL_MAP, MODEL_DIR
-
+from util.common import get_model_identifier
 
 VECTOR_CACHE = "../.vector_cache"  # Define the cache directory
-
-# Function to get model name and path
-def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
-    """
-    Get the full model identifier based on pretrained model name.
-
-    Args:
-        pretrained (str): Model name from the embeddings column.
-        cache_dir (str): Directory to load model from.
-
-    Returns:
-        tuple: (model_name, model_path)
-    """
-    model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_dir = MODEL_DIR.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, model_dir)
-    return model_name, model_path
-
 
 
 def update_tsv(input_file, output_file="output_modified.tsv"):
@@ -52,6 +34,10 @@ def update_tsv(input_file, output_file="output_modified.tsv"):
         model_name, _ = get_model_identifier(embedding_value.lower())  # Ensure case-insensitivity
         return model_name
 
+    # add 'classifier' column from 'model' column 
+    df["classfier"] = df["model"]
+    
+    # change 'model' column to the embedding model name
     df["model"] = df["embeddings"].apply(extract_model_from_embeddings)
     print("First few rows after adding 'model' column:")
     print(df.head())
