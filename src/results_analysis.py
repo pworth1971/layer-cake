@@ -61,7 +61,7 @@ def generate_matplotlib_charts_by_model(
     Returns:
         None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("Generating combined charts for all embeddings...")
+    print("\n\tGenerating combined charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -168,7 +168,7 @@ def generate_charts_matplotlib_split(df, output_path='../out', neural=False, y_a
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
 
-    print("Generating separate charts per model, dataset, and embedding type...")
+    print("\n\tGenerating separate charts per model, dataset, and language model type...")
 
     print("Filtering for measures:", MEASURES)
     
@@ -293,7 +293,7 @@ def gen_timelapse_plots(
         show_charts (bool): Whether to display the charts interactively.
         debug (bool): Whether to enable debug mode for extra outputs.
     """
-    print("Generating timelapse plots...")
+    print("\n\tGenerating timelapse plots...")
 
     # Ensure output directory exists
     if not os.path.exists(output_path):
@@ -306,7 +306,9 @@ def gen_timelapse_plots(
         return
 
     for dataset in df_timelapse['dataset'].unique():
-        print(f"Generating timelapse plots for dataset {dataset}...")
+        
+        if (debug):
+            print(f"Generating timelapse plots for dataset {dataset}...")
 
         subset_df = df_timelapse[df_timelapse['dataset'] == dataset].copy()
 
@@ -343,7 +345,7 @@ def gen_timelapse_plots(
             fill_color=factor_cmap('embeddings_prefix', palette=palette, factors=avg_timelapse_df['embeddings_prefix'].unique())
         )
 
-        p.add_tools(HoverTool(tooltips=[("Model", "@model"), ("Embeddings", "@embeddings_prefix"), ("Timelapse", "@timelapse")]))
+        p.add_tools(HoverTool(tooltips=[("Classifier", "@classifier"), ("Embeddings", "@embeddings_prefix"), ("Timelapse", "@timelapse")]))
 
         p.title.text_font_size = '16pt'
         p.xaxis.axis_label = "Representation (Dimensions)"
@@ -720,8 +722,8 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
             if debug:
                 print("subset_df1:\n", subset_df1)
 
-            # Group by representation, model, dimensions, and embeddings to find maximum values
-            subset_df2 = subset_df1.groupby(['representation', 'model', 'dimensions', 'embeddings', 'embedding_type']).agg({'value': 'max'}).reset_index()
+            # Group by representation, classifier, dimensions, and embeddings to find maximum values
+            subset_df2 = subset_df1.groupby(['representation', 'classifier', 'dimensions', 'embeddings', 'embedding_type']).agg({'value': 'max'}).reset_index()
 
             if subset_df2.empty:
                 print(f"No data available for dataset {dataset} with measure {measure}")
@@ -810,12 +812,12 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
 
 def gen_csvs_all(df, output_dir, neural=False, debug=False):
     """
-    Generate CSV and HTML summary performance data for each dataset, combining all models into one file.
+    Generate CSV and HTML summary performance data for each dataset, combining all classifiers into one file.
 
     Args:
         df (DataFrame, required): Input data, already filtered for the measures of interest
         output_dir (str, required): Output directory for files
-        neural (bool, optional): Whether the data is from deep learning models or classical ML models
+        neural (bool, optional): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or Logistic Regression
         debug (bool, optional): Whether to print debug information
     """
     
@@ -850,7 +852,7 @@ def gen_csvs_all(df, output_dir, neural=False, debug=False):
 
 def render_data_all(dataframe, dataset, output_html, output_csv, debug):
     """
-    Render data for all models into a single file, either html or csv format
+    Render data for classifiers into a single file, either html or csv format
     
     Arguments:
     - dataframe: the input data
@@ -861,28 +863,28 @@ def render_data_all(dataframe, dataset, output_html, output_csv, debug):
     Returns:
     - None
     """
-    print("\n\tRendering data (all version)...")
-
     if (debug):
+        print("rendering data (all version)...")
         print(f"dataset: {dataset}, output_html: {output_html}, output_csv: {output_csv}, debug: {debug}")
         print("DataFrame:\n", dataframe)
         
     # Define measure order
     measure_order = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-precision', 'te-recall']
+    
     # Ensure dataframe measures are sorted by predefined order
     measure_category = pd.Categorical(dataframe['measure'], categories=measure_order, ordered=True)
     dataframe['measure'] = measure_category
     dataframe.sort_values(by=['measure'], inplace=True)
 
-    grouped = dataframe.groupby(['M-Embeddings', 'M-Mix', 'class_type', 'model'], as_index=False)
+    grouped = dataframe.groupby(['M-Embeddings', 'M-Mix', 'class_type', 'classifier'], as_index=False)
     selected_columns = ['class_type', 'comp_method', 'M-Embeddings', 'M-Mix', 'representation', 'dimensions', 'measure', 'value', 'timelapse']
 
     rows = []
-    csv_rows = [['Dataset', 'Model', 'Class Type', 'Comp Method', 'Embeddings', 'Mix', 'Representation', 'Dimensions', 'Measure', 'Value', 'Timelapse (Seconds)']]
+    csv_rows = [['Dataset', 'Classifier', 'Class Type', 'Comp Method', 'Embeddings', 'Mix', 'Representation', 'Dimensions', 'Measure', 'Value', 'Timelapse (Seconds)']]
     previous_embeddings = None
     previous_mix = None
 
-    for (embeddings, mix, class_type, model), group in grouped:
+    for (embeddings, mix, class_type, classifier), group in grouped:   
         group_border = "border-top: 3px solid black;" if embeddings != previous_embeddings else ""
         first_row = True
 
@@ -900,7 +902,7 @@ def render_data_all(dataframe, dataset, output_html, output_csv, debug):
             row_html += f"<td>{row['comp_method']}</td><td>{row['representation']}</td><td>{row['dimensions']}</td><td>{row['measure']}</td><td>{formatted_value}</td><td>{formatted_timelapse}</td></tr>"
             rows.append(row_html)
 
-            csv_row = [dataset, model, row['class_type'], row['comp_method'], row['M-Embeddings'], row['M-Mix'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
+            csv_row = [dataset, classifier, row['class_type'], row['comp_method'], row['M-Embeddings'], row['M-Mix'], row['representation'], row['dimensions'], row['measure'], formatted_value, formatted_timelapse]
             csv_rows.append(csv_row)
 
         previous_embeddings = embeddings
@@ -935,19 +937,19 @@ def render_data_all(dataframe, dataset, output_html, output_csv, debug):
     with open(output_csv, mode='w', newline='') as csv_file:
         writer = csv.writer(csv_file)
         writer.writerows(csv_rows)
-
+  
     print(f"CSV saved as {output_csv}.")
 
 
 
 def gen_csvs(df, output_dir, neural=False, debug=False):
     """
-    generate CSV summary performance data for each data set, grouped by model 
+    generate CSV summary performance data for each data set, grouped by classifier 
 
     Args:
         df (Dataframe, required): input data, NB: the input data should be filtered for the measures of interest before calling this function
         output_dir (str, required): output directory of files
-        neural (bool, optional): whether or not data is from the deep learning / neural models or classic ML models
+        neural (bool, optional): whether or not data is from the deep learning / neural classifiers or classic ML classifiers like SVM or LR
         debug (bool, optional): whether or not to print out debug info.
     """
     
@@ -974,16 +976,16 @@ def gen_csvs(df, output_dir, neural=False, debug=False):
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     # Iterate through each dataset and model to generate tables
-    for (dataset, model), group_df in filtered_df.groupby(['dataset', 'model']):
-        output_html = f"{output_dir}/{dataset}_{model}_results.{current_date}.html"
-        output_csv = f"{output_dir}/{dataset}_{model}_results.{current_date}.csv"
+    for (dataset, classifier), group_df in filtered_df.groupby(['dataset', 'classifier']):
+        output_html = f"{output_dir}/{dataset}_{classifier}_results.{current_date}.html"
+        output_csv = f"{output_dir}/{dataset}_{classifier}_results.{current_date}.csv"
         # Assuming render_data is a function you have defined to output HTML and CSV
-        render_data(group_df, dataset, model, output_html, output_csv)
+        render_data(group_df, dataset, classifier, output_html, output_csv)
 
 
 
 
-def render_data(dataframe, dataset, model, output_html, output_csv):
+def render_data(dataframe, dataset, classifier, output_html, output_csv):
 
     print("\n\trendering data...")
 
@@ -1055,13 +1057,12 @@ def render_data(dataframe, dataset, model, output_html, output_csv):
     table_html += "</table>"
 
     print("dataset:", dataset)
-    print("model:", model)
+    print("classifier:", classifier)
     #print("class_type:", class_type)
 
     # Write the HTML table to file, including class_type in the title
     with open(output_html, 'w') as f:
-        #f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}, Class Type: {class_type}</h2>")
-        f.write(f"<h2>Results for Dataset: {dataset}, Model: {model}</h2>")
+        f.write(f"<h2>Results for Dataset: {dataset}, Classifier: {classifier}</h2>")
         f.write(table_html)
 
     print(f"HTML Table saved as {output_html}.")
@@ -1121,7 +1122,7 @@ def gen_dataset_summaries(
     Args:
         df (DataFrame, required): Input data, already filtered for the measures of interest
         output_path (str, optional): Output directory for files
-        neural (bool, optional): Whether the data is from deep learning models or classical ML models
+        neural (bool, optional): Whether the data is from deep learning classifiers or classical ML classifiers
         gen_file (bool, optional): Whether to generate output files
         stdout (bool, optional): Whether to print output to stdout
         debug (bool, optional): Whether to print debug information
@@ -1152,7 +1153,7 @@ def gen_dataset_summaries(
         dataset_filtered = df_filtered[df_filtered['dataset'] == dataset]
         
         # Sort by necessary columns
-        dataset_filtered.sort_values(by=['language_model', 'model', 'mode', 'representation', 'measure'], inplace=True)
+        dataset_filtered.sort_values(by=['language_model', 'classifier', 'mode', 'representation', 'measure'], inplace=True)
 
         # Generate output file for each dataset
         file_name = f"{dataset}_summary.out"
@@ -1186,7 +1187,7 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
     """
     generate_summary_all()
     
-    analyze the model performance results, print summary either to stdout or file
+    analyze the classifier performance results, print summary either to stdout or file
     """
 
     print(f'\n\tgenerating summary for all datasets to {output_path}...')
@@ -1201,15 +1202,15 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
     # Filter for Macro and Micro F1 scores only
     df_filtered = df[df['measure'].isin(MEASURES)]
 
-    # Group data by 'dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'
-    result = df_filtered.groupby(['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'])['value'].max().reset_index()
+    # Group data by 'dataset', 'classifier', 'embeddings', 'mode', 'representation', 'measure'
+    result = df_filtered.groupby(['dataset', 'classifier', 'embeddings', 'mode', 'representation', 'measure'])['value'].max().reset_index()
 
     # Merge the original data to fetch all corresponding column values
-    merged_result = pd.merge(df_filtered, result, how='inner', on=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure', 'value'])
-    unique_result = merged_result.drop_duplicates(subset=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure', 'value'])
+    merged_result = pd.merge(df_filtered, result, how='inner', on=['dataset', 'classifier', 'embeddings', 'mode', 'representation', 'measure', 'value'])
+    unique_result = merged_result.drop_duplicates(subset=['dataset', 'classifier', 'embeddings', 'mode', 'representation', 'measure', 'value'])
 
     # Specify the column order
-    columns_order = ['class_type', 'comp_method', 'model', 'dataset', 'embeddings', 'mode', 'representation', 'dimensions', 'measure', 'value', 'optimized', 'timelapse', 'run', 'epoch', 'os', 'cpus', 'gpus', 'mem']		
+    columns_order = ['class_type', 'comp_method', 'classifier', 'dataset', 'embeddings', 'mode', 'representation', 'dimensions', 'measure', 'value', 'optimized', 'timelapse', 'run', 'epoch', 'os', 'cpus', 'gpus', 'mem']		
 
     # Ensure all specified columns exist in the DataFrame
     missing_columns = [col for col in columns_order if col not in unique_result.columns]
@@ -1219,7 +1220,7 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
 
     # Sort the DataFrame
     final_result = unique_result[columns_order].copy()
-    final_result.sort_values(by=['dataset', 'model', 'embeddings', 'mode', 'representation', 'measure'], inplace=True)
+    final_result.sort_values(by=['dataset', 'classifier', 'embeddings', 'mode', 'representation', 'measure'], inplace=True)
 
     if (debug):
         print("final result:\n", final_result)
@@ -1264,7 +1265,7 @@ def all_model_performance_time_horizontal(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classisifers like SVM or LR.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during processing.
@@ -1272,7 +1273,7 @@ def all_model_performance_time_horizontal(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("Generating combined charts for all embeddings...")
+    print("\n\tGenerating combined charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1379,7 +1380,7 @@ def all_model_performance_time_horizontal(
                 s=20,                      # size of the marker points
                 label='Timelapse'
             )
-            ax2.set_ylabel('Timelapse', fontsize=10, color='red', weight='bold')
+            ax2.set_ylabel('Timelapse (seconds)', fontsize=10, color='red', weight='bold')
             ax2.tick_params(axis='y', labelsize=8, labelcolor='red')
             ax2.legend(loc='upper right', fontsize=10)
 
@@ -1418,7 +1419,7 @@ def model_performance_time_horizontal(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during processing.
@@ -1426,7 +1427,7 @@ def model_performance_time_horizontal(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("Generating combined charts for all embeddings...")
+    print("\n\tGenerating combined charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1449,12 +1450,13 @@ def model_performance_time_horizontal(
 
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
-            for model in df['model'].unique():
+            for classifier in df['classifier'].unique():
+                
                 # Filter data for the current combination
-                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['classifier'] == classifier)].copy()
 
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
                 else:
                     pass
@@ -1481,7 +1483,7 @@ def model_performance_time_horizontal(
                 df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
                 
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset} after filtering.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset} after filtering.")
                     continue
 
                 if debug:
@@ -1503,8 +1505,8 @@ def model_performance_time_horizontal(
                     palette=color_palette,
                     order=df_subset['rep_dim'],
                     ax=ax1,
-                    orient='v',  # Vertical orientation
-                    dodge=False  # Ensures single bar per category
+                    orient='v',                                 # Vertical orientation
+                    dodge=False                                 # Ensures single bar per category
                 )
                 
                 # Add metric values at the top of each bar
@@ -1518,7 +1520,7 @@ def model_performance_time_horizontal(
 
                 # Customize the primary y-axis
                 ax1.set_title(
-                    f"Dataset:{dataset}, Model: {model}, Measure: {measure} [by representation]",
+                    f"Dataset:{dataset}, Classifier: {classifier}, Measure: {measure} [by representation]",
                     fontsize=18, weight='bold'
                 )
                 
@@ -1526,7 +1528,7 @@ def model_performance_time_horizontal(
                 ax1.set_ylabel("Value", fontsize=14)
                 ax1.set_ylim(y_axis_threshold, 1)
                 ax1.tick_params(axis='y', labelsize=9)
-                ax1.legend(title="Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
+                ax1.legend(title="Language Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
 
                 # Secondary y-axis for timelapse values
                 ax2 = ax1.twinx()
@@ -1538,7 +1540,7 @@ def model_performance_time_horizontal(
                     s=30,                      # size of the marker points
                     label='Timelapse'
                 )
-                ax2.set_ylabel('Timelapse', fontsize=14, color='red')
+                ax2.set_ylabel('Timelapse (seconds)', fontsize=14, color='red')
                 ax2.tick_params(axis='y', labelsize=9, labelcolor='red')
                 ax2.legend(loc='upper right', fontsize=12)
 
@@ -1550,7 +1552,7 @@ def model_performance_time_horizontal(
                 fig.tight_layout()
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_horizontal.png"
+                plot_file_name = f"{dataset}_{measure}_{classifier}_horizontal.png"
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -1577,7 +1579,7 @@ def model_performance_time_vertical(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or LR.
     - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
     - top_n_results (default: 10): The number of top results to display.
     - show_charts (default: True): Whether to display the charts interactively.
@@ -1586,7 +1588,7 @@ def model_performance_time_vertical(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("Generating horizontal charts for all embeddings...")
+    print("\n\tGenerating horizontal charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1609,12 +1611,13 @@ def model_performance_time_vertical(
 
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
-            for model in df['model'].unique():
+            for classifier in df['classifier'].unique():
+                
                 # Filter data for the current combination
-                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['classifier'] == classifier)].copy()
 
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
                 # Extract the base embeddings (everything before the colon)
@@ -1639,7 +1642,7 @@ def model_performance_time_vertical(
                 df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
 
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset} after filtering.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset} after filtering.")
                     continue
 
                 if debug:
@@ -1661,15 +1664,9 @@ def model_performance_time_vertical(
                     palette=color_palette,
                     order=df_subset['rep_dim'],
                     ax=ax1,
-                    orient='h',  # Horizontal orientation
-                    dodge=False  # Ensures single bar per category
+                    orient='h',                                     # Horizontal orientation
+                    dodge=False                                     # Ensures single bar per category
                 )
-
-                # Adjust bar height to make them wider
-                """
-                for bar in bars.patches:
-                    bar.set_height(bar.get_height() * .75)  # Increased bar height for better visibility
-                """
                 
                 # Add metric values at the end of each bar
                 for bar, value in zip(bars.patches, df_subset['value']):
@@ -1682,13 +1679,13 @@ def model_performance_time_vertical(
 
                 # Customize the primary x-axis
                 ax1.set_title(
-                    f"Dataset: {dataset}, Model: {model}, Measure: {measure} [by representation]",
+                    f"Dataset: {dataset}, Classifier: {classifier}, Measure: {measure} [by representation]",
                     fontsize=14, weight='bold', ha='center'
                 )
                 ax1.set_xlabel(measure, fontsize=10, fontweight='normal')
                 ax1.set_xlim(x_axis_threshold, 1)
                 ax1.tick_params(axis='x', labelsize=9)
-                ax1.legend(title="Embedding Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
+                ax1.legend(title="LM Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize=12)
 
                 # Secondary x-axis for timelapse values
                 ax2 = ax1.twiny()
@@ -1697,10 +1694,10 @@ def model_performance_time_vertical(
                     df_subset['rep_dim'],
                     color='black',
                     marker='x',
-                    s=50,  # size of the marker points
+                    s=50,                           # size of the marker points
                     label='Timelapse'
                 )
-                ax2.set_xlabel('Timelapse', fontsize=10, fontweight='normal', color='red')
+                ax2.set_xlabel('Timelapse (seconds)', fontsize=10, fontweight='normal', color='red')
                 ax2.tick_params(axis='x', labelsize=9, labelcolor='red')
                 ax2.legend(loc='upper right', fontsize=10)
 
@@ -1712,7 +1709,7 @@ def model_performance_time_vertical(
                 fig.tight_layout()
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_vertical.png"
+                plot_file_name = f"{dataset}_{measure}_{classifier}_vertical.png"
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=450)
                 print(f"Saved plot to {output_path}/{plot_file_name}")
 
@@ -1739,7 +1736,7 @@ def all_model_performance_time_vertical(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
+    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or LR.
     - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
     - top_n_results (default: 10): The number of top results to display.
     - show_charts (default: True): Whether to display the charts interactively.
@@ -1748,7 +1745,7 @@ def all_model_performance_time_vertical(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("Generating horizontal charts for all embeddings...")
+    print("\n\tGenerating horizontal charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1845,7 +1842,7 @@ def all_model_performance_time_vertical(
             ax1.set_xlabel(measure, fontsize=10, fontweight='bold')
             ax1.set_xlim(x_axis_threshold, 1)
             ax1.tick_params(axis='x', labelsize=8)
-            ax1.legend(title="Language Model", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, title_fontsize=10)
+            ax1.legend(title="Language Model Type", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, title_fontsize=10)
 
             # Secondary x-axis for timelapse values
             ax2 = ax1.twiny()
@@ -1857,7 +1854,7 @@ def all_model_performance_time_vertical(
                 s=20,                           # size of the marker points
                 label='Timelapse'
             )
-            ax2.set_xlabel('Timelapse', fontsize=10, weight='bold', color='red')
+            ax2.set_xlabel('Timelapse (seconds)', fontsize=10, weight='bold', color='red')
             ax2.tick_params(axis='x', labelsize=8, labelcolor='red')
             ax2.legend(loc='upper right', fontsize=10)
 
@@ -1886,9 +1883,9 @@ def generate_vertical_heatmap_by_model(
     top_n_results=None, 
     debug=False):
     """
-    Generates a heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    Generates a heatmap to display classifier performance for word-based, subword-based, and token-based embeddings.
     """
-    print("Generating heatmap for all embeddings...")
+    print("\n\tGenerating heatmap for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1905,12 +1902,12 @@ def generate_vertical_heatmap_by_model(
 
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
-            for model in df['model'].unique():
+            for classifier in df['classifier'].unique():
                 
                 # Filter and prepare data
-                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['classifier'] == classifier)].copy()
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
                 # Extract the base embeddings (everything before the colon)
@@ -1949,7 +1946,7 @@ def generate_vertical_heatmap_by_model(
                     linewidths=0.5
                 )
                 plt.title(
-                    f"Dataset: {dataset}, Measure: {measure}, Model: {model} [by representation]",
+                    f"Dataset: {dataset}, Measure: {measure}, Classifier: {classifier} [by representation]",
                     fontsize=12, weight='bold'
                 )
                 plt.xlabel("Language Model", fontsize=12, weight='bold')
@@ -1963,7 +1960,7 @@ def generate_vertical_heatmap_by_model(
                 plt.yticks(fontsize=8)
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_vertical_heatmap.png"
+                plot_file_name = f"{dataset}_{measure}_{classifier}_vertical_heatmap.png"
                 plt.tight_layout()
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
                 print(f"Saved heatmap to {output_path}/{plot_file_name}")
@@ -1982,7 +1979,7 @@ def generate_vertical_heatmap_all_models(
     Generates a heatmap to display model performance for word-based, subword-based, and token-based embeddings.
     """
 
-    print("Generating heatmap for all embeddings and all models...")
+    print("\n\tGenerating heatmap for all language models and all classifiers...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1999,7 +1996,6 @@ def generate_vertical_heatmap_all_models(
 
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
-#            for model in df['model'].unique():
             
             # Filter and prepare data
             df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset)].copy()
@@ -2074,9 +2070,9 @@ def generate_horizontal_heatmap_by_model(
     top_n_results=None, 
     debug=False):
     """
-    Generates a horizontal heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    Generates a horizontal heatmap to display classifier performance for word-based, subword-based, and token-based language models.
     """
-    print("Generating horizontal heatmap for all embeddings...")
+    print("\n\tGenerating horizontal heatmap for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -2093,12 +2089,12 @@ def generate_horizontal_heatmap_by_model(
 
     for measure in MEASURES:
         for dataset in df['dataset'].unique():
-            for model in df['model'].unique():
+            for classifier in df['classifier'].unique():
                 
                 # Filter and prepare data
-                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['model'] == model)].copy()
+                df_subset = df[(df['measure'] == measure) & (df['dataset'] == dataset) & (df['classifier'] == classifier)].copy()
                 if df_subset.empty:
-                    print(f"No data available for {measure}, {model}, in dataset {dataset}.")
+                    print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
                 # Extract the base embeddings (everything before the colon)
@@ -2137,7 +2133,7 @@ def generate_horizontal_heatmap_by_model(
                     linewidths=0.5
                 )
                 plt.title(
-                    f"Dataset: {dataset}, Model: {model}, Measure: {measure} [by representation]",
+                    f"Dataset: {dataset}, Classifier: {classifier}, Measure: {measure} [by representation]",
                     fontsize=16, weight='bold'  # Increase font size and make bold
                 )
                 plt.xlabel("Representation:Dimensions", fontsize=12, weight='bold')             # Increase font size and bold
@@ -2151,7 +2147,7 @@ def generate_horizontal_heatmap_by_model(
                 plt.yticks(fontsize=10)
 
                 # Save the plot
-                plot_file_name = f"{dataset}_{measure}_{model}_horizontal_heatmap.png"
+                plot_file_name = f"{dataset}_{measure}_{classifier}_horizontal_heatmap.png"
                 plt.tight_layout()
                 plt.savefig(os.path.join(output_path, plot_file_name), dpi=300)
                 print(f"Saved heatmap to {output_path}/{plot_file_name}")
@@ -2168,10 +2164,10 @@ def generate_horizontal_heatmap_all_models(
     top_n_results=None, 
     debug=False):
     """
-    Generates a horizontal heatmap to display model performance for word-based, subword-based, and token-based embeddings.
+    Generates a horizontal heatmap to display classifier performance for word-based, subword-based, and token-based language models.
     """
     
-    print("Generating horizontal heatmap for all embeddings and all models...")
+    print("\n\tGenerating horizontal heatmap for all languauge models and all classifiers...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -2257,9 +2253,9 @@ def generate_horizontal_heatmap_all_models(
 
 if __name__ == "__main__":
 
-    print("\n\t----- Layer Cake Results Analysis -----")
+    print("\n\t----- Layer Cake Analysis & Reporting -----")
     
-    parser = argparse.ArgumentParser(description="Analyze model results and generate charts and/or summaries")
+    parser = argparse.ArgumentParser(description="Layer Cake Analysis and Reporting Engine")
 
     parser.add_argument('file_path', type=str, help='Path to the TSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
