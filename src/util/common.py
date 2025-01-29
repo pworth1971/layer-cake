@@ -52,8 +52,36 @@ CLASS_EMBEDDING_MODES = ['solo-wce', 'cat-wce', 'cat-dot-wce', 'dot-wce', 'lsa-w
 # --------------------------------------------------------------------------------------------------------------
 
 
-def initialize_testing(args, program, version):
+def initialize_testing(args, model_name, program, version):
+    """
+    Initializes testing based on the provided arguments, used for neural models
     
+    Args: 
+        - args: A namespace or dictionary of arguments that specify the configuration for the test.
+        Expected fields:
+            - net (str): Type of learner to use ('svm', 'lr', or 'nb').
+            - vtype (str): Vectorization type, either 'count' or 'tfidf'.
+            - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
+            - dataset (str): Name of the dataset.
+            - log_file (str): Path to the log file where results will be stored.
+            - mix (str): Dataset and embedding comparison method.
+            - dataset_emb_comp (str): Dataset embedding comparison method.
+        - model_name (str): Name of the model architecture.
+        - program (str): Name of the program.
+        - version (str): Version of the program.
+        
+    Returns:
+        - already_modelled (bool): Whether the current configuration has already been modeled.
+        - logger (CSVLog): Logger object to store model run details.
+        - representation (str): Type of data representation used for training.
+        - pretrained (bool): Whether to use a pretrained model or embeddings.
+        - embeddings (str): Type of embeddings to use.
+        - embedding_type (str): Type of embeddings, e.g., 'word', 'subword', 'token'.
+        - emb_path (str): Path to the embeddings or pretrained model files.
+        - lm_type (str): Language model type.
+        - mode (str): Mode of operation, either 'supervised' or 'unsupervised'.
+        - system (SystemResources): System resource information.
+    """
     import datetime
 
     print("\n\tinitializing...")
@@ -85,8 +113,9 @@ def initialize_testing(args, program, version):
             'gpus',
             'dataset', 
             'class_type',
-            'model', 
+            'classifier',
             'embeddings',
+            'model', 
             'lm_type',
             'mode',
             'comp_method',
@@ -169,7 +198,8 @@ def initialize_testing(args, program, version):
     logger.set_default('gpus', gpus)
 
     logger.set_default('dataset', args.dataset)
-    logger.set_default('model', args.net)
+    logger.set_default('classifier', args.net)
+    logger.set_default('model', model_name)
     logger.set_default('mode', mode)
     logger.set_default('embeddings', embeddings)
     logger.set_default('run', args.seed)
@@ -220,7 +250,6 @@ def initialize_testing(args, program, version):
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
 def initialize_ml_testing(args, model_name, program, version):
-
     """
     Initializes machine learning testing based on the provided arguments.
 
