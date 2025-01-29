@@ -239,7 +239,8 @@ def initialize_testing(args, model_name, program, version):
         representation=representation,
         mode=mode,
         run=args.seed,
-        optimized=optimized_val
+        optimized=optimized_val,
+        model=model_name
         )
 
     print("already_modelled:", already_modelled)

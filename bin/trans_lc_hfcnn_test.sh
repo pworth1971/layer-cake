@@ -41,8 +41,8 @@ datasets=(
 # Pretrained embeddings array (indexed to preserve order)
 #
 embedding_names=(
-    "LLAMA"
     "DEEPSEEK"
+    "LLAMA"
     "BERT"
     "DISTILBERT"
     "ROBERTA"
@@ -51,8 +51,8 @@ embedding_names=(
 )
 
 embedding_args=(    
-    "--pretrained llama"
     "--pretrained deepseek"
+    "--pretrained llama"
     "--pretrained bert"
     "--pretrained distilbert"
     "--pretrained roberta"

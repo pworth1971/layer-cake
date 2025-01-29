@@ -115,7 +115,8 @@ LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimen
 
 #DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
 #DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
-DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'             # dimensions 3584, case sensitive
+DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B'            # dimensions 1536, case sensitive
 
 #
 # ---------------------------------------------------------------------------------------------------------------------------

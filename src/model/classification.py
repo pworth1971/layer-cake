@@ -1392,14 +1392,13 @@ class LCCNNDeepSeekClassifier(LCCNNTransformerClassifier):
         """
         Override to get embedding dimensions from Llama's word embeddings.
         """
-        return self.pretrained_embeddings.wte.weight.shape  
-
+        return self.pretrained_embeddings.embed_tokens.weight.shape  
 
     def _get_embeddings(self):
         """
         Override to get embedding layer from GPT2 model.
         """
-        return self.pretrained_embeddings.wte      
+        return self.pretrained_embeddings.embed_tokens      
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
