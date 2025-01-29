@@ -426,10 +426,7 @@ class LCTransformerClassifier(nn.Module):
         print(f"TCE vocab size: {tce_vocab_size}, num_classes: {num_classes}")
 
         if model_vocab_size != tce_vocab_size:
-            raise ValueError(
-                f"Mismatch between model vocab size ({model_vocab_size}) "
-                f"and TCE vocab size ({tce_vocab_size})."
-            )
+            print("[WARNING] mismatch between model vocab size ({model_vocab_size}) and TCE vocab size ({tce_vocab_size}).")
 
         # Validate special tokens
         print("Special tokens:", self.tokenizer.special_tokens_map)
