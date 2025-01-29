@@ -3,6 +3,8 @@
 # Static configurable variables
 PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py"
 
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True 
+
 MODEL='--net hf.cnn'
 
 #

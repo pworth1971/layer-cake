@@ -227,6 +227,7 @@ class LCTransformerClassifier(nn.Module):
         # Transformer model setup (optional, only if model_name is provided)
         # --------------------------------------------------------------
         
+        """
         self.pretrained_embeddings = AutoModel.from_pretrained(
             model_name, 
             cache_dir=cache_dir, 
@@ -239,7 +240,14 @@ class LCTransformerClassifier(nn.Module):
             output_hidden_states=True,
             offload_folder="./offload"                              # Folder for CPU offloading
         )
+        """
         
+        self.pretrained_embeddings = AutoModel.from_pretrained(
+            model_name, 
+            cache_dir=cache_dir, 
+            output_hidden_states=True,
+        )
+
         #print("self.pretrained_embeddings:\n", self.pretrained_embeddings)
 
         # force all of the tensors to be stored contiguously in memory

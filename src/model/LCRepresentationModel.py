@@ -110,8 +110,8 @@ from huggingface_hub import login
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
-#LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimension = 4096, case sensitive
-LLAMA_MODEL = 'meta-llama/Llama-3.2-3B'                                  # dimension = 4096, case sensitive
+LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimension = 2048, case sensitive
+#LLAMA_MODEL = 'meta-llama/Llama-3.2-3B'                                  # dimension = 3072, case sensitive
 
 #DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
 #DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'

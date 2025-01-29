@@ -864,6 +864,9 @@ if __name__ == "__main__":
         # for eval_step calculation
         num_devices = system.get_num_gpus()
 
+        if (args.pretrained in ['llama', 'deepseek']):
+            batch_size = DEFAULT_MIN_CUDA_BATCH_SIZE
+
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
 
@@ -874,15 +877,22 @@ if __name__ == "__main__":
 
         # for eval_step calculation
         num_devices = 1                                # MPS only supports a single GPU
+
+        if (args.pretrained in ['llama', 'deepseek']):
+            batch_size = DEFAULT_MIN_MPS_BATCH_SIZE
+       
     else:
         if (args.dataset == 'rcv1'):
             batch_size = DEFAULT_MIN_CPU_BATCH_SIZE
         else:
             batch_size = DEFAULT_MAX_CPU_BATCH_SIZE     
         
+        if (args.pretrained in ['llama', 'deepseek']):
+            batch_size = DEFAULT_MIN_CPU_BATCH_SIZE
+
         # for eval_step calculation
         num_devices = 1                                # No GPUs available (CPU), so we default to 1
-
+        
     print(f"device: {device}")
     print("num_devices:", num_devices)
     print("batch_size:", batch_size)
@@ -1123,9 +1133,7 @@ if __name__ == "__main__":
         args=args,
         tce_matrix=tce_matrix,
         #debug=True
-        )
-
-    lc_model = lc_model.to(device)
+    ).to(device)                            # put on device (GPU if available)
 
     if not args.tunable:
 
