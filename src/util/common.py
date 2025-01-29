@@ -219,37 +219,40 @@ def initialize_testing(args, program, version):
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------
-def initialize_ml_testing(args, program, version):
+def initialize_ml_testing(args, model_name, program, version):
 
     """
     Initializes machine learning testing based on the provided arguments.
 
     Args:
-    - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
-      Expected fields:
-        - net (str): Type of learner to use ('svm', 'lr', or 'nb').
-        - vtype (str): Vectorization type, either 'count' or 'tfidf'.
-        - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
-        - dataset (str): Name of the dataset.
-        - logfile (str): Path to the log file where results will be stored.
-        - mix (str): Dataset and embedding comparison method.
-        - dataset_emb_comp (str): Dataset embedding comparison method.
-    
+        - args: A namespace or dictionary of arguments that specify the configuration for the ML experiment.
+        Expected fields:
+            - net (str): Type of learner to use ('svm', 'lr', or 'nb').
+            - vtype (str): Vectorization type, either 'count' or 'tfidf'.
+            - pretrained (str): Pretrained model or embedding type (e.g., 'BERT', 'LLaMA').
+            - dataset (str): Name of the dataset.
+            - logfile (str): Path to the log file where results will be stored.
+            - mix (str): Dataset and embedding comparison method.
+            - dataset_emb_comp (str): Dataset embedding comparison method.
+        - model_name (str): Name of the model architecture.
+        - program (str): Name of the program.
+        - version (str): Version of the program.
+
     Returns:
-    - already_computed (bool): Whether the current configuration has already been computed.
-    - vtype (str): Vectorization type ('count' or 'tfidf').
-    - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
-    - pretrained (bool): Whether to use a pretrained model or embeddings.
-    - embeddings (str): Type of embeddings to use.
-    - emb_path (str): Path to the embeddings or pretrained model files.
-    - mix (str): The dataset and embedding comparison method.
-    - representation (str): Type of data representation used for training.
-    - ml_logger (CSVLog): Logger object to store model run details.
-    - optimized (bool): Whether the model is optimized for performance.
+        - already_computed (bool): Whether the current configuration has already been computed.
+        - vtype (str): Vectorization type ('count' or 'tfidf').
+        - learner (class): The ML model class to be used (e.g., `LinearSVC` for SVM).
+        - pretrained (bool): Whether to use a pretrained model or embeddings.
+        - embeddings (str): Type of embeddings to use.
+        - emb_path (str): Path to the embeddings or pretrained model files.
+        - mix (str): The dataset and embedding comparison method.
+        - representation (str): Type of data representation used for training.
+        - ml_logger (CSVLog): Logger object to store model run details.
+        - optimized (bool): Whether the model is optimized for performance.
     """
 
-    print("\n\tinitializing ML testing...")
-    
+    print(f"\n\tinitializing ML testing...  model_name: {model_name}, program: {program}, version: {version}")
+
     print("args:", args)
 
     # set up model type
@@ -313,8 +316,9 @@ def initialize_ml_testing(args, program, version):
             'gpus',
             'dataset', 
             'class_type',
-            'model', 
+            'classifier', 
             'embeddings',
+            'model',
             'lm_type',
             'mode',
             'comp_method',
@@ -382,7 +386,8 @@ def initialize_ml_testing(args, program, version):
     logger.set_default('gpus', gpus)
 
     logger.set_default('dataset', args.dataset)
-    logger.set_default('model', args.net)
+    logger.set_default('classifier', args.net)
+    logger.set_default('model', model_name)
     logger.set_default('mode', mode)
     logger.set_default('embeddings', embeddings)
     logger.set_default('run', args.seed)

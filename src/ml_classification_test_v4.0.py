@@ -697,13 +697,13 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     )
     print("comp_method:", comp_method)
 
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-f1', value=Mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-f1', value=mf1, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
-    logfile.insert(dataset=args.dataset, class_type=class_type, model=args.net, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-macro-f1', value=Mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='final-te-micro-f1', value=mf1, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-accuracy', value=acc, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-hamming-loss', value=h_loss, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-precision', value=precision, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-recall', value=recall, timelapse=tend)
+    logfile.insert(dataset=args.dataset, class_type=class_type, embeddings=embeddings, representation=representation, lm_type=lang_model_type, comp_method=comp_method, optimized=optimized, dimensions=dims, measure='te-jacard-index', value=j_index, timelapse=tend)
 
     return acc, Mf1, mf1, h_loss, precision, recall, j_index, tend
 
@@ -815,7 +815,7 @@ if __name__ == '__main__':
     print(f"program_name: {program_name}, version: {version}")
 
     # initialize log file and run params
-    already_modelled, vtype, learner, pretrained, embeddings, lm_type, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args, program_name, version)
+    already_modelled, vtype, learner, pretrained, embeddings, lm_type, emb_path, mix, representation, logfile, optimized = initialize_ml_testing(args, model_name, program_name, version)
 
     # check to see if model params have been computed already
     if (already_modelled) and not (args.force):
@@ -826,6 +826,7 @@ if __name__ == '__main__':
     print("\tvtype:", vtype)
     print("\tlearner:", learner)
     print("\tpretrained:", pretrained)
+    print("\tmodel_name:", model_name)
     print("\tembeddings:", embeddings)
     print("\tlm_type:", lm_type)
     print("\temb_path:", emb_path)

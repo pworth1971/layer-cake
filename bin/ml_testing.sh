@@ -24,12 +24,12 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/ml_models_test.test"
+LOG="--logfile ../log/ml_opt_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
-#OPTIMC="--optimc"              # optimize model
-OPTIMC=""                      # default params
+OPTIMC="--optimc"              # optimize model
+#OPTIMC=""                      # default params
 
 CONF_MATRIX="--cm"  
 
@@ -40,15 +40,15 @@ declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "oh
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
 #declare -a learners=("svm" "lr" "nb")
-declare -a learners=("svm")
+declare -a learners=("lr" "nb")
 
 declare -a vtypes=("tfidf")
 
 #declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
 declare -a mixes=( "vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce")
 
-#declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2")
-declare -a embeddings=("llama" "deepseek")
+#declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2" "llama" "deepseek")
+#declare -a embeddings=("llama" "deepseek")
 #declare -a emb_comp_options=("avg" "summary" "weighted")
 declare -a emb_comp_options=("avg")
 
@@ -114,14 +114,14 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp" "$OPTIMC"
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp" "$OPTIMC"
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp" $OPTIMC
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp" $OPTIMC
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp" $OPTIMC
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp" $OPTIMC
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp" $OPTIMC
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$DEEPSEEK" "$emb_comp" $OPTIMC
                 done
