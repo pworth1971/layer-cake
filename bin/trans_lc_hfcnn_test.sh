@@ -3,15 +3,6 @@
 # Static configurable variables
 PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py"
 
-#
-# system wide supported model types
-#
-network_types=(
-    "linear"
-    "hf.cnn"
-    "hf.sc"
-)
-
 MODEL='--net hf.cnn'
 
 #
@@ -19,7 +10,8 @@ MODEL='--net hf.cnn'
 #
 EPOCHS=37              # TEST
 PATIENCE=3             # TEST
-LOG_FILE="--log-file ../log/lc_nn_hf.cnn_test.test"
+#LOG_FILE="--log-file ../log/lc_nn_hf.cnn_test.test"
+LOG_FILE="--log-file ../log/lc_nn_trans_test.test.modified"
 
 #
 # DEV settings
@@ -45,78 +37,30 @@ datasets=(
 # -------------------------------------------------------------------------------
 #
 # Pretrained embeddings array (indexed to preserve order)
-# NB: issues with Albert so leaving out. LlaMa has not been tested
 #
 embedding_names=(
-    "XLNET"
+    "LLAMA"
+    "DEEPSEEK"
+    "BERT"
     "DISTILBERT"
     "ROBERTA"
+    "XLNET"
     "GPT2"
-    "BERT"
 )
 
 embedding_args=(    
-    "--pretrained xlnet"
+    "--pretrained llama"
+    "--pretrained deepseek"
+    "--pretrained bert"
     "--pretrained distilbert"
     "--pretrained roberta"
+    "--pretrained xlnet"
     "--pretrained gpt2" 
-    "--pretrained bert"
-    
 )
 #
 # --------------------------------------------------------------------------------
 
 
-
-
-# -----------------------------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------------------------
-
-dataset="--dataset rcv1"
-
-channels="--channels 512"
-
-for i in "${!embedding_names[@]}"; do
-    
-    embed_name="${embedding_names[$i]}"
-    embed_arg="${embedding_args[$i]}"
-
-    #
-    # STATIC model, unsupervised        
-    #
-    #echo
-    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
-    #echo
-
-    #
-    # TUNABLE model, unsupervised        
-    #
-    echo
-    echo "Running: $PROGRAM_NAME    $MODEL  $channels --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
-    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
-    echo
-
-
-    #
-    # TUNABLE model, supervised (cat, add, dot), tunable tce layer        
-    #
-    echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
-    echo
-    $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
-    echo
-
-    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
-    #echo
-    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
-    #echo
-
-    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
-    #echo
-    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
-    #echo
-
-done
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -168,9 +112,6 @@ for i in "${!embedding_names[@]}"; do
     #echo
 
 done
-
-
-
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -331,8 +272,6 @@ done
 
 
 
-
-
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -385,8 +324,6 @@ done
 
 
 
-
-
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -436,8 +373,6 @@ for i in "${!embedding_names[@]}"; do
     #echo
 
 done
-
-
 
 
 
@@ -496,5 +431,51 @@ done
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 
 
+
+dataset="--dataset rcv1"
+
+channels="--channels 512"
+
+for i in "${!embedding_names[@]}"; do
+    
+    embed_name="${embedding_names[$i]}"
+    embed_arg="${embedding_args[$i]}"
+
+    #
+    # STATIC model, unsupervised        
+    #
+    #echo
+    #echo "Running: $PROGRAM_NAME $MODEL $channels $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    #$PROGRAM_NAME $MODEL    $channels    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
+    #echo
+
+    #
+    # TUNABLE model, unsupervised        
+    #
+    echo
+    echo "Running: $PROGRAM_NAME    $MODEL  $channels --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE"
+    $PROGRAM_NAME   $MODEL $channels    --tunable    $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE $MODEL
+    echo
+
+
+    #
+    # TUNABLE model, supervised (cat, add, dot), tunable tce layer        
+    #
+    echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable   $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
+    echo
+    $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+    echo
+
+    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
+    #echo
+
+    #echo "Running: $PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces"
+    #echo
+    #$PROGRAM_NAME $MODEL $channels   --tunable $dataset $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode dot --tunable-tces
+    #echo
+
 done
+
 

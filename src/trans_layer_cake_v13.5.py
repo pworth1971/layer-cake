@@ -36,9 +36,11 @@ from util.metrics import evaluation_nn
 from util.common import initialize_testing, get_embedding_type, get_model_identifier
 
 from embedding.supervised import compute_tces
-from embedding.pretrained import MODEL_MAP
+
+from model.LCRepresentationModel import MODEL_MAP
+
 from model.classification import SUPPORTED_OPS, LCSequenceClassifier
-from model.classification import LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier
+from model.classification import LCCNNBERTClassifier, LCCNNDistilBERTClassifier, LCCNNRoBERTaClassifier, LCCNNXLNetClassifier, LCCNNGPT2Classifier, LCCNNLlamaClassifier, LCCNNDeepSeekClassifier
 from model.classification import LCATTNBERTClassifier, LCATTNDistilBERTClassifier, LCATTNRoBERTaClassifier, LCATTNXLNetClassifier, LCATTNGPT2Classifier
 from model.classification import LCLinearBERTClassifier, LCLinearDistilBERTClassifier, LCLinearGPT2Classifier, LCLinearRoBERTaClassifier, LCLinearXLNetClassifier
 
@@ -418,6 +420,42 @@ def build_model(model_name, model_path, num_classes, class_type, lc_tokenizer, c
                                             comb_method=args.sup_mode, 
                                             debug=debug
                                             )
+        elif args.pretrained == 'llama':
+            cnn_model = LCCNNLlamaClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            num_channels=args.channels, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+        
+        elif args.pretrained == 'deepseek':
+            cnn_model = LCCNNDeepSeekClassifier(model_name=model_name, 
+                                            cache_dir=model_path, 
+                                            num_classes=num_classes,
+                                            class_type=class_type, 
+                                            lc_tokenizer=lc_tokenizer, 
+                                            num_channels=args.channels, 
+                                            supervised=args.supervised, 
+                                            tce_matrix=tce_matrix, 
+                                            class_weights=class_weights,
+                                            normalize_tces=args.normalize_tces, 
+                                            trainable_tces=args.tunable_tces,
+                                            tce_weight_init=args.tce_weight_init,
+                                            dropout_rate=args.dropprob, 
+                                            comb_method=args.sup_mode, 
+                                            debug=debug
+                                            )
+
         else:
             raise ValueError(f"Unsupported model class for net: {args.net} and pretrained model: {args.pretrained}")
         
@@ -693,7 +731,7 @@ def parse_args():
     #parser.add_argument('--dist', action='store_true', default=False, help='show class distribution plots')
     parser.add_argument('--vtype', type=str, default='tfidf', metavar='N', 
                         help=f'dataset base vectorization strategy, in [tfidf, count]')
-    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2'], 
+    parser.add_argument('--pretrained', type=str, choices=['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek'], 
                         help='supported language model types for dataset representation')
     parser.add_argument('--seed', type=int, default=RANDOM_SEED, help='Random seed')
     parser.add_argument('--log-file', type=str, default='../log/trans_lc_nn_test.test', 
@@ -758,8 +796,6 @@ def parse_args():
                         help='whether or not to have the tce_matrix be tunable during training. Default False.')
     parser.add_argument('--tce-weight-init', type=float, default=1.0, metavar='[0.0, 1.0]', 
                         help='initialized tce embedding layer weight, used with --supervised and --tunable-tces. Default: 1.0')
-    
-
 
     return parser.parse_args()
 
@@ -801,7 +837,7 @@ if __name__ == "__main__":
     print("args:", args)    
 
     # initialize logging and other system run variables
-    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(args, program, version)
+    already_modelled, logfile, method_name, pretrained, embeddings, embedding_type, emb_path, lm_type, mode, system = initialize_testing(args, model_name, program, version)
 
     # check to see if model params have been computed already
     if (already_modelled and not args.force):

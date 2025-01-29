@@ -3,8 +3,8 @@ logging.basicConfig(level=logging.INFO)
 
 import torch
 from torch import nn
-from transformers import BertTokenizerFast, BertModel, AutoModel
-from transformers import DistilBertModel, RobertaModel, XLNetModel, GPT2Model, LlamaModel
+from transformers import BertTokenizerFast, BertModel, AutoModel, LlamaModel
+from transformers import DistilBertModel, RobertaModel, XLNetModel, GPT2Model
 
 # custom imports
 from model.layers import *
@@ -227,7 +227,19 @@ class LCTransformerClassifier(nn.Module):
         # Transformer model setup (optional, only if model_name is provided)
         # --------------------------------------------------------------
         
-        self.pretrained_embeddings = AutoModel.from_pretrained(model_name, cache_dir=cache_dir, output_hidden_states=True)
+        self.pretrained_embeddings = AutoModel.from_pretrained(
+            model_name, 
+            cache_dir=cache_dir, 
+            torch_dtype=torch.float16,                              # Mixed precision for memory efficiency
+            device_map="auto",                                      # Automatically distribute layers across GPUs/CPU
+            max_memory={                                            # Restrict memory usage
+                0: "40GiB",                                         # GPU 0 memory limit
+                "cpu": "20GiB"                                      # CPU memory limit
+            },
+            output_hidden_states=True,
+            offload_folder="./offload"                              # Folder for CPU offloading
+        )
+        
         #print("self.pretrained_embeddings:\n", self.pretrained_embeddings)
 
         # force all of the tensors to be stored contiguously in memory
@@ -1305,6 +1317,81 @@ class LCCNNGPT2Classifier(LCCNNTransformerClassifier):
         Override to get embedding layer from GPT2 model.
         """
         return self.pretrained_embeddings.wte      # GPT2 uses `wte`
+
+
+
+class LCCNNLlamaClassifier(LCCNNTransformerClassifier):
+
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
+
+        super().__init__(LlamaModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
+
+
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from Llama's word embeddings.
+        """
+        return self.pretrained_embeddings.embed_tokens.weight.shape  
+
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from GPT2 model.
+        """
+        return self.pretrained_embeddings.embed_tokens      
+
+
+
+class LCCNNDeepSeekClassifier(LCCNNTransformerClassifier):
+
+    def __init__(self, 
+                 model_name, 
+                 cache_dir, 
+                 num_classes, 
+                 class_type, 
+                 lc_tokenizer, 
+                 class_weights=None,
+                 dropout_rate=0.6,
+                 num_channels=256, 
+                 supervised=False, 
+                 tce_matrix=None,
+                 comb_method='cat', 
+                 normalize_tces=False,  
+                 trainable_tces=True,
+                 tce_weight_init=1.0,
+                 debug=False):
+
+        super().__init__(AutoModel, model_name, cache_dir, num_classes, class_type, lc_tokenizer, class_weights, dropout_rate, num_channels, \
+                         supervised, tce_matrix, comb_method, normalize_tces, trainable_tces, tce_weight_init, debug)
+
+
+    def get_embedding_dims(self):
+        """
+        Override to get embedding dimensions from Llama's word embeddings.
+        """
+        return self.pretrained_embeddings.wte.weight.shape  
+
+
+    def _get_embeddings(self):
+        """
+        Override to get embedding layer from GPT2 model.
+        """
+        return self.pretrained_embeddings.wte      
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

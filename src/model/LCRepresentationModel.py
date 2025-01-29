@@ -1285,173 +1285,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
         return doc_embeddings, summ_embeddings
 
 
-
-
-class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
-    """
-    Llama representation model for text encoding and embeddings.
-    """
-
-    def __init__(self, model_name=LLAMA_MODEL, model_dir=VECTOR_CACHE+'/Llama', vtype='tfidf'):
-        """
-        Initialize the Llama representation model.
-        
-        Parameters:
-        ----------
-        model_name : str, optional
-            Name of the pretrained Llama model. Defaults to 'llama-7b'.
-        model_dir : str, optional
-            Directory to cache or load the model.
-        vtype : str, optional
-            Type of vectorization ('tfidf' or 'count'). Defaults to 'tfidf'.
-        """
-        print("Initializing Llama representation model...")
-
-        super().__init__(model_name, model_dir)  # Call parent constructor
-
-        # Load the Llama model and tokenizer
-        self.model = LlamaModel.from_pretrained(
-            model_name,
-            cache_dir=model_dir,
-            torch_dtype=torch.float16,                  # Mixed precision for memory efficiency
-        #    device_map="auto"                           # Automatically distribute the model across GPUs/CPU
-        )
-
-#        self.tokenizer = LlamaTokenizerFast.from_pretrained(
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
-            model_name,
-            cache_dir=model_dir,
-            #do_lower_case=False                 # keep tokenizer case sensitive
-        )
-
-        # Ensure the tokenizer has a pad token
-        if self.tokenizer.pad_token is None:
-            # Find the ID for '<|finetune_right_pad_id|>' in the tokenizer
-            finetune_right_pad_token = "<|finetune_right_pad_id|>"
-            if finetune_right_pad_token in self.tokenizer.get_vocab():
-                self.tokenizer.pad_token = finetune_right_pad_token
-                self.tokenizer.pad_token_id = self.tokenizer.convert_tokens_to_ids(finetune_right_pad_token)
-                print(f"PAD token set to '{finetune_right_pad_token}' with ID {self.tokenizer.pad_token_id}.")
-            else:
-                raise ValueError(f"Token '{finetune_right_pad_token}' not found in the tokenizer vocabulary.")
-
-        """
-        # Ensure the tokenizer has a pad token
-        if self.tokenizer.pad_token is None:
-            # Assign a unique PAD token
-            #self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # Use <eos> token for padding
-        """
-        
-        # Verify the PAD token
-        print("PAD token:", self.tokenizer.pad_token)
-        print("PAD token ID:", self.tokenizer.pad_token_id)
-
-        #self.max_length = self.tokenizer.model_max_length
-        self.max_length = MAX_LENGTH                                # need to set to default value
-        print(f"Llama max sequence length: {self.max_length}")
-
-        self.type = 'llama'
-
-        # Initialize vectorizer
-        if vtype == 'tfidf':
-            self.vectorizer = TfidfVectorizer(
-                min_df=MIN_DF_COUNT,
-                sublinear_tf=True,
-                lowercase=False,
-                tokenizer=self._custom_tokenizer
-            )
-        elif vtype == 'count':
-            self.vectorizer = CountVectorizer(
-                min_df=MIN_DF_COUNT,
-                lowercase=False,
-                tokenizer=self._custom_tokenizer
-            )
-        else:
-            raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
-
-        self.model.to(self.device)  # Put the model on the appropriate device
-
-        
-    def _custom_tokenizer(self, text):
-        """
-        Tokenize the text using the GPT-2 tokenizer, ensuring truncation and padding are applied.
-        This method returns tokenized strings (subwords) for use with TF-IDF/CountVectorizer.
-        """
-
-        # Tokenize the text with LlamaTokenizerFast, applying truncation to limit sequence length
-        tokenized_output = self.tokenizer(
-            text,
-            max_length=self.max_length,             # Limit to model's max length - set to 512)
-            truncation=True,                        # Ensure sequences longer than max_length are truncated
-            padding='max_length',                   # Optional: can pad to max length (if needed)
-            return_tensors=None,                    # Return token strings, not tensor IDs
-            add_special_tokens=False                 # Do not add special tokens like <|endoftext|> for TF-IDF use
-        )
-
-        # The tokenizer will return a dictionary, so we extract the tokenized sequence
-        tokens = tokenized_output['input_ids']
-
-        # Convert token IDs back to token strings for use with TF-IDF/CountVectorizer
-        tokens = self.tokenizer.convert_ids_to_tokens(tokens)
-
-        return tokens
-
-
-    def _compute_mean_embedding(self):
-        """
-        Compute the mean embedding vector using all tokens in the model's vocabulary.
-        This vector will be used for handling OOV tokens.
-        """
-        print("Computing mean embedding for model vocabulary...")
-
-        vocab = list(self.tokenizer.get_vocab().keys())
-        batch_size = self.batch_size
-        total_embeddings = []
-
-        # Get the tokenizer's vocabulary size
-        vocab_size = self.tokenizer.vocab_size
-        print("vocab_size:", vocab_size)
-
-        # Process the tokens in batches with a progress bar
-        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
-            for i in range(0, len(vocab), batch_size):
-                batch_tokens = vocab[i:i + batch_size]
-
-                # Tokenize the batch of tokens, ensuring attention_mask is created
-                inputs = self.tokenizer(
-                    batch_tokens, 
-                    return_tensors='pt', 
-                    padding=True, 
-                    truncation=True, 
-                    max_length=self.max_length
-                )
-                input_ids = inputs['input_ids'].to(self.device)
-                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
-
-                # Pass through the model to get token embeddings
-                with torch.no_grad():
-                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
-                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-
-                total_embeddings.append(token_embeddings)
-
-                # Update the progress bar with the actual batch size
-                pbar.update(len(batch_tokens))
-
-        # Concatenate all embeddings and compute the mean embedding
-        total_embeddings = np.concatenate(total_embeddings, axis=0)
-        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
-
-        print(f"Mean embedding shape: {mean_embedding.shape}")
-
-        return mean_embedding
-
-
-
-
-
-
 class BERTLCRepresentationModel(TransformerLCRepresentationModel):
     """
     BERTRepresentation subclass implementing sentence encoding using BERT
@@ -1947,6 +1780,166 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         return mean_embeddings, summ_embeddings
 
 
+
+class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
+    """
+    Llama representation model for text encoding and embeddings.
+    """
+
+    def __init__(self, model_name=LLAMA_MODEL, model_dir=VECTOR_CACHE+'/Llama', vtype='tfidf'):
+        """
+        Initialize the Llama representation model.
+        
+        Parameters:
+        ----------
+        model_name : str, optional
+            Name of the pretrained Llama model. Defaults to 'llama-7b'.
+        model_dir : str, optional
+            Directory to cache or load the model.
+        vtype : str, optional
+            Type of vectorization ('tfidf' or 'count'). Defaults to 'tfidf'.
+        """
+        print("Initializing Llama representation model...")
+
+        super().__init__(model_name, model_dir)  # Call parent constructor
+
+        # Load the Llama model and tokenizer
+        self.model = LlamaModel.from_pretrained(
+            model_name,
+            cache_dir=model_dir,
+            torch_dtype=torch.float16,                  # Mixed precision for memory efficiency
+        #    device_map="auto"                           # Automatically distribute the model across GPUs/CPU
+        )
+
+#        self.tokenizer = LlamaTokenizerFast.from_pretrained(
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            model_name,
+            cache_dir=model_dir,
+            #do_lower_case=False                 # keep tokenizer case sensitive
+        )
+
+        # Ensure the tokenizer has a pad token
+        if self.tokenizer.pad_token is None:
+            # Find the ID for '<|finetune_right_pad_id|>' in the tokenizer
+            finetune_right_pad_token = "<|finetune_right_pad_id|>"
+            if finetune_right_pad_token in self.tokenizer.get_vocab():
+                self.tokenizer.pad_token = finetune_right_pad_token
+                self.tokenizer.pad_token_id = self.tokenizer.convert_tokens_to_ids(finetune_right_pad_token)
+                print(f"PAD token set to '{finetune_right_pad_token}' with ID {self.tokenizer.pad_token_id}.")
+            else:
+                raise ValueError(f"Token '{finetune_right_pad_token}' not found in the tokenizer vocabulary.")
+
+        """
+        # Ensure the tokenizer has a pad token
+        if self.tokenizer.pad_token is None:
+            # Assign a unique PAD token
+            #self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # Use <eos> token for padding
+        """
+        
+        # Verify the PAD token
+        print("PAD token:", self.tokenizer.pad_token)
+        print("PAD token ID:", self.tokenizer.pad_token_id)
+
+        #self.max_length = self.tokenizer.model_max_length
+        self.max_length = MAX_LENGTH                                # need to set to default value
+        print(f"Llama max sequence length: {self.max_length}")
+
+        self.type = 'llama'
+
+        # Initialize vectorizer
+        if vtype == 'tfidf':
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT,
+                sublinear_tf=True,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        elif vtype == 'count':
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT,
+                lowercase=False,
+                tokenizer=self._custom_tokenizer
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
+
+        
+    def _custom_tokenizer(self, text):
+        """
+        Tokenize the text using the GPT-2 tokenizer, ensuring truncation and padding are applied.
+        This method returns tokenized strings (subwords) for use with TF-IDF/CountVectorizer.
+        """
+
+        # Tokenize the text with LlamaTokenizerFast, applying truncation to limit sequence length
+        tokenized_output = self.tokenizer(
+            text,
+            max_length=self.max_length,             # Limit to model's max length - set to 512)
+            truncation=True,                        # Ensure sequences longer than max_length are truncated
+            padding='max_length',                   # Optional: can pad to max length (if needed)
+            return_tensors=None,                    # Return token strings, not tensor IDs
+            add_special_tokens=False                 # Do not add special tokens like <|endoftext|> for TF-IDF use
+        )
+
+        # The tokenizer will return a dictionary, so we extract the tokenized sequence
+        tokens = tokenized_output['input_ids']
+
+        # Convert token IDs back to token strings for use with TF-IDF/CountVectorizer
+        tokens = self.tokenizer.convert_ids_to_tokens(tokens)
+
+        return tokens
+
+
+    def _compute_mean_embedding(self):
+        """
+        Compute the mean embedding vector using all tokens in the model's vocabulary.
+        This vector will be used for handling OOV tokens.
+        """
+        print("Computing mean embedding for model vocabulary...")
+
+        vocab = list(self.tokenizer.get_vocab().keys())
+        batch_size = self.batch_size
+        total_embeddings = []
+
+        # Get the tokenizer's vocabulary size
+        vocab_size = self.tokenizer.vocab_size
+        print("vocab_size:", vocab_size)
+
+        # Process the tokens in batches with a progress bar
+        with tqdm(total=len(vocab), desc="Computing mean embedding for model vocabulary", unit="token") as pbar:
+            for i in range(0, len(vocab), batch_size):
+                batch_tokens = vocab[i:i + batch_size]
+
+                # Tokenize the batch of tokens, ensuring attention_mask is created
+                inputs = self.tokenizer(
+                    batch_tokens, 
+                    return_tensors='pt', 
+                    padding=True, 
+                    truncation=True, 
+                    max_length=self.max_length
+                )
+                input_ids = inputs['input_ids'].to(self.device)
+                attention_mask = inputs['attention_mask'].to(self.device)  # Ensure attention_mask is passed
+
+                # Pass through the model to get token embeddings
+                with torch.no_grad():
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)  # Pass attention_mask
+                token_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+                total_embeddings.append(token_embeddings)
+
+                # Update the progress bar with the actual batch size
+                pbar.update(len(batch_tokens))
+
+        # Concatenate all embeddings and compute the mean embedding
+        total_embeddings = np.concatenate(total_embeddings, axis=0)
+        mean_embedding = total_embeddings.mean(axis=0)  # Compute the mean embedding across all tokens
+
+        print(f"Mean embedding shape: {mean_embedding.shape}")
+
+        return mean_embedding
 
 
 

@@ -235,7 +235,7 @@ def initialize_testing(args, model_name, program, version):
     # check to see if the model has been run before
     already_modelled = logger.already_calculated(
         dataset=args.dataset,
-        model=args.net, 
+        classifier=args.net, 
         representation=representation,
         mode=mode,
         run=args.seed,
@@ -460,7 +460,7 @@ def initialize_ml_testing(args, model_name, program, version):
     # check to see if the model has been run before
     already_computed = logger.already_calculated(
         dataset=args.dataset,
-        model=args.net,
+        classifier=args.net,
         representation=representation,
         #embeddings=embeddings
         )
@@ -566,13 +566,6 @@ def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
 
     return model_name, model_path
     
-"""
-def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
-    model_name = MODEL_MAP.get(pretrained, pretrained)
-    model_path = os.path.join(cache_dir, pretrained)
-    return model_name, model_path
-"""
-
 
 def get_embeddings_path(pretrained, args):
     

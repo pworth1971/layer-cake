@@ -37,6 +37,7 @@ class CSVLog:
 
         print("checking model already computed...")
         
+        #debug = True
         debug = False
         
         df = self.df
