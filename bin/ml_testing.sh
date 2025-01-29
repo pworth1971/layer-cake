@@ -24,7 +24,7 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/ml_opt_test.test"
+LOG="--logfile ../log/ml_full_opt_test.test.v2"
 
 EMB="--embedding-dir ../.vector_cache"
 
@@ -35,12 +35,13 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-#declare -a datasets=("ohsumed"  "arxiv_protoformer" "rcv1" "20newsgroups" "reuters21578" "bbc-news" "imdb" "arxiv")
-declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer" "rcv1" )
+declare -a datasets=( "rcv1" "bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 
 #declare -a learners=("svm" "lr" "nb")
-declare -a learners=("lr" "nb")
+#declare -a learners=("lr" "nb")
+declare -a learners=("svm")
+
 
 declare -a vtypes=("tfidf")
 

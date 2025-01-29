@@ -462,6 +462,7 @@ def initialize_ml_testing(args, model_name, program, version):
         dataset=args.dataset,
         classifier=args.net,
         representation=representation,
+        model=model_name,
         #embeddings=embeddings
         )
 
