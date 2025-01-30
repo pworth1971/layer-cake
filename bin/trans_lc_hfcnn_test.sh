@@ -12,8 +12,7 @@ MODEL='--net hf.cnn'
 #
 EPOCHS=37              # TEST
 PATIENCE=3             # TEST
-#LOG_FILE="--log-file ../log/lc_nn_trans_test_all.test.v2"
-LOG_FILE="--log-file ../log/lc_nn_trans_test.test.modified"
+LOG_FILE="--log-file ../log/lc_nn_trans_test_all.test.v2"
 
 #
 # DEV settings
