@@ -12,7 +12,7 @@ MODEL='--net hf.cnn'
 #
 EPOCHS=37              # TEST
 PATIENCE=3             # TEST
-#LOG_FILE="--log-file ../log/lc_nn_hf.cnn_test.test"
+#LOG_FILE="--log-file ../log/lc_nn_trans_test_all.test.v2"
 LOG_FILE="--log-file ../log/lc_nn_trans_test.test.modified"
 
 #
@@ -26,7 +26,6 @@ SEED=77
 
 # Datasets array
 datasets=(
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
@@ -34,6 +33,7 @@ datasets=(
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
+    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
 
 # -------------------------------------------------------------------------------
@@ -41,27 +41,26 @@ datasets=(
 # Pretrained embeddings array (indexed to preserve order)
 #
 embedding_names=(
-    "DEEPSEEK"
-    "LLAMA"
     "BERT"
     "DISTILBERT"
     "ROBERTA"
     "XLNET"
     "GPT2"
+    "LLAMA"
+    "DEEPSEEK"
 )
 
 embedding_args=(    
-    "--pretrained deepseek"
-    "--pretrained llama"
     "--pretrained bert"
     "--pretrained distilbert"
     "--pretrained roberta"
     "--pretrained xlnet"
-    "--pretrained gpt2" 
+    "--pretrained gpt2"
+    "--pretrained llama" 
+    "--pretrained deepseek"
 )
 #
 # --------------------------------------------------------------------------------
-
 
 
 
@@ -431,8 +430,6 @@ done
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------------------
-
-
 
 dataset="--dataset rcv1"
 
