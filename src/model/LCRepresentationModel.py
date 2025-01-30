@@ -72,7 +72,11 @@ PICKLE_DIR = '../pickles/'                          # pickled data directory
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
-# default pretrained models.
+# default pretrained language models.
+# ---------------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# Static Models
 #
 # NB: these models are all case sensitive, ie no need to lowercase the input text (see _preprocess)
 #
@@ -84,21 +88,61 @@ WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, cas
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
 FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
+# ---------------------------------------------------------------------------------------------------------------------------
 
-BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# HuggingFace transformer models
+
+#
+# google-bert models
+#
+#BERT_MODEL = 'bert-base-uncased'                              # dimension = 768, case insensitive
 #BERT_MODEL = 'bert-large-cased'                             # dimension = 1024, case sensitive
+#BERT_MODEL = 'bert-large-uncased'                             # dimension = 1024, case insensitive
+BERT_MODEL = 'bert-base-cased'                              # dimension = 768, case sensitive
 
-ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case insensitive
+#
+# FacebookAI models
+# NB also supports XLM and XLM-RoBERTa models as well as RoBERTa)
+#
 #ROBERTA_MODEL = 'roberta-large'                             # dimension = 1024, case sensitive
+ROBERTA_MODEL = 'roberta-base'                             # dimension = 768, case sensitive
 
-DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
+#
+# distilbert models
+#
+#DISTILBERT_MODEL = 'distilbert-base-uncased'                 # dimension = 768, case insensitive
+DISTILBERT_MODEL = 'distilbert-base-cased'                  # dimension 768, case sensisitve
 
+#
+# XLNet models
+#
+XLNET_MODEL = 'xlnet-base-cased'                                            # dimension = 768, case sensitive
+#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
+
+#
+# open-ai community huggingface models
+#
 GPT2_MODEL = 'gpt2'                                          # dimension = 768, case sensitive
 #GPT2_MODEL = 'gpt2-medium'                                   # dimension = 1024, case sensitive
 #GPT2_MODEL = 'gpt2-large'                                    # dimension = 1280, case sensitive
 
-XLNET_MODEL = 'xlnet-base-cased'                                            # dimension = 768, case sensitive
-#XLNET_MODEL = 'xlnet-large-cased'                           # dimension = 1024, case sensitive
+#
+# meta-llama models
+#
+LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimension = 2048, case sensitive
+#LLAMA_MODEL = 'meta-llama/Llama-3.2-3B'                                  # dimension = 3072, case sensitive
+
+#
+# deepseek-ai models
+# NB: limited huggingface support, requires python310 
+#
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
+#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'             # dimensions 3584, case sensitive
+DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B'            # dimensions 1536, case sensitive
+# ---------------------------------------------------------------------------------------------------------------------------
 
 
 #
@@ -110,13 +154,7 @@ from huggingface_hub import login
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 
-LLAMA_MODEL = 'meta-llama/Llama-3.2-1B'                                  # dimension = 2048, case sensitive
-#LLAMA_MODEL = 'meta-llama/Llama-3.2-3B'                                  # dimension = 3072, case sensitive
 
-#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
-#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
-#DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'             # dimensions 3584, case sensitive
-DEEPSEEK_MODEL = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B'            # dimensions 1536, case sensitive
 
 #
 # ---------------------------------------------------------------------------------------------------------------------------
