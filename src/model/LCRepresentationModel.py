@@ -1348,7 +1348,7 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
             model_name, 
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
+        ).to(self.device)
         
         self.tokenizer = BertTokenizerFast.from_pretrained(
             model_name, 
@@ -1396,7 +1396,7 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             model_name, 
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
+        ).to(self.device)
 
         self.tokenizer = RobertaTokenizerFast.from_pretrained(
             model_name, 
@@ -1445,7 +1445,7 @@ class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
             model_name, 
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
+        ).to(self.device)
 
         self.tokenizer = DistilBertTokenizerFast.from_pretrained(
             model_name, 
@@ -1492,7 +1492,7 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
             model_name, 
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
+        ).to(self.device)
  
         self.tokenizer = XLNetTokenizerFast.from_pretrained(
             model_name, 
@@ -1886,7 +1886,7 @@ class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype,                           # set in parent constructor
             #device_map="auto"                                      # Automatically distribute the model across GPUs/CPU
-        ).to(device)
+        ).to(self.device)
 
         self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
             model_name,
