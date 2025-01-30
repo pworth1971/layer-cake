@@ -15,7 +15,6 @@ from simpletransformers.language_representation import RepresentationModel
 from transformers import BertModel, RobertaModel, GPT2Model, XLNetModel, DistilBertModel, LlamaModel, PreTrainedTokenizerFast
 from transformers import BertTokenizerFast, RobertaTokenizerFast, GPT2TokenizerFast, XLNetTokenizerFast, DistilBertTokenizerFast
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
-from transformers import AutoConfig, PreTrainedTokenizer, PreTrainedModel
 
 from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_model
@@ -27,10 +26,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from joblib import Parallel, delayed
 import re
 
+
 import fasttext
 from concurrent.futures import ThreadPoolExecutor
 
-from typing import Optional, Union, Dict, Any, Tuple
+
 
 import logging
 
@@ -1003,14 +1003,6 @@ class TransformerLCRepresentationModel(LCRepresentationModel):
 
         super().__init__(model_name, model_dir)
     
-        self.device = DEVICE
-
-        # Set dtype for half-precision or full precision
-        self.torch_dtype = torch.float16                    # Mixed precision for memory efficiency
-
-        # Load tokenizer (no dtype needed here)
-        self.tokenizer = None  # Subclasses will define this
-
 
     def _custom_tokenizer(self, text):
         """
@@ -1344,16 +1336,12 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
         super().__init__(model_name, model_dir)                             # parent constructor
 
         # instantiate model and tokenizer
-        self.model = BertModel.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
+        self.model = BertModel.from_pretrained(model_name, cache_dir=model_dir)
         
         self.tokenizer = BertTokenizerFast.from_pretrained(
             model_name, 
             cache_dir=model_dir,
-            do_lower_case=False                             # keep tokenizer case sensitive
+            do_lower_case=False                 # keep tokenizer case sensitive
         )
 
         self.max_length = self.tokenizer.model_max_length
@@ -1379,6 +1367,8 @@ class BERTLCRepresentationModel(TransformerLCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+        
+        self.model.to(self.device)      # put the model on the appropriate device
     
 
 class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1392,17 +1382,8 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
 
         super().__init__(model_name, model_dir)                             # parent constructor
 
-        self.model = RobertaModel.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
-
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            do_lower_case=False                             # keep tokenizer case sensitive
-        )
+        self.model = RobertaModel.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
     
         self.max_length = self.tokenizer.model_max_length
         print("self.max_length:", self.max_length)
@@ -1427,6 +1408,8 @@ class RoBERTaLCRepresentationModel(TransformerLCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+        
+        self.model.to(self.device)      # put the model on the appropriate device
 
 
 class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1435,23 +1418,13 @@ class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
     """
 
     def __init__(self, model_name='distilbert-base-cased', model_dir=VECTOR_CACHE+'/DistilBERT', vtype='tfidf'):
-
         print("Initializing DistilBERT representation model...")
 
         super().__init__(model_name, model_dir)  # parent constructor
 
         # Load the DistilBERT model and tokenizer
-        self.model = DistilBertModel.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
-
-        self.tokenizer = DistilBertTokenizerFast.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            do_lower_case=False                             # keep tokenizer case-sensitive
-        )
+        self.model = DistilBertModel.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = DistilBertTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
 
         self.max_length = self.tokenizer.model_max_length
         print("self.max_length:", self.max_length)
@@ -1475,6 +1448,8 @@ class DistilBERTLCRepresentationModel(TransformerLCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
 
+        self.model.to(self.device)  # Put the model on the appropriate device
+
 
 
 class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
@@ -1488,17 +1463,9 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
         super().__init__(model_name, model_dir)  # parent constructor
 
         # Load the XLNet model and tokenizer
-        self.model = XLNetModel.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            torch_dtype=self.torch_dtype                    # set in base class init()
-        ).to(device)
- 
-        self.tokenizer = XLNetTokenizerFast.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            do_lower_case=False                             # keep the model case sensitive
-        )
+        self.model = XLNetModel.from_pretrained(model_name, cache_dir=model_dir)
+
+        self.tokenizer = XLNetTokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
 
         # Ensure padding token is available
         if self.tokenizer.pad_token is None:
@@ -1529,6 +1496,8 @@ class XLNetLCRepresentationModel(TransformerLCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+        self.model.to(self.device)      # put the model on the appropriate device
         
     
     def _custom_tokenizer(self, text):
@@ -1682,17 +1651,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
         super().__init__(model_name, model_dir)  # parent constructor
 
         # Load the GPT-2 model and tokenizer
-        self.model = GPT2Model.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            torch_dtype=self.torch_dtype                        # set in parent constructor
-        ).to(device)           
-        
-        self.tokenizer = GPT2TokenizerFast.from_pretrained(
-            model_name, 
-            cache_dir=model_dir,
-            do_lower_case=False                                 # keep tokenizer case-sensitive 
-        )
+        self.model = GPT2Model.from_pretrained(model_name, cache_dir=model_dir)
+        self.tokenizer = GPT2TokenizerFast.from_pretrained(model_name, cache_dir=model_dir)
 
         # Ensure padding token is available
         if self.tokenizer.pad_token is None:
@@ -1719,6 +1679,8 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Must be in [tfidf, count].")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
 
 
     def _custom_tokenizer(self, text):
@@ -1884,14 +1846,15 @@ class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
         self.model = LlamaModel.from_pretrained(
             model_name,
             cache_dir=model_dir,
-            torch_dtype=self.torch_dtype,                           # set in parent constructor
-            #device_map="auto"                                      # Automatically distribute the model across GPUs/CPU
-        ).to(device)
+            torch_dtype=torch.float16,                  # Mixed precision for memory efficiency
+        #    device_map="auto"                           # Automatically distribute the model across GPUs/CPU
+        )
 
+#        self.tokenizer = LlamaTokenizerFast.from_pretrained(
         self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
             model_name,
             cache_dir=model_dir,
-            do_lower_case=False                                     # keep tokenizer case sensitive
+            #do_lower_case=False                 # keep tokenizer case sensitive
         )
 
         # Ensure the tokenizer has a pad token
@@ -1904,6 +1867,14 @@ class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
                 print(f"PAD token set to '{finetune_right_pad_token}' with ID {self.tokenizer.pad_token_id}.")
             else:
                 raise ValueError(f"Token '{finetune_right_pad_token}' not found in the tokenizer vocabulary.")
+
+        """
+        # Ensure the tokenizer has a pad token
+        if self.tokenizer.pad_token is None:
+            # Assign a unique PAD token
+            #self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # Use <eos> token for padding
+        """
         
         # Verify the PAD token
         print("PAD token:", self.tokenizer.pad_token)
@@ -1931,6 +1902,8 @@ class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
             )
         else:
             raise ValueError("Invalid vectorizer type. Must be 'tfidf' or 'count'.")
+
+        self.model.to(self.device)  # Put the model on the appropriate device
 
         
     def _custom_tokenizer(self, text):
@@ -2009,6 +1982,9 @@ class LlamaLCRepresentationModel(TransformerLCRepresentationModel):
 
 
 
+from typing import Optional, Union, Dict, Any, Tuple
+from transformers import AutoConfig, PreTrainedTokenizer, PreTrainedModel
+
 class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
     """
     DeepSeek representation model for text encoding and embeddings.
@@ -2073,7 +2049,7 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
         if self.mixed_precision:
             self.model = self.model.half()                          # Convert model to half precision
 
-        print("DeepSeek model initialized and loaded onto device.")
+        #print("DeepSeek model initialized and loaded onto device.")
 
 
     def _load(
@@ -2086,25 +2062,24 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
         offload_folder: Optional[str] = None,
         **kwargs
     ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-        
+        """
+        Load the DeepSeek model and tokenizer with performance optimizations.
+        """
         try:
             # Load model with device map, max memory, and CPU offloading
             self.model = AutoModel.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
-                torch_dtype= self.torch_dtype,                      # set torch dtype from parent constructor value
                 trust_remote_code=trust_remote_code,
                 device_map=device_map,
                 max_memory=max_memory,
                 offload_folder=offload_folder,
                 **kwargs
             )
-            
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
-                do_lower_case=False,                        # keep tokenizer case sensitive
-                trust_remote_code=trust_remote_code
+                trust_remote_code=trust_remote_code,
             )
             print("[INFO]: DeepSeek model loaded successfully with original configuration")
 
@@ -2125,7 +2100,6 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
                 self.model = AutoModel.from_pretrained(
                     model_name,
                     cache_dir=cache_dir,
-                    torch_dtype=self.torch_dtype,                  # set torch dtype from parent constructor value
                     config=self.config,
                     trust_remote_code=trust_remote_code,
                     device_map=device_map,
@@ -2133,11 +2107,9 @@ class DeepSeekLCRepresentationModel(TransformerLCRepresentationModel):
                     offload_folder=offload_folder,
                     **kwargs
                 )
-
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     model_name,
                     cache_dir=cache_dir,
-                    do_lower_case=False,                        # keep tokenizer case sensitive
                     trust_remote_code=trust_remote_code,
                 )
                 print("[INFO]: Model loaded successfully without quantization")
