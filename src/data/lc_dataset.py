@@ -1932,7 +1932,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 
     # If the pickle file exists, load the dataset from it
     if os.path.exists(pickle_file):
-        print(f"Loading tokenized data from '{pickle_file}'...")
+        print(f"Loading LCDataset data from '{pickle_file}'...")
         lcd = LCDataset.load(pickle_file)
         if lcd:
             return lcd

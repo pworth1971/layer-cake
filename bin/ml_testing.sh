@@ -5,13 +5,13 @@
 # this is simply for reference
 #
 dataset_info=(
-    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
+    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
-    "--dataset bbc-news"                        # bbc-news (single label, 5 classes)    
+    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
 )   
 #
@@ -110,9 +110,9 @@ for i in "${!datasets[@]}"; do
         for vtype in "${vtypes[@]}"; do
             for mix in "${mixes[@]}"; do
                 for emb_comp in "${emb_comp_options[@]}"; do
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp" "$OPTIMC"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp" "$OPTIMC"
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp" $OPTIMC
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp" $OPTIMC
