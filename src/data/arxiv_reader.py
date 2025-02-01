@@ -240,7 +240,7 @@ def fetch_arxiv(data_path=None, test_size=.175, seed=1, static=False, array=Fals
         papers_dataframe['text'] = preprocess(
             papers_dataframe['text'],
             remove_punctuation=False,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=False,
             remove_special_chars=True,          # we do this for arxiv data
         )

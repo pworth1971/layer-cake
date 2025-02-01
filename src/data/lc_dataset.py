@@ -718,13 +718,46 @@ class LCDataset:
         # preprocess: we remove stopwords, mask numbers and remove punctuation
         # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
         #
+        """
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
             self.Xtr = self._preprocess(pd.Series(self.X_train_raw), remove_punctuation=True)
             self.Xte = self._preprocess(pd.Series(self.X_test_raw), remove_punctuation=True)
         else:
             self.Xtr = self._preprocess(pd.Series(self.X_train_raw), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.X_test_raw), remove_punctuation=False)
+        """
 
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(self.X_train_raw), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.X_test_raw), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(self.X_train_raw), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.X_test_raw), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
         print("\t--- preprocessed text ---")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
@@ -821,13 +854,46 @@ class LCDataset:
         # preprocess: we remove stopwords, mask numbers and remove punctuation
         # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
         #
+        """
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
         else:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
-
+        """
+        
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
         print("...preprocessed text...")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
@@ -940,15 +1006,15 @@ class LCDataset:
         else:
             self.Xtr = preprocess(
                 pd.Series(train_data), 
-                remove_punctuation=True,
-                lowercase=True,
-                remove_stopwords=True,
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
                 array=True                              # return as numpy array
                 )
             self.Xte = preprocess(
                 pd.Series(test_data), 
                 remove_punctuation=False,
-                lowercase=True,
+                lowercase=False,
                 remove_stopwords=False,
                 array=True                              # return as numpy array
                 )
@@ -1025,8 +1091,6 @@ class LCDataset:
     
         self.classification_type = 'multilabel'
         self.class_type = 'multilabel'
-
-        import os
 
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
 
@@ -1174,8 +1238,8 @@ class LCDataset:
             papers_dataframe['text'] = preprocess(
                 papers_dataframe['text'],
                 remove_punctuation=False,
-                lowercase=True,
-                remove_stopwords=True,
+                lowercase=False,
+                remove_stopwords=False,
                 remove_special_chars=True,           # we do this for arxiv data
                 array=True                           # return as array
             )
@@ -1284,13 +1348,46 @@ class LCDataset:
         # preprocess: we remove stopwords, mask numbers and remove punctuation
         # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
         #
+        """
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
         else:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
+        """
 
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
         print("...preprocessed text...")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
@@ -1352,7 +1449,6 @@ class LCDataset:
         return self.label_names
 
 
-
     def _load_ohsumed(self):
 
         print("\n\tloading ohsumed dataset...")
@@ -1382,13 +1478,46 @@ class LCDataset:
         # preprocess: we remove stopwords, mask numbers and remove punctuation
         # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
         #
+        """
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
         else:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
-
+        """
+        
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
         print("\t--- preprocessed text ---")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
@@ -1505,13 +1634,46 @@ class LCDataset:
         # preprocess: we remove stopwords, mask numbers and remove punctuation
         # if we are working with word based embeddings (fastText, Word2Vec, GloVe)
         #
+        """
         if (self.embedding_type in ['word', 'subword', 'sub-word']):
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=True)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=True)
         else:
             self.Xtr = self._preprocess(pd.Series(self.devel.data), remove_punctuation=False)
             self.Xte = self._preprocess(pd.Series(self.test.data), remove_punctuation=False)
-
+        """
+        
+        if (self.embedding_type in ['word', 'subword', 'sub-word']):
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=True,
+                lowercase=True,
+                remove_stopwords=True,
+                array=True                              # return as numpy array
+                )    
+        else:
+            self.Xtr = preprocess(
+                pd.Series(self.devel.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            self.Xte = preprocess(
+                pd.Series(self.test.data), 
+                remove_punctuation=False,
+                lowercase=False,
+                remove_stopwords=False,
+                array=True                              # return as numpy array
+                )
+            
         print("\t--- preprocessed text ---")
         print("self.Xtr:", type(self.Xtr), len(self.Xtr))
         print("self.Xtr[0]:\n", self.Xtr[0])
