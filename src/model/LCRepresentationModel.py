@@ -1686,7 +1686,7 @@ class GPT2LCRepresentationModel(TransformerLCRepresentationModel):
             model_name, 
             cache_dir=model_dir,
             torch_dtype=self.torch_dtype                        # set in parent constructor
-        ).to(device)           
+        ).to(self.device)           
         
         self.tokenizer = GPT2TokenizerFast.from_pretrained(
             model_name, 
