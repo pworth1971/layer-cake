@@ -2249,6 +2249,102 @@ def generate_horizontal_heatmap_all_models(
             plt.close()
 
 
+
+# ----------------------------------------------------------------------------------------------------------------------------
+
+def analyze(
+    df, 
+    out_dir, 
+    neural=False, 
+    debug=False
+):
+    """
+    Analyze performance by dataset and generate individual chart files for each measure.
+    
+    Args:
+    - df: DataFrame containing the analysis data.
+    - out_dir: Directory where the summary charts should be saved.
+    - neural: Flag indicating neural or non-neural analysis.
+    - debug: Debug mode flag.
+    """
+
+    print("\n\tGenerating performance analysis and charts by dataset...")
+
+    # Extract language model and representation form
+    if not neural:
+        df[['language_model', 'representation_form']] = df['embeddings'].str.split(':', expand=True)
+    else:
+        df['language_model'] = df['embeddings']
+        df['representation_form'] = 'solo'
+
+    # Filter only supported measures
+    supported_measures = MEASURES
+    df_filtered = df[df['measure'].str.contains('|'.join(supported_measures))]
+
+    # Group by dataset and generate charts for each
+    datasets = df_filtered['dataset'].unique()
+    for dataset in datasets:
+        print(f"\nProcessing dataset: {dataset}")
+
+        # Filter data for the specific dataset
+        dataset_df = df_filtered[df_filtered['dataset'] == dataset]
+
+        # Create a directory for this dataset
+        dataset_dir = os.path.join(out_dir, f"{dataset}_charts")
+        if not os.path.exists(dataset_dir):
+            os.makedirs(dataset_dir)
+
+        # Chart 1: Classifier Performance (one chart per measure)
+        for measure in supported_measures:
+            measure_df = dataset_df[dataset_df['measure'] == measure]
+
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(data=measure_df, x='classifier', y='value', palette="Set2")
+            plt.title(f"Summary Classifier Performance for Measure: {measure}")
+            plt.xlabel("Classifier")
+            plt.ylabel("Metric Value")
+            plt.xticks(rotation=45)
+
+            classifier_chart = os.path.join(dataset_dir, f"{dataset}_classifier_performance_{measure}.png")
+            plt.savefig(classifier_chart, bbox_inches='tight')
+            plt.close()
+            print(f"Saved: {classifier_chart}")
+
+        # Chart 2: Performance by Language Model (one chart per measure)
+        for measure in supported_measures:
+            measure_df = dataset_df[dataset_df['measure'] == measure]
+
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(data=measure_df, x='language_model', y='value', palette="pastel")
+            plt.title(f"Performance by Language Model for Measure: {measure} - {dataset}")
+            plt.xlabel("Language Model")
+            plt.ylabel("Metric Value")
+            plt.xticks(rotation=45)
+
+            language_model_chart = os.path.join(dataset_dir, f"{dataset}_language_model_performance_{measure}.png")
+            plt.savefig(language_model_chart, bbox_inches='tight')
+            plt.close()
+            print(f"Saved: {language_model_chart}")
+
+        # Chart 3: Performance by Representation Form (one chart per measure)
+        for measure in supported_measures:
+            measure_df = dataset_df[dataset_df['measure'] == measure]
+
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(data=measure_df, x='representation_form', y='value', palette="muted")
+            plt.title(f"Performance by Representation Form for Measure: {measure} - {dataset}")
+            plt.xlabel("Representation Form")
+            plt.ylabel("Metric Value")
+            plt.xticks(rotation=45)
+
+            representation_form_chart = os.path.join(dataset_dir, f"{dataset}_representation_form_performance_{measure}.png")
+            plt.savefig(representation_form_chart, bbox_inches='tight')
+            plt.close()
+            print(f"Saved: {representation_form_chart}")
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -2269,13 +2365,14 @@ if __name__ == "__main__":
     parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
     parser.add_argument('-r', '--results', type=int, default=TOP_N_RESULTS, help=f'number of results to display (default: {TOP_N_RESULTS})')
     parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
+    parser.add_argument('-a', '--analyze', action='store_true', default=False, help='Generate analysis data')
 
     args = parser.parse_args()
     print("args: ", args)
 
     # Ensure at least one operation is specified
-    if not (args.charts or args.summary):
-        parser.error("No action requested, add -c for charts or -s for summary")
+    if not (args.charts or args.summary or args.analyze):
+        parser.error("No action requested, add -c for charts or -s for summary or -a for analyze")
 
     debug = args.debug
     print("debug mode:", debug)
@@ -2308,6 +2405,7 @@ if __name__ == "__main__":
 
     summ_dir = os.path.join(out_dir, 'summaries')
     timelapse_dir = os.path.join(out_dir, 'timelapse')
+    analysis_dir = os.path.join(out_dir, 'analysis')
     
     charts_model_dir = os.path.join(out_dir, 'model_charts')
     charts_summ_dir = os.path.join(out_dir, 'summary_charts')
@@ -2326,6 +2424,7 @@ if __name__ == "__main__":
             os.makedirs(out_dir)
             os.makedirs(summ_dir)
             os.makedirs(timelapse_dir)
+            os.makedirs(analysis_dir)
             
             os.makedirs(charts_model_dir)
             os.makedirs(charts_summ_dir)
@@ -2338,6 +2437,9 @@ if __name__ == "__main__":
             print(f"Directory {out_dir} was not created. Exiting.")
             exit()
 
+    if (args.analyze):
+        analyze(df, out_dir=analysis_dir, neural=args.neural, debug=args.debug)
+        exit()
         
     #
     # generate charts
