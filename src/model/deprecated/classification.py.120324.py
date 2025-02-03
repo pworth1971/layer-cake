@@ -1,6 +1,6 @@
 from time import time
 import numpy as np
-from model.layers import *
+from src.model.deprecated.layers import *
 from transformers import BertModel, BertTokenizer
 
 from sklearn.linear_model import LogisticRegression

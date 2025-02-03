@@ -8,7 +8,7 @@ from transformers import BertTokenizerFast, BertModel
 from transformers import DistilBertModel, RobertaModel
 
 # custom imports
-from model.layers import *
+from src.model.deprecated.layers import *
 
 from embedding.pretrained import BERT_MODEL
 

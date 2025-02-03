@@ -231,16 +231,16 @@ class Dataset:
         #self.devel_raw, self.test_raw = mask_numbers(X_train_raw), mask_numbers(X_test_raw)
         self.devel_raw = preprocess(
             text_series=X_train_raw,
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=X_test_raw,
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         # Convert target labels to 1D arrays
@@ -360,17 +360,17 @@ class Dataset:
         
         self.devel_raw = preprocess(
             text_series=X_train_raw,
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False,
+            remove_stopwords=True,
             remove_special_chars=True
             )
 
         self.test_raw = preprocess(
             text_series=X_test_raw,
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False,
+            remove_stopwords=True,
             remove_special_chars=True
             )
 
@@ -435,16 +435,16 @@ class Dataset:
         #self.devel_raw, self.test_raw = mask_numbers(devel.data), mask_numbers(test.data)
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
@@ -503,16 +503,16 @@ class Dataset:
 
         self.devel_raw = preprocess(
             pd.Series(train_data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             pd.Series(test_data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         # Define target names
@@ -541,16 +541,16 @@ class Dataset:
 
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.devel_target, self.test_target = devel.target, test.target
@@ -571,16 +571,16 @@ class Dataset:
 
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
@@ -603,16 +603,16 @@ class Dataset:
 
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
-            remove_punctuation=False,
+            remove_punctuation=True,
             lowercase=True,
-            remove_stopwords=False
+            remove_stopwords=True
             )
 
         self.devel_labelmatrix, self.test_labelmatrix = _label_matrix(devel.target, test.target)
