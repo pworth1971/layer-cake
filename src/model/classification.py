@@ -17,6 +17,40 @@ from data.lc_trans_dataset import LCTokenizer
 SUPPORTED_OPS = ["cat", "add", "dot"]
 
 
+
+
+from scipy.sparse import issparse
+
+from time import time
+import numpy as np
+
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, precision_score
+from sklearn.metrics import make_scorer, recall_score, hamming_loss
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.multiclass import OneVsRestClassifier
+
+from util.metrics import evaluation_ml
+from util.common import OUT_DIR
+
+import logging
+logging.basicConfig(level=logging.INFO)
+
+
+NUM_JOBS = -1                   # important to manage CUDA memory allocation
+#NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
+
+NUM_SAMPLED_PARAMS = 9          # Number of parameter settings that are sampled by RandomizedSearchCV
+
+
+
+
+
+
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------
 # legacy neural classifier (CNN, ATTN, LSTM support)
 #
@@ -2525,33 +2559,6 @@ class BertWCEClassifier(nn.Module):
 #
 # ML Models
 #
-
-from scipy.sparse import issparse
-
-from time import time
-import numpy as np
-from src.model.deprecated.layers import *
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import LinearSVC
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.metrics import accuracy_score, f1_score, precision_score
-from sklearn.metrics import make_scorer, recall_score, hamming_loss
-from sklearn.model_selection import RandomizedSearchCV
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.multiclass import OneVsRestClassifier
-
-from util.metrics import evaluation_ml
-from util.common import OUT_DIR
-
-import logging
-logging.basicConfig(level=logging.INFO)
-
-
-NUM_JOBS = -1                   # important to manage CUDA memory allocation
-#NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
-
-NUM_SAMPLED_PARAMS = 9          # Number of parameter settings that are sampled by RandomizedSearchCV
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------

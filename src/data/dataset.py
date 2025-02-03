@@ -27,6 +27,10 @@ from util.common import DATASET_DIR, PICKLE_DIR
 MIN_DF_COUNT = 5                    # minimum document frequency count for a term to be included in the vocabulary
 
 
+import nltk
+nltk.download('stopwords')
+  
+
 
 def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
     """
