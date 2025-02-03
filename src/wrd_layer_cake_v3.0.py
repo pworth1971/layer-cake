@@ -319,7 +319,8 @@ def main(opt):
     elif (opt.pretrained == 'deepseek'):
         opt.deepseek_path = model_path
     else:
-        raise ValueError("Unsupported pretrained model:", opt.pretrained)
+        print("[WARNING]: No language model type specified.")
+        #raise ValueError("Unsupported pretrained model:", opt.pretrained)
 
     print("opt:", opt)
 
@@ -585,12 +586,7 @@ if __name__ == '__main__':
                         help='disables z-scoring form the computation of WCE')
 
     opt = parser.parse_args()
-
-    """
-    opt.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(f'running on {opt.device}')
-    assert f'{opt.device}'=='cuda', 'forced cuda device but cpu found'
-    """
+    print("opt:", opt)
     
     # Setup device prioritizing CUDA, then MPS, then CPU
     if torch.cuda.is_available():

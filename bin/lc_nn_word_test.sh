@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-PY="python ../src/wrd_layer_cake_v2.5.py --nepochs 77 --patience 5 --seed 77"
-LOG="--log-file ../log/lc_nn_wrd_test.legacy.test"
+PY="python ../src/wrd_layer_cake_v3.0.py --nepochs 77 --patience 5 --seed 77"
+LOG="--log-file ../log/lc_nn_wrd_test.v3.0.test"
 
 CNN="--net cnn"
 LSTM="--net lstm"
@@ -11,8 +11,6 @@ ATTN="--net attn"
 # Set the CUDA device for all processes
 #
 export CUDA_VISIBLE_DEVICES=3                                               # GPU ID for code execution
-
-
 
 
 

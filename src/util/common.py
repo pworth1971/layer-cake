@@ -559,17 +559,21 @@ def get_ml_representation(args):
 
 # Get the full model identifier and load from local directory
 def get_model_identifier(pretrained, cache_dir=VECTOR_CACHE):
-
-    model_name = MODEL_MAP.get(pretrained, pretrained)
     
-    model_dir = MODEL_DIR.get(pretrained, pretrained)
+    print(f"get_model_identifier()... pretrained: {pretrained}, cache_dir: {cache_dir}")
 
-    model_path = os.path.join(cache_dir, model_dir)
-
-    return model_name, model_path
+    if pretrained is None:
+        return None, None
+    else:
+        model_name = MODEL_MAP.get(pretrained, pretrained)        
+        model_dir = MODEL_DIR.get(pretrained, pretrained)
+        model_path = os.path.join(cache_dir, model_dir)
+        return model_name, model_path
     
 
 def get_embeddings_path(pretrained, args):
+    
+    print(f"get_embeddings_path()... pretrained: {pretrained}")
     
     if pretrained == 'glove':
         return args.glove_path
