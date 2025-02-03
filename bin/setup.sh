@@ -122,4 +122,13 @@ done
 
 echo "All requistite directories have been created successfully, pls download the dataset files as needed."
 
+#
+# Set up Git configuration
+# update with your git info
+#
+echo "Setting up Git configuration..."
+git config --global user.name "Peter Worth"
+git config --global user.email "peterworthjr@gmail.com"
+
+
 echo "Setup complete!"
