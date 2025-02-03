@@ -23,7 +23,7 @@ dataset="--dataset bbc-news"
 ##
 # CNN runs
 ##
-$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
+#$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
 
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--tunable

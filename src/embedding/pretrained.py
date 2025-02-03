@@ -100,7 +100,7 @@ class GloVeEmbeddings(PretrainedEmbeddings):
         self.type = 'glove'
         self.tokenizer = None
         dir = path
-        path = path + model_name
+        path = path + '/' + model_name
         print(f'loading GloVe embeddings from {path}...')
 
         print(f'Initializing GloVe class, loading GloVe pretrained vectors...')
