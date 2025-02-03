@@ -2251,24 +2251,30 @@ def generate_horizontal_heatmap_all_models(
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
+import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def analyze(
     df, 
     out_dir, 
     neural=False, 
-    debug=False
+    debug=False, 
+    include_opt=False
 ):
     """
-    Analyze performance by dataset and generate individual chart files for each measure.
+    Analyze performance by dataset and generate individual chart files,
+    including timelapse performance box plots for all performance categories.
     
     Args:
     - df: DataFrame containing the analysis data.
     - out_dir: Directory where the summary charts should be saved.
     - neural: Flag indicating neural or non-neural analysis.
     - debug: Debug mode flag.
+    - include_opt: Flag to include 'optimized' values in the timelapse boxplots.
     """
 
-    print("\n\tGenerating performance analysis and charts by dataset...")
+    print("\n\tGenerating performance analysis and charts...")
 
     # Extract language model and representation form
     if not neural:
@@ -2281,6 +2287,14 @@ def analyze(
     supported_measures = MEASURES
     df_filtered = df[df['measure'].str.contains('|'.join(supported_measures))]
 
+    # Create output directory if it doesn't exist
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+
+    # Apply the 'include_opt' filter for timelapse boxplots
+    if not include_opt:
+        df = df[df['optimized'] == False]
+
     # Group by dataset and generate charts for each
     datasets = df_filtered['dataset'].unique()
     for dataset in datasets:
@@ -2289,58 +2303,95 @@ def analyze(
         # Filter data for the specific dataset
         dataset_df = df_filtered[df_filtered['dataset'] == dataset]
 
-        # Create a directory for this dataset
-        dataset_dir = os.path.join(out_dir, f"{dataset}_charts")
-        if not os.path.exists(dataset_dir):
-            os.makedirs(dataset_dir)
-
-        # Chart 1: Classifier Performance (one chart per measure)
+        # --- CHART 1: Classifier Performance (one chart per measure) ---
         for measure in supported_measures:
             measure_df = dataset_df[dataset_df['measure'] == measure]
 
+            # Plot classifier performance
             plt.figure(figsize=(10, 6))
             sns.boxplot(data=measure_df, x='classifier', y='value', palette="Set2")
-            plt.title(f"Summary Classifier Performance for Measure: {measure}")
+            plt.title(f"Classifier Performance Summary - dataset: {dataset}, measure: {measure}")
             plt.xlabel("Classifier")
             plt.ylabel("Metric Value")
             plt.xticks(rotation=45)
 
-            classifier_chart = os.path.join(dataset_dir, f"{dataset}_classifier_performance_{measure}.png")
+            classifier_chart = os.path.join(out_dir, f"{dataset}_classifier_performance_{measure}.png")
             plt.savefig(classifier_chart, bbox_inches='tight')
             plt.close()
             print(f"Saved: {classifier_chart}")
 
-        # Chart 2: Performance by Language Model (one chart per measure)
+        # --- CHART 2: Performance by Language Model (one chart per measure) ---
         for measure in supported_measures:
             measure_df = dataset_df[dataset_df['measure'] == measure]
 
+            # Plot language model performance
             plt.figure(figsize=(10, 6))
             sns.boxplot(data=measure_df, x='language_model', y='value', palette="pastel")
-            plt.title(f"Performance by Language Model for Measure: {measure} - {dataset}")
+            plt.title(f"Language Model Performance Summary - dataset: {dataset}, measure: {measure}")
             plt.xlabel("Language Model")
             plt.ylabel("Metric Value")
             plt.xticks(rotation=45)
 
-            language_model_chart = os.path.join(dataset_dir, f"{dataset}_language_model_performance_{measure}.png")
+            language_model_chart = os.path.join(out_dir, f"{dataset}_language_model_performance_{measure}.png")
             plt.savefig(language_model_chart, bbox_inches='tight')
             plt.close()
             print(f"Saved: {language_model_chart}")
 
-        # Chart 3: Performance by Representation Form (one chart per measure)
+        # --- CHART 3: Performance by Representation Form (one chart per measure) ---
         for measure in supported_measures:
             measure_df = dataset_df[dataset_df['measure'] == measure]
 
             plt.figure(figsize=(10, 6))
             sns.boxplot(data=measure_df, x='representation_form', y='value', palette="muted")
-            plt.title(f"Performance by Representation Form for Measure: {measure} - {dataset}")
+            plt.title(f"Representation Performance Summary - dataset: {dataset}, measure: {measure}")
             plt.xlabel("Representation Form")
             plt.ylabel("Metric Value")
             plt.xticks(rotation=45)
 
-            representation_form_chart = os.path.join(dataset_dir, f"{dataset}_representation_form_performance_{measure}.png")
+            representation_form_chart = os.path.join(out_dir, f"{dataset}_representation_form_performance_{measure}.png")
             plt.savefig(representation_form_chart, bbox_inches='tight')
             plt.close()
             print(f"Saved: {representation_form_chart}")
+
+        # --- TIMELAPSE CHART 1: Timelapse by Classifier ---
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=dataset_df, x='classifier', y='timelapse', palette="Set2")
+        plt.title(f"Timelapse Performance by Classifier - {dataset}")
+        plt.xlabel("Classifier")
+        plt.ylabel("Time Elapsed (seconds)")
+        plt.xticks(rotation=45)
+
+        timelapse_classifier_chart = os.path.join(out_dir, f"{dataset}_timelapse_by_classifier.png")
+        plt.savefig(timelapse_classifier_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {timelapse_classifier_chart}")
+
+        # --- TIMELAPSE CHART 2: Timelapse by Language Model ---
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=dataset_df, x='language_model', y='timelapse', palette="pastel")
+        plt.title(f"Timelapse Performance by Language Model - {dataset}")
+        plt.xlabel("Language Model")
+        plt.ylabel("Time Elapsed (seconds)")
+        plt.xticks(rotation=45)
+
+        timelapse_language_model_chart = os.path.join(out_dir, f"{dataset}_timelapse_by_language_model.png")
+        plt.savefig(timelapse_language_model_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {timelapse_language_model_chart}")
+
+        # --- TIMELAPSE CHART 3: Timelapse by Representation Form ---
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=dataset_df, x='representation_form', y='timelapse', palette="muted")
+        plt.title(f"Timelapse Performance by Representation Form - {dataset}")
+        plt.xlabel("Representation Form")
+        plt.ylabel("Time Elapsed (seconds)")
+        plt.xticks(rotation=45)
+
+        timelapse_representation_form_chart = os.path.join(out_dir, f"{dataset}_timelapse_by_representation_form.png")
+        plt.savefig(timelapse_representation_form_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {timelapse_representation_form_chart}")
+
 
 
 
