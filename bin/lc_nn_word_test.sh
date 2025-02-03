@@ -10,7 +10,7 @@ ATTN="--net attn"
 #
 # Set the CUDA device for all processes
 #
-export CUDA_VISIBLE_DEVICES=3                                               # GPU ID for code execution
+export CUDA_VISIBLE_DEVICES=0                                               # GPU ID for code execution
 
 
 
@@ -23,7 +23,7 @@ dataset="--dataset bbc-news"
 ##
 # CNN runs
 ##
-#$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
+$PY $LOG $dataset	$CNN	--learnable 56	--channels 128
 
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove
 $PY $LOG $dataset	$CNN	--channels 128	--pretrained glove	--tunable
