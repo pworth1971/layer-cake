@@ -77,23 +77,49 @@ if [[ "$OS" == "ubuntu" ]]; then
     sudo apt install zip -y
 fi
 
-# Create vector_cache and datasets directories
-echo "Creating './vector_cache/' and './datasets/' directories with subdirectories..."
-mkdir -p ./vector_cache
-mkdir -p ./datasets
+# Create .vector_cache directories
+echo "Creating .vector_cache directories..."
+VECTOR_CACHE="../.vector_cache"
+LANGUAGE_MODELS=('GloVe' 'Word2Vec' 'fastText' 'BERT' 'RoBERTa' 'DistilBERT' 'XLNet' 'GPT2' 'Llama' 'DeepSeek')
 
-# Create subdirectories for language models
 for model in "${LANGUAGE_MODELS[@]}"; do
-    mkdir -p "./vector_cache/$model"
-    echo "Created directory: ./vector_cache/$model"
+    dir="${VECTOR_CACHE}/${model}"
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+        echo "Created: $dir"
+    else
+        echo "Directory already exists: $dir"
+    fi
 done
 
-# Create subdirectories for datasets
+# Create dataset directories
+echo "Creating dataset directories..."
+DATASET_DIR="../datasets"
+DATASETS=('bbc-news' 'ohsumed' '20newsgroups' 'reuters21578' 'arxiv' 'imdb' 'arxiv_protoformer' 'rcv1')
+
 for dataset in "${DATASETS[@]}"; do
-    mkdir -p "./datasets/$dataset"
-    echo "Created directory: ./datasets/$dataset"
+    dir="${DATASET_DIR}/${dataset}"
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+        echo "Created: $dir"
+    else
+        echo "Directory already exists: $dir"
+    fi
 done
 
-echo "All directories have been created successfully."
+# Create additional directories (pickles, out, log)
+echo "Creating additional requisite directories..."
+ADDITIONAL_DIRS=('../pickles' '../out' '../log')
+
+for additional_dir in "${ADDITIONAL_DIRS[@]}"; do
+    if [ ! -d "$additional_dir" ]; then
+        mkdir -p "$additional_dir"
+        echo "Created: $additional_dir"
+    else
+        echo "Directory already exists: $additional_dir"
+    fi
+done
+
+echo "All requistite directories have been created successfully, pls download the dataset files as needed."
 
 echo "Setup complete!"
