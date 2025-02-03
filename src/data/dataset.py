@@ -97,13 +97,13 @@ def init_vectorizer(vtype='tfidf', custom_tokenizer=None):
                 min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 sublinear_tf=True,                              # use sublinear TF scaling
                 analyzer='word',                                # analyze the words
-                lowercase=True                                  # dont lowercase the tokens
+                lowercase=False                                  # dont lowercase the tokens
             )
         elif vtype == 'count':
             vectorizer = CountVectorizer(
                 min_df=MIN_DF_COUNT,                            # ignore terms that have a document frequency strictly lower than the given threshold
                 analyzer='word',                                # analyze the words     
-                lowercase=True                                  # dont lowercase the tokens
+                lowercase=False                                  # dont lowercase the tokens
             )
     
     return vectorizer
@@ -232,14 +232,14 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=X_train_raw,
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=X_test_raw,
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
@@ -327,7 +327,7 @@ class Dataset:
         papers_dataframe['text'] = preprocess(
             papers_dataframe['text'],
             remove_punctuation=False,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=False,
             remove_special_chars=True
         )
@@ -361,7 +361,7 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=X_train_raw,
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True,
             remove_special_chars=True
             )
@@ -369,7 +369,7 @@ class Dataset:
         self.test_raw = preprocess(
             text_series=X_test_raw,
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True,
             remove_special_chars=True
             )
@@ -436,14 +436,14 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
@@ -504,14 +504,14 @@ class Dataset:
         self.devel_raw = preprocess(
             pd.Series(train_data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             pd.Series(test_data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
@@ -542,14 +542,14 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
@@ -572,14 +572,14 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
@@ -604,14 +604,14 @@ class Dataset:
         self.devel_raw = preprocess(
             text_series=pd.Series(devel.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
         self.test_raw = preprocess(
             text_series=pd.Series(test.data), 
             remove_punctuation=True,
-            lowercase=True,
+            lowercase=False,
             remove_stopwords=True
             )
 
