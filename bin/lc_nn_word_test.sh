@@ -326,10 +326,6 @@ $PY $LOG $dataset	$ATTN	--hidden 512	--pretrained fasttext	--supervised	--tunabl
 # ---------------------------------------------------------------------------------------------------------------------------------------
 
 
-
-
-
-
 # ---------------------------------------------------------------------------------------------------------------------------------------
 #
 # arxiv_protoformer data, 10 classes, single-label
@@ -405,8 +401,6 @@ $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext	--tunable
 $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext	--supervised
 $PY $LOG $dataset	$ATTN	--hidden 256	--pretrained fasttext	--supervised	--tunable
 # ---------------------------------------------------------------------------------------------------------------------------------------
-
-
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -487,7 +481,6 @@ $PY $LOG $dataset	$ATTN	--hidden 512	--pretrained fasttext	--supervised	--tunabl
 
 
 
-
 # ---------------------------------------------------------------------------------------------------------------------------------------
 #
 # imdb dataset, single-label, 2 classes
@@ -564,8 +557,6 @@ $PY $LOG $dataset	$ATTN	--hidden 64	--pretrained fasttext	--tunable
 $PY $LOG $dataset	$ATTN	--hidden 64	--pretrained fasttext	--supervised
 $PY $LOG $dataset	$ATTN	--hidden 64	--pretrained fasttext	--supervised	--tunable
 # ---------------------------------------------------------------------------------------------------------------------------------------
-
-
 
 
 

@@ -18,11 +18,10 @@ PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py   --net hf.sc"
 #
 EPOCHS=37              # TEST
 PATIENCE=3             # TEST
-LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.test"
-
+#LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.test"
+LOG_FILE='--log-file ../log/lc_nn_trans_test_all.test.v2'
 
 SEED=77
-
 
 # -------------------------------------------------------------------------------
 #
@@ -35,6 +34,8 @@ embedding_names=(
     "DISTILBERT"
     "ROBERTA"
     "GPT2"
+    "LLAMA"
+    "DEEPSEEK"
 )
 
 embedding_args=(    
@@ -43,20 +44,22 @@ embedding_args=(
     "--pretrained distilbert"
     "--pretrained roberta"
     "--pretrained gpt2" 
+    "--pretrained llama"
+    "--pretrained deepseek"
 )
 
 #
 # Datasets array
 #
 datasets=(
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
-    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
+    "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
+    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
     "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
     "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
+    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
  )   
 
 
@@ -75,14 +78,13 @@ for dataset in "${datasets[@]}"; do
         $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE
         echo
 
-
         #
         # TUNABLE model, supervised (cat), tunable tce layer        
         #
-        echo
-        echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
-        $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
-        echo
+        #echo
+        #echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces"
+        #$PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode cat --tunable-tces
+        #echo
 
         #
         # TUNABLE model, supervised (add), tunable tce layer        
@@ -91,7 +93,6 @@ for dataset in "${datasets[@]}"; do
         #echo "Running: $PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces"
         #$PROGRAM_NAME $dataset --tunable $embed_arg --seed $SEED $LOG_FILE --epochs $EPOCHS --patience $PATIENCE --supervised --sup-mode add --tunable-tces
         #echo
-
 
     done
 done
