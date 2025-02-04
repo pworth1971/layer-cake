@@ -203,9 +203,10 @@ def load_pt_model(opt):
     if opt.pretrained == 'glove':
         return GloVeEmbeddings(setname=GLOVE_SET, model_name=GLOVE_MODEL, path=opt.glove_path)
     elif opt.pretrained == 'word2vec':
-        return Word2VecEmbeddings(path=opt.word2vec_path+WORD2VEC_MODEL, limit=1000000)
+        return Word2VecEmbeddings(path=opt.word2vec_path+'/'+WORD2VEC_MODEL, limit=1000000)
     elif opt.pretrained == 'fasttext':
-        return FastTextEmbeddings(path=opt.fasttext_path+FASTTEXT_MODEL, limit=1000000)
+        #return FastTextEmbeddings(path=opt.fasttext_path+'/'+FASTTEXT_MODEL, limit=1000000)
+        return FastTextEmbeddings(path=opt.fasttext_path+'/'+FASTTEXT_MODEL)
     elif opt.pretrained is None:
         return None
 

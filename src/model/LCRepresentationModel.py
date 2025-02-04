@@ -87,7 +87,8 @@ GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, c
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
-FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
+#FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
+FASTTEXT_MODEL = 'crawl-300d-2M-subword.vec'                # dimension 300, case sensitive
 # ---------------------------------------------------------------------------------------------------------------------------
 
 
