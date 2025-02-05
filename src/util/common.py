@@ -943,7 +943,7 @@ def get_system_resources():
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def index_dataset(dataset, opt, pt_model=None):
+def index_dataset(dataset, opt, pt_model=None, debug=False):
     """
     Indexes the dataset for use with word-based (e.g., GloVe, Word2Vec, FastText)
     and token-based (e.g., BERT, RoBERTa, DistilBERT) embeddings.
@@ -966,7 +966,7 @@ def index_dataset(dataset, opt, pt_model=None):
         - devel_index: Indexed representation of the development dataset.
         - test_index: Indexed representation of the test dataset.
     """
-    print(f'indexing dataset.... dataset: {dataset}, vtype: {opt.vtype}, model: {opt.pretrained}')
+    print(f'\n\tindexing dataset.... dataset: {dataset}, vtype: {opt.vtype}, model: {opt.pretrained}, debug: {debug}')
     
     pickle_file = os.path.join(PICKLE_DIR, f"{opt.dataset}.{opt.vtype}.{opt.pretrained}.index.pickle")
     print('pickle_file:', pickle_file)
@@ -999,8 +999,8 @@ def index_dataset(dataset, opt, pt_model=None):
     print("Analyzer initialized.")
 
     # Index the datasets
-    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
-    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt)
+    devel_index = index(dataset.devel_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt, debug)
+    test_index = index(dataset.test_raw, word2index, known_words, analyzer, unk_index, out_of_vocabulary, opt, debug)
 
     # Save the indexed dataset to a pickle file
     print(f"Saving indexed dataset to {pickle_file}...")
@@ -1012,7 +1012,7 @@ def index_dataset(dataset, opt, pt_model=None):
 
 
 
-def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, opt):
+def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, opt, debug=False):
     """
     Index (i.e., replaces word strings with numerical indexes) a list of string documents and log outputs to files.
 
@@ -1078,23 +1078,21 @@ def index(data, vocab, known_words, analyzer, unk_index, out_of_vocabulary, opt)
             pbar.set_description(f'[unk = {unk_count}/{knw_count}={(100.*unk_count/knw_count):.2f}%]'
                                  f'[out = {out_count}/{knw_count}={(100.*out_count/knw_count):.2f}%]')
 
+    if (debug):
+        # Write vocab words, known words, and unknown words to files
+        with open(vocab_words_file, 'w') as vocab_file:
+            vocab_file.write("\n".join(sorted(all_vocab_words)))
 
-    # Write vocab words, known words, and unknown words to files
-    with open(vocab_words_file, 'w') as vocab_file:
-        vocab_file.write("\n".join(sorted(all_vocab_words)))
+        with open(known_words_file, 'w') as known_file:
+            known_file.write("\n".join(sorted(all_known_words)))
 
-    with open(known_words_file, 'w') as known_file:
-        known_file.write("\n".join(sorted(all_known_words)))
+        with open(unknown_words_file, 'w') as unknown_file:
+            unknown_file.write("\n".join(sorted(all_unknown_words)))
 
-    with open(unknown_words_file, 'w') as unknown_file:
-        unknown_file.write("\n".join(sorted(all_unknown_words)))
-
-    """
-    print(f"Text and tokens written to: {text_and_tokens_file}")
-    print(f"Vocabulary words written to: {vocab_words_file}")
-    print(f"Known words written to: {known_words_file}")
-    print(f"Unknown words written to: {unknown_words_file}")
-    """
+        print(f"Text and tokens written to: {text_and_tokens_file}")
+        print(f"Vocabulary words written to: {vocab_words_file}")
+        print(f"Known words written to: {known_words_file}")
+        print(f"Unknown words written to: {unknown_words_file}")
 
     return indexed_docs
 

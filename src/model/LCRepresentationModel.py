@@ -49,15 +49,12 @@ logging.getLogger('gensim.models.keyedvectors').setLevel(logging.ERROR)
 #
 from huggingface_hub import login
 
-
 HF_TOKEN = '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'
 HF_TOKEN2 = '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'
 #
 # ---------------------------------------------------------------------------------------------------------------------------
 
-
 MAX_WORKER_THREADS = 10
-
 
 NUM_JOBS = -1           # number of jobs for parallel processing
 
@@ -66,10 +63,8 @@ DEFAULT_CPU_BATCH_SIZE = 8
 DEFAULT_GPU_BATCH_SIZE = 8
 DEFAULT_MPS_BATCH_SIZE = 8
 
-
 VECTOR_CACHE = '../.vector_cache'                   # embedding cache directory
 PICKLE_DIR = '../pickles/'                          # pickled data directory
-
 
 # ---------------------------------------------------------------------------------------------------------------------------
 # default pretrained language models.
@@ -87,8 +82,9 @@ GLOVE_MODEL = 'glove.840B.300d.txt'                          # dimensiomn 300, c
 WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, case sensitive
 
 #FASTTEXT_MODEL = 'cc.en.300.bin'                            # dimension 300, case sensitive
+#FASTTEXT_MODEL = 'crawl-300d-2M-subword.vec'                # dimension 300, case sensitive
 #FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive
-FASTTEXT_MODEL = 'crawl-300d-2M-subword.vec'                # dimension 300, case sensitive
+FASTTEXT_MODEL = 'crawl-300d-2M.vec.bin'
 # ---------------------------------------------------------------------------------------------------------------------------
 
 

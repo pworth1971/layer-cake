@@ -8,7 +8,6 @@ import torch
 from torchtext.vocab import GloVe as TorchTextGloVe
 
 from model.LCRepresentationModel import VECTOR_CACHE, GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
-#from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL, XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL, LLAMA_MODEL
 
 # ----------------------------------------------------------------------------------------------------------------------------
 #
@@ -253,17 +252,165 @@ class Word2VecEmbeddings(PretrainedEmbeddings):
         return extraction
 
 
-#class FastTextEmbeddings(Word2VecEmbeddings):
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# 
+# Fasttext embeddings download URL:
+# https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M-subword.zip
+#
+#
+
+
+class FastTextEmbeddings(Word2VecEmbeddings):
+
+    def __init__(self, path, limit=None):
+        
+        #pathbin = path+'.bin'
+                
+        print(f'loading FastText embeddings from {path}...')
+
+        self.type = 'fasttext'
+
+        if path.endswith('.bin'):  # Check for binary format
+         
+            if os.path.exists(path):
+                print('open binary file')
+                super().__init__(path, limit, binary=True)
+
+        elif path.endswith('.vec'):  # vector file format
+
+            if os.path.exists(path):
+                print('open textual file')
+                super().__init__(path, limit, binary=False)            
+                print('saving as binary file')
+                self.save_binary(pathbin)
+                
+        else:
+            raise ValueError('FastText embeddings must be in .vec or .bin format')
+
+    def save_binary(self, path):
+        self.embed.save_word2vec_format(path, binary=True)
+
+from gensim.models.fasttext import FastText
+import torch
+
+class FastTextEmbeddings310(Word2VecEmbeddings):
+    """
+    FastTextEmbeddings Class: Handles FastText embeddings with subword support.
+    Inherits from PretrainedEmbeddings and aligns its interface with Word2VecEmbeddings.
+    """
+    
+    def __init__(self, path, limit=None):
+        """
+        Initializes the FastText embeddings. If a binary version exists, it loads it;
+        otherwise, it loads the text version and saves it as binary for future use.
+
+        Parameters:
+        ----------
+        path : str
+            Path to the FastText embedding file (either .vec or .bin).
+        limit : int, optional
+            Limit on the number of embeddings to load.
+        """
+
+        self.type = 'fasttext'
+
+        print(f'loading FastText embeddings from {path}...')
+
+        if path.endswith('.bin'):  # Check for binary format
+            print('Binary format detected. Loading using FastText binary loader.')
+            self.embed = FastText.load_fasttext_format(path)
+        else:
+            print('Text format detected. Loading using gensim KeyedVectors...')
+            self.embed = FastText.load(path)  # Using gensim's FastText loading mechanism for .vec files
+            print('saving as binary file')
+            self.save_binary(pathbin)
+            print('Binary file saved.')
+
+        # Build the word2index mapping
+        print("Building word2index mapping...")
+        self.word2index = {word: idx for idx, word in enumerate(self.embed.wv.index_to_key)}
+
+        # Initialize the tokenizer with a subword tokenizer using a fixed n-gram size
+        self.n = 3                                          # Default n-gram size
+
+        # we use gensim default tokenizer 
+        self.tokenizer = self._subword_tokenizer
+
+
+        
+    def _subword_tokenizer(self, text):
+        """
+        Tokenizes text into character n-grams for subword embeddings.
+
+        Parameters:
+        ----------
+        text : str
+            Input text to tokenize.
+        n : int
+            Length of character n-grams.
+
+        Returns:
+        -------
+        list of str
+            List of character n-grams.
+        """
+        tokens = []
+        words = text.split()
+        for word in words:
+            word = f"<{word}>"
+            tokens.extend([word[i:i+self.n] for i in range(len(word) - self.n + 1)])
+        return tokens
+
+
+    def get_tokenizer(self):
+        #return self.tokenizer
+        return None
+
+
+    def get_model(self):
+        return FASTTEXT_MODEL
+
+
+    def get_type(self):
+        return self.type
+
+
+    def save_binary(self, path):
+        self.embed.save_word2vec_format(path, binary=True)
+
+
+    def vocabulary(self):
+        """
+        Returns the vocabulary for the FastText model.
+        """
+        return set(self.embed.wv.index_to_key)
+
+
+    def dim(self):
+        """
+        Returns the dimensionality of the embeddings.
+        """
+        return self.embed.wv.vector_size
+
+    def extract(self, words):
+        print("FastText::extract()...")
+        extraction = np.zeros((len(words), self.dim()), dtype=np.float32)
+        for i, word in enumerate(words):
+            extraction[i] = self.embed.wv.get_vector(word)
+        return torch.from_numpy(extraction).float()
+
+
 
 import fasttext
 import fasttext.util
 from gensim.models import KeyedVectors
 
 
-class FastTextEmbeddings:
+class FastTextEmbeddings312(Word2VecEmbeddings):
 
-    #def __init__(self, path, limit=None):
-    def __init__(self, path):
+    def __init__(self, path, limit=None):
 
         self.type = 'fasttext'
 
@@ -272,43 +419,17 @@ class FastTextEmbeddings:
         #
         print(f'loading fastText embeddings from {path}...')
 
-        """
-        if path.endswith('.bin'):
-            print('Binary format detected. Loading using FastText native loader...')
-
-            assert os.path.exists(path), f'FastText binary model not found at {path}'
-        
-            self.model = fasttext.load_model(path)  # Use fastText native binary loader
-        else:
-            raise ValueError("FastTextEmbeddings expects a binary (.bin) file.")
-        """
-
-        if path.endswith('.vec'):
-            print('Loading fasttext embeddings using Gensim KeyedVectors {text format}...')
-
-            assert os.path.exists(path), f'FastText text model not found at {path}'
-        
-            # Load the .vec file using Gensim
-            self.model = KeyedVectors.load_word2vec_format(path, binary=False)
-            #self.save_binary(path)
-        else:
-            raise ValueError("FastTextEmbeddings expects a text (.vec) file.")
-
-        """
         if path.endswith('.bin'):  # Check for binary format
             print('Binary format detected. Loading using FastText binary loader.')
             super().__init__(path, limit, binary=True)
-        else:
-            pathbin = path + '.bin'
+        elif path.endswith('.vec'):  # Check for text format
+            print('Text format detected. Loading using gensim KeyedVectors...')
+
             if os.path.exists(pathbin):
-                print('open binary file')
-                super().__init__(pathbin, limit, binary=True)
-            else:
                 print('open textual file')
                 super().__init__(path, limit, binary=False)
                 print('saving as binary file')
                 self.save_binary(pathbin)
-        """
 
          # Initialize the tokenizer with a subword tokenizer using a fixed n-gram size
         self.n = 3              # Default n-gram size
@@ -348,23 +469,13 @@ class FastTextEmbeddings:
     def get_type(self):
         return self.type
 
-    """    
     def vocabulary(self):
         return set(self.embed.key_to_index.keys())
     
     def dim(self):
         return self.embed.vector_size
-    """
 
-    def vocabulary(self):
-        return set(self.model.index_to_key)  # Correct way to access the vocabulary in Gensim 4.x
 
-    """
-    def vocabulary(self):
-        return set(self.model.get_words())
-    """
-
-    """
     def extract(self, words):
         print("FastText::extract()...")
 
@@ -381,81 +492,7 @@ class FastTextEmbeddings:
                 continue
 
         return torch.from_numpy(extraction).float()
-    """
-
-    """
-    def dim(self):
-        return self.model.get_dimension()
-    """
-
-    def dim(self):
-        return self.model.vector_size
-
-    def extract(self, words):
-        """
-        Extract embeddings for a list of words using FastText's subword capability.
-
-        Parameters:
-        ----------
-        words : list of str
-            List of words to extract embeddings for.
-
-        Returns:
-        -------
-        torch.Tensor
-            Tensor containing the embeddings for the given words.
-        """
-        print("FastText::extract()...")
-
-        # Initialize an array for embeddings
-        extraction = np.zeros((len(words), self.dim()), dtype=np.float32)
-
-        for i, word in enumerate(words):
-            if word in self.model:
-                extraction[i] = self.model[word]  # Gensim-style access
-            else:
-                # Optionally handle out-of-vocabulary words using subword tokenization
-                print(f"Word '{word}' not found in vocabulary. Using zero vector.")
-                extraction[i] = np.zeros(self.dim(), dtype=np.float32)
-
-        return torch.from_numpy(extraction).float()
 
 
-
-
-    def extract_binary(self, words):
-        """
-        Extract embeddings for a list of words using FastText's subword capability.
-
-        Parameters:
-        ----------
-        words : list of str
-            List of words to extract embeddings for.
-
-        Returns:
-        -------
-        torch.Tensor
-            Tensor containing the embeddings for the given words.
-        """
-        print("FastText::extract()...")
-
-        # Initialize an array for embeddings
-        extraction = np.zeros((len(words), self.dim()), dtype=np.float32)
-
-        for i, word in enumerate(words):
-            extraction[i] = self.model.get_word_vector(word)
-
-        return torch.from_numpy(extraction).float()
-
-    """
     def save_binary(self, path):
         self.embed.save_word2vec_format(path, binary=True)
-    """
-
-    def save_binary(self, path):
-        """
-        Saves the model as a binary Word2Vec file for faster future loading.
-        """
-        binary_path = path.replace(".vec", ".bin")
-        print(f"Saving binary version of FastText embeddings to {binary_path}...")
-        self.model.save_word2vec_format(binary_path, binary=True)

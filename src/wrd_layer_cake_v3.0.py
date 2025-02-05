@@ -5,6 +5,7 @@ from time import time
 import scipy
 from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
 from data.dataset import *
 
@@ -250,7 +251,7 @@ def train(model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, 
     return mean_loss
 
 
-def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, opt, embedding_size):
+def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, logfile, criterion, measure_prefix, opt, embedding_size, target_names):
 
     print("testing model...")
 
@@ -269,14 +270,14 @@ def test(model, test_index, yte, pad_index, classification_type, tinit, epoch, l
 
     yte_ = scipy.sparse.vstack(predictions)
     
-    #Mf1, mf1, acc = evaluation_legacy(yte, yte_, classification_type)
-
     Mf1, mf1, acc, h_loss, precision, recall, j_index = evaluation_nn(yte, yte_, classification_type)
     print(f'[{measure_prefix}] Macro-F1={Mf1:.3f} Micro-F1={mf1:.3f} Accuracy={acc:.3f}')
     
     tend = time() - tinit
 
     if (measure_prefix == 'final-te'):
+
+        print(classification_report(yte, yte_.toarray(), target_names=target_names, digits=4))
 
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-macro-f1', value=Mf1, timelapse=tend)
         logfile.insert(dimensions=embedding_size, epoch=epoch, measure=f'{measure_prefix}-micro-f1', value=mf1, timelapse=tend)
@@ -358,7 +359,7 @@ def main(opt):
     dataset.inspect_text()
     print("\n")
 
-    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, opt, pt_model=pt_model)
+    word2index, out_of_vocabulary, unk_index, pad_index, devel_index, test_index = index_dataset(dataset, opt, pt_model=pt_model, debug=True)
     print("word2index:", type(word2index), len(word2index))
     print("out_of_vocabulary:", type(out_of_vocabulary), len(out_of_vocabulary))
     vocabsize = len(word2index) + len(out_of_vocabulary)
@@ -447,12 +448,12 @@ def main(opt):
         train(lc_model, train_index, ytr, pad_index, tinit, logfile, criterion, optim, epoch, method_name)
 
         # validation
-        macrof1 = test(lc_model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', opt, embedding_size=emb_size_str)
+        macrof1 = test(lc_model, val_index, yval, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'va', opt, embedding_size=emb_size_str, target_names=dataset.target_names)
         early_stop(macrof1, epoch)
 
         if opt.test_each>0:
             if (opt.plotmode and (epoch==1 or epoch%opt.test_each==0)) or (not opt.plotmode and epoch%opt.test_each==0 and epoch<opt.nepochs):
-                test(lc_model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te', opt, embedding_size=emb_size_str)
+                test(lc_model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'te', opt, embedding_size=emb_size_str, target_names=dataset.target_names)
         
         if early_stop.STOP:
             print('[early-stop]')
@@ -475,7 +476,7 @@ def main(opt):
 
         # test
         print('Training complete: testing')
-        test(res_model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', opt, embedding_size=emb_size_str)
+        test(res_model, test_index, yte, pad_index, dataset.classification_type, tinit, epoch, logfile, criterion, 'final-te', opt, embedding_size=emb_size_str, target_names=dataset.target_names)
 
 
 
@@ -484,7 +485,7 @@ if __name__ == '__main__':
     program = 'wrd_layer_cake'
     version = '3.0'
 
-    print(f'\t--- LAYER_CAKE (Word Based Lanaguage Models) Version: {version} ---')
+    print(f'\n\t--- LAYER_CAKE (Word Based Lanaguage Models) Version: {version} ---')
 
     available_datasets = Dataset.dataset_available
     print("available_datasets:", available_datasets)
