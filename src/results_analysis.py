@@ -2402,8 +2402,6 @@ def performance_analysis_detail(
         print(f"Saved: {timelapse_representation_form_chart}")
 
 
-
-
 def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
     """
     Analyze classifier and language model performance across all datasets.
@@ -2426,17 +2424,18 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         print(f"Created output directory: {out_dir}")
     
     for measure in MEASURES:
+
         measure_df = df[df['measure'] == measure]
 
         # --- CHART: Classifier performance across datasets and models ---
         plt.figure(figsize=(12, 8))
         sns.boxplot(data=measure_df, x='classifier', y='value', palette="colorblind")
-        plt.title(f"Classifier Performance Summary Across Datasets and Models - Measure: {measure}")
+        plt.title(f"Classifier Performance Summary ({measure})", fontweight='bold')
         plt.xlabel("Classifier")
         plt.ylabel("Metric Value")
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, fontstyle='italic')
 
-        classifier_chart = os.path.join(out_dir, f"overall_classifier_performance_{measure}.png")
+        classifier_chart = os.path.join(out_dir, f"classifier_performance_{measure}.png")
         plt.savefig(classifier_chart, bbox_inches='tight')
         plt.close()
         print(f"Saved: {classifier_chart}")
@@ -2444,8 +2443,8 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         # --- CHART: Dual-axis chart combining performance and timelapse ---
         fig, ax1 = plt.subplots(figsize=(12, 8))
 
-        # Primary Y-axis (Performance Metric)
-        sns.barplot(data=measure_df, x='classifier', y='value', ax=ax1, palette="colorblind", ci=None)
+        # Primary Y-axis (Boxplot for Performance Metric)
+        sns.boxplot(data=measure_df, x='classifier', y='value', ax=ax1, palette="colorblind")
         ax1.set_ylabel(f"{measure} Value", color='tab:blue')
         ax1.tick_params(axis='y', labelcolor='tab:blue')
 
@@ -2455,10 +2454,10 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
         ax2.tick_params(axis='y', labelcolor='tab:red')
 
-        plt.title(f"Classifier Performance and Timelapse - {measure}")
-        plt.xticks(rotation=45)
+        plt.title(f"Global Classifier Performance ({measure})", fontweight='bold')
+        plt.xticks(rotation=45, fontstyle='italic')
 
-        dual_axis_chart = os.path.join(out_dir, f"overall_classifier_performance_timelapse_{measure}.png")
+        dual_axis_chart = os.path.join(out_dir, f"classifier_performance_timelapse_{measure}.png")
         plt.savefig(dual_axis_chart, bbox_inches='tight')
         plt.close()
         print(f"Saved: {dual_axis_chart}")
@@ -2467,12 +2466,12 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         # --- CHART: Language model performance across classifiers and datasets ---
         plt.figure(figsize=(12, 8))
         sns.boxplot(data=measure_df, x='embeddings', y='value', palette="colorblind")
-        plt.title(f"Language Model Performance Summary Across Classifiers and Datasets - Measure: {measure}")
-        plt.xlabel("Language Model")
+        plt.title(f"Language Model Performance Summary ({measure})", fontweight='bold')
+        plt.xlabel("Language Model Type")
         plt.ylabel("Metric Value")
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, fontstyle='italic')
 
-        language_model_chart = os.path.join(out_dir, f"overall_language_model_performance_{measure}.png")
+        language_model_chart = os.path.join(out_dir, f"language_model_performance_{measure}.png")
         plt.savefig(language_model_chart, bbox_inches='tight')
         plt.close()
         print(f"Saved: {language_model_chart}")
@@ -2481,8 +2480,8 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         # --- CHART: Dual-axis chart combining performance and timelapse ---
         fig, ax1 = plt.subplots(figsize=(12, 8))
 
-        # Primary Y-axis (Performance Metric)
-        sns.barplot(data=measure_df, x='embeddings', y='value', ax=ax1, palette="colorblind", ci=None)
+        # Primary Y-axis (Boxplot for Performance Metric)
+        sns.boxplot(data=measure_df, x='embeddings', y='value', ax=ax1, palette="colorblind")
         ax1.set_ylabel(f"{measure} Value", color='tab:blue')
         ax1.tick_params(axis='y', labelcolor='tab:blue')
 
@@ -2492,13 +2491,15 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
         ax2.tick_params(axis='y', labelcolor='tab:red')
 
-        plt.title(f"Language Model Performance and Timelapse - {measure}")
-        plt.xticks(rotation=45)
+        plt.title(f"Global Language Model Performance ({measure})", fontweight='bold')
+        plt.xlabel("Language Model Type")
+        plt.xticks(rotation=45, fontstyle='italic')
 
-        dual_axis_chart = os.path.join(out_dir, f"overall_language_model_performance_timelapse_{measure}.png")
+        dual_axis_chart = os.path.join(out_dir, f"language_model_performance_timelapse_{measure}.png")
         plt.savefig(dual_axis_chart, bbox_inches='tight')
         plt.close()
         print(f"Saved: {dual_axis_chart}")
+
 
 
 
@@ -2606,12 +2607,14 @@ if __name__ == "__main__":
             debug=args.debug
         )
 
+        """
         performance_analysis_detail(
             df, 
             out_dir=analysis_dir, 
             neural=args.neural, 
             debug=args.debug
         )
+        """
         
     #
     # generate charts
