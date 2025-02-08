@@ -2416,7 +2416,7 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
 
-    print("\nAnalyzing classifier and language model performance in aggregate across all datasets...")
+    print("\n\tAnalyzing classifier and language model performance in aggregate across all datasets...")
     
     # Create output directory if not exists
     if not os.path.exists(out_dir):
@@ -2607,43 +2607,18 @@ if __name__ == "__main__":
             debug=args.debug
         )
 
-        """
         performance_analysis_detail(
             df, 
             out_dir=analysis_dir, 
             neural=args.neural, 
             debug=args.debug
         )
-        """
         
     #
     # generate charts
     #
     if args.charts:
         
-        """
-        #this generates matlibplots without timelapse data
-        generate_matplotlib_charts_by_model(
-            df=df, 
-            output_path=charts_model_dir,
-            neural=args.neural,
-            y_axis_threshold=args.ystart,
-            show_charts=args.show,
-            debug=debug
-        )
-        """
-        
-        """
-        #this generates matlibplots without timelapse data for eaxch embedding type
-        generate_charts_matplotlib_split(
-            df=df, 
-            output_path=charts_model_dir,
-            neural=args.neural,
-            y_axis_threshold=args.ystart,
-            show_charts=args.show,
-            debug=debug
-        )
-        """
         
         # --------------------------------------------
         # across all models (classifiers)
@@ -2692,7 +2667,32 @@ if __name__ == "__main__":
         #
         # ---------------------------------------------
         
+        # deprecated
+        """
+        #this generates matlibplots without timelapse data
+        generate_matplotlib_charts_by_model(
+            df=df, 
+            output_path=charts_model_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        """
         
+        """
+        #this generates matlibplots without timelapse data for eaxch embedding type
+        generate_charts_matplotlib_split(
+            df=df, 
+            output_path=charts_model_dir,
+            neural=args.neural,
+            y_axis_threshold=args.ystart,
+            show_charts=args.show,
+            debug=debug
+        )
+        """
+
+
         # --------------------------------------------
         # by model (classifier)
         #
