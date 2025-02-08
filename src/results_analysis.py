@@ -443,10 +443,7 @@ def plotly_model_performance_horizontal(
             # Sort by performance value in descending order
             subset_df2.sort_values(by='value', ascending=False, inplace=True)
 
-            # Filter to the top num_results if specified
-            if num_results is not None:
-                subset_df2 = subset_df2.head(num_results)
-
+            subset_df2 = subset_df2.head(num_results)
             if debug:
                 print("subset_df2 sorted by value:\n", subset_df2)
 
@@ -525,7 +522,7 @@ def plotly_model_performance_dual_yaxis(
     output_path='../out', 
     neural=False, 
     y_axis_threshold=0, 
-    num_results=20, 
+    num_results=TOP_N_RESULTS, 
     show_charts=True, 
     debug=False):
     """
@@ -585,10 +582,8 @@ def plotly_model_performance_dual_yaxis(
             # Sort by performance values
             subset_df.sort_values(by='value', ascending=False, inplace=True)
 
-            # Limit to top results
-            if num_results is not None:
-                subset_df = subset_df.head(num_results)
-
+            # Filter to the top num_results          
+            subset_df = subset_df.head(num_results)
             if debug:
                 print("Subset after sorting:\n", subset_df)
 
@@ -1267,13 +1262,17 @@ def all_model_performance_time_horizontal(
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
     - neural (default: False): Whether the data is from deep learning classifiers or classical ML classisifers like SVM or LR.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
+    - top_n_results (default: 10): The number of top results to display in the plot.
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during processing.
     
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("\n\tGenerating combined charts for all language models...")
+    print("\n\tGenerating horizontal combined charts for all language models...")
+
+    if (debug):
+        print(f"output_path: {output_path}, neural: {neural}, y_axis_threshold: {y_axis_threshold}, top_n_results: {top_n_results}, show_charts: {show_charts}")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1319,9 +1318,11 @@ def all_model_performance_time_horizontal(
         
             # ---------------------------------------------------------------------------------------------
             # filter data depeneding upon what we are showing
+            """
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]                
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+            """
             # ---------------------------------------------------------------------------------------------
             
             # Sort by measure value in descending order and limit to top N results
@@ -1427,7 +1428,7 @@ def model_performance_time_horizontal(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("\n\tGenerating combined charts for all language models...")
+    print("\n\tGenerating horizontal combined charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1474,9 +1475,11 @@ def model_performance_time_horizontal(
             
                 # ---------------------------------------------------------------------------------------------
                 # filter data depeneding upon what we are showing
+                """
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]                
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+                """
                 # ---------------------------------------------------------------------------------------------
                 
                 # Sort by measure value in descending order and limit to top N results
@@ -1588,7 +1591,7 @@ def model_performance_time_vertical(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("\n\tGenerating horizontal charts for all language models...")
+    print("\n\tGenerating vertical charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1633,9 +1636,11 @@ def model_performance_time_vertical(
 
                 # ---------------------------------------------------------------------------------------------
                 # filter data to exclude specific embeddings
+                """
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
                 df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+                """
                 # ---------------------------------------------------------------------------------------------
 
                 # Sort by measure value in descending order and limit to top N results
@@ -1745,7 +1750,7 @@ def all_model_performance_time_vertical(
     Returns:
     - None: The function saves the generated plots as PNG files in the specified output directory.
     """
-    print("\n\tGenerating horizontal charts for all language models...")
+    print("\n\tGenerating vertical charts for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1790,9 +1795,11 @@ def all_model_performance_time_vertical(
 
             # ---------------------------------------------------------------------------------------------
             # filter data to exclude specific embeddings
+            """
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
             df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
+            """
             # ---------------------------------------------------------------------------------------------
 
             # Sort by measure value in descending order and limit to top N results
@@ -1885,7 +1892,7 @@ def generate_vertical_heatmap_by_model(
     """
     Generates a heatmap to display classifier performance for word-based, subword-based, and token-based embeddings.
     """
-    print("\n\tGenerating heatmap for all language models...")
+    print("\n\tGenerating vertical heatmap for all language models...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -1979,7 +1986,7 @@ def generate_vertical_heatmap_all_models(
     Generates a heatmap to display model performance for word-based, subword-based, and token-based embeddings.
     """
 
-    print("\n\tGenerating heatmap for all language models and all classifiers...")
+    print("\n\tGenerating vertical heatmap for all language models and all classifiers...")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -2251,11 +2258,12 @@ def generate_horizontal_heatmap_all_models(
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
-import os
-import seaborn as sns
-import matplotlib.pyplot as plt
+#
+# Global performance analysis charts (box plots)
+#
+#
 
-def analyze(
+def performance_analysis_detail(
     df, 
     out_dir, 
     neural=False, 
@@ -2274,7 +2282,7 @@ def analyze(
     - include_opt: Flag to include 'optimized' values in the timelapse boxplots.
     """
 
-    print("\n\tGenerating performance analysis and charts...")
+    print("\n\tGenerating performance analysis charts by Classifier, Language Model and Representation...")
 
     # Extract language model and representation form
     if not neural:
@@ -2305,6 +2313,7 @@ def analyze(
 
         # --- CHART 1: Classifier Performance (one chart per measure) ---
         for measure in supported_measures:
+            
             measure_df = dataset_df[dataset_df['measure'] == measure]
 
             # Plot classifier performance
@@ -2395,6 +2404,104 @@ def analyze(
 
 
 
+def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
+    """
+    Analyze classifier and language model performance across all datasets.
+
+    Args:
+    - df: DataFrame containing the analysis data.
+    - out_dir: Directory where the summary charts should be saved.
+    - neural: Flag indicating neural or non-neural analysis.
+    - debug: Debug mode flag.
+
+    Returns:
+    - None: The function saves the generated plots as PNG files in the specified output directory.
+    """
+
+    print("\nAnalyzing classifier and language model performance in aggregate across all datasets...")
+    
+    # Create output directory if not exists
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+        print(f"Created output directory: {out_dir}")
+    
+    for measure in MEASURES:
+        measure_df = df[df['measure'] == measure]
+
+        # --- CHART: Classifier performance across datasets and models ---
+        plt.figure(figsize=(12, 8))
+        sns.boxplot(data=measure_df, x='classifier', y='value', palette="colorblind")
+        plt.title(f"Classifier Performance Summary Across Datasets and Models - Measure: {measure}")
+        plt.xlabel("Classifier")
+        plt.ylabel("Metric Value")
+        plt.xticks(rotation=45)
+
+        classifier_chart = os.path.join(out_dir, f"overall_classifier_performance_{measure}.png")
+        plt.savefig(classifier_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {classifier_chart}")
+
+        # --- CHART: Dual-axis chart combining performance and timelapse ---
+        fig, ax1 = plt.subplots(figsize=(12, 8))
+
+        # Primary Y-axis (Performance Metric)
+        sns.barplot(data=measure_df, x='classifier', y='value', ax=ax1, palette="colorblind", ci=None)
+        ax1.set_ylabel(f"{measure} Value", color='tab:blue')
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+        # Secondary Y-axis (Timelapse Scatter Plot)
+        ax2 = ax1.twinx()
+        sns.stripplot(data=measure_df, x='classifier', y='timelapse', ax=ax2, color='darkred', jitter=True, alpha=0.6, size=6)
+        ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+
+        plt.title(f"Classifier Performance and Timelapse - {measure}")
+        plt.xticks(rotation=45)
+
+        dual_axis_chart = os.path.join(out_dir, f"overall_classifier_performance_timelapse_{measure}.png")
+        plt.savefig(dual_axis_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {dual_axis_chart}")
+
+
+        # --- CHART: Language model performance across classifiers and datasets ---
+        plt.figure(figsize=(12, 8))
+        sns.boxplot(data=measure_df, x='embeddings', y='value', palette="colorblind")
+        plt.title(f"Language Model Performance Summary Across Classifiers and Datasets - Measure: {measure}")
+        plt.xlabel("Language Model")
+        plt.ylabel("Metric Value")
+        plt.xticks(rotation=45)
+
+        language_model_chart = os.path.join(out_dir, f"overall_language_model_performance_{measure}.png")
+        plt.savefig(language_model_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {language_model_chart}")
+
+
+        # --- CHART: Dual-axis chart combining performance and timelapse ---
+        fig, ax1 = plt.subplots(figsize=(12, 8))
+
+        # Primary Y-axis (Performance Metric)
+        sns.barplot(data=measure_df, x='embeddings', y='value', ax=ax1, palette="colorblind", ci=None)
+        ax1.set_ylabel(f"{measure} Value", color='tab:blue')
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+        # Secondary Y-axis (Timelapse Scatter Plot)
+        ax2 = ax1.twinx()
+        sns.stripplot(data=measure_df, x='embeddings', y='timelapse', ax=ax2, color='darkred', jitter=True, alpha=0.6, size=6)
+        ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+
+        plt.title(f"Language Model Performance and Timelapse - {measure}")
+        plt.xticks(rotation=45)
+
+        dual_axis_chart = os.path.join(out_dir, f"overall_language_model_performance_timelapse_{measure}.png")
+        plt.savefig(dual_axis_chart, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {dual_axis_chart}")
+
+
+
 # ----------------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------------
 
@@ -2429,6 +2536,8 @@ if __name__ == "__main__":
     print("debug mode:", debug)
 
     print("y_start:", args.ystart)
+
+    print("number of results:", args.results)
 
     df = read_data_file(args.file_path, debug=debug)
     if (df is None):
@@ -2489,8 +2598,20 @@ if __name__ == "__main__":
             exit()
 
     if (args.analyze):
-        analyze(df, out_dir=analysis_dir, neural=args.neural, debug=args.debug)
-        exit()
+
+        perforamance_analysis_summary(
+            df, 
+            out_dir=analysis_dir, 
+            neural=args.neural, 
+            debug=args.debug
+        )
+
+        performance_analysis_detail(
+            df, 
+            out_dir=analysis_dir, 
+            neural=args.neural, 
+            debug=args.debug
+        )
         
     #
     # generate charts
