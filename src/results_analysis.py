@@ -559,8 +559,8 @@ def plotly_model_performance_dual_yaxis(
         df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
 
     for dataset in df['dataset'].unique():
-        if debug:
-            print("Processing dataset:", dataset)
+        
+        print("processing dataset:", dataset)
 
         for measure in MEASURES:
             if debug:
@@ -2306,7 +2306,8 @@ def performance_analysis_detail(
     # Group by dataset and generate charts for each
     datasets = df_filtered['dataset'].unique()
     for dataset in datasets:
-        print(f"\nProcessing dataset: {dataset}")
+        
+        print(f"processing dataset: {dataset}")
 
         # Filter data for the specific dataset
         dataset_df = df_filtered[df_filtered['dataset'] == dataset]
