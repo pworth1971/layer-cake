@@ -286,7 +286,7 @@ class LCRepresentationModel(RepresentationModel, ABC):
 
         try:        
             with ZipFile(zip_file_path, 'r') as zip_ref:
-                print(f"Extracting GloVe embeddings from {zip_file_path}...")
+                print(f"Extracting embeddings from {zip_file_path}...")
                 zip_ref.extractall(os.path.dirname(zip_file_path))
 
             # Delete the zip file after extraction
@@ -841,16 +841,30 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
 
         # Automatically download embeddings if not present
         if not os.path.exists(self.path_to_embeddings):
+
+            """
             print(f"Error: The FastText model file was not found at '{self.path_to_embeddings}'.")
             print("Please download the model from the official FastText repository:")
             print("https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M-subword.zip")
             print("Extract the zip file and ensure the .bin file is located at the specified path.")
             raise FileNotFoundError(f"Embedding file {self.path_to_embeddings} not found.")
+            """
+            vec_file, vec_path = self._download_embeddings(model_name, model_dir)
+
+            # load .vec file 
+            print("loading fastText embeddings from .vec file using Gensim (non-binary format)...")
+            self.model = gensim.models.KeyedVectors.load_word2vec_format(vec_path, binary=False)
+
+            # extracts a .vec file if successful, must be stored as binary format for faster processing
+            self.save_binary(vec_path+'.bin')
+
+        print("loading fastText embeddings (binary format) from {}".format(self.path_to_embeddings))
+        self.model = gensim.models.KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=True)
         
         # Load the FastText model using Gensim's load_facebook_vectors
-        self.model = load_facebook_model(self.path_to_embeddings)
+        #self.model = load_facebook_model(self.path_to_embeddings)
 
-        self.mean_embedding = np.mean(self.model.wv.vectors, axis=0)  # Compute the mean vector
+        self.mean_embedding = np.mean(self.model.vectors, axis=0)  # Compute the mean vector
 
         self.vtype = vtype
         print(f"Vectorization type: {vtype}")
@@ -882,14 +896,83 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         else:
             raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
 
-    
+
+    def save_binary(self, path):
+
+        print("saving fastText embeddings to {}".format(path))
+
+        self.model.save_word2vec_format(path, binary=True)
+
+
+    def _download_embeddings(self, model_name, model_dir):
+        """
+        Download pre-trained fastText embeddings from a URL, unzip, and locate the .vec file.
+
+        Returns:
+        - file_name: The name of the .vec file.
+        - full_file_path: The complete path to the .vec file.
+        """
+
+        print(f'downloading embeddings... model: {model_name}, path: {model_dir}')
+
+        # fastText Embeddings 
+        if (FASTTEXT_MODEL == 'crawl-300d-2M.vec.bin'):
+            url = f"https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip"
+            zipfile = 'crawl-300d-2M.vec.zip'
+        else:
+            raise ValueError(f"Unsupported model {FASTTEXT_MODEL} for download.")
+
+        dest_zip_file = model_dir + '/' + zipfile
+        print(f"Downloading embeddings from {url} to {dest_zip_file}...")
+        self._download_file(url, dest_zip_file)
+
+        # Unzip embeddings
+        print(f"Unzipping embeddings from {dest_zip_file}...")
+        self._unzip_embeddings(dest_zip_file)
+
+        # Look for the .vec file
+        print("Looking for .vec file after extraction...")
+        vec_file = None
+        for root, dirs, files in os.walk(model_dir):
+            for file in files:
+                if file.endswith('.vec'):
+                    vec_file = file
+                    full_file_path = os.path.join(root, file)
+                    break
+
+        # Raise an error if no .vec file is found
+        if not vec_file:
+            raise FileNotFoundError("No .vec file was found in the extracted contents.")
+
+        print(f"Found .vec file: {vec_file} at {full_file_path}")
+
+        return vec_file, full_file_path
+
+
     def vocabulary(self):
-        return set(self.model.wv.key_to_index.keys())
+        return set(self.model.key_to_index.keys())
 
     def dim(self):
         return self.model.vector_size
 
+    
     def extract(self, words):
+        print("Extracting words from fastText model...")
+        oov = 0
+        extraction = np.zeros((len(words), self.dim()))
+
+        for idx, word in enumerate(words):
+            if word in self.model:
+                extraction[idx] = self.model[word]
+            else:
+                extraction[idx] = self.model.get_vector(word, norm=True)
+                oov += 1
+
+        print(f"OOV count: {oov}")
+        return torch.from_numpy(extraction).float()
+
+
+    def extract_old(self, words):
         
         print("extracting words from fastText model...")
 
@@ -913,6 +996,85 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
     
 
     def build_embedding_vocab_matrix(self):
+
+        print("Building embedding vocab matrix using Gensim FastText model...")
+
+        vocabulary = np.asarray(list(self.vectorizer.vocabulary_.keys()))
+        embedding_matrix = np.zeros((len(vocabulary), self.embedding_dim))
+
+        oov = 0
+
+        for idx, word in enumerate(tqdm(vocabulary, desc="Embedding vocab matrix...")):
+            try:
+                # Check if the word exists directly in the vocabulary
+                if word in self.model:
+                    embedding_matrix[idx] = self.model[word]
+                else:
+                    # Handle OOV words using subword information
+                    embedding_matrix[idx] = self.model.get_vector(word, norm=True)
+                    oov += 1
+            except KeyError:
+                print(f"Subword vector not found for '{word}', falling back to mean embedding.")
+                embedding_matrix[idx] = self.mean_embedding
+                oov += 1
+
+        print(f"OOV words: {oov} ({(oov / len(vocabulary)) * 100:.2f}%)")
+        return embedding_matrix
+
+
+    def encode_docs(self, texts):
+        """
+        Compute document embeddings using Gensim FastText API by averaging word and subword vectors.
+        
+        Args:
+        - texts: List of input documents (as raw text).
+
+        Returns:
+        - avg_document_embeddings: Numpy array of average document embeddings for each document.
+        """
+        
+        print("\n\tEncoding docs using Gensim FastText embeddings...")
+
+        avg_document_embeddings = []
+        oov = 0
+
+        # Use tqdm to show progress while encoding documents
+        for doc in tqdm(texts, desc="Encoding documents with Gensim FastText..."):
+            tokens = self.vectorizer.build_analyzer()(doc)
+            token_vectors = []
+
+            for token in tokens:
+                try:
+                    # Check if the token exists directly in the FastText vocabulary
+                    if token in self.model:
+                        token_vectors.append(self.model[token])
+                    else:
+                        # Handle OOV words using subword information
+                        token_vectors.append(self.model.get_vector(token, norm=True))
+                        oov += 1
+                except KeyError:
+                    # If subword retrieval fails, fall back to mean embedding
+                    print(f"Warning: '{token}' not found in vocabulary or subwords, using mean embedding.")
+                    token_vectors.append(self.mean_embedding)
+                    oov += 1
+
+            if token_vectors:
+                avg_document_embedding = np.mean(token_vectors, axis=0)
+            else:
+                avg_document_embedding = self.mean_embedding  # Handle empty documents by using the mean embedding
+
+            avg_document_embeddings.append(avg_document_embedding)
+
+        avg_document_embeddings = np.array(avg_document_embeddings)
+        print("Average document embeddings shape:", avg_document_embeddings.shape)
+        print(f"Total OOV words: {oov}")
+
+        return avg_document_embeddings, avg_document_embeddings
+
+
+
+
+    def build_embedding_vocab_matrix_old(self):
 
         print("building embedding vocab matrix for Gensim FastText model...")
 
@@ -941,7 +1103,7 @@ class FastTextGensimLCRepresentationModel(LCRepresentationModel):
         return self.embedding_vocab_matrix
 
 
-    def encode_docs(self, texts):
+    def encode_docs_old(self, texts):
         """
         Compute document embeddings using Gensim FastText API by averaging word and subword vectors.
         
