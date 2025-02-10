@@ -35,14 +35,12 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-declare -a datasets=("reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer" "rcv1" "bbc-news")
+declare -a datasets=("bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer" "rcv1")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm" "lr" "nb")
-declare -a vtypes=("tfidf")
+declare -a vtypes=("tfidf" "count")
 
-#declare -a mixes=("cat-wce" "solo-wce" "dot-wce" "lsa-wce" "cat-doc-wce" "vmode" "solo" "lsa" "dot" "cat-doc")
-declare -a mixes=( "vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce")
-
+declare -a mixes=( "vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce" "cat-wce" "lsa-wce" "cat-doc-wce" "cat-doc")
 declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2" "llama" "deepseek")
 
 #declare -a emb_comp_options=("avg" "summary" "weighted")
@@ -119,7 +117,7 @@ for i in "${!datasets[@]}"; do
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$XLNET" "$emb_comp" $OPTIMC
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$GPT2" "$emb_comp" $OPTIMC
                     run_command "$dataset" "$learner" "$vtype" "$mix" "$LLAMA" "$emb_comp" $OPTIMC
-                    #run_command "$dataset" "$learner" "$vtype" "$mix" "$DEEPSEEK" "$emb_comp" $OPTIMC
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$DEEPSEEK" "$emb_comp" $OPTIMC
                 done
             done
         done
