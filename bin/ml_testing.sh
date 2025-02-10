@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 #
@@ -24,7 +25,7 @@ dataset_info=(
 #
 PY="python ../src/ml_classification_test_v4.0.py"
 
-LOG="--logfile ../log/test/ml_full_test.test.v2"
+LOG="--logfile ../log/test/ml_def_full_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
