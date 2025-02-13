@@ -311,14 +311,14 @@ def gen_xdata(Xtr_raw,
         from scipy.sparse import hstack
 
         if (dataset_embedding_type == 'weighted'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(weighted_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(weighted_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), weighted_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), weighted_embeddings_test])
         elif (dataset_embedding_type == 'avg'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(avg_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(avg_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), avg_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), avg_embeddings_test])
         elif (dataset_embedding_type == 'summary'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(summary_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(summary_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), summary_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), summary_embeddings_test])
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None
