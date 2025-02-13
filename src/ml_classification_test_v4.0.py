@@ -803,6 +803,8 @@ if __name__ == '__main__':
     else:
         raise ValueError("Unsupported pretrained model:", args.pretrained)
     
+    print("mix:", args.mix)
+    print("CLASS_EMBEDDING_MODES:", CLASS_EMBEDDING_MODES)
     if (args.mix in CLASS_EMBEDDING_MODES):
         args.supervised = True
     else:

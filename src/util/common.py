@@ -46,8 +46,7 @@ SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', '
 
 WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
 TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
-
-CLASS_EMBEDDING_MODES = ['solo-wce', 'dot-wce' 'cat-wce' 'lsa-wce' 'cat-doc-wce']
+CLASS_EMBEDDING_MODES = ['solo-wce', 'dot-wce', 'cat-wce', 'lsa-wce', 'cat-doc-wce']
 #
 # --------------------------------------------------------------------------------------------------------------
 
