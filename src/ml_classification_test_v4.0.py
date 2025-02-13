@@ -807,6 +807,7 @@ if __name__ == '__main__':
         args.supervised = True
     else:
         args.supervised = False
+    print("supervised:", args.supervised)
 
     print("args:", args)    
                 
@@ -831,6 +832,7 @@ if __name__ == '__main__':
     print("\tlm_type:", lm_type)
     print("\temb_path:", emb_path)
     print("\tmix:", mix)
+    print("\tsupervised:", args.supervised)
     print("\trepresentation:", representation)
     print("\toptimized:", optimized)
 
