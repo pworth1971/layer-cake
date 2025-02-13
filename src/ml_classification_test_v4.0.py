@@ -362,17 +362,15 @@ def gen_xdata(Xtr_raw,
         # of dataset embedding representation to form the final input.
         # NB: we maintain the sparse representations here for faster compute performance
         #
-        from scipy.sparse import hstack
-
         if (dataset_embedding_type == 'weighted'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(weighted_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(weighted_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), weighted_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), weighted_embeddings_test])
         elif (dataset_embedding_type == 'avg'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(avg_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(avg_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), avg_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), avg_embeddings_test])
         elif (dataset_embedding_type == 'summary'):
-            X_train = hstack([Xtr_vectorized, csr_matrix(summary_embeddings_train)])
-            X_test = hstack([Xte_vectorized, csr_matrix(summary_embeddings_test)])
+            X_train = np.hstack([Xtr_vectorized.toarray(), summary_embeddings_train])
+            X_test = np.hstack([Xte_vectorized.toarray(), summary_embeddings_test])
         else:
             print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
             return None
@@ -402,8 +400,8 @@ def gen_xdata(Xtr_raw,
         # we concatenate the resulting matrix with the stacked vectorized + embedding dataset 
         # representation to further augment the already augmented vectorized feature set with 
         # the additional CE information
-        X_train = np.hstack([X_train.toarray(), X_train_ce])              
-        X_test = np.hstack([X_test.toarray(), X_test_ce])
+        X_train = np.hstack([X_train, X_train_ce])              
+        X_test = np.hstack([X_test, X_test_ce])
 
         print("after stacking CEs with vectorized represnetation and embedding representations of dataset...")
         print("X_train:", type(X_train), X_train.shape)
