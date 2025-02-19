@@ -2306,7 +2306,7 @@ def performance_analysis_detail(
     # Group by dataset and generate charts for each
     datasets = df_filtered['dataset'].unique()
     for dataset in datasets:
-        
+
         print(f"processing dataset: {dataset}")
 
         # Filter data for the specific dataset
@@ -2455,7 +2455,7 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
         ax2.tick_params(axis='y', labelcolor='tab:red')
 
-        plt.title(f"Global Classifier Performance ({measure})", fontweight='bold')
+        plt.title(f"Global Classifier Performance ({measure})")
         plt.xticks(rotation=45, fontstyle='italic')
 
         dual_axis_chart = os.path.join(out_dir, f"classifier_performance_timelapse_{measure}.png")
@@ -2492,7 +2492,7 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         ax2.set_ylabel("Timelapse (seconds)", color='tab:red')
         ax2.tick_params(axis='y', labelcolor='tab:red')
 
-        plt.title(f"Global Language Model Performance ({measure})", fontweight='bold')
+        plt.title(f"Global Language Model Performance ({measure})")
         plt.xlabel("Language Model Type")
         plt.xticks(rotation=45, fontstyle='italic')
 
