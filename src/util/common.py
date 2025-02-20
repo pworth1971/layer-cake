@@ -368,9 +368,6 @@ def initialize_ml_testing(args, model_name, program, version):
 
     print("pretrained: ", {pretrained}, "; embeddings: ", {embeddings})
 
-    lm_type = get_language_model_type(embeddings)
-    print("lm_type:", {lm_type})
-
     if (args.mix in [CLASS_EMBEDDING_MODES]):
         supervised = True
         mode = f'supervised'
@@ -473,26 +470,33 @@ def initialize_ml_testing(args, model_name, program, version):
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
 def get_embeddings_ml(args):
-
+    """
+    build the embeddings field for ML logger
+    """
     print("get_embeddings_ml...")
 
-    if (args.pretrained):
-        return args.pretrained + ':' + args.mix
+    if args.pretrained:
+        if args.mix == 'vmode':
+            return args.pretrained + ':' + args.mix + '.' + args.vtype
+        else:
+            return args.pretrained + ':' + args.mix
     else:
         return args.mix
+
     
 
 def get_ml_representation(args):
-
+    """
+    set representation form
+    """
     print("forming ML model representation...")
 
     # set model and dataset
     method_name = f'[{args.net}:{args.dataset}]:->'
 
-    #set representation form
-
+    # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
+    # as the dataset representation into the model
     if (args.mix == 'vmode'):
         method_name += f'{args.vtype}[{args.pretrained}]'
 
@@ -526,11 +530,6 @@ def get_ml_representation(args):
     elif (args.mix == 'dot-wce'):
         method_name += f'{args.vtype}.({args.pretrained}+wce({args.vtype}))'
         
-    # vmode is when we simply use the frequency vector representation (TF-IDF or Count)
-    # as the dataset representation into the model
-    elif (args.mix == 'vmode'):
-        method_name += f'{args.vtype}[{args.pretrained}]'
-    
     # lsa is when we use SVD (aka LSA) to reduce the number of featrues from 
     # the vectorized data set, LSA is a form of dimensionality reduction
     elif (args.mix == 'lsa'):
