@@ -2502,6 +2502,36 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         print(f"Saved: {dual_axis_chart}")
 
 
+def gen_classifier_summaries(df, output_path='../out'):
+    """
+    Generate summary data by classifier 
+
+    Args:
+        df (DataFrame, required): Input data, already filtered for the measures of interest
+        output_path (str, optional): Output directory for files
+        
+    Returns:
+        None
+    """
+    print(f'\n\tgenerating classifier summary data to {output_path}...')
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Compute the performance summary by classifier for each metric
+    summary_df = df.groupby(["classifier", "measure"])["value"].describe()
+
+    # Generate output file for each dataset
+    file_name = f"classifier_summary.csv"
+    output_file = os.path.join(output_path, file_name)
+
+    summary_df.to_csv(output_file)
+    print(f"Saved classifier summary data to {output_file}")
+
+# ----------------------------------------------------------------------------------------------------------------------------
+
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------------
@@ -2765,6 +2795,11 @@ if __name__ == "__main__":
     # generate summaries
     #
     if args.summary:
+        
+        gen_classifier_summaries(
+            df=df, 
+            output_path=summ_dir
+        )
         
         gen_summary_all(
             df=df, 
