@@ -36,12 +36,14 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
+#declare -a datasets=("rcv1" "bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer")
 declare -a datasets=("rcv1" "bbc-news" "reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "arxiv_protoformer")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 declare -a learners=("svm" "lr" "nb")
 declare -a vtypes=("tfidf" "count")
 declare -a mixes=("cat-doc" "vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce" "cat-wce" "lsa-wce" "cat-doc-wce")
-declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2" "llama" "deepseek")
+#declare -a embeddings=("fasttext" "glove" "word2vec" "bert" "roberta" "distilbert" "xlnet" "gpt2" "llama" "deepseek")
+declare -a embeddings=("deepseek")
 
 #declare -a emb_comp_options=("avg" "summary" "weighted")
 declare -a emb_comp_options=("avg")
