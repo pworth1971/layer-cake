@@ -1,6 +1,11 @@
 import logging
 logging.basicConfig(level=logging.INFO)
 
+
+import seaborn as sns
+import matplotlib as plt
+
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -41,13 +46,12 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 
+
+
 NUM_JOBS = -1                   # important to manage CUDA memory allocation
 #NUM_JOBS = 40                  # for rcv1 dataset which has 101 classes, too many to support in parallel
 
 NUM_SAMPLED_PARAMS = 9          # Number of parameter settings that are sampled by RandomizedSearchCV
-
-
-
 
 
 
@@ -3019,11 +3023,6 @@ def run_nb_model(dataset, X_train, X_test, y_train, y_test, args, target_names, 
         evaluation_ml(y_test, y_preds, classification_type=class_type, debug=False)
     
     return Mf1, mf1, accuracy, h_loss, precision, recall, j_index
-
-
-
-import seaborn as sns
-import matplotlib as plt
 
 
 def create_confusion_matrix(y_test, y_pred, category_names, title, file_name=OUT_DIR+'confusion_matrix.png', debug=True):
