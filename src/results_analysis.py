@@ -2388,7 +2388,7 @@ if __name__ == "__main__":
 
     print("output directory:", out_dir)
 
-    summ_dir = os.path.join(out_dir, 'summary_charts')
+    summ_dir = os.path.join(out_dir, 'summary_data')
     analysis_dir = os.path.join(out_dir, 'analysis_data')
     
     charts_dir = os.path.join(out_dir, 'model_charts')
