@@ -1608,7 +1608,7 @@ def generate_vertical_heatmap_by_model(
                     print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
-                df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+                df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
 
                 """
                 # Extract the base embeddings (everything before the colon)
@@ -1704,7 +1704,7 @@ def generate_vertical_heatmap_all_models(
                 print(f"No data available for {measure}, in dataset {dataset}.")
                 continue
 
-            df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+            df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
 
             """
             # Extract the base embeddings (everything before the colon)
@@ -1801,7 +1801,7 @@ def generate_horizontal_heatmap_by_model(
                     print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
-                df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+                df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
 
                 """
                 # Extract the base embeddings (everything before the colon)
@@ -1898,7 +1898,7 @@ def generate_horizontal_heatmap_all_models(
                 print(f"No data available for {measure} in dataset {dataset}.")
                 continue
 
-            df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+            df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
 
             """
             # Extract the base embeddings (everything before the colon)
@@ -1986,22 +1986,22 @@ def performance_analysis_detail(
 
     print("\n\tGenerating performance analysis charts by Classifier, Language Model and Representation...")
 
+    # Filter only supported measures
+    supported_measures = MEASURES
+    df_filtered = df[df['measure'].str.contains('|'.join(supported_measures))]
+
     # Extract language model and representation form based on classifier type
-    df['language_model'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
-    df['representation_form'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+    df_filtered['language_model'] = df_filtered.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df_filtered['representation_form'] = df_filtered.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
 
     """
     # Extract language model and representation form
     if not neural:
-        df[['language_model', 'representation_form']] = df['embeddings'].str.split(':', expand=True)
+        df_filtered[['language_model', 'representation_form']] = df_filtered['embeddings'].str.split(':', expand=True)
     else:
-        df['language_model'] = df['embeddings']
-        df['representation_form'] = 'solo'
+        df_filtered['language_model'] = df_filtered['embeddings']
+        df_filtered['representation_form'] = 'solo'
     """
-
-    # Filter only supported measures
-    supported_measures = MEASURES
-    df_filtered = df[df['measure'].str.contains('|'.join(supported_measures))]
 
     # Create output directory if it doesn't exist
     if not os.path.exists(out_dir):
@@ -2136,6 +2136,22 @@ def perforamance_analysis_summary(df, out_dir, debug=False):
 
         measure_df = df[df['measure'] == measure]
 
+        #
+        # if we are looking at ML data we need to parse the language model type from
+        # the embeddings column in the log data, first value before colon ':'
+        #
+        # Extract language model and representation form based on classifier type
+        measure_df['lm_type'] = measure_df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+        x_axis = measure_df.apply(lambda row: 'lm_type' if row['classifier'] in ML_CLASSIFIERS else 'embeddings', axis=1).iloc[0]
+
+        """
+        if not neural:
+            measure_df['lm_type'] = measure_df['embeddings'].str.split(':', n=1).str[0]
+            x_axis = 'lm_type'
+        else:
+            x_axis = 'embeddings'
+        """
+
         # --- CHART: Classifier performance across datasets and models ---
         plt.figure(figsize=(12, 8))
         sns.boxplot(data=measure_df, x='classifier', y='value', palette="colorblind")
@@ -2170,22 +2186,6 @@ def perforamance_analysis_summary(df, out_dir, debug=False):
         plt.savefig(dual_axis_chart, bbox_inches='tight')
         plt.close()
         print(f"Saved: {dual_axis_chart}")
-
-        #
-        # if we are looking at ML data we need to parse the language model type from
-        # the embeddings column in the log data, first value before colon ':'
-        #
-        # Extract language model and representation form based on classifier type
-        df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
-        x_axis = df.apply(lambda row: 'lm_type' if row['classifier'] in ML_CLASSIFIERS else 'embeddings', axis=1).iloc[0]
-
-        """
-        if not neural:
-            measure_df['lm_type'] = measure_df['embeddings'].str.split(':', n=1).str[0]
-            x_axis = 'lm_type'
-        else:
-            x_axis = 'embeddings'
-        """
 
         # --- CHART: Language model performance across classifiers and datasets ---
         plt.figure(figsize=(12, 8))
