@@ -26,6 +26,7 @@ from util.common import OUT_DIR, WORD_BASED_MODELS, TOKEN_BASED_MODELS
 
 
 
+
 # -----------------------------------------------------------------------------------------------------------------------------------
 #
 
@@ -36,8 +37,10 @@ MEASURES = ['final-te-macro-f1', 'final-te-micro-f1']
 CSV_MEASURES = ['final-te-macro-f1', 'final-te-micro-f1', 'te-accuracy', 'te-recall', 'te-precision']  
 
 Y_AXIS_THRESHOLD = 0.25                     # when to start the Y axis to show differentiation in the plot
-TOP_N_RESULTS = 10                          # default number of results to display
+TOP_N_RESULTS = 25                          # default number of results to display
 
+ML_CLASSIFIERS = ['svm', 'lr', 'nb']
+DL_CLASSIFIERS = ['cnn', 'lstm', 'attn', 'hf.sc', 'hf.cnn']
 #
 # -----------------------------------------------------------------------------------------------------------------------------------
 
@@ -46,7 +49,6 @@ TOP_N_RESULTS = 10                          # default number of results to displ
 def plotly_model_performance_horizontal(
     df, 
     output_path='../out', 
-    neural=False, 
     y_axis_threshold=Y_AXIS_THRESHOLD, 
     num_results=TOP_N_RESULTS, 
     show_charts=True, 
@@ -57,7 +59,6 @@ def plotly_model_performance_horizontal(
     Arguments:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - num_results (default: None): Number of top results to display in the plot (None for all results).
     - show_charts (default: True): Whether to display the charts interactively.
@@ -80,12 +81,17 @@ def plotly_model_performance_horizontal(
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
+    # parse the embeddings field if its an ML model entry
+    df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+    """
     if neural:
         # Extract the first term in the colon-delimited 'embeddings' field
         df['embedding_type'] = df['embeddings']
     else:
         # Extract the first term in the colon-delimited 'embeddings' field
         df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+    """
 
     # Generate a separate chart for each measure within each dataset
     for dataset in df['dataset'].unique():
@@ -193,7 +199,6 @@ def plotly_model_performance_horizontal(
 def plotly_model_performance_dual_yaxis(
     df, 
     output_path='../out', 
-    neural=False, 
     y_axis_threshold=0, 
     num_results=TOP_N_RESULTS, 
     show_charts=True, 
@@ -205,7 +210,6 @@ def plotly_model_performance_dual_yaxis(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path: Directory to save the output files.
-    - neural: Whether the data is from deep learning models or classical ML models.
     - y_axis_threshold: The minimum value for the measure y-axis.
     - num_results: Number of top results to display.
     - show_charts: Whether to display the charts interactively.
@@ -226,10 +230,15 @@ def plotly_model_performance_dual_yaxis(
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
+    # Extract language model and representation form based on classifier type
+    df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    
+    """
     if neural:
         df['embedding_type'] = df['embeddings']
     else:
         df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+    """
 
     for dataset in df['dataset'].unique():
         
@@ -339,14 +348,13 @@ def plotly_model_performance_dual_yaxis(
 
 
 
-def model_performance_comparison_all(df, output_path='../out', neural=False, y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=True, debug=False):
+def model_performance_comparison_all(df, output_path='../out', y_axis_threshold=Y_AXIS_THRESHOLD, show_charts=True, debug=False):
     """
     model_performance_comparison generates bar charts for each combination of model, dataset, and measure from a given DataFrame.
     
     Arguments:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning models or classical ML models.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during
@@ -369,12 +377,17 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
     if output_path and not os.path.exists(output_path):
         os.makedirs(output_path)
 
+    # Extract language model and representation form based on classifier type
+    df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    
+    """
     if neural:
         # Extract the first term in the colon-delimited 'embeddings' field
         df['embedding_type'] = df['embeddings']
     else:
         # Extract the first term in the colon-delimited 'embeddings' field
         df['embedding_type'] = df['embeddings'].apply(lambda x: x.split(':')[0])
+    """
 
     # Generate a separate chart for each measure within each dataset
     for dataset in df['dataset'].unique():
@@ -478,14 +491,13 @@ def model_performance_comparison_all(df, output_path='../out', neural=False, y_a
 # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def gen_csvs_all(df, chart_output_dir, csv_output_dir, neural=False, debug=False):
+def gen_csvs_all(df, chart_output_dir, csv_output_dir, debug=False):
     """
     Generate CSV and HTML summary performance data for each dataset, combining all classifiers into one file.
 
     Args:
         df (DataFrame, required): Input data, already filtered for the measures of interest
         output_dir (str, required): Output directory for files
-        neural (bool, optional): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or Logistic Regression
         debug (bool, optional): Whether to print debug information
     """
     
@@ -496,13 +508,17 @@ def gen_csvs_all(df, chart_output_dir, csv_output_dir, neural=False, debug=False
     if debug:
         print("CSV DataFrame:\n", df)
 
+    df['M-Embeddings'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['M-Mix'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+
+    """
     if not neural:
         df['M-Embeddings'] = df['embeddings'].apply(lambda x: x.split(':')[0])
         df['M-Mix'] = df['embeddings'].apply(lambda x: x.split(':')[1])
     else:
         df['M-Embeddings'] = df['embeddings']
         df['M-Mix'] = 'solo'  
-
+    """
     filtered_df = df[df['measure'].isin(CSV_MEASURES)]
 
     if debug:
@@ -610,14 +626,13 @@ def render_data_all(dataframe, dataset, output_html, output_csv, debug):
 
 
 
-def gen_csvs(df, output_dir, neural=False, debug=False):
+def gen_csvs(df, output_dir, debug=False):
     """
     generate CSV summary performance data for each data set, grouped by classifier 
 
     Args:
         df (Dataframe, required): input data, NB: the input data should be filtered for the measures of interest before calling this function
         output_dir (str, required): output directory of files
-        neural (bool, optional): whether or not data is from the deep learning / neural classifiers or classic ML classifiers like SVM or LR
         debug (bool, optional): whether or not to print out debug info.
     """
     
@@ -626,6 +641,10 @@ def gen_csvs(df, output_dir, neural=False, debug=False):
     if debug:
         print("CSV DataFrame:\n", df)
     
+    df['M-Embeddings'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['M-Mix'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+
+    """
     if not neural:
         # split the 'embeddings' column into 'M-Embeddings' and 'M-Mix'
         df['M-Embeddings'] = df['embeddings'].apply(lambda x: x.split(':')[0])
@@ -633,6 +652,7 @@ def gen_csvs(df, output_dir, neural=False, debug=False):
     else:
         df['M-Embeddings'] = df['embeddings']
         df['M-Mix'] = 'solo'                        # default to solo for neural models
+    """
 
     # Filter the dataframe for the required measures
     filtered_df = df[df['measure'].isin(CSV_MEASURES)]
@@ -780,7 +800,6 @@ def read_data_file(file_path=None, debug=False):
 def gen_dataset_summaries(
     df, 
     output_path='../out', 
-    neural=False, 
     gen_file=True, 
     stdout=False, 
     debug=False):
@@ -790,7 +809,6 @@ def gen_dataset_summaries(
     Args:
         df (DataFrame, required): Input data, already filtered for the measures of interest
         output_path (str, optional): Output directory for files
-        neural (bool, optional): Whether the data is from deep learning classifiers or classical ML classifiers
         gen_file (bool, optional): Whether to generate output files
         stdout (bool, optional): Whether to print output to stdout
         debug (bool, optional): Whether to print debug information
@@ -807,12 +825,16 @@ def gen_dataset_summaries(
     # Filter for Macro and Micro F1 scores only
     df_filtered = df[df['measure'].isin(['final-te-macro-f1', 'final-te-micro-f1'])]
 
+    df_filtered['language_model'] = df_filtered.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+    """
     if not neural:
         # Extract the first part of the embeddings as 'language_model'
         df_filtered['language_model'] = df_filtered['embeddings'].apply(lambda x: x.split(':')[0])
     else:
         df_filtered['language_model'] = df_filtered['embeddings']
-           
+    """
+
     # Get the current date in YYYY-MM-DD format for file naming
     current_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -921,7 +943,6 @@ def gen_summary_all(df, output_path='../out', gen_file=True, stdout=False, debug
 def all_model_performance_time_horizontal(
     df, 
     output_path='../out', 
-    neural=False, 
     y_axis_threshold=Y_AXIS_THRESHOLD, 
     top_n_results=TOP_N_RESULTS,
     show_charts=False, 
@@ -933,7 +954,6 @@ def all_model_performance_time_horizontal(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classisifers like SVM or LR.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - top_n_results (default: 10): The number of top results to display in the plot.
     - show_charts (default: True): Whether to display the charts interactively.
@@ -945,7 +965,7 @@ def all_model_performance_time_horizontal(
     print("\n\tGenerating horizontal combined charts for all language models...")
 
     if (debug):
-        print(f"output_path: {output_path}, neural: {neural}, y_axis_threshold: {y_axis_threshold}, top_n_results: {top_n_results}, show_charts: {show_charts}")
+        print(f"output_path: {output_path}, y_axis_threshold: {y_axis_threshold}, top_n_results: {top_n_results}, show_charts: {show_charts}")
 
     # Filter for measures of interest
     df_measures = df[df['measure'].isin(MEASURES)]
@@ -977,12 +997,16 @@ def all_model_performance_time_horizontal(
                 continue
             else:
                 pass
-                
+            
+            df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+            """
             # Extract the base embeddings (everything before the colon)
             if neural:
                 df_subset['embedding_type'] = df_subset['embeddings']
             else:
                 df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+            """
 
             # Combine representation and dimensions into a single label for x-axis
             df_subset['rep_dim'] = df_subset.apply(
@@ -1081,7 +1105,6 @@ def all_model_performance_time_horizontal(
 def model_performance_time_horizontal(
     df, 
     output_path='../out', 
-    neural=False, 
     y_axis_threshold=Y_AXIS_THRESHOLD, 
     top_n_results=TOP_N_RESULTS,
     show_charts=False, 
@@ -1093,7 +1116,6 @@ def model_performance_time_horizontal(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers.
     - y_axis_threshold (default: 0): The minimum value for the y-axis (used to set a threshold).
     - show_charts (default: True): Whether to display the charts interactively.
     - debug (default: False): Whether to print additional debug information during processing.
@@ -1134,12 +1156,16 @@ def model_performance_time_horizontal(
                     continue
                 else:
                     pass
-                    
+                
+                df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+                """
                 # Extract the base embeddings (everything before the colon)
                 if neural:
                     df_subset['embedding_type'] = df_subset['embeddings']
                 else:
                     df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+                """
 
                 # Combine representation and dimensions into a single label for x-axis
                 df_subset['rep_dim'] = df_subset.apply(
@@ -1241,7 +1267,6 @@ def model_performance_time_horizontal(
 def model_performance_time_vertical(
     df,
     output_path='../out',
-    neural=False,
     x_axis_threshold=0.0,
     top_n_results=TOP_N_RESULTS,
     show_charts=False,
@@ -1255,7 +1280,6 @@ def model_performance_time_vertical(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or LR.
     - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
     - top_n_results (default: 10): The number of top results to display.
     - show_charts (default: True): Whether to display the charts interactively.
@@ -1296,26 +1320,19 @@ def model_performance_time_vertical(
                     print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
+                df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+                """
                 # Extract the base embeddings (everything before the colon)
                 if neural:
                     df_subset['embedding_type'] = df_subset['embeddings']
                 else:
                     df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+                """
 
                 # Combine representation and dimensions into a single label for y-axis
-                df_subset['rep_dim'] = df_subset.apply(
-                    lambda row: f"{row['representation']}:{row['dimensions']}", axis=1
-                )
-
-                # ---------------------------------------------------------------------------------------------
-                # filter data to exclude specific embeddings
-                """
-                df_subset = df_subset[~df_subset['rep_dim'].str.contains('weighted', case=False, na=False)]
-                df_subset = df_subset[~df_subset['rep_dim'].str.contains('wce', case=False, na=False)]
-                df_subset = df_subset[~df_subset['rep_dim'].str.contains('tce', case=False, na=False)]
-                """
-                # ---------------------------------------------------------------------------------------------
-
+                df_subset['rep_dim'] = df_subset.apply(lambda row: f"{row['representation']}:{row['dimensions']}", axis=1)
+                
                 # Sort by measure value in descending order and limit to top N results
                 df_subset = df_subset.sort_values(by='value', ascending=False).head(top_n_results)
 
@@ -1401,7 +1418,6 @@ def model_performance_time_vertical(
 def all_model_performance_time_vertical(
     df,
     output_path='../out',
-    neural=False,
     x_axis_threshold=0.0,
     top_n_results=TOP_N_RESULTS,
     show_charts=False,
@@ -1414,7 +1430,6 @@ def all_model_performance_time_vertical(
     Args:
     - df: Pandas DataFrame that contains the data to be plotted.
     - output_path (default: '../out'): Directory to save the output files. If it doesn't exist, it is created.
-    - neural (default: False): Whether the data is from deep learning classifiers or classical ML classifiers like SVM or LR.
     - x_axis_threshold (default: 0.0): The minimum value for the x-axis.
     - top_n_results (default: 10): The number of top results to display.
     - show_charts (default: True): Whether to display the charts interactively.
@@ -1455,11 +1470,15 @@ def all_model_performance_time_vertical(
                 print(f"No data available for {measure} in dataset {dataset}.")
                 continue
 
+            df_subset['embedding_type'] = df_subset.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+            """
             # Extract the base embeddings (everything before the colon)
             if neural:
                 df_subset['embedding_type'] = df_subset['embeddings']
             else:
                 df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+            """
 
             # Combine representation and dimensions into a single label for y-axis
             df_subset['rep_dim'] = df_subset.apply(
@@ -1559,7 +1578,6 @@ def all_model_performance_time_vertical(
 def generate_vertical_heatmap_by_model(
     df, 
     output_path='../out', 
-    neural=False,
     top_n_results=None, 
     debug=False):
     """
@@ -1590,11 +1608,15 @@ def generate_vertical_heatmap_by_model(
                     print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
+                df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+                """
                 # Extract the base embeddings (everything before the colon)
                 if neural:
                     df_subset['embedding_type'] = df_subset['embeddings']
                 else:
                     df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+                """
 
                 # Combine representation and dimensions into a single label for y-axis
                 df_subset['rep_dim'] = df_subset.apply(
@@ -1652,7 +1674,6 @@ def generate_vertical_heatmap_by_model(
 def generate_vertical_heatmap_all_models(
     df, 
     output_path='../out', 
-    neural=False,
     top_n_results=None, 
     debug=False):
     """
@@ -1683,11 +1704,15 @@ def generate_vertical_heatmap_all_models(
                 print(f"No data available for {measure}, in dataset {dataset}.")
                 continue
 
+            df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+            """
             # Extract the base embeddings (everything before the colon)
             if neural:
                 df_subset['embedding_type'] = df_subset['embeddings']
             else:
                 df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+            """
 
             # Combine representation and dimensions into a single label for y-axis
             df_subset['rep_dim'] = df_subset.apply(
@@ -1746,7 +1771,6 @@ def generate_vertical_heatmap_all_models(
 def generate_horizontal_heatmap_by_model(
     df, 
     output_path='../out', 
-    neural=False,
     top_n_results=None, 
     debug=False):
     """
@@ -1777,11 +1801,15 @@ def generate_horizontal_heatmap_by_model(
                     print(f"No data available for {measure}, {classifier}, in dataset {dataset}.")
                     continue
 
+                df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+                """
                 # Extract the base embeddings (everything before the colon)
                 if neural:
                     df_subset['embedding_type'] = df_subset['embeddings']
                 else:
                     df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+                """
 
                 # Combine representation and dimensions into a single label for x-axis
                 df_subset['rep_dim'] = df_subset.apply(
@@ -1840,7 +1868,6 @@ def generate_horizontal_heatmap_by_model(
 def generate_horizontal_heatmap_all_models(
     df, 
     output_path='../out', 
-    neural=False,
     top_n_results=None, 
     debug=False):
     """
@@ -1871,11 +1898,15 @@ def generate_horizontal_heatmap_all_models(
                 print(f"No data available for {measure} in dataset {dataset}.")
                 continue
 
+            df['embedding_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+            """
             # Extract the base embeddings (everything before the colon)
             if neural:
                 df_subset['embedding_type'] = df_subset['embeddings']
             else:
                 df_subset['embedding_type'] = df_subset['embeddings'].apply(lambda x: x.split(':')[0])
+            """
 
             # Combine representation and dimensions into a single label for x-axis
             df_subset['rep_dim'] = df_subset.apply(
@@ -1939,7 +1970,6 @@ def generate_horizontal_heatmap_all_models(
 def performance_analysis_detail(
     df, 
     out_dir, 
-    neural=False, 
     debug=False, 
     include_opt=False
 ):
@@ -1950,19 +1980,24 @@ def performance_analysis_detail(
     Args:
     - df: DataFrame containing the analysis data.
     - out_dir: Directory where the summary charts should be saved.
-    - neural: Flag indicating neural or non-neural analysis.
     - debug: Debug mode flag.
     - include_opt: Flag to include 'optimized' values in the timelapse boxplots.
     """
 
     print("\n\tGenerating performance analysis charts by Classifier, Language Model and Representation...")
 
+    # Extract language model and representation form based on classifier type
+    df['language_model'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['representation_form'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+
+    """
     # Extract language model and representation form
     if not neural:
         df[['language_model', 'representation_form']] = df['embeddings'].str.split(':', expand=True)
     else:
         df['language_model'] = df['embeddings']
         df['representation_form'] = 'solo'
+    """
 
     # Filter only supported measures
     supported_measures = MEASURES
@@ -2077,14 +2112,13 @@ def performance_analysis_detail(
 
 
 
-def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
+def perforamance_analysis_summary(df, out_dir, debug=False):
     """
     Analyze classifier and language model performance across all datasets.
 
     Args:
     - df: DataFrame containing the analysis data.
     - out_dir: Directory where the summary charts should be saved.
-    - neural: Flag indicating neural or non-neural analysis.
     - debug: Debug mode flag.
 
     Returns:
@@ -2141,11 +2175,17 @@ def perforamance_analysis_summary(df, out_dir, neural=True, debug=False):
         # if we are looking at ML data we need to parse the language model type from
         # the embeddings column in the log data, first value before colon ':'
         #
+        # Extract language model and representation form based on classifier type
+        df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+        x_axis = df.apply(lambda row: 'lm_type' if row['classifier'] in ML_CLASSIFIERS else 'embeddings', axis=1).iloc[0]
+
+        """
         if not neural:
             measure_df['lm_type'] = measure_df['embeddings'].str.split(':', n=1).str[0]
             x_axis = 'lm_type'
         else:
             x_axis = 'embeddings'
+        """
 
         # --- CHART: Language model performance across classifiers and datasets ---
         plt.figure(figsize=(12, 8))
@@ -2341,7 +2381,6 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-m', '--heatmaps', action='store_true', default=False, help='Generate heatmaps')
     parser.add_argument('-t', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
-    parser.add_argument('-n', '--neural', action='store_true', default=False, help='Output from Neural Nets')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
@@ -2423,7 +2462,6 @@ if __name__ == "__main__":
         perforamance_analysis_summary(
             df, 
             out_dir=summ_dir, 
-            neural=args.neural, 
             debug=args.debug
         )
 
@@ -2438,7 +2476,6 @@ if __name__ == "__main__":
             df,
             chart_output_dir=charts_dir, 
             csv_output_dir=analysis_dir, 
-            neural=args.neural, 
             debug=debug
         )
         
@@ -2463,7 +2500,6 @@ if __name__ == "__main__":
         gen_dataset_summaries(
             df=df, 
             output_path=analysis_dir, 
-            neural=args.neural,
             gen_file=True, 
             stdout=False, 
             debug=debug
@@ -2477,14 +2513,12 @@ if __name__ == "__main__":
         performance_analysis_detail(
             df, 
             out_dir=charts_dir, 
-            neural=args.neural, 
             debug=args.debug
         )
 
         model_performance_time_horizontal(
             df=df, 
             output_path=charts_dir,
-            neural=args.neural,
             y_axis_threshold=args.ystart,
             top_n_results=args.results,
             show_charts=args.show,
@@ -2494,7 +2528,6 @@ if __name__ == "__main__":
         model_performance_time_vertical(
             df=df, 
             output_path=charts_dir,
-            neural=args.neural,
             x_axis_threshold=args.ystart,
             top_n_results=args.results,
             show_charts=args.show,
@@ -2504,7 +2537,6 @@ if __name__ == "__main__":
         plotly_model_performance_dual_yaxis(
                 df=df, 
                 output_path=charts_dir, 
-                neural=args.neural,
                 y_axis_threshold=args.ystart,
                 num_results=args.results,
                 show_charts=args.show, 
@@ -2514,7 +2546,6 @@ if __name__ == "__main__":
         plotly_model_performance_horizontal(
                 df=df, 
                 output_path=charts_dir, 
-                neural=args.neural,
                 y_axis_threshold=args.ystart,
                 num_results=args.results,
                 show_charts=args.show, 
@@ -2524,7 +2555,6 @@ if __name__ == "__main__":
         all_model_performance_time_horizontal(
             df=df, 
             output_path=charts_dir,
-            neural=args.neural,
             y_axis_threshold=args.ystart,
             top_n_results=args.results,
             show_charts=args.show,
@@ -2534,7 +2564,6 @@ if __name__ == "__main__":
         all_model_performance_time_vertical(
             df=df, 
             output_path=charts_dir,
-            neural=args.neural,
             x_axis_threshold=args.ystart,
             top_n_results=args.results,
             show_charts=args.show,
@@ -2553,7 +2582,6 @@ if __name__ == "__main__":
         generate_vertical_heatmap_by_model(
             df, 
             output_path=heatmap_dir,
-            neural=args.neural,
             top_n_results=args.results,
             debug=debug
         )
@@ -2561,7 +2589,6 @@ if __name__ == "__main__":
         generate_vertical_heatmap_all_models(
             df, 
             output_path=heatmap_dir,
-            neural=args.neural,
             top_n_results=args.results,
             debug=debug
         )
@@ -2569,7 +2596,6 @@ if __name__ == "__main__":
         generate_horizontal_heatmap_by_model(
             df, 
             output_path=heatmap_dir,
-            neural=args.neural,
             top_n_results=args.results,
             debug=debug
         )
@@ -2577,9 +2603,6 @@ if __name__ == "__main__":
         generate_horizontal_heatmap_all_models(
             df, 
             output_path=heatmap_dir,
-            neural=args.neural,
             top_n_results=args.results,
             debug=debug
         )
-   
-    
