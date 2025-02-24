@@ -2142,7 +2142,8 @@ def perforamance_analysis_summary(df, out_dir, debug=False):
         #
         # Extract language model and representation form based on classifier type
         measure_df['lm_type'] = measure_df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
-        x_axis = measure_df.apply(lambda row: 'lm_type' if row['classifier'] in ML_CLASSIFIERS else 'embeddings', axis=1).iloc[0]
+        #x_axis = measure_df.apply(lambda row: 'lm_type' if row['classifier'] in ML_CLASSIFIERS else 'embeddings', axis=1).iloc[0]
+        x_axis = 'lm_type'
 
         """
         if not neural:
