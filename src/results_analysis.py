@@ -2223,10 +2223,11 @@ def perforamance_analysis_summary(df, out_dir, debug=False):
 
 
 
+# ----------------------------------------------------------------------------------------------------------------------------
 
-def gen_classifier_summaries(df, output_path=OUT_DIR):
+def gen_global_classifier_summaries(df, output_path=OUT_DIR):
     """
-    Generate summary data by classifier 
+    Generate global summary data by classifier across all datasets and language models 
 
     Args:
         df (DataFrame, required): Input data, already filtered for the measures of interest
@@ -2235,7 +2236,7 @@ def gen_classifier_summaries(df, output_path=OUT_DIR):
     Returns:
         None
     """
-    print(f'\n\tgenerating classifier summary data to {output_path}...')
+    print(f'\n\tgenerating global classifier summary data to {output_path}...')
 
     # Create output directory if it doesn't exist
     if not os.path.exists(output_path):
@@ -2245,11 +2246,48 @@ def gen_classifier_summaries(df, output_path=OUT_DIR):
     summary_df = df.groupby(["classifier", "measure"])["value"].describe()
 
     # Generate output file for each dataset
-    file_name = f"classifier_summary.csv"
+    file_name = f"global_classifier_summary.csv"
     output_file = os.path.join(output_path, file_name)
 
     summary_df.to_csv(output_file)
-    print(f"Saved classifier summary data to {output_file}")
+    print(f"Saved global classifier summary data to {output_file}")
+
+
+
+
+def gen_global_language_model_summaries(df, output_path=OUT_DIR):
+    """
+    Generate summary data by language model across all classifiers and datasets 
+
+    Args:
+        df (DataFrame, required): Input data, already filtered for the measures of interest
+        output_path (str, optional): Output directory for files
+        
+    Returns:
+        None
+    """
+    print(f'\n\tgenerating global language model summary data to {output_path}...')
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    #
+    # if we are looking at ML data we need to parse the language model type from
+    # the embeddings column in the log data, first value before colon ':'
+    #
+    # Extract language model and representation form based on classifier type
+    df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+    # Compute the performance summary by classifier for each metric
+    summary_df = df.groupby(["lm_type", "measure"])["value"].describe()
+
+    # Generate output file for each dataset
+    file_name = f"global_language_model_summary.csv"
+    output_file = os.path.join(output_path, file_name)
+
+    summary_df.to_csv(output_file)
+    print(f"Saved global language model summary data to {output_file}")
 
 # ----------------------------------------------------------------------------------------------------------------------------
 
@@ -2339,7 +2377,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
         plt.title(f"{measure_label} and Timelapse by Representation Form (All Datasets and Classifiers)", fontsize=12)
         plt.legend(handles=legend_patches, loc='upper right')
         
-        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_{measure}_timelapse_boxplot_vertical.png")
+        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_representation_form_timelapse_boxplot_vertical.png")
         plt.savefig(output_path_vertical_rep_summary)
 
         plt.close()
@@ -2360,7 +2398,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
         plt.title(f"{measure_label} and Timelapse by Representation Form (All Datasets and Classifiers)", fontsize=12)
         plt.legend(handles=legend_patches, loc='upper right')
         
-        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_{measure}_timelapse_boxplot_horizontal.png")
+        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_representation_form_timelapse_boxplot_horizontal.png")
         plt.savefig(output_path_vertical_rep_summary)
 
         plt.close()
@@ -2381,7 +2419,6 @@ if __name__ == "__main__":
     parser.add_argument('file_path', type=str, help='Path to the TSV file with the data')
     parser.add_argument('-c', '--charts', action='store_true', default=False, help='Generate charts')
     parser.add_argument('-m', '--heatmaps', action='store_true', default=False, help='Generate heatmaps')
-    parser.add_argument('-t', '--runtimes', action='store_true', default=False, help='Generate timrlapse charts')
     parser.add_argument('-s', '--summary', action='store_true', default=False, help='Generate summary')
     parser.add_argument('-o', '--output_dir', action='store_true', help='Directory to write output files. If not provided, defaults to ' + OUT_DIR + ' + the base file name of the input file.')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='debug mode')
@@ -2480,11 +2517,15 @@ if __name__ == "__main__":
             debug=debug
         )
         
-        gen_classifier_summaries(
+        gen_global_classifier_summaries(
             df=df, 
             output_path=summ_dir
         )
-    
+
+        gen_global_language_model_summaries(
+            df=df, 
+            output_path=summ_dir
+        )
 
     #
     # CSV and OUT data files for Excel manipulation and analysis
