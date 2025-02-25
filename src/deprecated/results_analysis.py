@@ -519,6 +519,7 @@ def gen_csvs_all(df, chart_output_dir, csv_output_dir, debug=False):
         df['M-Embeddings'] = df['embeddings']
         df['M-Mix'] = 'solo'  
     """
+
     filtered_df = df[df['measure'].isin(CSV_MEASURES)]
 
     if debug:
@@ -2225,6 +2226,46 @@ def perforamance_analysis_summary(df, out_dir, debug=False):
 
 # ----------------------------------------------------------------------------------------------------------------------------
 
+
+def gen_global_dataset_summaries(df, output_path=OUT_DIR):
+    """
+    Generate global summary data by classifier across all datasets and language models 
+
+    Args:
+        df (DataFrame, required): Input data, already filtered for the measures of interest
+        output_path (str, optional): Output directory for files
+        
+    Returns:
+        None
+    """
+    print(f'\n\tgenerating global classifier summary data to {output_path}...')
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    #
+    # if we are looking at ML data we need to parse the language model type from
+    # the embeddings column in the log data, first value before colon ':'
+    #
+    # Extract language model and representation form based on classifier type
+    #df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+    df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['representation'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+
+    # Compute the performance summary by classifier for each metric
+    summary_df = df.groupby(["dataset", "classifier", "lm_type", "representation", "timelapse", "measure"])["value"].describe()
+
+    # Generate output file for each dataset
+    file_name = f"global_dataset_summary.csv"
+    output_file = os.path.join(output_path, file_name)
+
+    summary_df.to_csv(output_file)
+    print(f"Saved global dataset summary data to {output_file}")
+
+
+
 def gen_global_classifier_summaries(df, output_path=OUT_DIR):
     """
     Generate global summary data by classifier across all datasets and language models 
@@ -2242,8 +2283,18 @@ def gen_global_classifier_summaries(df, output_path=OUT_DIR):
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
+    #
+    # if we are looking at ML data we need to parse the language model type from
+    # the embeddings column in the log data, first value before colon ':'
+    #
+    # Extract language model and representation form based on classifier type
+    #df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
+    df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['representation'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
+
     # Compute the performance summary by classifier for each metric
-    summary_df = df.groupby(["classifier", "measure"])["value"].describe()
+    summary_df = df.groupby(["classifier", "dataset", "lm_type", "representation", "timelapse", "measure"])["value"].describe()
 
     # Generate output file for each dataset
     file_name = f"global_classifier_summary.csv"
@@ -2251,7 +2302,6 @@ def gen_global_classifier_summaries(df, output_path=OUT_DIR):
 
     summary_df.to_csv(output_file)
     print(f"Saved global classifier summary data to {output_file}")
-
 
 
 
@@ -2277,10 +2327,13 @@ def gen_global_language_model_summaries(df, output_path=OUT_DIR):
     # the embeddings column in the log data, first value before colon ':'
     #
     # Extract language model and representation form based on classifier type
+    #df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+
     df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['representation'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
 
     # Compute the performance summary by classifier for each metric
-    summary_df = df.groupby(["lm_type", "measure"])["value"].describe()
+    summary_df = df.groupby(["lm_type", "representation", "dataset", "classifier", "timelapse", "measure"])["value"].describe()
 
     # Generate output file for each dataset
     file_name = f"global_language_model_summary.csv"
@@ -2290,7 +2343,6 @@ def gen_global_language_model_summaries(df, output_path=OUT_DIR):
     print(f"Saved global language model summary data to {output_file}")
 
 # ----------------------------------------------------------------------------------------------------------------------------
-
 
 
 def gen_rep_summaries(df, chart_output_path, csv_output_path):
@@ -2307,7 +2359,10 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
         os.makedirs(csv_output_path)
 
     # Extract language model type and representation form from 'embeddings' column
-    df[['lm_type', 'representation_form']] = df['embeddings'].str.split(':', n=1, expand=True)
+    #df[['lm_type', 'representation_form']] = df['embeddings'].str.split(':', n=1, expand=True)
+
+    df['lm_type'] = df.apply(lambda row: row['embeddings'].split(':')[0] if row['classifier'] in ML_CLASSIFIERS else row['embeddings'], axis=1)
+    df['representation_form'] = df.apply(lambda row: row['embeddings'].split(':')[1] if row['classifier'] in ML_CLASSIFIERS else 'solo', axis=1)
 
     # Filter only the relevant measures
     df_filtered = df[df["measure"].isin(MEASURES)]
@@ -2523,6 +2578,11 @@ if __name__ == "__main__":
         )
 
         gen_global_language_model_summaries(
+            df=df, 
+            output_path=summ_dir
+        )
+
+        gen_global_dataset_summaries(
             df=df, 
             output_path=summ_dir
         )
