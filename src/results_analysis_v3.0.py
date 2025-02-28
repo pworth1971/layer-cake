@@ -2465,6 +2465,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
 
     # Vertical box plots
     for measure, measure_label in zip(["mean_macro_f1", "mean_micro_f1"], ["Macro-F1 Score", "Micro-F1 Score"]):
+
         plt.figure(figsize=(10, 8))
         ax = sns.boxplot(y="representation_form", x=measure, data=df_representation_summary)
         ax2 = ax.twiny()
@@ -2479,7 +2480,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
         plt.title(f"{measure_label} and Timelapse by Representation Form (All Datasets and Classifiers)", fontsize=12)
         plt.legend(handles=legend_patches, loc='upper right')
         
-        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_representation_form_timelapse_boxplot_vertical.png")
+        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"representation_form_timelapse_boxplot_vertical_{measure}.png")
         plt.savefig(output_path_vertical_rep_summary)
 
         plt.close()
@@ -2500,7 +2501,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
         plt.title(f"{measure_label} and Timelapse by Representation Form (All Datasets and Classifiers)", fontsize=12)
         plt.legend(handles=legend_patches, loc='upper right')
         
-        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"summary_representation_form_timelapse_boxplot_horizontal.png")
+        output_path_vertical_rep_summary = os.path.join(chart_output_path, f"representation_form_timelapse_boxplot_horizontal_{measure}.png")
         plt.savefig(output_path_vertical_rep_summary)
 
         plt.close()
@@ -2527,7 +2528,7 @@ if __name__ == "__main__":
     parser.add_argument('-y', '--ystart', type=float, default=Y_AXIS_THRESHOLD, help='Y-axis starting value for the charts (default: 0.6)')
     parser.add_argument('-r', '--results', type=int, default=TOP_N_RESULTS, help=f'number of results to display (default: {TOP_N_RESULTS})')
     parser.add_argument('-show', action='store_true', default=False, help='Display charts interactively (requires -c)')
-    parser.add_argument('-a', '--analyze', action='store_true', default=False, help='Generate analysis data')
+    parser.add_argument('-a', '--analysis', action='store_true', default=False, help='Generate analysis data')
 
     args = parser.parse_args()
     print("args: ", args)
@@ -2642,7 +2643,7 @@ if __name__ == "__main__":
     #
     # CSV and OUT data files for Excel manipulation and analysis
     #
-    if (args.analyze):
+    if (args.analysis):
 
         gen_summary_all(
             df=df, 
