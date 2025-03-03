@@ -3,11 +3,12 @@
 
 ## Introduction
 
-Layer Cake is a platform for testing the performance of different language models, ie word embeddings, for teh problem of text classification.
-Layer cake supports core machine learning models that are effective with text classification such as SVM , Logistic Regression and Naive Bayes, as well
-as neural models, ie deep learning architectures, which support CNN, ATTN and LSTM approaches (with some limitations). The platform is designed to
-support and test different model and data configurations, which include the tuning and testing of both hyperparametr settings for the various models 
-as well as various combinations of embeddings and underlying dataset representations.
+Layer Cake is a platform for testing the relative performance of different language models, or word embeddings, specifically with respect to the 
+problem of text classification. Layer cake supports both core machine learning models such as SVM , Logistic Regression and Naive Bayes, as well
+as neural models, ie deep learning architectures, which support CNN, ATTN and LSTM approaches (with some limitations) for the static language models
+such as Word2Vec, GloVe and fastText, and two transformer classifiers that leverage the huggingface transformers API. The platform is designed to
+support and test different model and data configurations, and report and analyze the output under a variety of hyperparametr and dataset confuguratoions,
+as well as various combinations of embeddings and underlying dataset (language) representations.
 
 The core of the code and modules are forked from a github repo that was designed to test 'word-class embeddings' as described in a 2019 paper 
 entitled 'Word-Class Embeddings for Multiclass Text Classification' authored by Alejandro Moreo, Andrea Esuli, and Fabrizio Sebastiani who at 
@@ -17,11 +18,9 @@ text classification. WCEs are meant to be used as extensions (i.e., by concatena
 embeddings in order to improve the performance of neural classifiers. This work was outlined in the original paper which is available 
 at https://arxiv.org/abs/1911.11506, with the original repo which we forked from available here: https://github.com/AlexMoreo/word-class-embeddings.
 
-We extend this architecture to support fastText word embeddings, as well as Tranformer (token based) langugae models such as BERT, DistilBERT, RoBERTa,
-XLNet and GPT2, levergaing the huggingface libraries (transformers) for model creation and testing. In doing so we adapt these WCEs to TCEs, or token 
-class embeddings so that the underlying dataset representation data by the model, which uses a model sepcific tokenization strategy, can be properly 
-aligned with the TCEs themselves for testing. Our findings are that the TCEs are not effective in this setting but we leave the possibility open that 
-there is an alternative way to add them that could possiby be effective.
+We extend this architecture to support fastText and word2vec static, word embeddings, as well as Tranformer (token based), context-sensitive embeddings 
+such as BERT, DistilBERT, RoBERTa, XLNet, GPT2, Llama and DeepSeek (actual models used can be found in the LCRepresentation class file) again using
+the huggingface libraries (transformers) for model creation and testing. 
 
 
 ## Platform Overview
@@ -41,7 +40,6 @@ Vector Machine (SVM) model which is quite handy and widely used for text classif
 type problems.
 
 The driver code for this module is in src/ml_classification_test_v3.0.py and it is a command line program that takes the following arguments:
-
 
 
 options:
@@ -213,7 +211,6 @@ is driven and tested by the bin/trans_lc_hfseq_test.sh and bin/trans_lc_hfcnn_te
 different models.
 
 
-
 ### Reporting & Analytics: results_analysis.py
 
 Each of the modules described above outputs results to log files, typically generated in the log/ directory which have a lot of information about the underlying 
@@ -223,10 +220,9 @@ the data to provide a summary report and/or interactive, html charts that show t
 different data sets and in different models. 
 
 
-	----- Results Analysis -----
-usage: results_analysis.py [-h] [-c] [-r] [-n] [-s] [-o] [-d] [-y YSTART] [-m RESULTS] [-show] file_path
+usage: results_analysis_v3.0.py [-h] [-c] [-m] [-s] [-o] [-d] [-y YSTART] [-r RESULTS] [-show] [-a] file_path
 
-Analyze model results and generate charts and/or summaries
+Layer Cake Analysis and Reporting Engine
 
 positional arguments:
   file_path             Path to the TSV file with the data
@@ -234,16 +230,17 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -c, --charts          Generate charts
-  -r, --runtimes        Generate timrlapse charts
-  -n, --neural          Output from Neural Nets
+  -m, --heatmaps        Generate heatmaps
   -s, --summary         Generate summary
   -o, --output_dir      Directory to write output files. If not provided, defaults to ../out/ + the base file name of the input file.
   -d, --debug           debug mode
   -y YSTART, --ystart YSTART
                         Y-axis starting value for the charts (default: 0.6)
-  -m RESULTS, --results RESULTS
-                        Y-axis starting value for the charts (default: 0.6)
+  -r RESULTS, --results RESULTS
+                        number of results to display (default: 25)
   -show                 Display charts interactively (requires -c)
+  -a, --analysis        Generate analysis data
+(python310) peter@Peters-MacBook-Pro-16-inch-2021 bin % 
 
 
 Outputs:
@@ -259,14 +256,13 @@ Summary Generation:
 - Text-based summaries (.out).
 - Tabular summaries in CSV format.
 
-Timelapse Charts:
-- Timelapse Plots: Interactive HTML visualizations showing average runtimes for various embeddings and models.
-
-
+Heatmaps:
+- heatmap diagrams of classifier and language model performance
+- 
 
 A sample run might look something like:
 
-python ../src/results_analysis.py ../log/lc_ml_test.test --charts --runtimes --summary --debug
+python ../src/results_analysis.py ../log/lc_ml_test.test --charts --summary --debug
 
 But shell scripts for ML and NN model analysis are provided in the bin directory for reference.
 
@@ -274,16 +270,15 @@ Output defaults to /out directory and includes charts which show model and datas
 summary files in CSV and HTML output, 
 
 
-
 ## Technical Requirements & Dependencies
 
-This code was developed n both a Mac with Apple silicon (Apple M1 and M3 chips) as well as, for the neural models specifically which are GPU dependent, a Ubuntu Linux
-host that has CUDA support, the latter of which is a core technical dependency for this code to run - along with the rest of the python and conda requirements 
-outlined in setup.sh and requirements.txt. 
+This code was developed to support both a MacOS MPS environment as well as Ubuntu Linux (CUDA), the latter of which is a core technical dependency 
+for the code to leverage GPUs on Limux which are integral to model fine-tuning which is a significant part of the computational complexity, and performance, 
+of Layer Cake.
 
-The code runs using the latest (as of winter of 2025) python 3.12 libraries. Specifically we use a miniconda python 3.12 environment which is built 
-with the bin/startup.sh script which can be run from a command line from a new system. The startup shell script runs on both Apple MacOS and Ubuntu Linux.
-
+The code runs using the latest (as of winter of 2025) python 3.10 libraries, which is a necessary condition for the training of the DeepSeek models. 
+Specifically we use a miniconda python 3.10 environment which is built with the bin/setup.sh script which can be run from a command line and which will
+install all of the necessary libraries and tools necessary for Layer Cake to run successfully. 
 
 
 ## Supported Data sets
@@ -297,8 +292,6 @@ specifically from the provider.
 
 As of the time of this writing the datasets we support are outlined below, each of which has its own source that must be downloaded and 
 configured in the proper /datasets subdirectory.
-
-
 
 
 #### BBC NEWS 
