@@ -754,7 +754,81 @@ def get_embedding_type(pretrained):
     return embedding_type
 
 
+
+import torch
+import psutil
+import subprocess
+import plistlib
+import GPUtil
+
 def get_sysinfo(debug=False):
+
+    print("get_sysinfo()...")
+
+    # Get CPU information
+    num_physical_cores = psutil.cpu_count(logical=False)
+    num_logical_cores = psutil.cpu_count(logical=True)
+
+    print("CPU Physical Cores:", num_physical_cores)
+    print("CPU Logical Cores:", num_logical_cores)
+
+    # Get memory information
+    memory = psutil.virtual_memory()
+    total_memory = memory.total
+    avail_mem = memory.available
+
+    print("Total Memory:", total_memory)
+    print("Available Memory:", avail_mem)
+
+    # Initialize CUDA info
+    num_cuda_devices = 0
+    cuda_devices = []
+
+    print("GPU Info...")
+    if torch.cuda.is_available():
+        num_cuda_devices = torch.cuda.device_count()
+        print("Total CUDA devices:", num_cuda_devices)
+        for i in range(num_cuda_devices):
+            device_info = {
+                "name": torch.cuda.get_device_name(i),
+                "memory": torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)  # Convert bytes to MB
+            }
+            cuda_devices.append(device_info)
+            print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
+    else:
+        print("CUDA is not available")
+
+    # GPUtil (typically for NVIDIA GPUs)
+    gpus = GPUtil.getGPUs()
+    for gpu in gpus:
+        print(f"GPU: {gpu.name}, Memory Free: {gpu.memoryFree}MB, Memory Used: {gpu.memoryUsed}MB, Memory Total: {gpu.memoryTotal}MB")
+
+    # MPS / Metal on macOS
+    if torch.backends.mps.is_available():
+        print("MPS is available.")
+        print("MPS GPU Info:")
+
+        try:
+            output = subprocess.check_output(
+                ['system_profiler', '-xml', 'SPDisplaysDataType', '-detailLevel', 'full']
+            )
+            plist = plistlib.loads(output)
+
+            for item in plist[0]['_items']:
+                model = item.get('sppci_model', item.get('_name', 'Unknown GPU'))
+
+                print(f"MPS GPU: {model}")
+                print(f"Shared Unified Memory: {total_memory / (1024 ** 3):.2f} GB (system-wide)")
+        except Exception as e:
+            print(f"Failed to retrieve MPS info: {e}")
+    else:
+        print("MPS is not available.")
+
+    return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
+
+
+
+def get_sysinfo_old(debug=False):
 
     print("get_sysinfo()...")
     
