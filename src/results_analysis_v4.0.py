@@ -2500,7 +2500,7 @@ def gen_rep_summaries(df, chart_output_path, csv_output_path):
 # final summary table data
 #
 
-def summarize_by_representation_form(df, output_path='../out', debug=False):
+def ml_summary_by_representation_form(df, output_path='../out', debug=False):
     """
     Summarizes measure values by representation form across language model families
     for ML classifiers, splitting embeddings into language model family and representation.
@@ -2661,6 +2661,42 @@ def summarize_dl_classifiers_by_classifier(df, output_path='../out', debug=False
     print(f"DL classifier summary by classifier saved to {output_file}")
 
 
+def summarize_all_classifiers_by_dataset(df, output_path='../out', debug=False):
+    """
+    Summarizes measures for classifiers in DL_CLASSIFIERS by dataset and classifier.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with classification results.
+        output_path (str): Directory to save the summary TSV.
+        debug (bool): Flag to output debugging info.
+
+    Returns:
+        None: Writes summary TSV to specified output path.
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Group by dataset, classifier, and measure, summarizing values
+    summary_df = df.groupby(['dataset', 'classifier', 'measure']).agg(
+        mean_value=('value', 'mean'),
+        median_value=('value', 'median'),
+        max_value=('value', 'max'),
+        min_value=('value', 'min'),
+        std_dev=('value', 'std'),
+        count=('value', 'count'),
+        mean_timelapse=('timelapse', 'mean')
+    ).reset_index()
+
+    summary_df.sort_values(by=['dataset', 'classifier', 'measure'], inplace=True)
+
+    if debug:
+        print(summary_df)
+
+    output_file = os.path.join(output_path, 'all_classifier_summary_by_dataset.tsv')
+    summary_df.to_csv(output_file, sep='\t', index=False)
+    print(f"DL classifier summary by dataset saved to {output_file}")
+
+
 def summarize_dl_classifiers_by_dataset(df, output_path='../out', debug=False):
     """
     Summarizes measures for classifiers in DL_CLASSIFIERS by dataset and classifier.
@@ -2702,6 +2738,119 @@ def summarize_dl_classifiers_by_dataset(df, output_path='../out', debug=False):
     output_file = os.path.join(output_path, 'dl_classifier_summary_by_dataset.tsv')
     summary_df.to_csv(output_file, sep='\t', index=False)
     print(f"DL classifier summary by dataset saved to {output_file}")
+
+
+def summarize_all_by_classifier(df, output_path='../out', debug=False):
+    """
+    Summarizes measures for all data by classifier, includes ML and DL models.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with classification results.
+        output_path (str): Directory to save the summary TSV.
+        debug (bool): Flag to output debugging info.
+
+    Returns:
+        None: Writes summary TSV to specified output path.
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Group by classifier and measure, summarizing values
+    summary_df = df.groupby(['classifier', 'measure']).agg(
+        mean_value=('value', 'mean'),
+        median_value=('value', 'median'),
+        max_value=('value', 'max'),
+        min_value=('value', 'min'),
+        std_dev=('value', 'std'),
+        count=('value', 'count'),
+        mean_timelapse=('timelapse', 'mean')
+    ).reset_index()
+
+    summary_df.sort_values(by=['classifier', 'measure'], inplace=True)
+
+    if debug:
+        print(summary_df)
+
+    output_file = os.path.join(output_path, 'summary_by_classifier.tsv')
+    summary_df.to_csv(output_file, sep='\t', index=False)
+    print(f"Summary by classifier saved to {output_file}")
+
+
+
+
+
+def timelapse_correlation_scatter_plot(df, output_path='../out', debug=False):
+    """
+    Plots individual scatter charts showing correlation between training times (timelapse) and model performance
+    for each measure defined in MEASURES, separately by dataset and measure, including all classifiers with different shapes.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing classifier results.
+        output_path (str): Directory to save the scatter plots.
+        debug (bool): Debug flag for additional console output.
+
+    Returns:
+        None: Saves the plots to the specified directory.
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # Define classifier shapes
+    classifier_shapes = {
+        'hf.sc': 'o', 'hf.cnn': 'o',       # Transformers
+        'lr': 's', 'nb': 's', 'svm': 's',  # Classical ML
+        'cnn': '^', 'attn': '^', 'lstm': '^'  # Deep Learning
+    }
+
+    # Filter the dataframe by the measures
+    df_filtered = df[df['measure'].isin(MEASURES)].copy()
+
+    if df_filtered.empty:
+        print("No data for selected measures.")
+        return
+
+    for dataset in df_filtered['dataset'].unique():
+        df_dataset = df_filtered[df_filtered['dataset'] == dataset]
+
+        for measure in MEASURES:
+            measure_df = df_dataset[df_dataset['measure'] == measure]
+
+            if measure_df.empty:
+                if debug:
+                    print(f"No data available for dataset: {dataset}, measure: {measure}")
+                continue
+
+            plt.figure(figsize=(8, 6))  # Reduced figure size for clarity
+
+            for classifier in measure_df['classifier'].unique():
+                classifier_df = measure_df[measure_df['classifier'] == classifier]
+                shape = classifier_shapes.get(classifier, 'X')  # Default shape if not found
+
+                sns.scatterplot(
+                    data=classifier_df,
+                    x='timelapse',
+                    y='value',
+                    label=classifier,
+                    marker=shape,
+                    s=15,
+                    alpha=0.8
+                )
+
+            plt.title(f'Correlation of Training Time to {measure} for {dataset}', fontsize=14)
+            plt.xlabel('Training Time (seconds)', fontsize=12)
+            plt.ylabel(f'{measure}', fontsize=12)
+            plt.legend(title='Classifier', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.grid(True, linestyle='--', alpha=0.6)
+
+            plot_file = os.path.join(output_path, f'timelapse_performance_correlation_{dataset}_{measure}.png')
+            plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+
+            if debug:
+                print(f"Scatter plot for {dataset}, measure {measure} saved to {plot_file}")
+
+
+
+
 
 
 
@@ -2796,6 +2945,12 @@ if __name__ == "__main__":
     #
     if args.summary:
 
+        timelapse_correlation_scatter_plot(
+            df, 
+            output_path=charts_dir,
+            debug=args.debug
+        )
+
         summarize_dl_classifiers_by_classifier(
             df,
             output_path=summ_dir,
@@ -2808,7 +2963,19 @@ if __name__ == "__main__":
             debug=args.debug
         )
 
-        summarize_by_representation_form(
+        summarize_all_classifiers_by_dataset(
+            df,
+            output_path=summ_dir,
+            debug=args.debug
+        )
+
+        summarize_all_by_classifier(
+            df,
+            output_path=summ_dir,
+            debug=args.debug
+        )
+
+        ml_summary_by_representation_form(
             df,
             output_path=summ_dir,
             debug=args.debug
