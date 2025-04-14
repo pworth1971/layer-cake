@@ -2779,53 +2779,36 @@ def summarize_all_by_classifier(df, output_path='../out', debug=False):
 
 
 
+import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
 def timelapse_correlation_scatter_plot_by_classifier(df, output_path='../out', debug=False):
-    """
-    Plots individual scatter charts showing correlation between training times (timelapse) and model performance
-    for each measure defined in MEASURES, separately by dataset and measure, including all classifiers with different shapes.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing classifier results.
-        output_path (str): Directory to save the scatter plots.
-        debug (bool): Debug flag for additional console output.
-
-    Returns:
-        None: Saves the plots to the specified directory.
-    """
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # Define classifier shapes
     classifier_shapes = {
-        'hf.sc': 'o', 'hf.cnn': 'o',       # Transformers
-        'lr': 's', 'nb': 's', 'svm': 's',  # Classical ML
-        'cnn': '^', 'attn': '^', 'lstm': '^'  # Deep Learning
+        'hf.sc': 'o', 'hf.cnn': 'o',
+        'lr': 's', 'nb': 's', 'svm': 's',
+        'cnn': '^', 'attn': '^', 'lstm': '^'
     }
 
-    # Filter the dataframe by the measures
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-
-    if df_filtered.empty:
-        print("No data for selected measures.")
-        return
+    df_filtered['timelapse'] = df_filtered['timelapse'] / 60  # Convert to minutes
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
-
         for measure in MEASURES:
             measure_df = df_dataset[df_dataset['measure'] == measure]
-
             if measure_df.empty:
                 if debug:
-                    print(f"No data available for dataset: {dataset}, measure: {measure}")
+                    print(f"No data for {dataset}, {measure}")
                 continue
-
-            plt.figure(figsize=(8, 6))  # Reduced figure size for clarity
-
+            plt.figure(figsize=(8, 6))
             for classifier in measure_df['classifier'].unique():
                 classifier_df = measure_df[measure_df['classifier'] == classifier]
-                shape = classifier_shapes.get(classifier, 'X')  # Default shape if not found
-
+                shape = classifier_shapes.get(classifier, 'X')
                 sns.scatterplot(
                     data=classifier_df,
                     x='timelapse',
@@ -2835,60 +2818,35 @@ def timelapse_correlation_scatter_plot_by_classifier(df, output_path='../out', d
                     s=15,
                     alpha=0.8
                 )
-
             plt.title(f'Correlation of Training Time to {measure} for {dataset}', fontsize=14)
-            plt.xlabel('Training Time (seconds)', fontsize=12)
+            plt.xlabel('Training Time (minutes)', fontsize=12)
             plt.ylabel(f'{measure}', fontsize=12)
             plt.legend(title='Classifier', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.grid(True, linestyle='--', alpha=0.6)
-
             plot_file = os.path.join(output_path, f'classifier_timelapse_performance_correlation_{dataset}_{measure}.png')
             plt.savefig(plot_file, dpi=300, bbox_inches='tight')
-
             if debug:
-                print(f"Scatter plot for {dataset}, measure {measure} saved to {plot_file}")
-
+                print(f"Saved: {plot_file}")
 
 
 def timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=False):
-    """
-    Plots individual scatter charts showing correlation between training times (timelapse) and model performance
-    for each measure defined in MEASURES, separately by dataset and measure, using language model identity from the 'model' column.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing classifier results.
-        output_path (str): Directory to save the scatter plots.
-        debug (bool): Debug flag for additional console output.
-
-    Returns:
-        None: Saves the plots to the specified directory.
-    """
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # Filter the dataframe by the measures
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-
-    if df_filtered.empty:
-        print("No data for selected measures.")
-        return
+    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
-
         for measure in MEASURES:
             measure_df = df_dataset[df_dataset['measure'] == measure]
-
             if measure_df.empty:
                 if debug:
-                    print(f"No data available for dataset: {dataset}, measure: {measure}")
+                    print(f"No data for {dataset}, {measure}")
                 continue
-
-            plt.figure(figsize=(8, 6))  # Reduced figure size for clarity
-
+            plt.figure(figsize=(8, 6))
             for model in measure_df['model'].unique():
                 model_df = measure_df[measure_df['model'] == model]
-
                 sns.scatterplot(
                     data=model_df,
                     x='timelapse',
@@ -2897,57 +2855,32 @@ def timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=
                     s=15,
                     alpha=0.8
                 )
-
             plt.title(f'Correlation of Training Time to {measure} for {dataset}', fontsize=14)
-            plt.xlabel('Training Time (seconds)', fontsize=12)
+            plt.xlabel('Training Time (minutes)', fontsize=12)
             plt.ylabel(f'{measure}', fontsize=12)
             plt.legend(title='Language Model', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.grid(True, linestyle='--', alpha=0.6)
-
             plot_file = os.path.join(output_path, f'model_timelapse_performance_correlation_{dataset}_{measure}.png')
             plt.savefig(plot_file, dpi=300, bbox_inches='tight')
-
             if debug:
-                print(f"Scatter plot for {dataset}, measure {measure} saved to {plot_file}")
-
-
-
-import plotly.express as px
+                print(f"Saved: {plot_file}")
 
 
 def plotly_timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=False):
-    """
-    Generates interactive HTML scatter plots showing correlation between training time (timelapse) and model performance,
-    grouped by dataset and measure, colored by language model ('model' column), with mouseover tooltips.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing classifier results.
-        output_path (str): Directory to save the scatter plots.
-        debug (bool): Debug flag for additional console output.
-
-    Returns:
-        None: Saves interactive plots as HTML files.
-    """
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-
-    if df_filtered.empty:
-        print("No data for selected measures.")
-        return
+    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
-
         for measure in MEASURES:
             measure_df = df_dataset[df_dataset['measure'] == measure]
-
             if measure_df.empty:
                 if debug:
-                    print(f"No data for dataset: {dataset}, measure: {measure}")
+                    print(f"No data for {dataset}, {measure}")
                 continue
-
             fig = px.scatter(
                 measure_df,
                 x='timelapse',
@@ -2955,24 +2888,92 @@ def plotly_timelapse_correlation_scatter_plot_by_model(df, output_path='../out',
                 color='model',
                 hover_data=['model', 'classifier', 'representation', 'dimensions'],
                 title=f'Training Time vs {measure} for {dataset}',
-                labels={'value': measure, 'timelapse': 'Training Time (seconds)'}
+                labels={'value': measure, 'timelapse': 'Training Time (minutes)'}
             )
-
             fig.update_layout(
                 height=600,
                 width=900,
                 title_font=dict(size=16),
-                xaxis_title='Training Time (seconds)',
+                xaxis_title='Training Time (minutes)',
                 yaxis_title=measure,
                 legend_title_text='Language Model',
                 template='plotly_white'
             )
-
             plot_file = os.path.join(output_path, f'model_timelapse_performance_correlation_{dataset}_{measure}.html')
             fig.write_html(plot_file)
-
             if debug:
-                print(f"Interactive HTML plot saved to {plot_file}")
+                print(f"Saved HTML plot: {plot_file}")
+
+
+def timelapse_correlation_scatter_plot_by_model_summary(df, output_path='../out', ystart=None, debug=False):
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    df_filtered = df[df['measure'].isin(MEASURES)].copy()
+    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+
+    for measure in MEASURES:
+        measure_df = df_filtered[df_filtered['measure'] == measure]
+        if measure_df.empty:
+            if debug:
+                print(f"No data for {measure}")
+            continue
+        fig = px.scatter(
+            measure_df,
+            x='timelapse',
+            y='value',
+            color='model',
+            hover_data=['dataset', 'model', 'classifier', 'representation', 'dimensions'],
+            title=f'Training Time vs {measure} (All Datasets)',
+            labels={'value': measure, 'timelapse': 'Training Time (minutes)'}
+        )
+        fig.update_layout(
+            height=600,
+            width=900,
+            title_font=dict(size=16),
+            xaxis_title='Training Time (minutes)',
+            yaxis_title=measure,
+            legend_title_text='Language Model',
+            template='plotly_white'
+        )
+        plot_file = os.path.join(output_path, f'summary_model_timelapse_performance_correlation_{measure}.html')
+        fig.write_html(plot_file)
+        if debug:
+            print(f"Saved summary model plot: {plot_file}")
+
+
+def timelapse_correlation_scatter_plot_by_classifier_summary(df, output_path='../out', ystart=None, debug=False):
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    df_filtered = df[df['measure'].isin(MEASURES)].copy()
+    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+
+    for measure in MEASURES:
+        measure_df = df_filtered[df_filtered['measure'] == measure]
+        if measure_df.empty:
+            if debug:
+                print(f"No data for {measure}")
+            continue
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(
+            data=measure_df,
+            x='timelapse',
+            y='value',
+            hue='classifier',
+            s=15,
+            alpha=0.8
+        )
+        plt.title(f'Training Time vs {measure} (All Datasets)', fontsize=14)
+        plt.xlabel('Training Time (minutes)', fontsize=12)
+        plt.ylabel(f'{measure}', fontsize=12)
+        plt.legend(title='Classifier', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plot_file = os.path.join(output_path, f'summary_classifier_timelapse_performance_correlation_{measure}.png')
+        plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+        if debug:
+            print(f"Saved summary classifier plot: {plot_file}")
+
 
 
 
@@ -3065,6 +3066,18 @@ if __name__ == "__main__":
     # generate summary data across all classifiers and datasets
     #
     if args.summary:
+
+        timelapse_correlation_scatter_plot_by_classifier_summary(
+            df,
+            output_path=summ_dir,
+            debug=args.debug    
+        )
+
+        timelapse_correlation_scatter_plot_by_model_summary(
+            df,
+            output_path=summ_dir,
+            debug=args.debug    
+        )
 
         summarize_dl_classifiers_by_classifier(
             df,
