@@ -2779,9 +2779,11 @@ def summarize_all_by_classifier(df, output_path='../out', debug=False):
 
 
 
-import plotly.express as px
-import matplotlib.pyplot as plt
-import seaborn as sns
+# -------------------------------------------------------------------------------------------------------------------------------
+# 
+# timelapse correlation plots 
+#
+# -------------------------------------------------------------------------------------------------------------------------------
 
 
 def timelapse_correlation_scatter_plot_by_classifier(df, output_path='../out', debug=False):
@@ -2795,7 +2797,8 @@ def timelapse_correlation_scatter_plot_by_classifier(df, output_path='../out', d
     }
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-    df_filtered['timelapse'] = df_filtered['timelapse'] / 60  # Convert to minutes
+    df_filtered = df_filtered[df_filtered['timelapse'] > 0]
+    df_filtered['timelapse'] /= 60
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
@@ -2818,8 +2821,9 @@ def timelapse_correlation_scatter_plot_by_classifier(df, output_path='../out', d
                     s=15,
                     alpha=0.8
                 )
+            plt.xscale('log')
             plt.title(f'Correlation of Training Time to {measure} for {dataset}', fontsize=14)
-            plt.xlabel('Training Time (minutes)', fontsize=12)
+            plt.xlabel('Training Time (minutes, log scale)', fontsize=12)
             plt.ylabel(f'{measure}', fontsize=12)
             plt.legend(title='Classifier', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.grid(True, linestyle='--', alpha=0.6)
@@ -2834,7 +2838,8 @@ def timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=
         os.makedirs(output_path)
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+    df_filtered = df_filtered[df_filtered['timelapse'] > 0]
+    df_filtered['timelapse'] /= 60
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
@@ -2855,8 +2860,9 @@ def timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=
                     s=15,
                     alpha=0.8
                 )
+            plt.xscale('log')
             plt.title(f'Correlation of Training Time to {measure} for {dataset}', fontsize=14)
-            plt.xlabel('Training Time (minutes)', fontsize=12)
+            plt.xlabel('Training Time (minutes, log scale)', fontsize=12)
             plt.ylabel(f'{measure}', fontsize=12)
             plt.legend(title='Language Model', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.grid(True, linestyle='--', alpha=0.6)
@@ -2866,12 +2872,16 @@ def timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=
                 print(f"Saved: {plot_file}")
 
 
+
 def plotly_timelapse_correlation_scatter_plot_by_model(df, output_path='../out', debug=False):
+    import plotly.express as px
+
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+    df_filtered = df_filtered[df_filtered['timelapse'] > 0]
+    df_filtered['timelapse'] /= 60
 
     for dataset in df_filtered['dataset'].unique():
         df_dataset = df_filtered[df_filtered['dataset'] == dataset]
@@ -2888,14 +2898,15 @@ def plotly_timelapse_correlation_scatter_plot_by_model(df, output_path='../out',
                 color='model',
                 hover_data=['model', 'classifier', 'representation', 'dimensions'],
                 title=f'Training Time vs {measure} for {dataset}',
-                labels={'value': measure, 'timelapse': 'Training Time (minutes)'}
+                labels={'value': measure, 'timelapse': 'Training Time (minutes, log scale)'}
             )
             fig.update_layout(
                 height=600,
                 width=900,
-                title_font=dict(size=16),
-                xaxis_title='Training Time (minutes)',
+                xaxis_type='log',
+                xaxis_title='Training Time (minutes, log scale)',
                 yaxis_title=measure,
+                title_font=dict(size=16),
                 legend_title_text='Language Model',
                 template='plotly_white'
             )
@@ -2906,11 +2917,14 @@ def plotly_timelapse_correlation_scatter_plot_by_model(df, output_path='../out',
 
 
 def timelapse_correlation_scatter_plot_by_model_summary(df, output_path='../out', ystart=None, debug=False):
+    import plotly.express as px
+
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+    df_filtered = df_filtered[df_filtered['timelapse'] > 0]
+    df_filtered['timelapse'] /= 60
 
     for measure in MEASURES:
         measure_df = df_filtered[df_filtered['measure'] == measure]
@@ -2925,14 +2939,15 @@ def timelapse_correlation_scatter_plot_by_model_summary(df, output_path='../out'
             color='model',
             hover_data=['dataset', 'model', 'classifier', 'representation', 'dimensions'],
             title=f'Training Time vs {measure} (All Datasets)',
-            labels={'value': measure, 'timelapse': 'Training Time (minutes)'}
+            labels={'value': measure, 'timelapse': 'Training Time (minutes, log scale)'}
         )
         fig.update_layout(
             height=600,
             width=900,
-            title_font=dict(size=16),
-            xaxis_title='Training Time (minutes)',
+            xaxis_type='log',
+            xaxis_title='Training Time (minutes, log scale)',
             yaxis_title=measure,
+            title_font=dict(size=16),
             legend_title_text='Language Model',
             template='plotly_white'
         )
@@ -2943,11 +2958,15 @@ def timelapse_correlation_scatter_plot_by_model_summary(df, output_path='../out'
 
 
 def timelapse_correlation_scatter_plot_by_classifier_summary(df, output_path='../out', ystart=None, debug=False):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     df_filtered = df[df['measure'].isin(MEASURES)].copy()
-    df_filtered['timelapse'] = df_filtered['timelapse'] / 60
+    df_filtered = df_filtered[df_filtered['timelapse'] > 0]
+    df_filtered['timelapse'] /= 60
 
     for measure in MEASURES:
         measure_df = df_filtered[df_filtered['measure'] == measure]
@@ -2964,8 +2983,9 @@ def timelapse_correlation_scatter_plot_by_classifier_summary(df, output_path='..
             s=15,
             alpha=0.8
         )
+        plt.xscale('log')
         plt.title(f'Training Time vs {measure} (All Datasets)', fontsize=14)
-        plt.xlabel('Training Time (minutes)', fontsize=12)
+        plt.xlabel('Training Time (minutes, log scale)', fontsize=12)
         plt.ylabel(f'{measure}', fontsize=12)
         plt.legend(title='Classifier', fontsize=9, bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, linestyle='--', alpha=0.6)
@@ -2973,6 +2993,7 @@ def timelapse_correlation_scatter_plot_by_classifier_summary(df, output_path='..
         plt.savefig(plot_file, dpi=300, bbox_inches='tight')
         if debug:
             print(f"Saved summary classifier plot: {plot_file}")
+
 
 
 
