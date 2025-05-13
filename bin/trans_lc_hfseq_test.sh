@@ -19,7 +19,7 @@ PROGRAM_NAME="python ../src/trans_layer_cake_v13.5.py   --net hf.sc"
 EPOCHS=37              # TEST
 PATIENCE=3             # TEST
 #LOG_FILE="--log-file ../log/lc_nn_hfseq_trans_test.test"
-LOG_FILE='--log-file ../log/lc_nn_trans_test_all.test.v2'
+LOG_FILE='--log-file ../log/lc_nn_trans_test_all.test.v3'
 
 SEED=77
 
@@ -52,15 +52,15 @@ embedding_args=(
 # Datasets array
 #
 datasets=(
+    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
     "--dataset bbc-news"                        # bbc-news (single label, 5 classes)   
+    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
+    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
     "--dataset reuters21578"                    # reuters21578 (multi-label, 115 classes) 
     "--dataset 20newsgroups"                    # 20newsgroups (single label, 20 classes)
     "--dataset arxiv"                           # arxiv (multi-label, 58 classes) 
-    "--dataset arxiv_protoformer"               # arxiv_protoformer (single-label, 10 classes)
     "--dataset imdb"                            # imdb (single-label, 2 classes)     
-    "--dataset ohsumed"                         # ohsumed (multi-label, 23 classes) 
-    "--dataset rcv1"                            # RCV1-v2 (multi-label, 101 classes)
- )   
+)   
 
 
 for dataset in "${datasets[@]}"; do

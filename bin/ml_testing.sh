@@ -36,7 +36,7 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-declare -a datasets=("reuters21578" "20newsgroups" "arxiv" "imdb" "ohsumed" "bbc-news" "arxiv_protoformer" "rcv1")
+declare -a datasets=("arxiv" "rcv1" "reuters21578" "20newsgroups" "imdb" "ohsumed" "bbc-news" "arxiv_protoformer")
 declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
 #declare -a learners=("svm" "lr" "nb")
 declare -a learners=("svm")
