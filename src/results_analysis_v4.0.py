@@ -2572,8 +2572,6 @@ def ml_summary_by_representation_form(df, output_path='../out', debug=False):
     print(f"Summary by dataset and representation form saved to {output_file_dataset}")
 
 
-
-
 def ml_classifier_topvalue_summary(df, output_path='../out', debug=False):
     """
     Outputs to a single TSV file the top 5 'value' rows for each measure,
