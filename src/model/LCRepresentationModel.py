@@ -84,6 +84,8 @@ WORD2VEC_MODEL = 'GoogleNews-vectors-negative300.bin'       # dimension 300, cas
 #FASTTEXT_MODEL = 'crawl-300d-2M-subword.vec'                # dimension 300, case sensitive, subword based model
 #FASTTEXT_MODEL = 'crawl-300d-2M-subword.bin'                # dimension 300, case sensitive, subwiord based model
 FASTTEXT_MODEL = 'crawl-300d-2M.vec.bin'                    # dimensions 300, case sensitive, word based model
+
+HYPERBOLIC_MODEL = 'best_model_dict_hyperbolic_300_cpae.vec'                # dimensions 300, word based model
 # ---------------------------------------------------------------------------------------------------------------------------
 
 
@@ -167,6 +169,7 @@ MODEL_MAP = {
     "glove": GLOVE_MODEL,
     "word2vec": WORD2VEC_MODEL,
     "fasttext": FASTTEXT_MODEL,
+    "hyperbolic": HYPERBOLIC_MODEL,
     "bert": BERT_MODEL,
     "roberta": ROBERTA_MODEL,
     "distilbert": DISTILBERT_MODEL,
@@ -180,6 +183,7 @@ MODEL_DIR = {
     "glove": 'GloVe',
     "word2vec": 'Word2Vec',
     "fasttext": 'fastText',
+    "hyperbolic": 'hyperbolic',
     "bert": 'BERT',
     "roberta": 'RoBERTa',
     "distilbert": 'DistilBERT',
@@ -384,6 +388,174 @@ class LCRepresentationModel(RepresentationModel, ABC):
         """
         pass
 
+
+
+
+class HyperbolicLCRepresentationModel(LCRepresentationModel):
+    """
+    HyperbolicLCRepresentationModel handles pretrained word embeddings trained in hyperbolic space,
+    stored in .vec format.
+    """
+    def __init__(self, model_name='multi-relational_hyperbolic.vec', model_dir='./vector_cache/Hyperbolic', vtype='tfidf'):
+        print("Initializing HyperbolicLCRepresentationModel...")
+
+        super().__init__(model_name, model_dir=model_dir)
+
+        # Automatically download embeddings if not present
+        if not os.path.exists(self.path_to_embeddings):
+            print(f"Embedding file {self.path_to_embeddings} not found. Downloading...")
+            self._download_embeddings(model_name, model_dir)
+
+        self.model = KeyedVectors.load_word2vec_format(self.path_to_embeddings, binary=False)    
+    
+        self.word2index = {w: i for i,w in enumerate(self.model.index_to_key)}
+
+        self.vtype = vtype
+        print(f"Vectorization type: {vtype}")
+
+        self.type = 'hyperbolic'
+
+        # Get embedding size (dimensionality)
+        self.embedding_dim = self.model.vector_size
+        print(f"self.embedding_dim: {self.embedding_dim}")
+
+        if vtype == 'tfidf':
+            print("using TF-IDF vectorization...")
+            self.vectorizer = TfidfVectorizer(
+                min_df=MIN_DF_COUNT, 
+                sublinear_tf=True, 
+        #        lowercase=False
+        )
+        elif vtype == 'count':
+            print("using Count vectorization...")
+            self.vectorizer = CountVectorizer(
+                min_df=MIN_DF_COUNT, 
+                #lowercase=False
+            )
+        else:
+            raise ValueError("Invalid vectorizer type. Use 'tfidf' or 'count'.")
+
+    def vocabulary(self):
+        return set(self.word2index.keys())
+
+    def dim(self):
+        return self.embedding_dim
+
+    def extract(self, words):
+        
+        print("extracting words from Hyperbolic model...")
+
+        source_idx, target_idx, oov = LCRepresentationModel.reindex(words, self.word2index)
+
+        print("OOV:", oov)
+        
+        extraction = np.zeros((len(words), self.dim()))
+        extraction[source_idx] = self.model.vectors[target_idx]
+        extraction = torch.from_numpy(extraction).float()
+
+        return extraction
+    
+
+    def build_embedding_vocab_matrix(self):
+    
+        print('Building embedding vocab matrix for hyperbolic embeddings...')
+    
+        vocabulary = np.asarray(list(zip(*sorted(self.vectorizer.vocabulary_.items(), key=lambda x: x[1])))[0])
+        self.embedding_vocab_matrix = self.extract(vocabulary).numpy()
+        print("embedding_vocab_matrix:", type(self.embedding_vocab_matrix), self.embedding_vocab_matrix.shape)
+    
+        return self.embedding_vocab_matrix
+
+
+    def encode_docs(self, texts, embedding_vocab_matrix):
+
+        """
+        Compute both weighted document embeddings (using TF-IDF) and average document embeddings for each document.
+
+        Args:
+        - texts: List of input documents (as raw text).
+        - embedding_vocab_matrix: Matrix of pre-trained word embeddings (e.g., Word2Vec, GloVe).
+
+        Returns:
+        - weighted_document_embeddings: Numpy array of weighted document embeddings for each document.
+        - avg_document_embeddings: Numpy array of average document embeddings for each document.
+        """
+
+        print(f"\n\tEncoding docs using Hyperbolic embeddings...")
+
+        print("texts:", type(texts), len(texts))
+        print("embedding_vocab_matrix:", type(embedding_vocab_matrix), embedding_vocab_matrix.shape)
+
+        weighted_document_embeddings = []
+        avg_document_embeddings = []
+
+        # Compute the mean embedding for the entire embedding matrix as a fallback for OOV tokens
+        self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
+        #print(f"Mean embedding vector (for OOV tokens): {self.mean_embedding.shape}")
+        #print("mean_embedding:", type(self.mean_embedding), self.mean_embedding)
+
+        oov_tokens = 0
+
+        for doc in texts:
+            # Tokenize the document using the vectorizer (ensures consistency in tokenization)
+            tokens = self.vectorizer.build_analyzer()(doc)
+
+            # Calculate TF-IDF weights for the tokens
+            tfidf_vector = self.vectorizer.transform([doc]).toarray()[0]
+
+            weighted_sum = np.zeros(embedding_vocab_matrix.shape[1])
+            total_weight = 0.0
+            valid_embeddings = []    
+
+            for token in tokens:
+                # Get the token's index in the vocabulary (case-sensitive lookup first)
+                token_id = self.vectorizer.vocabulary_.get(token, None)
+
+                # If the token is not found, try the lowercase version
+                if token_id is None:
+                    token_id = self.vectorizer.vocabulary_.get(token.lower(), None)
+
+                if token_id is not None and 0 <= token_id < embedding_vocab_matrix.shape[0]:
+                    # Get the embedding for the token from the embedding matrix
+                    embedding = embedding_vocab_matrix[token_id]
+                    # Get the TF-IDF weight for the token
+                    weight = tfidf_vector[token_id]
+
+                    # Accumulate the weighted embedding
+                    weighted_sum += embedding * weight
+                    total_weight += weight
+                    valid_embeddings.append(embedding)
+                else:
+                    # Use the mean embedding for OOV tokens
+                    embedding = self.mean_embedding
+                    oov_tokens += 1
+                    valid_embeddings.append(embedding)
+
+            # Compute the weighted embedding for the document
+            if total_weight > 0:
+                weighted_document_embedding = weighted_sum / total_weight
+            else:
+                # Handle empty or OOV cases
+                weighted_document_embedding = self.mean_embedding
+
+            # Compute the average embedding for the document
+            if valid_embeddings:
+                avg_document_embedding = np.mean(valid_embeddings, axis=0)
+            else:
+                # Handle empty or OOV cases
+                avg_document_embedding = self.mean_embedding
+
+            weighted_document_embeddings.append(weighted_document_embedding)
+            avg_document_embeddings.append(avg_document_embedding)
+
+        weighted_document_embeddings = np.array(weighted_document_embeddings)
+        avg_document_embeddings = np.array(avg_document_embeddings)
+
+        print("weighted_document_embeddings:", type(weighted_document_embeddings), weighted_document_embeddings.shape)
+        print("avg_document_embeddings:", type(avg_document_embeddings), avg_document_embeddings.shape)
+        print("oov_tokens:", oov_tokens)
+
+        return weighted_document_embeddings, avg_document_embeddings
 
 
 
@@ -629,7 +801,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         """
         print("Initializing Word2VecLCRepresentationModel...")
 
-        super().__init__(model_name, model_dir=model_dir)  # parent constructor
+        super().__init__(model_name, model_dir=model_dir)                   # parent constructor
 
         # Automatically download embeddings if not present
         if not os.path.exists(self.path_to_embeddings):
@@ -747,7 +919,8 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
 
         # Compute the mean embedding for the entire embedding matrix as a fallback for OOV tokens
         self.mean_embedding = np.mean(embedding_vocab_matrix, axis=0)
-        print(f"Mean embedding vector for OOV tokens calculated: {self.mean_embedding.shape}")
+        #print(f"Mean embedding vector (f)or OOV tokens): {self.mean_embedding.shape}")
+        #print("mean_embedding:", type(self.mean_embedding), self.mean_embedding)
 
         oov_tokens = 0
 
@@ -811,9 +984,6 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
         print("oov_tokens:", oov_tokens)
 
         return weighted_document_embeddings, avg_document_embeddings
-
-    
-
 
 class FastTextGensimLCRepresentationModel(LCRepresentationModel):
     """

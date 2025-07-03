@@ -23,9 +23,9 @@ dataset_info=(
 #
 # Shell Script Arguments
 #
-PY="python ../src/ml_classification_test_v4.0.py"
+PY="python ../src/ml_classification_test_v5.0.py"
 
-LOG="--logfile ../log/ml_def_count_test.test"
+LOG="--logfile ../log/hyperbolic_test.test"
 
 EMB="--embedding-dir ../.vector_cache"
 
@@ -36,21 +36,27 @@ CONF_MATRIX="--cm"
 
 DATASET_EMB_COMP="--dataset-emb-comp"
 
-declare -a datasets=("arxiv" "rcv1" "reuters21578" "20newsgroups" "imdb" "ohsumed" "bbc-news" "arxiv_protoformer")
-declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+#declare -a datasets=("arxiv" "rcv1" "reuters21578" "20newsgroups" "imdb" "ohsumed" "bbc-news" "arxiv_protoformer")
+declare -a datasets=("reuters21578" "20newsgroups")
+
+#declare -a pickle_paths=("../pickles" "../pickles" "../pickles" "../pickles")
+
 #declare -a learners=("svm" "lr" "nb")
 declare -a learners=("svm")
+
 #declare -a vtypes=("tfidf" "count")
 declare -a vtypes=("tfidf")
-#declare -a mixes=("cat-doc" "vmode" "solo" "lsa" "dot" "solo-wce" "dot-wce" "cat-wce" "lsa-wce" "cat-doc-wce")
-declare -a mixes=("vmode")
-#declare -a emb_comp_options=("avg" "summary" "weighted")
-declare -a emb_comp_options=("avg")
+
+#declare -a mixes=("vmode" "solo" "lsa" "dot" "cat-doc" "solo-wce" "dot-wce" "cat-wce" "lsa-wce" "cat-doc-wce")
+declare -a mixes=("solo")
+declare -a emb_comp_options=("avg" "summary" "weighted")
+
 
 # Embedding config params
 GLOVE="--pretrained glove" 
 WORD2VEC="--pretrained word2vec"
 FASTTEXT="--pretrained fasttext"
+HYPERBOLIC="--pretrained hyperbolic"
 BERT="--pretrained bert"
 ROBERTA="--pretrained roberta"
 DISTILBERT="--pretrained distilbert"
@@ -101,17 +107,24 @@ function run_command() {
 }
 
 # Loop through datasets and run commands
+
 for i in "${!datasets[@]}"; do
+
     dataset=${datasets[$i]}
     #pickle_path=${pickle_paths[$i]}
 
     for learner in "${learners[@]}"; do
+
         for vtype in "${vtypes[@]}"; do
+
             for mix in "${mixes[@]}"; do
+
                 for emb_comp in "${emb_comp_options[@]}"; do
 #                    run_command "$dataset" "$learner" "$vtype" "$mix" "$FASTTEXT" "$emb_comp" "$OPTIMC"
-                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
+#                    run_command "$dataset" "$learner" "$vtype" "$mix" "$GLOVE" "$emb_comp" "$OPTIMC"
 #                    run_command "$dataset" "$learner" "$vtype" "$mix" "$WORD2VEC" "$emb_comp" "$OPTIMC"
+                    run_command "$dataset" "$learner" "$vtype" "$mix" "$HYPERBOLIC" "$emb_comp" "$OPTIMC"
+
 #                    run_command "$dataset" "$learner" "$vtype" "$mix" "$BERT" "$emb_comp" "$OPTIMC"
 #                    run_command "$dataset" "$learner" "$vtype" "$mix" "$ROBERTA" "$emb_comp" $OPTIMC
 #                    run_command "$dataset" "$learner" "$vtype" "$mix" "$DISTILBERT" "$emb_comp" $OPTIMC

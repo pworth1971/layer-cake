@@ -195,6 +195,15 @@ class LCDataset:
                 model_dir=embedding_path, 
                 vtype=vectorization_type
             )
+        
+        elif (pretrained == 'hyperbolic'):
+            print("Using Hyperbolic dictionary model embeddings...")
+            
+            self.lcr_model = HyperbolicLCRepresentationModel(
+                model_name=HYPERBOLIC_MODEL, 
+                model_dir=embedding_path, 
+                vtype=vectorization_type
+            )
 
         elif (pretrained == 'fasttext'):
             print("Using FastText language model embeddings...")
@@ -443,7 +452,7 @@ class LCDataset:
             self.Xtr_weighted_embeddings = self.Xtr_avg_embeddings
             self.Xte_weighted_embeddings = self.Xte_avg_embeddings
             
-        elif (self.pretrained in ['word2vec', 'glove']):                        # word based embeddings
+        elif (self.pretrained in ['word2vec', 'glove', 'hyperbolic']):                        # word based embeddings
             
             print("generating word based dataset representations...")
 
@@ -536,9 +545,12 @@ class LCDataset:
         print("known_words:", type(known_words), len(known_words))
         
         if self.lcr_model is not None:
-            print("self.lcr_model\n: ", self.model)
+            print("self.lcr_model:\n: ", self.lcr_model)
+            #print("self.lcr_model.vocabulary():\n: ", self.lcr_model.vocabulary())
             known_words.update(self.lcr_model.vocabulary())         # polymorphic behavior
 
+        print("known_words:", type(known_words), len(known_words))
+        
         self.word2index['UNKTOKEN'] = len(self.word2index)
         self.word2index['PADTOKEN'] = len(self.word2index)
         self.unk_index = self.word2index['UNKTOKEN']
@@ -2075,6 +2087,7 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         'glove': GLOVE_MODEL,
         'word2vec': WORD2VEC_MODEL,
         'fasttext': FASTTEXT_MODEL,
+        'hyperbolic': HYPERBOLIC_MODEL,
         'bert': BERT_MODEL,
         'roberta': ROBERTA_MODEL,
         'distilbert': DISTILBERT_MODEL,
@@ -2123,10 +2136,6 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
         lcd.save(pickle_file)
 
         return lcd
-
-
-
-
 
 
 

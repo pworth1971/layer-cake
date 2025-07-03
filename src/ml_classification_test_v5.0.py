@@ -784,6 +784,8 @@ if __name__ == '__main__':
         args.word2vec_path = model_path
     elif (args.pretrained == 'fasttext'):
         args.fasttext_path = model_path
+    elif (args.pretrained == 'hyperbolic'):
+        args.hyperbolic_path = model_path 
     elif (args.pretrained == 'bert'):
         args.bert_path = model_path
     elif (args.pretrained == 'roberta'):

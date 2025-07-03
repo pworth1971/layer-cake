@@ -5,6 +5,12 @@ import pickle
 import torch
 import datetime
     
+import pandas as pd
+from nltk.corpus import stopwords
+import string
+import re
+
+
 from scipy.sparse import vstack, issparse
 
 from joblib import Parallel, delayed
@@ -23,7 +29,7 @@ from sklearn.naive_bayes import MultinomialNB
 # custom importa
 from util.csv_log import CSVLog
 
-from model.LCRepresentationModel import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL
+from model.LCRepresentationModel import GLOVE_MODEL, WORD2VEC_MODEL, FASTTEXT_MODEL, HYPERBOLIC_MODEL
 from model.LCRepresentationModel import BERT_MODEL, ROBERTA_MODEL, DISTILBERT_MODEL
 from model.LCRepresentationModel import XLNET_MODEL, GPT2_MODEL, DEEPSEEK_MODEL, LLAMA_MODEL
 from model.LCRepresentationModel import MODEL_MAP, MODEL_DIR, VECTOR_CACHE, PICKLE_DIR
@@ -41,10 +47,10 @@ DATASET_DIR = '../datasets/'                                        # dataset di
 NEURAL_MODELS = ['cnn', 'lstm', 'attn', 'hf.sc.ff', 'hf.sc', 'hf.cnn', 'linear']
 ML_MODELS = ['svm', 'lr', 'nb']
 
-SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
+SUPPORTED_LMS = ['glove', 'word2vec', 'fasttext', 'hyperbolic', 'bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
 SUPPORTED_TRANSFORMER_LMS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
 
-WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext']
+WORD_BASED_MODELS = ['glove', 'word2vec', 'fasttext', 'hyperbolic']
 TOKEN_BASED_MODELS = ['bert', 'roberta', 'distilbert', 'xlnet', 'gpt2', 'llama', 'deepseek']
 CLASS_EMBEDDING_MODES = ['solo-wce', 'dot-wce', 'cat-wce', 'lsa-wce', 'cat-doc-wce']
 #
@@ -460,6 +466,7 @@ def initialize_ml_testing(args, model_name, program, version):
         classifier=args.net,
         representation=representation,
         model=model_name,
+        mode=mode,
         #embeddings=embeddings
         )
 
@@ -579,6 +586,8 @@ def get_embeddings_path(pretrained, args):
         return args.word2vec_path
     elif pretrained == 'fasttext':
         return args.fasttext_path
+    elif pretrained == 'hyperbolic':
+        return args.hyperbolic_path
     elif (pretrained == 'bert'):
         return args.bert_path
     elif pretrained == 'roberta':
@@ -619,6 +628,8 @@ def get_language_model_type(embeddings, model_name=None):
         return 'static:word:co-occurrence:global'
     elif embeddings in ['word2vec']:
         return 'static:word:co-occurrence:local'
+    elif embeddings in ['hyperbolic']:
+        return 'static:word:hyperbolic'
     elif embeddings in ['fasttext']:
         if model_name and "subword" in model_name.lower():
             return 'static:subword:co-occurrence:local'
@@ -683,6 +694,7 @@ def get_representation(opt, add_model=False):
                 'glove': ('static', GLOVE_MODEL),
                 'word2vec': ('static', WORD2VEC_MODEL),
                 'fasttext': ('subword', FASTTEXT_MODEL),
+                'hyperbolic': ('word', HYPERBOLIC_MODEL),
                 'bert': ('transformer', BERT_MODEL),
                 'roberta': ('transformer', ROBERTA_MODEL),
                 'distilbert': ('transformer', DISTILBERT_MODEL),
@@ -744,7 +756,7 @@ def get_embedding_type(pretrained):
 
     if (pretrained is not None and pretrained in ['bert', 'roberta', 'distilbert', 'albert', 'xlnet', 'gpt2', 'llama', 'deepseek']):
         embedding_type = 'token'
-    elif (pretrained is not None and pretrained in ['glove', 'word2vec']):
+    elif (pretrained is not None and pretrained in ['glove', 'word2vec', 'hyperbolic']):
         embedding_type = 'word'
     elif (pretrained is not None and pretrained in ['fasttext']):
         embedding_type = 'subword'
@@ -754,12 +766,6 @@ def get_embedding_type(pretrained):
     return embedding_type
 
 
-
-import torch
-import psutil
-import subprocess
-import plistlib
-import GPUtil
 
 def get_sysinfo(debug=False):
 
@@ -828,55 +834,6 @@ def get_sysinfo(debug=False):
 
 
 
-def get_sysinfo_old(debug=False):
-
-    print("get_sysinfo()...")
-    
-    # Get CPU information
-    num_physical_cores = psutil.cpu_count(logical=False)
-    num_logical_cores = psutil.cpu_count(logical=True)
-
-    print("CPU Physical Cores:", num_physical_cores)
-    print("CPU Logical Cores:", num_logical_cores)
-    #print("CPU Usage Per Core:", psutil.cpu_percent(percpu=True, interval=1))
-
-    # Get memory information
-    memory = psutil.virtual_memory()
-
-    total_memory = memory.total
-    avail_mem = memory.available
-
-    print("Total Memory:", total_memory)
-    print("Available Memory:", avail_mem)
-    #print("Memory Usage %:", memory.percent)
-
-    num_cuda_devices = 0
-    cuda_devices = []                   # initialize cuda device list
-
-    print("GPU Info...")
-    if torch.cuda.is_available():
-        num_cuda_devices = torch.cuda.device_count()
-        print("Total CUDA devices:", num_cuda_devices)
-        for i in range(num_cuda_devices):
-            device_info = {
-                "name": torch.cuda.get_device_name(i),
-                "memory": torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)  # Convert bytes to MB
-            }
-            cuda_devices.append(device_info)
-            #print(f"Device {i}: {device_info['name']} - Memory: {device_info['memory']} MB")
-            print(f"Device {i}: {torch.cuda.get_device_name(i)} - Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 2)} MB")
-    else:
-        num_cuda_devices = 0
-        print("CUDA is not available")
-
-    gpus = GPUtil.getGPUs()
-    for gpu in gpus:
-        print(f"GPU: {gpu.name}, Memory Free: {gpu.memoryFree}MB, Memory Used: {gpu.memoryUsed}MB, Memory Total: {gpu.memoryTotal}MB")
-    
-    return num_physical_cores, num_logical_cores, total_memory, avail_mem, num_cuda_devices, cuda_devices
-
-
-
 def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type='word', learner='???', mix=None):
 
     print("calculating model computation method...")
@@ -900,9 +857,13 @@ def get_model_computation_method(vtype='tfidf', pretrained=None, embedding_type=
 
         elif (pretrained in ['glove', 'word2vec']):
             pt_type += 'co-occurrence:word'
-        
+
+        elif (pretrained in ['hyperbolic']):
+            pt_type += 'hyperbolic:word'
+
         elif (pretrained in ['fasttext']):
             pt_type += 'co-occurrence:subword'
+  
         else:
             pt_type += '??'
                 
@@ -1268,13 +1229,6 @@ def tokenize_parallel(documents, tokenizer, max_tokens, n_jobs=-1):
 #
 # text preprocessing functions
 #
-
-import pandas as pd
-from nltk.corpus import stopwords
-import string
-import re
-
-
 
 def preprocess(
         text_series: pd.Series, 
