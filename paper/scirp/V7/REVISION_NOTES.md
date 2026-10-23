@@ -49,19 +49,16 @@ The manuscript follows `../ijis-template.docx` (Word render: `../ijis-template.p
   - The Open Access badge (and the template's CC BY badge, kept for reference) are cropped from a render of the template's first page.
   - The CC BY-NC button is the official Creative Commons button.
 - **Licence:** CC BY-NC 4.0, as for the 2025 paper (per the signed copyright form, `../lc_scirp_copyright_form_06202025.pdf`).
+- **Author Contributions:** P.J.W. is the main author: conceptualization, methodology, software, investigation (all experiments), formal analysis, data curation, visualization and writing (original draft). I.C. and P.J.W.: writing (review and editing).
 - **Acknowledgements:** a section before Author Contributions discloses the use of Claude Code (Anthropic) with Claude Opus 5.5 (`claude-opus-5-5`) on 2026-10-23. It covers the redrafting, re-analysis and validation of results, reference checking, figures and tables, and typesetting.
 
-## Title options (working title: METRON)
+## Title
 
-| Name | Greek | Why it fits |
-|---|---|---|
-| **METRON** | μέτρον, "measure"; *metron ariston*, "measure is best" | The paper measures accuracy against cost, and its finding is about moderation. Acronym option: **M**easuring **E**ffectiveness and **T**raining cost of **R**epresentations **O**ver **N**eural and classical classifiers |
-| **DIAKRISIS** | διάκρισις, "discernment, separating" | Classification is *diakrisis* |
-| **LOGISMOS** | λογισμός, "reckoning, calculation" | Cost accounting |
-| **SOPHROSYNE** | σωφροσύνη, "temperance" | Restraint in model selection |
-| **Mēden Agan** | μηδὲν ἄγαν, "nothing in excess" | Diminishing returns |
+**The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models** (chosen by the authors, 2026-10-23; replaces the working title "METRON").
 
-"ARETE" was dropped (arXiv 2511.04573 already uses it).
+- The title, PDF metadata and "How to cite" text carry it; the running head carries the authors, as in the template.
+- At the template's 22 pt the title ran to four lines and pushed the title block off page 1. `ijis.cls` now sets it at 20/23 pt, which gives three lines and keeps the abstract, keywords and title note on page 1.
+- The title note cites the 2025 paper as "a revised and extended version of [1]".
 
 ## Findings (all from the run-level data)
 
@@ -112,6 +109,18 @@ All 89 V6 entries were checked against authoritative records; reports are in `re
   - a wrong arXiv ID (leimeister2019skip);
   - wrong report numbers or venues.
 - **V7 citations:** V7 cites 87 references, all audited or newly verified. `lc_v7_refs.bib` keeps 123 audited entries; only cited ones print.
+- **Second pass (2026-10-23), claims against sources.** All 87 keys resolve, BibTeX reports no warnings and the printed list has no formatting faults. Each sentence that cites a source was re-read against the source; 11 were corrected:
+  1. Energy-cost sentence (Intro): treviso2023efficient dropped. It surveys efficiency methods and is not a source for documented energy or dollar costs; patterson2021carbon and luccioni2024power carry the claim.
+  2. galke2022bag (Intro): the wide MLP "matches or beats graph-based classifiers ... although fine-tuned transformers still lead" (was "rivals graph and sequence models").
+  3. bucher2024fine, edwards2024language (Intro): fine-tuned small models beat *prompted* generative LLMs, "whether the LLMs are used zero-shot or with in-context examples" (was "zero-shot" only).
+  4. trust2024study (Background): the study "revisit[s] text classification in the age of large language models" (was "examine how to fine-tune ... for classification").
+  5. joulin-etal-2017-bag (Background): fastText "is often on par with deep classifiers in accuracy while training orders of magnitude faster" (was "trains in seconds at near state-of-the-art accuracy").
+  6. galke2022bag (Background): "matches or outperforms graph-based classifiers, while fine-tuned BERT and DistilBERT remain ahead" (was "competitive with graph-based and fine-tuned models").
+  7. moreo2021, WCE definition (Background): WCEs come from term–label co-occurrence in the training documents; the supervised functions (normalised dot product, PPMI, information gain, χ²) are attributed to the code base (`--supervised-method dotn|ppmi|ig|chi`), not to the paper.
+  8. moreo2021, reported gains (Background): "consistent gains when WCEs are added to four neural architectures for topic classification" (was "for both linear and neural classifiers").
+  9. li2020pytorch… (Framework): cited for DataParallel being single-process and less efficient than distributed data parallelism, which the paper establishes; the old wording ("scales sub-linearly") was not a claim the paper is a direct source for.
+  10. dror2018hitchhiker (Framework): cited for test-selection guidance (non-parametric tests, exact *p*-values), not for a "no significance stars" recommendation.
+  11. moreo2021, replication (Results): "consistent with the gains reported by [Moreo et al.], here across eight corpora" (was "replicates ... on a broader set of corpora"; the corpora and setup differ).
 
 ## Figures (all regenerated from run-level data)
 
@@ -128,9 +137,7 @@ No chart uses a dual axis.
 
 ## Please confirm or decide
 
-1. The title. The running head, footer and "How to cite" text change with it.
-2. The Transformers version on the Ubuntu box (red). PyTorch 2.4.1 is confirmed by `bin/setup.sh`.
-3. Whether the classical module's BERT features used the cased model (the code default) or the uncased one. The logs record the vocabulary only for fine-tuned runs.
-4. Author Contributions (red placeholder): fill in the CRediT roles.
-5. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
-6. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.
+1. The Transformers version on the Ubuntu box (red). PyTorch 2.4.1 is confirmed by `bin/setup.sh`.
+2. Whether the classical module's BERT features used the cased model (the code default) or the uncased one. The logs record the vocabulary only for fine-tuned runs.
+3. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
+4. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.

@@ -6,7 +6,7 @@ Layer Cake is a benchmarking framework for text classification that measures **e
 - neural networks over static word embeddings;
 - fine-tuned transformers.
 
-It accompanies the paper *Layer Cake: On Language Representation and Compute Characteristics in Text Classification* (Worth & Cardei, [International Journal of Intelligence Science 15(4), 2025](https://doi.org/10.4236/ijis.2025.154010)). A revised and extended version is in preparation; its source, data and analysis scripts are in [`paper/scirp/V7/`](paper/scirp/V7/).
+It accompanies the paper *Layer Cake: On Language Representation and Compute Characteristics in Text Classification* (Worth & Cardei, [International Journal of Intelligence Science 15(4), 2025](https://doi.org/10.4236/ijis.2025.154010)). A revised and extended version, *The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models*, is in preparation; its source, data and analysis scripts are in [`paper/scirp/V7/`](paper/scirp/V7/).
 
 ## Key findings
 

@@ -184,7 +184,7 @@
   \noindent\hspace*{-\ijisoffset}%
   \begin{minipage}[t]{\ijisfullwidth}
     \vspace*{0.1cm}%
-    {\raggedright\headfont\fontsize{22}{25}\selectfont\bfseries \@title%
+    {\raggedright\headfont\fontsize{20}{23}\selectfont\bfseries \@title%
       \ifx\ijis@titlenote\@empty\else\textsuperscript{*}\fi\par}
     \vspace{0.35cm}%
     {\fontsize{11}{15}\selectfont\bfseries \@author\par}
