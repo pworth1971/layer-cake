@@ -13,8 +13,6 @@
 \newcommand{\confirm}[1]{\textcolor{red}{#1}}
 % Expandable \input, so generated rows can sit directly before \bottomrule inside a tabular.
 \makeatletter\newcommand{\inputtable}[1]{\@@input #1 }\makeatother
-% Figure labels in Times, as the template asks (8 pt Times New Roman).
-\newcommand{\figfont}{\fontfamily{ptm}\fontsize{7.5}{9}\selectfont}
 
 \title{METRON: On Measuring the Cost of Accuracy in Text Classification, from Sparse Features to Fine-Tuned Transformers}
 \author{Peter J. Worth Jr., Ionut Cardei}
@@ -23,7 +21,8 @@
 \email{pworth2022@fau.edu, icardei@fau.edu}
 \titlenote{A revised and extended version of \cite{worth2025layercake}, \textit{International Journal of Intelligence Science}, 2025.}
 \howtocite{Worth Jr., P.J. and Cardei, I. (2026) METRON: On Measuring the Cost of Accuracy in Text Classification, from Sparse Features to Fine-Tuned Transformers. \textit{International Journal of Intelligence Science}, \textbf{*}, *-*. \url{https://doi.org/10.4236/ijis.2026.*****}}
-\license{This work is licensed under the Creative Commons Attribution International License \confirm{(CC BY 4.0)}.\\ \url{http://creativecommons.org/licenses/by/4.0/}}
+\license{This work is licensed under the Creative Commons Attribution-NonCommercial International License (CC BY-NC 4.0).\\ \url{http://creativecommons.org/licenses/by-nc/4.0/}}
+\ccbadge{\includegraphics[height=0.52cm]{ijis/cc-by-nc.png}}
 
 \begin{document}
 
@@ -610,6 +609,16 @@ Two extensions would sharpen these conclusions. The first is to time feature ext
 
 \componenthead{Data and Code Availability}
 The Layer Cake framework is available at \url{https://github.com/pworth1971/layer-cake}. The run-level results of the original study, the summary tables of the earlier paper, and the scripts that produce every table and figure in this article (\texttt{extract\_tables.py}, \texttt{extract\_runs.py}, \texttt{analyze.py}, \texttt{tables.py}, \texttt{figures.py}) are distributed with the manuscript source.
+
+\componenthead{Acknowledgements}
+In preparing this revision the authors used Claude Code (Anthropic), an AI assistant for software and writing tasks, through its Visual Studio Code extension, with the Claude Opus 5.5 model (\texttt{claude-opus-5-5}), on 23 October 2026. The assistant was used to:
+\begin{itemize}
+\item redraft and restructure the manuscript from the earlier version \cite{worth2025layercake};
+\item write the analysis scripts released with this article, re-analyse the published run-level results with them, and check that they reproduce every summary statistic reported in \cite{worth2025layercake};
+\item check each reference against Crossref, arXiv, the ACL Anthology and publisher records, and correct the bibliography;
+\item regenerate the figures and tables, and typeset the manuscript in the journal template.
+\end{itemize}
+No new experiments were run, and the assistant neither generated nor altered any experimental result. The authors reviewed and edited all AI-assisted material and take full responsibility for the content of this article.
 
 \componenthead{Author Contributions}
 \confirm{To be completed by the authors, e.g.\ conceptualization, P.J.W. and I.C.; methodology, software, investigation and formal analysis, P.J.W.; writing---original draft, P.J.W.; writing---review and editing, P.J.W. and I.C.; supervision, I.C.}

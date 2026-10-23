@@ -8,24 +8,43 @@
 % accent colour #943634.
 %
 % Fonts: the template asks for Minion Pro Capt (body), Cambria (headings) and
-% Calibri (journal furniture). We use the free, closely matched Crimson Pro,
-% Caladea (metric-compatible with Cambria) and Carlito (metric-compatible with
-% Calibri), so the source builds with a standard TeX Live and pdfLaTeX.
+% Calibri (journal furniture). With pdfLaTeX the class uses the free, closely
+% matched Crimson Pro, Caladea (metric-compatible with Cambria) and Carlito
+% (metric-compatible with Calibri), so the source builds with a standard TeX Live.
+% With XeLaTeX it uses the template's own fonts when they are installed.
 
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{ijis}[2026/10/23 IJIS (SCIRP) article layout]
 \LoadClass[10pt]{article}
 
 % ---------------------------------------------------------------- fonts
-\RequirePackage[T1]{fontenc}
-\RequirePackage[lining]{CrimsonPro}
-\RequirePackage[varqu,varl]{inconsolata}
-\RequirePackage{carlito}
+\RequirePackage{iftex}
 \RequirePackage{amsmath,amssymb}
-\RequirePackage[cmintegrals]{newtxmath}
-\newcommand*{\headfont}{\fontfamily{Caladea-TLF}\selectfont}
+\ifPDFTeX
+  % pdfLaTeX: free equivalents of the template fonts (all in TeX Live)
+  \RequirePackage[T1]{fontenc}
+  \RequirePackage[lining]{CrimsonPro}
+  \RequirePackage[varqu,varl]{inconsolata}
+  \RequirePackage{carlito}
+  \RequirePackage[cmintegrals]{newtxmath}
+  \newcommand*{\headfont}{\fontfamily{Caladea-TLF}\selectfont}
+  \newcommand*{\figfont}{\fontfamily{ptm}\fontsize{7.5}{9}\selectfont}
+  \RequirePackage[protrusion=true,expansion=true]{microtype}
+\else
+  % XeLaTeX / LuaLaTeX: the template's own fonts where they are installed
+  % (Minion Pro, Cambria, Calibri), otherwise the free equivalents.
+  \RequirePackage[cmintegrals]{newtxmath}
+  \RequirePackage[no-math]{fontspec}
+  \IfFontExistsTF{Minion Pro Capt}{\setmainfont{Minion Pro Capt}}
+    {\IfFontExistsTF{Minion Pro}{\setmainfont{Minion Pro}}{\setmainfont{Crimson Pro}[Numbers=Lining]}}
+  \IfFontExistsTF{Calibri}{\setsansfont{Calibri}}{\setsansfont{Carlito}}
+  \IfFontExistsTF{Cambria}{\newfontfamily\ijis@head{Cambria}}{\newfontfamily\ijis@head{Caladea}}
+  \newcommand*{\headfont}{\ijis@head}
+  \IfFontExistsTF{Times New Roman}{\newfontfamily\ijis@fig{Times New Roman}}{\newfontfamily\ijis@fig{TeX Gyre Termes}}
+  \newcommand*{\figfont}{\ijis@fig\fontsize{7.5}{9}\selectfont}
+  \RequirePackage[protrusion=true]{microtype}
+\fi
 \linespread{1.25}% 10 pt type on an exact 15 pt line, as in the template
-\RequirePackage[protrusion=true,expansion=true]{microtype}
 \setlength{\emergencystretch}{1.5em}
 
 % ---------------------------------------------------------------- page

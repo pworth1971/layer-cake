@@ -19,7 +19,8 @@ python extract_runs.py     # run-level results -> ../data/runs.csv
 python analyze.py          # analyses -> ../data/derived/*.csv, results.json
 python tables.py           # LaTeX table bodies -> ../tables/*.tex
 python figures.py          # figures -> ../pictures/fig_*.pdf
-cd .. && latexmk -pdf lc_v7_10232026.tex
+cd .. && latexmk -pdf lc_v7_10232026.tex      # pdfLaTeX: free equivalents of the template fonts
+#        latexmk -xelatex lc_v7_10232026.tex  # XeLaTeX: Minion Pro / Cambria / Calibri when installed
 ```
 
 Use the base conda Python (`/opt/anaconda3/bin/python`). No number in a results table is typed by hand.
@@ -39,9 +40,16 @@ The manuscript follows `../ijis-template.docx` (Word render: `../ijis-template.p
 - **Figures:** data figures are rendered at the 12.71 cm column width with 8 pt Times New Roman labels, as the template specifies. The diagrams use Times labels.
 - **Fonts:**
   - The template asks for Minion Pro Capt (body), Cambria (headings) and Calibri/Tahoma (journal furniture).
-  - The LaTeX build uses free equivalents available in TeX Live: Crimson Pro, Caladea (metric-compatible with Cambria) and Carlito (metric-compatible with Calibri).
-  - Your Word render falls back to Cambria for the body because Minion Pro Capt isn't installed, so the body looks slightly different from that PDF.
-- **Template assets** (`ijis/`): the SCIRP logo is from the template's embedded image, and the CC BY and Open Access badges are cropped from a render of the template's first page.
+  - **pdfLaTeX** uses the free equivalents from TeX Live: Crimson Pro, Caladea (metric-compatible with Cambria) and Carlito (metric-compatible with Calibri).
+  - **XeLaTeX** uses Minion Pro, Cambria and Calibri when they are installed, and the free equivalents otherwise.
+  - The three free families are also installed in `~/Library/Fonts` (OFL / Apache 2.0), so other applications can use them.
+  - Minion Pro, Cambria and Calibri are licensed fonts and were not installed. To use Minion Pro, activate it in Adobe Creative Cloud (Adobe Fonts), then build with XeLaTeX. Cambria and Calibri ship with Microsoft Office under a licence limited to Office.
+- **Template assets** (`ijis/`):
+  - The SCIRP logo is from the template's embedded image.
+  - The Open Access badge (and the template's CC BY badge, kept for reference) are cropped from a render of the template's first page.
+  - The CC BY-NC button is the official Creative Commons button.
+- **Licence:** CC BY-NC 4.0, as for the 2025 paper (per the signed copyright form, `../lc_scirp_copyright_form_06202025.pdf`).
+- **Acknowledgements:** a section before Author Contributions discloses the use of Claude Code (Anthropic) with Claude Opus 5.5 (`claude-opus-5-5`) on 2026-10-23. It covers the redrafting, re-analysis and validation of results, reference checking, figures and tables, and typesetting.
 
 ## Title options (working title: METRON)
 
@@ -123,6 +131,6 @@ No chart uses a dual axis.
 1. The title. The running head, footer and "How to cite" text change with it.
 2. The Transformers version on the Ubuntu box (red). PyTorch 2.4.1 is confirmed by `bin/setup.sh`.
 3. Whether the classical module's BERT features used the cased model (the code default) or the uncased one. The logs record the vocabulary only for fine-tuned runs.
-4. The licence. The template default is CC BY 4.0 (red in the side column); the 2025 paper was published CC BY-NC.
-5. Author Contributions (red placeholder): fill in the CRediT roles.
+4. Author Contributions (red placeholder): fill in the CRediT roles.
+5. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
 6. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.
