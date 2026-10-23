@@ -137,7 +137,7 @@ No chart uses a dual axis.
 
 ## Please confirm or decide
 
-1. The Transformers version on the Ubuntu box (red). PyTorch 2.4.1 is confirmed by `bin/setup.sh`.
-2. Whether the classical module's BERT features used the cased model (the code default) or the uncased one. The logs record the vocabulary only for fine-tuned runs.
-3. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
-4. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.
+1. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
+2. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.
+
+Left unspecified by the authors (the information is not available): the Hugging Face Transformers version, and whether the classical module's BERT features used the cased or uncased checkpoint. The manuscript states neither; the model-table footnote gives the BERT vocabulary only for the fine-tuned runs, where the log records it.

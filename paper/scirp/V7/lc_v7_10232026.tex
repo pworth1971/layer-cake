@@ -9,8 +9,6 @@
 \definecolor{inktwo}{HTML}{52514E}
 \definecolor{rulegray}{HTML}{C3C2B7}
 
-% Items the authors must confirm before submission are printed in red in the draft.
-\newcommand{\confirm}[1]{\textcolor{red}{#1}}
 % Expandable \input, so generated rows can sit directly before \bottomrule inside a tabular.
 \makeatletter\newcommand{\inputtable}[1]{\@@input #1 }\makeatother
 
@@ -204,7 +202,7 @@ GPT-2 (124M) \cite{radford2019language} & next-token prediction & byte-level BPE
 Llama-3.2 (1.23B) \cite{grattafiori2024llama3,llama32modelcard} & next-token + distillation & BPE (tiktoken) & 128,256 & 2,048 & public data, up to 9T tokens \\
 DeepSeek-R1-Distill (1.5B) \cite{guo2025deepseek} & SFT on 800k R1-curated samples & byte-level BPE & 151,936 & 1,536 & Qwen2.5-Math-1.5B base \cite{yang2024qwen25} \\
 \bottomrule
-\multicolumn{6}{@{}p{\linewidth}@{}}{\rule{0pt}{9pt}Checkpoints: \texttt{glove.840B.300d}, \texttt{GoogleNews-vectors-negative300}, \texttt{crawl-300d-2M}, \texttt{bert-base-uncased}, \texttt{distilbert-base-\{cased,uncased\}}, \texttt{roberta-base}, \texttt{xlnet-base-cased}, \texttt{gpt2}, \texttt{meta-llama/Llama-3.2-1B}, \texttt{deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B}. $^{a}$Fine-tuned runs use the uncased model, as recorded by the vocabulary size in the run log; the classical module's code defaults to \texttt{bert-base-cased} (28,996). $^{b}$Both variants appear in the fine-tuned runs.}
+\multicolumn{6}{@{}p{\linewidth}@{}}{\rule{0pt}{9pt}Checkpoints: \texttt{glove.840B.300d}, \texttt{GoogleNews-vectors-negative300}, \texttt{crawl-300d-2M}, \texttt{bert-base-uncased}, \texttt{distilbert-base-\{cased,uncased\}}, \texttt{roberta-base}, \texttt{xlnet-base-cased}, \texttt{gpt2}, \texttt{meta-llama/Llama-3.2-1B}, \texttt{deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B}. $^{a}$Fine-tuned runs use the uncased model, as recorded by the vocabulary size in the run log. $^{b}$Both variants appear in the fine-tuned runs.}
 \end{tabularx}
 \end{fullwidth}
 \end{table}
@@ -306,7 +304,7 @@ The run log records the machine for 89\% of runs (\tabref{tab:hardware}). Every 
 \begin{table}[t]
 \centering
 \footnotesize
-\caption{Hardware by module, from the run log. Share of runs: share of the module's logged runs on that machine. Software: Python 3.10, scikit-learn 1.6.1, PyTorch 2.4.1, \confirm{Transformers 4.45.2}, CUDA 12.4.}
+\caption{Hardware by module, from the run log. Share of runs: share of the module's logged runs on that machine. Software: Python 3.10, scikit-learn 1.6.1, PyTorch 2.4.1, CUDA 12.4.}
 \label{tab:hardware}
 \begin{tabular}{@{}lllrr@{}}
 \toprule
