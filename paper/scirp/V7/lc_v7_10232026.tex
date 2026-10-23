@@ -13,13 +13,13 @@
 \makeatletter\newcommand{\inputtable}[1]{\@@input #1 }\makeatother
 
 \title{The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models}
-\author{Peter J. Worth Jr., Ionut Cardei}
-\runningauthors{P. J. Worth Jr., I. Cardei}
-\hypersetup{pdftitle={The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models}, pdfauthor={Peter J. Worth Jr., Ionut Cardei}}
+\author{Peter J. Worth Jr.}
+\runningauthors{P. J. Worth Jr.}
+\hypersetup{pdftitle={The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models}, pdfauthor={Peter J. Worth Jr.}}
 \affiliation{Department of Electrical Engineering and Computer Science, Florida Atlantic University, Boca Raton, FL, USA}
-\email{pworth2022@fau.edu, icardei@fau.edu}
+\email{pworth2022@fau.edu}
 \titlenote{A revised and extended version of \cite{worth2025layercake}, \textit{International Journal of Intelligence Science}, 2025.}
-\howtocite{Worth Jr., P.J. and Cardei, I. (2026) The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models. \textit{International Journal of Intelligence Science}, \textbf{*}, *-*. \url{https://doi.org/10.4236/ijis.2026.*****}}
+\howtocite{Worth Jr., P.J. (2026) The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models. \textit{International Journal of Intelligence Science}, \textbf{*}, *-*. \url{https://doi.org/10.4236/ijis.2026.*****}}
 \license{This work is licensed under the Creative Commons Attribution-NonCommercial International License (CC BY-NC 4.0).\\ \url{http://creativecommons.org/licenses/by-nc/4.0/}}
 \ccbadge{\includegraphics[height=0.52cm]{ijis/cc-by-nc.png}}
 
@@ -202,7 +202,7 @@ GPT-2 (124M) \cite{radford2019language} & next-token prediction & byte-level BPE
 Llama-3.2 (1.23B) \cite{grattafiori2024llama3,llama32modelcard} & next-token + distillation & BPE (tiktoken) & 128,256 & 2,048 & public data, up to 9T tokens \\
 DeepSeek-R1-Distill (1.5B) \cite{guo2025deepseek} & SFT on 800k R1-curated samples & byte-level BPE & 151,936 & 1,536 & Qwen2.5-Math-1.5B base \cite{yang2024qwen25} \\
 \bottomrule
-\multicolumn{6}{@{}p{\linewidth}@{}}{\rule{0pt}{9pt}Checkpoints: \texttt{glove.840B.300d}, \texttt{GoogleNews-vectors-negative300}, \texttt{crawl-300d-2M}, \texttt{bert-base-uncased}, \texttt{distilbert-base-\{cased,uncased\}}, \texttt{roberta-base}, \texttt{xlnet-base-cased}, \texttt{gpt2}, \texttt{meta-llama/Llama-3.2-1B}, \texttt{deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B}. $^{a}$Fine-tuned runs use the uncased model, as recorded by the vocabulary size in the run log. $^{b}$Both variants appear in the fine-tuned runs.}
+\multicolumn{6}{@{}>{\raggedright\arraybackslash}p{\linewidth}@{}}{\rule{0pt}{9pt}Checkpoints: \texttt{glove.840B.300d}, \texttt{GoogleNews-vectors-negative300}, \texttt{crawl-300d-2M}, \texttt{bert-base-uncased}, \texttt{distilbert-base-\{cased,uncased\}}, \texttt{roberta-base}, \texttt{xlnet-base-cased}, \texttt{gpt2}, \texttt{meta-llama/Llama-3.2-1B}, \texttt{deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B}. $^{a}$Fine-tuned runs use the uncased model, as recorded by the vocabulary size in the run log. $^{b}$Both variants appear in the fine-tuned runs.}
 \end{tabularx}
 \end{fullwidth}
 \end{table}
@@ -607,23 +607,23 @@ How much accuracy does fine-tuning a transformer buy for text classification, an
 Two extensions would sharpen these conclusions. The first is to time feature extraction and inference, so that the frozen-feature configurations and deployed transformers are costed in full. The second is to add the efficient alternatives that have matured since these runs: parameter-efficient fine-tuning \cite{hu2021loralowrankadaptationlarge,dettmers2023qloraefficientfinetuningquantized}, modern efficient encoders such as ModernBERT \cite{warner2024modernbert}, few-shot sentence-embedding classifiers such as SetFit \cite{tunstall2022setfit}, and prompted LLMs \cite{edwards2024language}. Layer Cake and the analysis scripts released with this article are designed to make each of these a configuration change rather than a new study.
 
 \componenthead{Data and Code Availability}
-The Layer Cake framework is available at \url{https://github.com/pworth1971/layer-cake}. The run-level results of the original study, the summary tables of the earlier paper, and the scripts that produce every table and figure in this article (\texttt{extract\_tables.py}, \texttt{extract\_runs.py}, \texttt{analyze.py}, \texttt{tables.py}, \texttt{figures.py}) are distributed with the manuscript source.
+The Layer Cake framework is available at \url{https://github.com/pworth1971/layer-cake}. The run-level results of the original study, the summary tables of the earlier paper, and the scripts that produce every table and figure in this article (\texttt{extract\_tables.py}, \texttt{extract\_runs.py}, \texttt{analyze.py}, \texttt{tables.py}, \texttt{figures.py}) are in the \texttt{paper/scirp/V7} directory of the same repository.
 
 \componenthead{Acknowledgements}
-In preparing this revision the authors used Claude Code (Anthropic), an AI assistant for software and writing tasks, through its Visual Studio Code extension, with the Claude Opus 5.5 model (\texttt{claude-opus-5-5}), on 23 October 2026. The assistant was used to:
+In preparing this revision the author used Claude Code (Anthropic), an AI assistant for software and writing tasks, through its Visual Studio Code extension, with the Claude Opus 5.5 model (\texttt{claude-opus-5-5}), on 23 October 2026. The assistant was used to:
 \begin{itemize}
 \item redraft and restructure the manuscript from the earlier version \cite{worth2025layercake};
 \item write the analysis scripts released with this article, re-analyse the published run-level results with them, and check that they reproduce every summary statistic reported in \cite{worth2025layercake};
 \item check each reference against Crossref, arXiv, the ACL Anthology and publisher records, and correct the bibliography;
 \item regenerate the figures and tables, and typeset the manuscript in the journal template.
 \end{itemize}
-No new experiments were run, and the assistant neither generated nor altered any experimental result. The authors reviewed and edited all AI-assisted material and take full responsibility for the content of this article.
+No new experiments were run, and the assistant neither generated nor altered any experimental result. The author reviewed and edited all AI-assisted material and takes full responsibility for the content of this article.
 
 \componenthead{Author Contributions}
-P.J.W. is the main author of this work. Conceptualization, methodology, software, investigation (all experiments), formal analysis, data curation, visualization and writing---original draft, P.J.W.; writing---review and editing, I.C. and P.J.W.
+P.J.W. is the sole author of this work and is responsible for its conceptualization, methodology, software, investigation (all experiments), formal analysis, data curation, visualization, and writing (original draft, review and editing).
 
 \componenthead{Conflicts of Interest}
-The authors declare no conflicts of interest regarding the publication of this paper.
+The author declares no conflicts of interest regarding the publication of this paper.
 
 \bibliographystyle{scirp}
 \bibliography{lc_v7_refs}

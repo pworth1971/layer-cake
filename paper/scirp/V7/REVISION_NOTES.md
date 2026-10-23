@@ -30,7 +30,7 @@ Use the base conda Python (`/opt/anaconda3/bin/python`). No number in a results 
 The manuscript follows `../ijis-template.docx` (Word render: `../ijis-template.pdf`):
 
 - **Class and page:** `ijis.cls` rebuilds the template's page, a 21 × 27.5 cm sheet with 1.5 cm side margins. Body text runs in a 12.71 cm column indented 5.29 cm, at 10 pt on an exact 15 pt line.
-- **Page 1:** the SCIRP logo and journal block in the header, then the title with its note, authors, affiliation and email.
+- **Page 1:** the SCIRP logo and journal block in the header, then the title with its note, author, affiliation and email.
 - **Side column and abstract:** the side column holds "How to cite", the dates, the copyright notice and the licence badges. Beside it sits the Abstract/Keywords panel between #943634 rules.
 - **Headings and figures:** numbered headings ("1." / "1.1.") in #943634. Captions are labelled "Table 1." / "Figure 1." in bold accent colour (tables above, figures below), and in-text references to figures and tables appear in the same style.
 - **Running head and footer:** the author header carries a grey rule. The footer has the DOI, page number and journal name.
@@ -49,14 +49,15 @@ The manuscript follows `../ijis-template.docx` (Word render: `../ijis-template.p
   - The Open Access badge (and the template's CC BY badge, kept for reference) are cropped from a render of the template's first page.
   - The CC BY-NC button is the official Creative Commons button.
 - **Licence:** CC BY-NC 4.0, as for the 2025 paper (per the signed copyright form, `../lc_scirp_copyright_form_06202025.pdf`).
-- **Author Contributions:** P.J.W. is the main author: conceptualization, methodology, software, investigation (all experiments), formal analysis, data curation, visualization and writing (original draft). I.C. and P.J.W.: writing (review and editing).
+- **Authorship:** single author, Peter J. Worth Jr. (decided 2026-10-23; Ionut Cardei, co-author of the 2025 paper, is not an author of this version). His name remains only in reference [1], the 2025 paper, as published.
+- **Author Contributions:** P.J.W. is the sole author and is responsible for conceptualization, methodology, software, investigation (all experiments), formal analysis, data curation, visualization, and writing.
 - **Acknowledgements:** a section before Author Contributions discloses the use of Claude Code (Anthropic) with Claude Opus 5.5 (`claude-opus-5-5`) on 2026-10-23. It covers the redrafting, re-analysis and validation of results, reference checking, figures and tables, and typesetting.
 
 ## Title
 
-**The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models** (chosen by the authors, 2026-10-23; replaces the working title "METRON").
+**The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models** (chosen by the author, 2026-10-23; replaces the working title "METRON").
 
-- The title, PDF metadata and "How to cite" text carry it; the running head carries the authors, as in the template.
+- The title, PDF metadata and "How to cite" text carry it; the running head carries the author, as in the template.
 - At the template's 22 pt the title ran to four lines and pushed the title block off page 1. `ijis.cls` now sets it at 20/23 pt, which gives three lines and keeps the abstract, keywords and title note on page 1.
 - The title note cites the 2025 paper as "a revised and extended version of [1]".
 
@@ -137,7 +138,11 @@ No chart uses a dual axis.
 
 ## Please confirm or decide
 
-1. The Acknowledgements say the authors reviewed and edited all AI-assisted material. Make sure that is true before submission.
+1. The Acknowledgements say the author reviewed and edited all AI-assisted material. Make sure that is true before submission.
 2. Received/Accepted/Published dates, volume, pages and DOI are placeholders (`**`) for SCIRP to fill.
 
-Left unspecified by the authors (the information is not available): the Hugging Face Transformers version, and whether the classical module's BERT features used the cased or uncased checkpoint. The manuscript states neither; the model-table footnote gives the BERT vocabulary only for the fine-tuned runs, where the log records it.
+Left unspecified (the information is not available): the Hugging Face Transformers version, and whether the classical module's BERT features used the cased or uncased checkpoint. The manuscript states neither; the model-table footnote gives the BERT vocabulary only for the fine-tuned runs, where the log records it.
+
+## Submission package
+
+`Cost-of-Accuracy-submission-10232026.zip` (built 2026-10-23) holds what the journal needs to compile and check the manuscript: `lc_v7_10232026.tex` and `.pdf`, the `.bbl` (so it compiles without BibTeX), `lc_v7_refs.bib`, `ijis.cls`, `scirp.bst`, `ijis/` (template badges and logo), `pictures/` (PDF figures) and `tables/`. It leaves out these notes, the audit reports, the data and the analysis scripts; the manuscript's Data and Code Availability statement points to `paper/scirp/V7` in the repository for those. It replaces the earlier review package (`Cost-of-Accuracy-V7-10232026.zip`), which carried the two-author front matter.
