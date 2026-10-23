@@ -1,0 +1,1776 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2025.1.14)  26 APR 2025 05:05
+entering extended mode
+ restricted \write18 enabled.
+ file:line:error style messages enabled.
+ %&-line parsing enabled.
+**"Layer Cake 04262025.tex"
+(./Layer Cake 04262025.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-02-20>
+(./clv2025.cls
+Document Class: clv2025 2025/01/05 v2 LaTeX document class for MIT - Computatio
+nal Linguistics Journals
+\draftrule=\dimen140
+\trimrule=\dimen141
+(/usr/local/texlive/2024/texmf-dist/tex/latex/geometry/geometry.sty
+Package: geometry 2020/01/02 v5.9 Page Geometry
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
+\KV@toks@=\toks17
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/iftex/ifvtex.sty
+Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
+
+(/usr/local/texlive/2024/texmf-dist/tex/generic/iftex/iftex.sty
+Package: iftex 2022/02/03 v1.0f TeX engine tests
+))
+\Gm@cnth=\count188
+\Gm@cntv=\count189
+\c@Gm@tempcnt=\count190
+\Gm@bindingoffset=\dimen142
+\Gm@wd@mp=\dimen143
+\Gm@odd@mp=\dimen144
+\Gm@even@mp=\dimen145
+\Gm@layoutwidth=\dimen146
+\Gm@layoutheight=\dimen147
+\Gm@layouthoffset=\dimen148
+\Gm@layoutvoffset=\dimen149
+\Gm@dimlist=\toks18
+)
+\trimwidth=\skip48
+\trimheight=\skip49
+\typewidth=\skip50
+\typeheight=\skip51
+\normaltextheight=\skip52
+\blindfoliodrop=\skip53
+\figheight=\skip54
+\figwidth=\skip55
+\tabledim=\skip56
+\tempdimen=\dimen150
+\enumdim=\dimen151
+\mathindent=\dimen152
+\emathindent=\dimen153
+\bibindent=\dimen154
+\normalbaselineskip=\skip57
+\tableleftskip=\skip58
+\tablerightskip=\skip59
+\tempbox=\box51
+LaTeX Info: Redefining \itshape on input line 480.
+LaTeX Info: Redefining \scshape on input line 485.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2021/04/29 v2.0v Standard LaTeX package
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/base/textcomp.sty
+Package: textcomp 2020/02/02 v2.0n Standard LaTeX package
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/psnfss/palatino.sty
+Package: palatino 2020/03/25 PSNFSS-v9.3 (SPQR) 
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/psnfss/helvet.sty
+Package: helvet 2020/03/25 PSNFSS-v9.3 (WaS) 
+)
+\minute=\count191
+\hour=\count192
+\aucount=\count193
+\tempcount=\count194
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/hyperref/hyperref.sty
+Package: hyperref 2024-01-20 v7.01h Hypertext links for LaTeX
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty
+Package: kvsetkeys 2022-10-05 v1.19 Key value parser (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty
+Package: kvdefinekeys 2019-12-19 v1.6 Define keys (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/pdfescape/pdfescape.sty
+Package: pdfescape 2019/12/09 v1.15 Implements pdfTeX's escape features (HO)
+
+(/usr/local/texlive/2024/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty
+Package: ltxcmds 2023-12-04 v1.26 LaTeX kernel commands for general use (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty
+Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO
+)
+
+(/usr/local/texlive/2024/texmf-dist/tex/generic/infwarerr/infwarerr.sty
+Package: infwarerr 2019/12/03 v1.5 Providing info/warning/error messages (HO)
+)
+Package pdftexcmds Info: \pdf@primitive is available.
+Package pdftexcmds Info: \pdf@ifprimitive is available.
+Package pdftexcmds Info: \pdfdraftmode found.
+))
+(/usr/local/texlive/2024/texmf-dist/tex/latex/hycolor/hycolor.sty
+Package: hycolor 2020-01-27 v1.10 Color options for hyperref/bookmark (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/auxhook/auxhook.sty
+Package: auxhook 2019-12-17 v1.6 Hooks for auxiliary files (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/hyperref/nameref.sty
+Package: nameref 2023-11-26 v2.56 Cross-referencing by name of section
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/refcount/refcount.sty
+Package: refcount 2019/12/15 v3.6 Data extraction from label references (HO)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/gettitlestring/gettitlestring.s
+ty
+Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
+ (/usr/local/texlive/2024/texmf-dist/tex/latex/kvoptions/kvoptions.sty
+Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
+))
+\c@section@level=\count195
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/etoolbox/etoolbox.sty
+Package: etoolbox 2020/10/05 v2.5k e-TeX tools for LaTeX (JAW)
+\etb@tempcnta=\count196
+)
+\@linkdim=\dimen155
+\Hy@linkcounter=\count197
+\Hy@pagecounter=\count198
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/hyperref/pd1enc.def
+File: pd1enc.def 2024-01-20 v7.01h Hyperref: PDFDocEncoding definition (HO)
+Now handling font encoding PD1 ...
+... no UTF-8 mapping file for font encoding PD1
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/intcalc/intcalc.sty
+Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
+)
+\Hy@SavedSpaceFactor=\count199
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/hyperref/puenc.def
+File: puenc.def 2024-01-20 v7.01h Hyperref: PDF Unicode definition (HO)
+Now handling font encoding PU ...
+... no UTF-8 mapping file for font encoding PU
+)
+Package hyperref Info: Option `final' set `true' on input line 4062.
+Package hyperref Info: Hyper figures OFF on input line 4179.
+Package hyperref Info: Link nesting OFF on input line 4184.
+Package hyperref Info: Hyper index ON on input line 4187.
+Package hyperref Info: Plain pages OFF on input line 4194.
+Package hyperref Info: Backreferencing OFF on input line 4199.
+Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
+Package hyperref Info: Bookmarks ON on input line 4446.
+\c@Hy@tempcnt=\count266
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/url/url.sty
+\Urlmuskip=\muskip16
+Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
+)
+LaTeX Info: Redefining \url on input line 4784.
+\XeTeXLinkMargin=\dimen156
+
+(/usr/local/texlive/2024/texmf-dist/tex/generic/bitset/bitset.sty
+Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
+
+(/usr/local/texlive/2024/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty
+Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
+)
+))
+\Fld@menulength=\count267
+\Field@Width=\dimen157
+\Fld@charsize=\dimen158
+Package hyperref Info: Hyper figures OFF on input line 6063.
+Package hyperref Info: Link nesting OFF on input line 6068.
+Package hyperref Info: Hyper index ON on input line 6071.
+Package hyperref Info: backreferencing OFF on input line 6078.
+Package hyperref Info: Link coloring OFF on input line 6083.
+Package hyperref Info: Link coloring with OCG OFF on input line 6088.
+Package hyperref Info: PDF/A mode OFF on input line 6093.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/base/atbegshi-ltx.sty
+Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
+package with kernel methods
+)
+
+Package hyperref Warning: Option `pdfpagelabels' is turned off
+(hyperref)                because \thepage is undefined.
+
+\c@Item=\count268
+\c@Hfootnote=\count269
+)
+Package hyperref Info: Driver (autodetected): hpdftex.
+ (/usr/local/texlive/2024/texmf-dist/tex/latex/hyperref/hpdftex.def
+File: hpdftex.def 2024-01-20 v7.01h Hyperref driver for pdfTeX
+\Fld@listcount=\count270
+\c@bookmark@seq@number=\count271
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty
+Package: rerunfilecheck 2022-07-10 v1.10 Rerun checks for auxiliary files (HO)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/base/atveryend-ltx.sty
+Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend pac
+kage
+with kernel methods
+)
+(/usr/local/texlive/2024/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
+Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
+)
+Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
+85.
+)
+\Hy@SectionHShift=\skip60
+)
+\affiliationnumber=\count272
+\totalaffiliations=\count273
+\c@part=\count274
+\c@chapter=\count275
+\c@section=\count276
+\c@subsection=\count277
+\c@subsubsection=\count278
+\c@paragraph=\count279
+\c@subparagraph=\count280
+\topsepi=\skip61
+\topsepii=\skip62
+\topsepiii=\skip63
+\itemsepi=\skip64
+\itemsepii=\skip65
+\itemsepiii=\skip66
+\LabelSep=\dimen159
+\listtopsepi=\skip67
+\listtopsepii=\skip68
+\listtopsepiii=\skip69
+\listitemsepi=\skip70
+\listitemsepii=\skip71
+\listitemsepiii=\skip72
+\listleftmargini=\skip73
+\listleftmarginii=\skip74
+\listleftmarginiii=\skip75
+\listlabelwidthi=\skip76
+\listlabelwidthii=\skip77
+\listlabelwidthiii=\skip78
+\listlabelsepi=\skip79
+\listlabelsepii=\skip80
+\listlabelsepiii=\skip81
+\listrightmargin=\skip82
+\listdepth=\count281
+\lpalignmaxwd=\skip83
+\c@eqnnosave=\count282
+ (/usr/local/texlive/2024/texmf-dist/tex/latex/amscls/amsthm.sty
+Package: amsthm 2020/05/29 v2.20.6
+\thm@style=\toks19
+\thm@bodyfont=\toks20
+\thm@headfont=\toks21
+\thm@notefont=\toks22
+\thm@headpunct=\toks23
+\thm@preskip=\skip84
+\thm@postskip=\skip85
+\thm@headsep=\skip86
+\dth@everypar=\toks24
+)
+\c@example=\count283
+\c@theorem=\count284
+\c@lemma=\count285
+\c@proposition=\count286
+\c@corollary=\count287
+\c@notation=\count288
+\c@assumption=\count289
+\c@remark=\count290
+\c@definition=\count291
+\c@numtheorem=\count292
+\c@case=\count293
+\abovecaptionskip=\skip87
+\belowcaptionskip=\skip88
+\c@figure=\count294
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/epsfig.sty
+Package: epsfig 2017/06/25 v1.7b (e)psfig emulation (SPQR)
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/graphicx.sty
+Package: graphicx 2021/09/16 v1.2d Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/graphics.sty
+Package: graphics 2022/03/10 v1.4e Standard LaTeX Graphics (DPC,SPQR)
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/trig.sty
+Package: trig 2021/08/11 v1.11 sin cos tan (DPC)
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics-cfg/graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: pdftex.def on input line 107.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics-def/pdftex.def
+File: pdftex.def 2022/09/22 v1.2b Graphics/color driver for pdftex
+))
+\Gin@req@height=\dimen160
+\Gin@req@width=\dimen161
+)
+\epsfxsize=\dimen162
+\epsfysize=\dimen163
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/graphics/rotating.sty
+Package: rotating 2016/08/11 v2.16d rotated objects in LaTeX
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/base/ifthen.sty
+Package: ifthen 2022/04/13 v1.1d Standard LaTeX ifthen package (DPC)
+)
+\c@r@tfl@t=\count295
+\rotFPtop=\skip89
+\rotFPbot=\skip90
+\rot@float@box=\box52
+\rot@mess@toks=\toks25
+)
+\figtempbox=\box53
+\c@table=\count296
+\@footmax=\dimen164
+\bibleftmargin=\skip91
+\biblabelsep=\skip92
+\bibitemsep=\skip93
+\bibparsep=\skip94
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/natbib/natbib.sty
+Package: natbib 2010/09/13 8.31b (PWD, AO)
+\bibhang=\skip95
+\bibsep=\skip96
+LaTeX Info: Redefining \cite on input line 694.
+\c@NAT@ctr=\count297
+)
+\c@rules=\count298
+\c@qcount=\count299
+\qcountdim=\dimen165
+\@twocolsep=\dimen166
+\partialpage=\box54
+\tblcolcount=\count300
+\tcsepbefore=\skip97
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/amsfonts.sty
+Package: amsfonts 2013/01/14 v3.01 Basic AMSFonts support
+\@emptytoks=\toks26
+\symAMSa=\mathgroup4
+\symAMSb=\mathgroup5
+LaTeX Font Info:    Redeclaring math symbol \hbar on input line 98.
+LaTeX Font Info:    Overwriting math alphabet `\mathfrak' in version `bold'
+(Font)                  U/euf/m/n --> U/euf/b/n on input line 106.
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/amssymb.sty
+Package: amssymb 2013/01/14 v3.01 AMS font symbols
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/tools/multicol.sty
+Package: multicol 2023/03/30 v1.9f multicolumn formatting (FMi)
+\c@tracingmulticols=\count301
+\mult@box=\box55
+\multicol@leftmargin=\dimen167
+\c@unbalance=\count302
+\c@collectmore=\count303
+\doublecol@number=\count304
+\multicoltolerance=\count305
+\multicolpretolerance=\count306
+\full@width=\dimen168
+\page@free=\dimen169
+\premulticols=\dimen170
+\postmulticols=\dimen171
+\multicolsep=\skip98
+\multicolbaselineskip=\skip99
+\partial@page=\box56
+\last@line=\box57
+\mc@boxedresult=\box58
+\maxbalancingoverflow=\dimen172
+\mult@rightbox=\box59
+\mult@grightbox=\box60
+\mult@firstbox=\box61
+\mult@gfirstbox=\box62
+\@tempa=\box63
+\@tempa=\box64
+\@tempa=\box65
+\@tempa=\box66
+\@tempa=\box67
+\@tempa=\box68
+\@tempa=\box69
+\@tempa=\box70
+\@tempa=\box71
+\@tempa=\box72
+\@tempa=\box73
+\@tempa=\box74
+\@tempa=\box75
+\@tempa=\box76
+\@tempa=\box77
+\@tempa=\box78
+\@tempa=\box79
+\@tempa=\box80
+\@tempa=\box81
+\@tempa=\box82
+\@tempa=\box83
+\@tempa=\box84
+\@tempa=\box85
+\@tempa=\box86
+\@tempa=\box87
+\@tempa=\box88
+\@tempa=\box89
+\@tempa=\box90
+\@tempa=\box91
+\@tempa=\box92
+\@tempa=\box93
+\@tempa=\box94
+\@tempa=\box95
+\@tempa=\box96
+\@tempa=\box97
+\@tempa=\box98
+\c@minrows=\count307
+\c@columnbadness=\count308
+\c@finalcolumnbadness=\count309
+\last@try=\dimen173
+\multicolovershoot=\dimen174
+\multicolundershoot=\dimen175
+\mult@nat@firstbox=\box99
+\colbreak@box=\box100
+\mc@col@check@num=\count310
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/tools/dcolumn.sty
+Package: dcolumn 2023/07/08 v1.06 decimal alignment package (DPC)
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/tools/array.sty
+Package: array 2023/10/16 v2.5g Tabular extension package (FMi)
+\col@sep=\dimen176
+\ar@mcellbox=\box101
+\extrarowheight=\dimen177
+\NC@list=\toks27
+\extratabsurround=\skip100
+\backup@length=\skip101
+\ar@cellbox=\box102
+)))
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsmath/amsmath.sty
+Package: amsmath 2023/05/13 v2.17o AMS math features
+\@mathmargin=\skip102
+
+For additional information on amsmath, use the `?' option.
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsmath/amstext.sty
+Package: amstext 2021/08/26 v2.01 AMS text
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsmath/amsgen.sty
+File: amsgen.sty 1999/11/30 v2.0 generic functions
+\@emptytoks=\toks28
+\ex@=\dimen178
+)
+LaTeX Info: Redefining \text on input line 28.
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsmath/amsbsy.sty
+Package: amsbsy 1999/11/29 v1.2d Bold Symbols
+\pmbraise@=\dimen179
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsmath/amsopn.sty
+Package: amsopn 2022/04/08 v2.04 operator names
+)
+\inf@bad=\count311
+LaTeX Info: Redefining \frac on input line 234.
+\uproot@=\count312
+\leftroot@=\count313
+LaTeX Info: Redefining \overline on input line 399.
+LaTeX Info: Redefining \colon on input line 410.
+\classnum@=\count314
+\DOTSCASE@=\count315
+LaTeX Info: Redefining \ldots on input line 496.
+LaTeX Info: Redefining \dots on input line 499.
+LaTeX Info: Redefining \cdots on input line 620.
+\Mathstrutbox@=\box103
+\strutbox@=\box104
+LaTeX Info: Redefining \big on input line 722.
+LaTeX Info: Redefining \Big on input line 723.
+LaTeX Info: Redefining \bigg on input line 724.
+LaTeX Info: Redefining \Bigg on input line 725.
+\big@size=\dimen180
+LaTeX Font Info:    Redeclaring font encoding OML on input line 743.
+LaTeX Font Info:    Redeclaring font encoding OMS on input line 744.
+\macc@depth=\count316
+LaTeX Info: Redefining \bmod on input line 905.
+LaTeX Info: Redefining \pmod on input line 910.
+LaTeX Info: Redefining \smash on input line 940.
+LaTeX Info: Redefining \relbar on input line 970.
+LaTeX Info: Redefining \Relbar on input line 971.
+\c@MaxMatrixCols=\count317
+\dotsspace@=\muskip17
+\c@parentequation=\count318
+\dspbrk@lvl=\count319
+\tag@help=\toks29
+\row@=\count320
+\column@=\count321
+\maxfields@=\count322
+\andhelp@=\toks30
+\eqnshift@=\dimen181
+\alignsep@=\dimen182
+\tagshift@=\dimen183
+\tagwidth@=\dimen184
+\totwidth@=\dimen185
+\lineht@=\dimen186
+\@envbody=\toks31
+\multlinegap=\skip103
+\multlinetaggap=\skip104
+\mathdisplay@stack=\toks32
+LaTeX Info: Redefining \[ on input line 2953.
+LaTeX Info: Redefining \] on input line 2954.
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/booktabs/booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen187
+\lightrulewidth=\dimen188
+\cmidrulewidth=\dimen189
+\belowrulesep=\dimen190
+\belowbottomsep=\dimen191
+\aboverulesep=\dimen192
+\abovetopsep=\dimen193
+\cmidrulesep=\dimen194
+\cmidrulekern=\dimen195
+\defaultaddspace=\dimen196
+\@cmidla=\count323
+\@cmidlb=\count324
+\@aboverulesep=\dimen197
+\@belowrulesep=\dimen198
+\@thisruleclass=\count325
+\@lastruleclass=\count326
+\@thisrulewidth=\dimen199
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/tools/tabularx.sty
+Package: tabularx 2023/07/08 v2.11c `tabularx' package (DPC)
+\TX@col@width=\dimen256
+\TX@old@table=\dimen257
+\TX@old@col=\dimen258
+\TX@target=\dimen259
+\TX@delta=\dimen260
+\TX@cols=\count327
+\TX@ftn=\toks33
+)
+LaTeX Font Info:    Trying to load font information for T1+ppl on input line 21
+.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/psnfss/t1ppl.fd
+File: t1ppl.fd 2001/06/04 font definitions for T1/ppl.
+)
+(/usr/local/texlive/2024/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
+File: l3backend-pdftex.def 2024-02-20 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count328
+\l__pdf_internal_box=\box105
+)
+No file "Layer Cake 04262025".aux.
+\openout1 = `"Layer Cake 04262025.aux"'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+*geometry* verbose mode - [ preamble ] result:
+* driver: pdftex
+* paper: custom
+* layout: <same size as paper>
+* layoutoffset:(h,v)=(0.0pt,0.0pt)
+* modes: twoside 
+* h-part:(L,W,R)=(72.26999pt, 343.28252pt, 72.26999pt)
+* v-part:(T,H,B)=(42.67912pt, 593.29599pt, 86.72488pt)
+* \paperwidth=487.8225pt
+* \paperheight=722.7pt
+* \textwidth=384.0pt
+* \textheight=595.32pt
+* \oddsidemargin=0.0pt
+* \evensidemargin=0.0pt
+* \topmargin=-29.59087pt
+* \headheight=6.5pt
+* \headsep=31.0pt
+* \topskip=7.0pt
+* \footskip=36.0pt
+* \marginparwidth=60.0pt
+* \marginparsep=6.0pt
+* \columnsep=24.0pt
+* \skip\footins=23.0pt plus 8.0pt
+* \hoffset=-18.0pt
+* \voffset=-12.0pt
+* \mag=1000
+* \@twocolumnfalse
+* \@twosidetrue
+* \@mparswitchtrue
+* \@reversemarginfalse
+* (1in=72.27pt=25.4mm, 1cm=28.453pt)
+
+Package hyperref Info: Link coloring OFF on input line 21.
+\@outlinefile=\write3
+\openout3 = `"Layer Cake 04262025.out"'.
+
+(/usr/local/texlive/2024/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count329
+\scratchdimen=\dimen261
+\scratchbox=\box106
+\nofMPsegments=\count330
+\nofMParguments=\count331
+\everyMPshowfont=\toks34
+\MPscratchCnt=\count332
+\MPscratchDim=\dimen262
+\MPnumerator=\count333
+\makeMPintoPDFobject=\count334
+\everyMPtoPDFconversion=\toks35
+) (/usr/local/texlive/2024/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
+e
+))
+\symitgreek=\mathgroup6
+LaTeX Font Info:    Overwriting symbol font `itgreek' in version `normal'
+(Font)                  OML/zplmr7m/m/n --> OML/pns/m/n on input line 21.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 32.
+
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/umsa.fd
+File: umsa.fd 2013/01/14 v3.01 AMS symbols A
+)
+LaTeX Font Info:    Trying to load font information for U+msb on input line 32.
+
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/umsb.fd
+File: umsb.fd 2013/01/14 v3.01 AMS symbols B
+)
+LaTeX Font Info:    Trying to load font information for T1+pcr on input line 32
+.
+
+(/usr/local/texlive/2024/texmf-dist/tex/latex/psnfss/t1pcr.fd
+File: t1pcr.fd 2001/06/04 font definitions for T1/pcr.
+)
+
+Package natbib Warning: Citation `moreo' on page 1 undefined on input line 35.
+
+LaTeX Font Info:    Trying to load font information for TS1+ppl on input line 3
+6.
+(/usr/local/texlive/2024/texmf-dist/tex/latex/psnfss/ts1ppl.fd
+File: ts1ppl.fd 2001/06/04 font definitions for TS1/ppl.
+) [1
+
+{/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/loc
+al/texlive/2024/texmf-dist/fonts/enc/dvips/base/8r.enc}]
+
+Package natbib Warning: Citation `turingmind1950' on page 2 undefined on input 
+line 41.
+
+
+Package natbib Warning: Citation `jones2025largelanguagemodelspass' on page 2 u
+ndefined on input line 41.
+
+
+Package natbib Warning: Citation `mccallum1998comparison' on page 2 undefined o
+n input line 43.
+
+
+Package natbib Warning: Citation `genkin01082007' on page 2 undefined on input 
+line 43.
+
+
+Package natbib Warning: Citation `joachims1998text' on page 2 undefined on inpu
+t line 43.
+
+
+Package natbib Warning: Citation `mikolov' on page 2 undefined on input line 43
+.
+
+
+Package natbib Warning: Citation `pennington' on page 2 undefined on input line
+ 43.
+
+
+Package natbib Warning: Citation `articleboja' on page 2 undefined on input lin
+e 43.
+
+
+Package natbib Warning: Citation `zhang2015character' on page 2 undefined on in
+put line 43.
+
+
+Package natbib Warning: Citation `yoon2014convolutional' on page 2 undefined on
+ input line 43.
+
+
+Package natbib Warning: Citation `hochreiterlong' on page 2 undefined on input 
+line 43.
+
+
+Package natbib Warning: Citation `vaswani' on page 2 undefined on input line 43
+.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 2 undefined on
+ input line 43.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [2]
+
+Package natbib Warning: Citation `pmlr-v97-houlsby19a' on page 3 undefined on i
+nput line 45.
+
+
+Package natbib Warning: Citation `hu2021loralowrankadaptationlarge' on page 3 u
+ndefined on input line 45.
+
+
+Package natbib Warning: Citation `dettmers2023qloraefficientfinetuningquantized
+' on page 3 undefined on input line 45.
+
+
+Package natbib Warning: Citation `li2021prefixtuningoptimizingcontinuousprompts
+' on page 3 undefined on input line 45.
+
+
+Package natbib Warning: Citation `moreo' on page 3 undefined on input line 47.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [3]
+
+Package natbib Warning: Citation `articlewei' on page 4 undefined on input line
+ 65.
+
+
+Package natbib Warning: Citation `xu2025towards' on page 4 undefined on input l
+ine 65.
+
+[4]
+
+Package natbib Warning: Citation `worth' on page 5 undefined on input line 71.
+
+
+Package natbib Warning: Citation `chomsky56' on page 5 undefined on input line 
+71.
+
+
+Package natbib Warning: Citation `Chomsky57' on page 5 undefined on input line 
+71.
+
+
+Package natbib Warning: Citation `chomsky65aspects' on page 5 undefined on inpu
+t line 71.
+
+
+Package natbib Warning: Citation `harris' on page 5 undefined on input line 73.
+
+
+
+Package natbib Warning: Citation `firth' on page 5 undefined on input line 73.
+
+
+Package natbib Warning: Citation `bahdanau2016neuralmachinetranslationjointly' 
+on page 5 undefined on input line 75.
+
+
+Package natbib Warning: Citation `vaswani' on page 5 undefined on input line 75
+.
+
+
+Package natbib Warning: Citation `sparckjones1972statistical' on page 5 undefin
+ed on input line 75.
+
+
+Package natbib Warning: Citation `salton1971smart' on page 5 undefined on input
+ line 75.
+
+[5]
+<pictures/fig1.jpg, id=46, 321.45094pt x 316.18124pt>
+File: pictures/fig1.jpg Graphic file (type jpg)
+<use pictures/fig1.jpg>
+Package pdftex.def Info: pictures/fig1.jpg  used on input line 79.
+(pdftex.def)             Requested size: 153.59766pt x 151.085pt.
+
+
+Package natbib Warning: Citation `deerwester' on page 6 undefined on input line
+ 84.
+
+
+Package natbib Warning: Citation `mikolov' on page 6 undefined on input line 86
+.
+
+[6 <./pictures/fig1.jpg>]
+<pictures/fig2.png, id=54, 1116.17pt x 425.59pt>
+File: pictures/fig2.png Graphic file (type png)
+<use pictures/fig2.png>
+Package pdftex.def Info: pictures/fig2.png  used on input line 90.
+(pdftex.def)             Requested size: 345.59766pt x 131.77567pt.
+
+
+Package natbib Warning: Citation `pennington' on page 7 undefined on input line
+ 95.
+
+
+Package natbib Warning: Citation `articleboja' on page 7 undefined on input lin
+e 97.
+
+
+Underfull \vbox (badness 2608) has occurred while \output is active []
+
+ [7 <./pictures/fig2.png>]
+
+Package natbib Warning: Citation `moreo' on page 8 undefined on input line 103.
+
+
+
+Package natbib Warning: Citation `bahdanau2016neuralmachinetranslationjointly' 
+on page 8 undefined on input line 105.
+
+
+Package natbib Warning: Citation `vaswani' on page 8 undefined on input line 10
+5.
+
+
+Underfull \vbox (badness 1189) has occurred while \output is active []
+
+ [8]
+
+Package natbib Warning: Citation `schuster' on page 9 undefined on input line 1
+09.
+
+
+Package natbib Warning: Citation `wu' on page 9 undefined on input line 109.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 9 undefined on
+ input line 109.
+
+
+Package natbib Warning: Citation `sennrich-etal-2016-neural' on page 9 undefine
+d on input line 111.
+
+
+Package natbib Warning: Citation `raffel2019exploring' on page 9 undefined on i
+nput line 111.
+
+
+Package natbib Warning: Citation `lan2019albert' on page 9 undefined on input l
+ine 111.
+
+
+Package natbib Warning: Citation `yang2019xlnet' on page 9 undefined on input l
+ine 111.
+
+
+Package natbib Warning: Citation `kudo2018sentencepiece' on page 9 undefined on
+ input line 111.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [9]
+
+Package natbib Warning: Citation `vaswani' on page 10 undefined on input line 1
+15.
+
+<pictures/fig3.png, id=75, 1156.32pt x 770.88pt>
+File: pictures/fig3.png Graphic file (type png)
+<use pictures/fig3.png>
+Package pdftex.def Info: pictures/fig3.png  used on input line 121.
+(pdftex.def)             Requested size: 230.40234pt x 153.5969pt.
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 10 undefined o
+n input line 126.
+
+
+Package natbib Warning: Citation `lan2019albert' on page 10 undefined on input 
+line 126.
+
+
+Package natbib Warning: Citation `yang2019xlnet' on page 10 undefined on input 
+line 126.
+
+
+Package natbib Warning: Citation `clark2020electra' on page 10 undefined on inp
+ut line 126.
+
+[10 <./pictures/fig3.png>]
+<pictures/fig4.png, id=81, 412.54124pt x 146.79843pt>
+File: pictures/fig4.png Graphic file (type png)
+<use pictures/fig4.png>
+Package pdftex.def Info: pictures/fig4.png  used on input line 130.
+(pdftex.def)             Requested size: 345.59766pt x 122.97832pt.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 11 undefined o
+n input line 131.
+
+
+Package natbib Warning: Citation `peters2018deep' on page 11 undefined on input
+ line 135.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 11 undefined o
+n input line 135.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 11 undefined o
+n input line 137.
+
+
+Package natbib Warning: Citation `radford2019language' on page 11 undefined on 
+input line 137.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [11 <./pictures/fig4.png>]
+
+Package natbib Warning: Citation `sparckjones1972statistical' on page 12 undefi
+ned on input line 143.
+
+
+Package natbib Warning: Citation `deerwester' on page 12 undefined on input lin
+e 143.
+
+
+Package natbib Warning: Citation `joachims1998text' on page 12 undefined on inp
+ut line 143.
+
+
+Package natbib Warning: Citation `mccallum1998comparison' on page 12 undefined 
+on input line 143.
+
+
+Package natbib Warning: Citation `sebastiani2002machine' on page 12 undefined o
+n input line 143.
+
+
+Package natbib Warning: Citation `yoon2014convolutional' on page 12 undefined o
+n input line 145.
+
+
+Package natbib Warning: Citation `zhang2015character' on page 12 undefined on i
+nput line 145.
+
+
+Package natbib Warning: Citation `zang2021research' on page 12 undefined on inp
+ut line 145.
+
+
+Package natbib Warning: Citation `liuguo2019bidirectional' on page 12 undefined
+ on input line 145.
+
+
+Package natbib Warning: Citation `moreo' on page 12 undefined on input line 145
+.
+
+
+Package natbib Warning: Citation `moreo' on page 12 undefined on input line 147
+.
+
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 12 undefined o
+n input line 149.
+
+
+Package natbib Warning: Citation `liu2019roberta' on page 12 undefined on input
+ line 149.
+
+
+Package natbib Warning: Citation `hinton2015distilling' on page 12 undefined on
+ input line 149.
+
+
+Package natbib Warning: Citation `sanh2020distilbert' on page 12 undefined on i
+nput line 149.
+
+[12]
+<pictures/fig5.png, id=95, 843.15pt x 366.61969pt>
+File: pictures/fig5.png Graphic file (type png)
+<use pictures/fig5.png>
+Package pdftex.def Info: pictures/fig5.png  used on input line 153.
+(pdftex.def)             Requested size: 384.00694pt x 170.71693pt.
+
+
+Package natbib Warning: Citation `articlebrown' on page 13 undefined on input l
+ine 158.
+
+
+Package natbib Warning: Citation `yang2019xlnet' on page 13 undefined on input 
+line 158.
+
+
+Package natbib Warning: Citation `touvron2023llama' on page 13 undefined on inp
+ut line 158.
+
+
+Package natbib Warning: Citation `articlebi' on page 13 undefined on input line
+ 158.
+
+
+Package natbib Warning: Citation `qiu2020pre' on page 13 undefined on input lin
+e 160.
+
+
+Package natbib Warning: Citation `minaee2021deep' on page 13 undefined on input
+ line 160.
+
+
+Package natbib Warning: Citation `trust2024study' on page 13 undefined on input
+ line 160.
+
+
+Package natbib Warning: Citation `liu2019roberta' on page 13 undefined on input
+ line 160.
+
+[13 <./pictures/fig5.png>]
+
+Package natbib Warning: Citation `moreo' on page 14 undefined on input line 166
+.
+
+
+Package natbib Warning: Citation `moreo' on page 14 undefined on input line 168
+.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [14]
+[15]
+
+Package natbib Warning: Citation `moreo' on page 16 undefined on input line 193
+.
+
+[16]
+<pictures/fig6.png, id=124, 315.36pt x 395.1855pt>
+File: pictures/fig6.png Graphic file (type png)
+<use pictures/fig6.png>
+Package pdftex.def Info: pictures/fig6.png  used on input line 197.
+(pdftex.def)             Requested size: 307.2125pt x 313.00114pt.
+
+Underfull \vbox (badness 1789) has occurred while \output is active []
+
+ [17 <./pictures/fig6.png>] [18]
+
+Package natbib Warning: Citation `moreo' on page 19 undefined on input line 217
+.
+
+[19]
+
+Package natbib Warning: Citation `moreo' on page 20 undefined on input line 237
+.
+
+
+Package natbib Warning: Citation `moreo' on page 20 undefined on input line 251
+.
+
+[20]
+
+Package natbib Warning: Citation `pennington' on page 21 undefined on input lin
+e 258.
+
+
+Package natbib Warning: Citation `mikolov' on page 21 undefined on input line 2
+62.
+
+
+Package natbib Warning: Citation `articleboja' on page 21 undefined on input li
+ne 266.
+
+[21]
+
+Package natbib Warning: Citation `devlin-etal-2019-bert' on page 22 undefined o
+n input line 273.
+
+
+Package natbib Warning: Citation `liu2019roberta' on page 22 undefined on input
+ line 273.
+
+
+Package natbib Warning: Citation `hinton2015distilling' on page 22 undefined on
+ input line 279.
+
+
+Package natbib Warning: Citation `sanh2020distilbert' on page 22 undefined on i
+nput line 279.
+
+
+Package natbib Warning: Citation `yang2019xlnet' on page 22 undefined on input 
+line 283.
+
+
+Package natbib Warning: Citation `dai2019transformer' on page 22 undefined on i
+nput line 283.
+
+[22]
+
+Package natbib Warning: Citation `articlebrown' on page 23 undefined on input l
+ine 291.
+
+
+Package natbib Warning: Citation `touvron2023llama' on page 23 undefined on inp
+ut line 299.
+
+[23]
+
+Package natbib Warning: Citation `articlebi' on page 24 undefined on input line
+ 305.
+
+
+Package natbib Warning: Citation `guo2025deepseek' on page 24 undefined on inpu
+t line 305.
+
+
+Package natbib Warning: Citation `ouyang2022training' on page 24 undefined on i
+nput line 305.
+
+
+Package natbib Warning: Citation `articlewei' on page 24 undefined on input lin
+e 307.
+
+
+Package natbib Warning: Citation `articlebai' on page 24 undefined on input lin
+e 309.
+
+
+Package natbib Warning: Citation `hinton2015distilling' on page 24 undefined on
+ input line 309.
+
+<pictures/fig7.jpeg, id=191, 951.555pt x 877.2775pt>
+File: pictures/fig7.jpeg Graphic file (type jpg)
+<use pictures/fig7.jpeg>
+Package pdftex.def Info: pictures/fig7.jpeg  used on input line 315.
+(pdftex.def)             Requested size: 383.9983pt x 426.79092pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+[24]
+
+Package natbib Warning: Citation `lewis1987reuters' on page 25 undefined on inp
+ut line 328.
+
+
+Underfull \vbox (badness 1997) has occurred while \output is active []
+
+ [25 <./pictures/fig7.jpeg>]
+
+Package natbib Warning: Citation `greene' on page 26 undefined on input line 33
+2.
+
+LaTeX Font Info:    Trying to load font information for OML+zplmr7m on input li
+ne 337.
+LaTeX Font Info:    No file OMLzplmr7m.fd. on input line 337.
+
+LaTeX Font Warning: Font shape `OML/zplmr7m/m/n' undefined
+(Font)              using `OML/cmm/m/it' instead on input line 337.
+
+
+Package natbib Warning: Citation `lewis2004' on page 26 undefined on input line
+ 337.
+
+
+Package natbib Warning: Citation `LANG1995331' on page 26 undefined on input li
+ne 341.
+
+
+Package natbib Warning: Citation `sinha' on page 26 undefined on input line 346
+.
+
+
+Package natbib Warning: Citation `farhangi' on page 26 undefined on input line 
+351.
+
+
+Package natbib Warning: Citation `sanderson' on page 26 undefined on input line
+ 356.
+
+
+Package natbib Warning: Citation `maas' on page 26 undefined on input line 361.
+
+
+[26]
+Underfull \hbox (badness 3029) in paragraph at lines 383--383
+[]|\T1/ppl/m/n/10 News ar-ti-cles, im-bal-anced
+ []
+
+
+Underfull \hbox (badness 1337) in paragraph at lines 383--383
+[]|\T1/ppl/m/n/10 Balanced top-ics from BBC
+ []
+
+
+Underfull \hbox (badness 5260) in paragraph at lines 383--383
+[]|\T1/ppl/m/n/10 Research pa-pers, over-lap-
+ []
+
+
+Underfull \hbox (badness 5475) in paragraph at lines 383--383
+[]|\T1/ppl/m/n/10 Movie re-views, sen-ti-ment
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 383--383
+[]|\T1/ppl/m/n/10 Newsgroup ar-ti-cles,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 383--383
+\T1/ppl/m/n/10 bal-anced and di-verse
+ []
+
+[27] [28]
+
+Package natbib Warning: Citation `moreo' on page 29 undefined on input line 426
+.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [29]
+
+Package natbib Warning: Citation `moreo' on page 30 undefined on input line 435
+.
+
+
+Package natbib Warning: Citation `deerwester' on page 30 undefined on input lin
+e 437.
+
+
+Package natbib Warning: Citation `moreo' on page 30 undefined on input line 437
+.
+
+
+Package natbib Warning: Citation `worth' on page 30 undefined on input line 439
+.
+
+[30]
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Embedding
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 rep-re-sen-ta-tion
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Embeddings
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 (weighted/avg/
+ []
+
+
+Underfull \hbox (badness 2828) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 When em-bed-dings
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Embeddings +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 Weighted Class
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Embeddings +
+ []
+
+
+Underfull \hbox (badness 6477) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 When class in-ter-
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Vectorized text
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 + Em-bed-ding
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 When com-bin-ing
+ []
+
+
+Underfull \hbox (badness 2435) in paragraph at lines 459--459
+\T1/ppl/m/n/10 raw text and em-
+ []
+
+
+Underfull \hbox (badness 1755) in paragraph at lines 459--459
+\T1/ppl/m/n/10 bed-dings en-hances
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Vectorized text +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 Weighted Class
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 When in-te-grat-ing
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Vectorized text
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 + Em-bed-ding
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 rep-re-sen-ta-tion +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 Weighted Class
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 Em-bed-dings +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+[]|\T1/ppl/m/n/10 Comprehensive
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 rep-re-sen-ta-tion
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 com-bin-ing raw,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 459--459
+\T1/ppl/m/n/10 em-bed-ding, and
+ []
+
+[31]
+Underfull \hbox (badness 2126) in paragraph at lines 479--479
+\T1/ppl/m/n/10 bed-ding space via
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 When pro-ject-ing
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 Em-bed-dings +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 Projection
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 com-bined with
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 class-sensitive
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 Latent Se-man-tic
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 Anal-y-sis for
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 di-men-sion-al-ity
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 2173) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 For di-men-sion-al-ity
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 re-duc-tion while
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 keep-ing se-man-tic
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 LSA + Weighted
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 TF-IDF/Count +
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 When re-duced
+ []
+
+
+Underfull \hbox (badness 3942) in paragraph at lines 479--479
+\T1/ppl/m/n/10 fea-tures and class
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+[]|\T1/ppl/m/n/10 Baseline ap-proach
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 479--479
+\T1/ppl/m/n/10 us-ing only
+ []
+
+
+Package natbib Warning: Citation `moreo' on page 32 undefined on input line 486
+.
+
+[32] [33]
+
+Package natbib Warning: Citation `moreo' on page 34 undefined on input line 493
+.
+
+[34] [35]
+<pictures/fig8.png, id=283, 301.125pt x 120.45pt>
+File: pictures/fig8.png Graphic file (type png)
+<use pictures/fig8.png>
+Package pdftex.def Info: pictures/fig8.png  used on input line 511.
+(pdftex.def)             Requested size: 345.6294pt x 156.50594pt.
+
+
+Package natbib Warning: Citation `moreo' on page 36 undefined on input line 518
+.
+
+[36 <./pictures/fig8.png>] [37]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [38]
+<pictures/fig9.png, id=301, 366.61969pt x 482.55281pt>
+File: pictures/fig9.png Graphic file (type png)
+<use pictures/fig9.png>
+Package pdftex.def Info: pictures/fig9.png  used on input line 542.
+(pdftex.def)             Requested size: 345.61832pt x 441.03079pt.
+
+[39 <./pictures/fig9.png>] [40] [41]
+<pictures/fig10.png, id=323, 522.95375pt x 683.55376pt>
+File: pictures/fig10.png Graphic file (type png)
+<use pictures/fig10.png>
+Package pdftex.def Info: pictures/fig10.png  used on input line 575.
+(pdftex.def)             Requested size: 345.60538pt x 469.48312pt.
+ [42 <./pictures/fig10.png>]
+<pictures/table2.png, id=332, 584.93532pt x 509.65407pt>
+File: pictures/table2.png Graphic file (type png)
+<use pictures/table2.png>
+Package pdftex.def Info: pictures/table2.png  used on input line 586.
+(pdftex.def)             Requested size: 384.01459pt x 384.12933pt.
+ [43 <./pictures/table2.png>]
+<pictures/table3.png, id=340, 586.44093pt x 508.14844pt>
+File: pictures/table3.png Graphic file (type png)
+<use pictures/table3.png>
+Package pdftex.def Info: pictures/table3.png  used on input line 595.
+(pdftex.def)             Requested size: 384.00081pt x 384.12657pt.
+<pictures/fig11.png, id=341, 752.8125pt x 602.25pt>
+File: pictures/fig11.png Graphic file (type png)
+<use pictures/fig11.png>
+Package pdftex.def Info: pictures/fig11.png  used on input line 608.
+(pdftex.def)             Requested size: 384.0097pt x 355.67361pt.
+
+Underfull \vbox (badness 1365) has occurred while \output is active []
+
+ [44 <./pictures/table3.png>] [45 <./pictures/fig11.png>]
+<pictures/fig12.png, id=355, 752.8125pt x 602.25pt>
+File: pictures/fig12.png Graphic file (type png)
+<use pictures/fig12.png>
+Package pdftex.def Info: pictures/fig12.png  used on input line 617.
+(pdftex.def)             Requested size: 384.0097pt x 355.67361pt.
+ [46 <./pictures/fig12.png>]
+<pictures/table4.png, id=362, 513.41812pt x 551.05875pt>
+File: pictures/table4.png Graphic file (type png)
+<use pictures/table4.png>
+Package pdftex.def Info: pictures/table4.png  used on input line 628.
+(pdftex.def)             Requested size: 384.00502pt x 384.12405pt.
+
+[47 <./pictures/table4.png>]
+<pictures/table5.png, id=369, 513.41812pt x 548.0475pt>
+File: pictures/table5.png Graphic file (type png)
+<use pictures/table5.png>
+Package pdftex.def Info: pictures/table5.png  used on input line 636.
+(pdftex.def)             Requested size: 384.00502pt x 384.11566pt.
+ [48 <./pictures/table5.png>]
+<pictures/table6.png, id=376, 528.47438pt x 549.55313pt>
+File: pictures/table6.png Graphic file (type png)
+<use pictures/table6.png>
+Package pdftex.def Info: pictures/table6.png  used on input line 645.
+(pdftex.def)             Requested size: 384.00098pt x 384.12274pt.
+ [49 <./pictures/table6.png>]
+<pictures/table7.png, id=384, 526.96875pt x 550.30594pt>
+File: pictures/table7.png Graphic file (type png)
+<use pictures/table7.png>
+Package pdftex.def Info: pictures/table7.png  used on input line 652.
+(pdftex.def)             Requested size: 384.01659pt x 384.12833pt.
+ [50 <./pictures/table7.png>] [51]
+<pictures/fig13.png, id=402, 529.22719pt x 658.71094pt>
+File: pictures/fig13.png Graphic file (type png)
+<use pictures/fig13.png>
+Package pdftex.def Info: pictures/fig13.png  used on input line 677.
+(pdftex.def)             Requested size: 383.99886pt x 412.57782pt.
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [52 <./pictures/fig13.png>]
+<pictures/fig14.png, id=409, 517.935pt x 651.18282pt>
+File: pictures/fig14.png Graphic file (type png)
+<use pictures/fig14.png>
+Package pdftex.def Info: pictures/fig14.png  used on input line 707.
+(pdftex.def)             Requested size: 384.01668pt x 355.6676pt.
+
+Underfull \vbox (badness 3439) has occurred while \output is active []
+
+ [53 <./pictures/fig14.png>]
+<pictures/table8.png, id=417, 521.69907pt x 502.87875pt>
+File: pictures/table8.png Graphic file (type png)
+<use pictures/table8.png>
+Package pdftex.def Info: pictures/table8.png  used on input line 743.
+(pdftex.def)             Requested size: 384.00542pt x 384.11014pt.
+
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+[54] [55 <./pictures/table8.png>]
+<pictures/table9.png, id=431, 524.71031pt x 507.39563pt>
+File: pictures/table9.png Graphic file (type png)
+<use pictures/table9.png>
+Package pdftex.def Info: pictures/table9.png  used on input line 752.
+(pdftex.def)             Requested size: 384.01212pt x 384.1227pt.
+ [56
+
+ <./pictures/table9.png>]
+<pictures/fig15.png, id=439, 815.29594pt x 527.72156pt>
+File: pictures/fig15.png Graphic file (type png)
+<use pictures/fig15.png>
+Package pdftex.def Info: pictures/fig15.png  used on input line 766.
+(pdftex.def)             Requested size: 307.2032pt x 213.39592pt.
+<pictures/fig16.png, id=440, 815.29594pt x 527.72156pt>
+File: pictures/fig16.png Graphic file (type png)
+<use pictures/fig16.png>
+Package pdftex.def Info: pictures/fig16.png  used on input line 772.
+(pdftex.def)             Requested size: 307.2032pt x 213.39592pt.
+
+Underfull \vbox (badness 7759) has occurred while \output is active []
+
+ [57 <./pictures/fig15.png> <./pictures/fig16.png>]
+<pictures/table10.png, id=449, 319.1925pt x 189.70876pt>
+File: pictures/table10.png Graphic file (type png)
+<use pictures/table10.png>
+Package pdftex.def Info: pictures/table10.png  used on input line 781.
+(pdftex.def)             Requested size: 384.00317pt x 241.85374pt.
+<pictures/table11.png, id=450, 408.77719pt x 698.61pt>
+File: pictures/table11.png Graphic file (type png)
+<use pictures/table11.png>
+Package pdftex.def Info: pictures/table11.png  used on input line 806.
+(pdftex.def)             Requested size: 384.01982pt x 526.40799pt.
+
+Underfull \vbox (badness 2269) has occurred while \output is active []
+
+ [58 <./pictures/table10.png>]
+<pictures/table12.png, id=457, 413.29407pt x 697.10437pt>
+File: pictures/table12.png Graphic file (type png)
+<use pictures/table12.png>
+Package pdftex.def Info: pictures/table12.png  used on input line 813.
+(pdftex.def)             Requested size: 384.00635pt x 526.401pt.
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [59 <./pictures/table11.png>]
+Underfull \hbox (badness 5954) in paragraph at lines 818--819
+[]\T1/ppl/m/n/10 However, for the 20news-groups, arxiv_protoformer, bbc-news, i
+mdb, and
+ []
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [60 <./pictures/table12.png>]
+<pictures/table13.png, id=470, 679.03688pt x 162.6075pt>
+File: pictures/table13.png Graphic file (type png)
+<use pictures/table13.png>
+Package pdftex.def Info: pictures/table13.png  used on input line 822.
+(pdftex.def)             Requested size: 383.99847pt x 99.58742pt.
+<pictures/table14.png, id=471, 678.28406pt x 161.10187pt>
+File: pictures/table14.png Graphic file (type png)
+<use pictures/table14.png>
+Package pdftex.def Info: pictures/table14.png  used on input line 830.
+(pdftex.def)             Requested size: 383.99709pt x 99.58713pt.
+ [61 <./pictures/table13.png> <./pictures/table14.png>]
+<pictures/fig17.png, id=481, 2378.8875pt x 1243.64626pt>
+File: pictures/fig17.png Graphic file (type png)
+<use pictures/fig17.png>
+Package pdftex.def Info: pictures/fig17.png  used on input line 841.
+(pdftex.def)             Requested size: 383.96927pt x 184.92589pt.
+File: pictures/fig17.png Graphic file (type png)
+<use pictures/fig17.png>
+Package pdftex.def Info: pictures/fig17.png  used on input line 848.
+(pdftex.def)             Requested size: 383.96927pt x 184.92589pt.
+
+[62 <./pictures/fig17.png
+
+pdfTeX warning: /Library/TeX/texbin/pdflatex (file ./pictures/fig17.png): large
+ interlaced PNG might cause out of memory (use non-interlaced PNG to fix this)
+>] [63] [64]
+
+Package natbib Warning: Citation `tifrea' on page 65 undefined on input line 87
+5.
+
+
+Package natbib Warning: Citation `leimeister2019skip' on page 65 undefined on i
+nput line 875.
+
+
+Package natbib Warning: Citation `valentino' on page 65 undefined on input line
+ 875.
+
+
+Package natbib Warning: Citation `lee' on page 65 undefined on input line 879.
+
+
+Package natbib Warning: Citation `articleding' on page 65 undefined on input li
+ne 879.
+
+
+Package natbib Warning: Citation `liang2022research' on page 65 undefined on in
+put line 881.
+
+
+Package natbib Warning: Citation `zhao2022research' on page 65 undefined on inp
+ut line 881.
+
+
+Package natbib Warning: Citation `kamyab2021attention' on page 65 undefined on 
+input line 881.
+
+[65] [66]
+No file "Layer Cake 04262025".bbl.
+
+Package natbib Warning: There were undefined citations.
+
+(./Layer Cake 04262025.aux)
+ ***********
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-02-20>
+ ***********
+
+
+LaTeX Font Warning: Some font shapes were not available, defaults substituted.
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+
+Package rerunfilecheck Warning: File `"Layer Cake 04262025".out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+Package rerunfilecheck Info: Checksums for `"Layer Cake 04262025".out':
+(rerunfilecheck)             Before: <no file>
+(rerunfilecheck)             After:  AFE2EBAEEEE5202632CCCF9A041FCA3E;3863.
+ ) 
+Here is how much of TeX's memory you used:
+ 12357 strings out of 474116
+ 184516 string characters out of 5743682
+ 1942187 words of memory out of 5000000
+ 34353 multiletter control sequences out of 15000+600000
+ 592338 words of font info for 110 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 90i,11n,93p,3256b,433s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx7.pfb>
+</usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><
+/usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></
+usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></us
+r/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/
+local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></usr/lo
+cal/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmib10.pfb></usr/lo
+cal/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/loca
+l/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/local/t
+exlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/texl
+ive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texli
+ve/2024/texmf-dist/fonts/type1/public/amsfonts/latxfont/lcircle1.pfb></usr/loca
+l/texlive/2024/texmf-dist/fonts/type1/urw/courier/ucrr8a.pfb></usr/local/texliv
+e/2024/texmf-dist/fonts/type1/urw/palatino/uplb8a.pfb></usr/local/texlive/2024/
+texmf-dist/fonts/type1/urw/palatino/uplr8a.pfb></usr/local/texlive/2024/texmf-d
+ist/fonts/type1/urw/palatino/uplri8a.pfb>
+Output written on "Layer Cake 04262025.pdf" (66 pages, 4102924 bytes).
+PDF statistics:
+ 624 PDF objects out of 1000 (max. 8388607)
+ 462 compressed objects within 5 object streams
+ 185 named destinations out of 1000 (max. 500000)
+ 151 words of extra memory for PDF output out of 10000 (max. 10000000)
+

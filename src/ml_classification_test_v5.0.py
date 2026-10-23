@@ -9,6 +9,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 # custom imports
 from embedding.supervised import get_supervised_embeddings, compute_tces
+from embedding.supervised import get_hyperbolic_doc_embeddings
 
 from util.common import *
 
@@ -33,9 +34,11 @@ warnings.filterwarnings('ignore')
 
 def gen_xdata(Xtr_raw, 
               Xtr_vectorized, 
+              X_hyper_train,
               y_train, 
               Xte_raw,
               Xte_vectorized, 
+              X_hyper_test,
               y_test, 
               vec_vocab_size,
               dataset=None,
@@ -62,10 +65,14 @@ def gen_xdata(Xtr_raw,
         The vectorized TF-IDF representation of the training set.
     y_train : numpy.ndarray
         The target labels for the training set.
+    X_hyper_train : numpy.ndarray
+        The hyperbolic embeddings for the training set.
     Xte_raw : numpy.ndarray
         The raw text data for the test set.
     Xte_vectorized : scipy.sparse matrix
         The vectorized TF-IDF representation of the test set.
+    X_hyper_test : numpy.ndarray
+        The hyperbolic embeddings for the test set.
     y_test : numpy.ndarray
         The target labels for the test set.
     vec_vocab_size : int
@@ -145,35 +152,14 @@ def gen_xdata(Xtr_raw,
         
         if (pretrained in WORD_BASED_MODELS):
             print("\n\tcomputing WCEs...")
+
             Xtr_ces = get_supervised_embeddings(Xtr_vectorized, y_train)
-            Xte_ces = get_supervised_embeddings(Xte_vectorized, y_test)
-            
+            Xte_ces = get_supervised_embeddings(Xte_vectorized, y_test)            
+            print("Xtr_ces:", type(Xtr_ces), Xtr_ces.shape)
+            print("Xte_ces:", type(Xte_ces), Xte_ces.shape)
+
         elif (pretrained in TOKEN_BASED_MODELS):
             print("\n\tcomputing TCEs...")
-        
-            """"
-            if (dataset in LCDataset.single_label_datasets):
-                print("single label, converting target labels to to one-hot for tce computation...")
-                
-                # Assuming labels are a numpy array of shape (num_samples,)
-                def to_one_hot(labels):
-                    encoder = OneHotEncoder(categories='auto', sparse_output=True, dtype=np.float32)
-                    labels = labels.reshape(-1, 1)
-                    one_hot = encoder.fit_transform(labels)  # Result is a sparse matrix
-                    return one_hot
-
-                one_hot_labels_train = to_one_hot(y_train.toarray())
-                one_hot_labels_test = to_one_hot(y_test.toarray())
-
-            else:
-                one_hot_labels_train = y_train
-                one_hot_labels_test = y_test
-
-            # Ensure one_hot_labels_train is a csr_matrix
-            if not isinstance(one_hot_labels_train, csr_matrix):
-                print("Converting one_hot_labels_train to csr_matrix...")
-                one_hot_labels_train = csr_matrix(one_hot_labels_train)
-            """
             
             print("computing TCE training data...")
             Xtr_ces = compute_tces(
@@ -296,6 +282,44 @@ def gen_xdata(Xtr_raw,
         print("after stacking CEs with embedding dataset representation...")
         print("X_train:", type(X_train), X_train.shape)
         print("X_test:", type(X_test), X_test.shape)
+
+    # here we use the pretrained embeddings representation of the doc
+    # with the hyperbolic embedding representation, concatenated (without the tfidf vectors)    
+    elif mix == 'solo-hyper':
+
+        print("using the embedding dataset represntation with WCEs (solo-wce)...")
+
+        #
+        # Here we initialize the training and test data sets with the
+        # appropriate dataset embedding representation 
+        #
+        if (dataset_embedding_type == 'weighted'):
+            X_train = weighted_embeddings_train
+            X_test = weighted_embeddings_test                
+        elif (dataset_embedding_type == 'avg'):
+            X_train = avg_embeddings_train
+            X_test = avg_embeddings_test
+        elif (dataset_embedding_type == 'summary'):
+
+            # NB that summary type embeddings (i.e. CLS token) only supported with BERT embeddings
+            # but we expect them in the pickle file so we swapped them for avg_embeddings when 
+            # we compute them in LCDataset class 
+            X_train = summary_embeddings_train
+            X_test = summary_embeddings_test
+        else:
+            print(f"Unsupported dataset_embedding_type '{dataset_embedding_type}'")
+            return None   
+
+        # Now we stack the hyperbolic embedding representation with the pretrained embedding 
+        # representation from the LCRepresentationModel.encode_docs() method, ie the embedding 
+        # representation of the document dataset
+        X_train = np.hstack([X_train, X_hyper_train])
+        X_test = np.hstack([X_test, X_hyper_test])
+
+        print("after stacking hyperbolic embeddings with pretrained embedding dataset representation...")
+        print("X_train:", type(X_train), X_train.shape)
+        print("X_test:", type(X_test), X_test.shape)
+
 
     # here we are concatenating the vectorized representation of the dataset 
     # along with the embedding representation of the dataset
@@ -613,24 +637,6 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
     print("Xtr_summary_embeddings:", type(Xtr_summary_embeddings), Xtr_summary_embeddings.shape)
     print("Xte_summary_embeddings:", type(Xte_summary_embeddings), Xte_summary_embeddings.shape)
 
-    """
-    if class_type in ['multilabel', 'multi-label']:
-
-        print("multi-label case, expanding (todense) y...")
-
-        if isinstance(y_train_sparse, (csr_matrix, csc_matrix)):
-            y_train = y_train_sparse.toarray()                      # Convert sparse matrix to dense array for multi-label tasks
-        if isinstance(y_test_sparse, (csr_matrix, csc_matrix)):
-            y_test = y_test_sparse.toarray()                        # Convert sparse matrix to dense array for multi-label tasks
-        
-        print("y_train after transformation:", type(y_train), y_train.shape)
-        print("y_test after transformation:", type(y_test), y_test.shape)
-        
-    else:
-        y_train = y_train_sparse
-        y_test = y_test_sparse
-    """
-
     y_train = y_train_sparse
     y_test = y_test_sparse
 
@@ -649,9 +655,11 @@ def run_model(dataset='20newsgroups', vtype='tfidf', embeddings=None, embedding_
         X_train, X_test = gen_xdata(
             Xtr_raw=Xtr_raw, 
             Xtr_vectorized=Xtr_vectorized, 
+            X_hyper_train=Xtr_hyper_embeddings,
             y_train=y_train, 
             Xte_raw=Xte_raw,
             Xte_vectorized=Xte_vectorized, 
+            X_hyper_test=Xte_hyper_embeddings,
             y_test=y_test, 
             vec_vocab_size=vec_vocab_size,
             dataset=dataset,
