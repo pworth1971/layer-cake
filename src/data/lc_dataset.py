@@ -2140,9 +2140,6 @@ def loadpt_data(dataset, vtype='tfidf', pretrained=None, embedding_path=VECTOR_C
 
 
 
-
-
-
 def load_fasttext_format(path):
     print(f'loading {path}')
     labels,docs=[],[]

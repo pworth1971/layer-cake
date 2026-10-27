@@ -72,7 +72,6 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
         raise ValueError("[ERROR] y is not a csr_matrix.")
         return None
 
-
     nC = y.shape[1]
  
     if (debug):
@@ -161,7 +160,6 @@ def get_supervised_embeddings(X, y, max_label_space=300, binary_structural_probl
     return F
 
 
-
 def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt, asarray=False, debug=False):
     """
     Computes TCEs - supervised embeddings at the tokenized level for the text, and labels/classes, in the underlying dataset.
@@ -212,8 +210,6 @@ def compute_tces(vocabsize, vectorized_training_data, training_label_matrix, opt
     return tce_matrix
 
 
-
-
 def supervised_embeddings_tfidf(X, Y, debug=False):
     """
     Computes term frequency-inverse document frequency (TF-IDF) like features but supervised with label 
@@ -258,8 +254,8 @@ def supervised_embeddings_tfidf(X, Y, debug=False):
         """
         
     # Compute tf-idf normalization
-    tfidf_norm = X.sum(axis=0)  # Sum of term frequencies
-    epsilon = 1e-6  # Small constant to prevent division by zero
+    tfidf_norm = X.sum(axis=0)                  # Sum of term frequencies
+    epsilon = 1e-6                              # Small constant to prevent division by zero
     tfidf_norm = tfidf_norm + epsilon
 
     if debug:

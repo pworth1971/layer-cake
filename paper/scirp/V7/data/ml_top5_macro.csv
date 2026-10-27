@@ -1,0 +1,41 @@
+classifier,dataset,measure,dims,representation,value,time_s,rank
+svm,20newsgroups,macro,"(11314, 22920)",count+llama(avg),0.705,64.75,1
+lr,20newsgroups,macro,"(11314, 24988)",tfidf+tfidf.(llama+wce(tfidf))+tfidf.(llama+wce(tfidf)),0.703,314.08,2
+lr,20newsgroups,macro,"(11314, 4116)",llama(avg)+tfidf.(llama+wce(tfidf)),0.701,36.34,3
+lr,20newsgroups,macro,"(11314, 22920)",count+llama(avg),0.7,787.88,4
+svm,20newsgroups,macro,"(11314, 4116)",llama(avg)+tfidf.(llama+wce(tfidf)),0.689,133.89,5
+lr,arxiv,macro,"(11962, 18997)",count+llama(avg),0.784,466.42,1
+svm,arxiv,macro,"(11962, 18997)",count+llama(avg),0.776,59.19,2
+lr,arxiv,macro,"(11962, 18948)",tfidf+llama(avg),0.769,151.81,3
+lr,arxiv,macro,"(11962, 2048)",llama(avg),0.769,22.03,4
+svm,arxiv,macro,"(11962, 18948)",tfidf+llama(avg),0.765,23.97,5
+lr,arxiv_protoformer,macro,"(82500, 34540)",tfidf+llama(avg),0.857,2569.18,1
+lr,arxiv_protoformer,macro,"(82500, 2048)",llama(avg),0.856,184.94,2
+lr,arxiv_protoformer,macro,"(82500, 1536)",deepseek(avg),0.855,154.6,3
+svm,arxiv_protoformer,macro,"(82500, 1536)",deepseek(avg),0.85,238.68,4
+svm,arxiv_protoformer,macro,"(82500, 32930)",tfidf+deepseek(avg),0.85,1571.72,5
+lr,bbc-news,macro,"(1229, 1541)",xlnet(avg)+tfidf.(xlnet+wce(tfidf)),0.989,2.34,1
+lr,bbc-news,macro,"(1229, 8969)",tfidf+tfidf.(xlnet+wce(tfidf))+tfidf.(xlnet+wce(tfidf)),0.989,3.47,2
+lr,bbc-news,macro,"(1229, 1541)",roberta(avg)+tfidf.(roberta+wce(tfidf)),0.989,1.86,3
+lr,bbc-news,macro,"(1229, 8537)",tfidf+tfidf.(roberta+wce(tfidf))+tfidf.(roberta+wce(tfidf)),0.989,1.72,4
+svm,bbc-news,macro,"(1229, 768)",gpt2(avg),0.988,1.72,5
+lr,imdb,macro,"(25000, 30664)",tfidf+roberta(avg),0.925,198.31,1
+lr,imdb,macro,"(25000, 2048)",llama(avg),0.923,27.83,2
+svm,imdb,macro,"(25000, 768)",roberta(avg),0.922,9.38,3
+lr,imdb,macro,"(25000, 32714)",tfidf+llama(avg),0.921,489.62,4
+lr,imdb,macro,"(25000, 768)",roberta(avg),0.921,7.65,5
+svm,ohsumed,macro,"(24061, 18940)",tfidf fasttext,0.691,13.22,1
+svm,ohsumed,macro,"(24061, 18940)",tfidf glove,0.691,13.44,2
+svm,ohsumed,macro,"(24061, 18940)",tfidf word2vec,0.691,14.11,3
+svm,ohsumed,macro,"(24061, 19240)",tfidf+fasttext(avg),0.69,20.48,4
+svm,ohsumed,macro,"(24061, 19240)",tfidf+word2vec(avg),0.687,17.97,5
+lr,rcv1,macro,"(23149, 30931)",count+llama(avg),0.648,11126.84,1
+lr,rcv1,macro,"(23149, 30931)",tfidf+llama(avg),0.635,8408.93,2
+lr,rcv1,macro,"(23149, 2048)",llama(avg),0.633,889.43,3
+svm,rcv1,macro,"(23149, 28679)",tfidf+roberta(avg),0.629,5519.3,4
+svm,rcv1,macro,"(23149, 2048)",llama(avg),0.624,1749.58,5
+svm,reuters21578,macro,"(9603, 9556)",tfidf+glove(avg),0.606,19.01,1
+svm,reuters21578,macro,"(9603, 9556)",tfidf+fasttext(avg),0.606,16.72,2
+lr,reuters21578,macro,"(9603, 9256)",tfidf fasttext,0.6,19.53,3
+lr,reuters21578,macro,"(9603, 9256)",tfidf glove,0.6,20.87,4
+lr,reuters21578,macro,"(9603, 9256)",tfidf word2vec,0.6,22.29,5

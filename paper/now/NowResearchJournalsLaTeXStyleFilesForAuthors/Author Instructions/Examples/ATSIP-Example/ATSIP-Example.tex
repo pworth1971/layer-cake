@@ -1,0 +1,69 @@
+% !Mode:: "TeX:DE:UTF-8:Main"
+%
+%
+%JOURNAL CODE SEE DOCUMENTATION
+
+\documentclass[sip,biber]{now-journal} % Replace example with the journal code.
+
+\usepackage[utf8]{inputenc}
+\usepackage{amssymb}
+\usepackage{float}
+
+% a few definitions that are *not* needed in general:
+\newcommand{\ie}{\emph{i.e.}}
+\newcommand{\eg}{\emph{e.g.}}
+\newcommand{\etc}{\emph{etc}}
+\newcommand{\now}{\textsc{now}}
+
+\raggedbottom
+
+\newcommand{\red}[1]{\textcolor{red}{#1}} % Used by typesetter to indicate changes
+
+%ARTICLE TITLE
+\title{Using the now publishers \LaTeX Class for ATSIPA Articles}
+
+%AUTHORS AND AFFILIATIONS
+\author[1*]{Gupta,Anahita}
+\author[1]{Casey,Mike}
+
+\affil[1]{now publishers, Inc.}
+
+%BIBLIOGRAPHY FILE
+\addbibresource{sample-now.bib}
+
+%ISSUE DATA
+\issuevolumeyear{2024}
+\issuevolumenumber{xx}
+\issueelocation{e} % This is only required for sip articles
+\articletype{Original/Overview Paper} % This is only required for sip articles
+
+\articledatabox{Received xx xxxxx 2024; Revised xx xxxxx 2024\\[2pt]
+ISSN 2048-7703; DOI 10.1561/116.xxxxxxxx\\
+\copyright\ 2024 A. Gupta and M. Casey}
+
+%OPEN ACCESS STATEMENT % This is only required for sip articles
+\OAstatement{This is an Open Access article, distributed under the terms of the Creative Commons Attribution licence (\url{http://creativecommons.org/licenses/by-nc/4.0/}), which permits unrestricted re-use, distribution, and reproduction in any medium, for non-commercial use, provided the original work is properly cited.}
+
+%KEYWORDS
+\keywords{Comma-separated keywords go here}
+
+%CORRESPONDING AUTHOR
+\creditline*{Corresponding author: anahita.gupta@nowpublishers.com.}
+
+\disclaimer{Your disclaimer goes here.}
+
+\begin{document}
+
+\begin{abstract}
+This document serves as an example for how an ATSIPA journal article should look using the \LaTeX\ class.
+\end{abstract}
+
+\section{First Section}
+\label{s-section1}
+
+Body of the article goes here. Citations can be added as using \texttt{\textbackslash cite\{\}} which produces: \cite{armonth}. Alternatively, in-text citations can be added using \texttt{\textbackslash citet\{\}} to produce: \citet{bvolume}.
+
+%BACKMATTER SEE DOCUMENTATION
+\printbibliography
+
+\end{document}

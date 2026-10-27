@@ -441,6 +441,7 @@ class HyperbolicLCRepresentationModel(LCRepresentationModel):
     def dim(self):
         return self.embedding_dim
 
+
     def extract(self, words):
         
         print("extracting words from Hyperbolic model...")
@@ -867,6 +868,7 @@ class Word2VecLCRepresentationModel(LCRepresentationModel):
 
     def dim(self):
         return self.model.vector_size
+
 
     def extract(self, words):
         
