@@ -1,0 +1,10 @@
+# LaTeX build products (rebuild with: latexmk -pdf lc_v7_10232026.tex)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+analysis/__pycache__/

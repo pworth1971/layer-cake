@@ -1,0 +1,17 @@
+dataset,class_type,family,classifier,lm,form,config,representation,dims,vocab,tce,wce,tunable,measure,value,time_s,time_logged,time_precise,os,cpus,gpu_name,n_gpus
+arxiv,multi-label,transformer,hf.sc,bert,solo,,hf.sc-bert.tunable,"(30522,768)",30522,False,False,True,macro,0.0,675.3194382190704,675,True,Linux,"physical:32,logical:64",NVIDIA A100-PCIE-40GB,4.0
+arxiv,multi-label,transformer,hf.sc,bert,solo,,hf.sc-bert.tunable,"(30522,768)",30522,False,False,True,micro,0.0,675.3194382190704,675,True,Linux,"physical:32,logical:64",NVIDIA A100-PCIE-40GB,4.0
+arxiv,multi-label,transformer,hf.sc,distilbert,solo,,hf.sc-distilbert.tunable-tce.tunable[cat]-d0.5-dotn.zscore,"(30522,768):torch.Size([30522, 58])",30522,True,False,True,macro,0.0,603.8074026107788,604,True,Linux,"physical:32,logical:64",NVIDIA A100-PCIE-40GB,4.0
+arxiv,multi-label,transformer,hf.sc,distilbert,solo,,hf.sc-distilbert.tunable,"(30522,768)",30522,False,False,True,macro,0.0,601.0,601,False,,,,
+arxiv,multi-label,transformer,hf.sc,distilbert,solo,,hf.sc-distilbert.tunable,"(30522,768)",30522,False,False,True,micro,0.0,601.0,601,False,,,,
+arxiv,multi-label,transformer,hf.sc,distilbert,solo,,hf.sc-distilbert.tunable-tce.tunable[cat]-d0.5-dotn.zscore,"(30522,768):torch.Size([30522, 58])",30522,True,False,True,micro,0.0,603.8074026107788,604,True,Linux,"physical:32,logical:64",NVIDIA A100-PCIE-40GB,4.0
+arxiv,multi-label,static,lstm,fasttext,solo,,lstm-dropnone0.5-h64-fasttext.static,"(44760, 300)",44760,False,False,False,macro,0.0,13.0,13,False,,,,
+arxiv,multi-label,static,lstm,fasttext,solo,,lstm-dropnone0.5-h64-fasttext.tunable,"(44760, 300)",44760,False,False,True,macro,0.348,130.0,130,False,,,,
+arxiv,multi-label,static,lstm,fasttext,solo,,lstm-dropnone0.5-h64-fasttext.static,"(44760, 300)",44760,False,False,False,micro,0.0,13.0,13,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h512-word2vec.tunable,"(38145, 300)",38145,False,False,True,macro,0.311,312.0,312,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h64-word2vec.static,"(38145, 300)",38145,False,False,False,macro,0.0,13.0,13,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h64-word2vec.tunable,"(38145, 300)",38145,False,False,True,macro,0.207,129.0,129,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h64-word2vec.tunable,"(38145, 300)",38145,False,False,True,micro,0.215,129.0,129,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h64-word2vec.static,"(38145, 300)",38145,False,False,False,micro,0.0,13.0,13,False,,,,
+arxiv,multi-label,static,lstm,word2vec,solo,,lstm-dropnone0.5-h512-word2vec.tunable,"(38145, 300)",38145,False,False,True,micro,0.319,312.0,312,False,,,,
+imdb,single-label,transformer,hf.cnn,llama,solo,,hf.cnn-ch64-llama.tunable,"(128256,2048)",128256,False,False,True,macro,0.333,8977.667333364487,8978,True,Linux,"physical:64,logical:128",NVIDIA RTX 6000 Ada Generation,4.0

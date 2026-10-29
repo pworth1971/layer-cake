@@ -1,0 +1,602 @@
+{
+  "verification": {
+    "macro": {
+      "checks": 392,
+      "mismatches": 0
+    },
+    "micro": {
+      "checks": 392,
+      "mismatches": 0
+    }
+  },
+  "friedman": {
+    "macro": {
+      "chi2": 29.475336322869953,
+      "p": 0.00011847563471584728,
+      "k": 8,
+      "n": 8,
+      "cd": 3.712201705187906
+    },
+    "micro": {
+      "chi2": 31.821052631578926,
+      "p": 4.383844308817894e-05,
+      "k": 8,
+      "n": 8,
+      "cd": 3.712201705187906
+    }
+  },
+  "cost_ratios": {
+    "macro": {
+      "wall_T_over_ML": 61.95268738309279,
+      "wall_T_over_S": 61.40011340618212,
+      "device_T_over_S": 245.60045362472854,
+      "range_wall_T_over_ML": [
+        2.782657169607168,
+        2133.3469996936105
+      ],
+      "range_wall_T_over_S": [
+        18.90220504977296,
+        145.58440570488003
+      ],
+      "range_device_T_over_S": [
+        75.60882019909184,
+        582.3376228195201
+      ]
+    },
+    "micro": {
+      "wall_T_over_ML": 54.04032445689956,
+      "wall_T_over_S": 53.327136875289646,
+      "device_T_over_S": 213.30854750115864,
+      "range_wall_T_over_ML": [
+        5.9721997730880805,
+        2133.3469996936105
+      ],
+      "range_wall_T_over_S": [
+        16.968895942247755,
+        145.58440570488003
+      ],
+      "range_device_T_over_S": [
+        67.87558376899102,
+        582.3376228195201
+      ]
+    }
+  },
+  "typical_gaps": {
+    "macro": {
+      "T_minus_S_pts": 6.537499999999998,
+      "T_minus_ML_pts": 7.768749999999998,
+      "ML_minus_S_pts": -1.2312500000000004
+    },
+    "micro": {
+      "T_minus_S_pts": 4.818749999999998,
+      "T_minus_ML_pts": 6.468750000000001,
+      "ML_minus_S_pts": -1.6500000000000028
+    }
+  },
+  "by_task_type": {
+    "macro": {
+      "single_mean": 0.874999999999998,
+      "multi_mean": 5.574999999999999,
+      "single_range": [
+        0.10000000000000009,
+        2.299999999999991
+      ],
+      "multi_range": [
+        3.699999999999992,
+        6.999999999999995
+      ],
+      "p": 0.02857142857142857
+    },
+    "micro": {
+      "single_mean": 0.7999999999999979,
+      "multi_mean": 4.275,
+      "single_range": [
+        -0.20000000000000018,
+        2.299999999999991
+      ],
+      "multi_range": [
+        2.100000000000002,
+        6.400000000000006
+      ],
+      "p": 0.05714285714285714
+    }
+  },
+  "class_embeddings": {
+    "macro|WCE, static NN": {
+      "n": 129,
+      "mean": 2.2620155038759697,
+      "median": 0.8000000000000007,
+      "up": 80,
+      "down": 45,
+      "ties": 4,
+      "corpora": 8,
+      "corpora_up": 5,
+      "corpora_down": 3,
+      "p": 0.3125,
+      "p_corpus_median": 0.15625,
+      "p_pairs": 1.4549601824158684e-06,
+      "corpus_means": {
+        "20newsgroups": 2.37,
+        "arxiv": 8.56,
+        "arxiv_protoformer": -0.64,
+        "bbc-news": 0.11,
+        "imdb": -0.13,
+        "ohsumed": 1.44,
+        "rcv1": -1.5,
+        "reuters21578": 4.8
+      },
+      "time_ratio_median": 1.0216808517773945
+    },
+    "macro|TCE, transformer": {
+      "n": 79,
+      "mean": 0.8632911392405069,
+      "median": 0.0,
+      "up": 39,
+      "down": 35,
+      "ties": 5,
+      "corpora": 8,
+      "corpora_up": 5,
+      "corpora_down": 3,
+      "p": 0.546875,
+      "p_corpus_median": 0.578125,
+      "p_pairs": 0.6642809228740433,
+      "corpus_means": {
+        "20newsgroups": -0.01,
+        "arxiv": 6.35,
+        "arxiv_protoformer": 0.12,
+        "bbc-news": -0.28,
+        "imdb": 0.01,
+        "ohsumed": 0.57,
+        "rcv1": -1.07,
+        "reuters21578": 0.68
+      },
+      "time_ratio_median": 1.0145097609552702
+    },
+    "macro|WCE, classical ML": {
+      "n": 623,
+      "mean": 4.242375601926164,
+      "median": 1.4000000000000012,
+      "up": 392,
+      "down": 217,
+      "ties": 14,
+      "corpora": 8,
+      "corpora_up": 6,
+      "corpora_down": 2,
+      "p": 0.0390625,
+      "p_corpus_median": 0.1484375,
+      "p_pairs": 3.1237134566379447e-21,
+      "corpus_means": {
+        "20newsgroups": 6.57,
+        "arxiv": 9.51,
+        "arxiv_protoformer": 3.22,
+        "bbc-news": 1.96,
+        "imdb": -0.78,
+        "ohsumed": 10.24,
+        "rcv1": -1.09,
+        "reuters21578": 3.9
+      },
+      "time_ratio_median": 1.8609195152918498
+    },
+    "macro|TCE, transformer, no collapsed runs": {
+      "n": 77,
+      "mean": 0.0012987012987014613,
+      "median": 0.0,
+      "up": 38,
+      "down": 35,
+      "ties": 4,
+      "corpora": 8,
+      "corpora_up": 4,
+      "corpora_down": 4,
+      "p": 0.84375,
+      "p_corpus_median": 0.578125,
+      "p_pairs": 0.5179640585952281,
+      "corpus_means": {
+        "20newsgroups": -0.01,
+        "arxiv": -0.57,
+        "arxiv_protoformer": 0.12,
+        "bbc-news": -0.28,
+        "imdb": 0.01,
+        "ohsumed": 0.57,
+        "rcv1": -1.07,
+        "reuters21578": 0.68
+      },
+      "time_ratio_median": 1.0145097609552702
+    },
+    "macro|WCE static by dataset": {
+      "20newsgroups": 2.37,
+      "arxiv": 8.56,
+      "arxiv_protoformer": -0.64,
+      "bbc-news": 0.11,
+      "imdb": -0.13,
+      "ohsumed": 1.44,
+      "rcv1": -1.5,
+      "reuters21578": 4.8
+    },
+    "macro|WCE ML by base": {
+      "solo": {
+        "n": 158,
+        "mean": 5.938607594936709,
+        "median": 3.499999999999992,
+        "up": 118,
+        "down": 37,
+        "ties": 3,
+        "corpora": 8,
+        "corpora_up": 6,
+        "corpora_down": 2,
+        "p": 0.0546875,
+        "p_corpus_median": 0.0390625,
+        "p_pairs": 1.0489944940358324e-13,
+        "corpus_means": {
+          "20newsgroups": 4.83,
+          "arxiv": 14.42,
+          "arxiv_protoformer": 3.62,
+          "bbc-news": 0.67,
+          "imdb": -1.86,
+          "ohsumed": 14.84,
+          "rcv1": -0.2,
+          "reuters21578": 10.58
+        },
+        "time_ratio_median": 2.6219057634764504
+      },
+      "cat-doc": {
+        "n": 149,
+        "mean": -2.606711409395974,
+        "median": -2.100000000000002,
+        "up": 41,
+        "down": 102,
+        "ties": 6,
+        "corpora": 8,
+        "corpora_up": 1,
+        "corpora_down": 7,
+        "p": 0.015625,
+        "p_corpus_median": 0.015625,
+        "p_pairs": 1.1338342341884424e-12,
+        "corpus_means": {
+          "20newsgroups": -0.51,
+          "arxiv": -2.92,
+          "arxiv_protoformer": -0.44,
+          "bbc-news": 0.01,
+          "imdb": -3.26,
+          "ohsumed": -1.36,
+          "rcv1": -10.13,
+          "reuters21578": -2.42
+        },
+        "time_ratio_median": 2.116757847652198
+      },
+      "lsa": {
+        "n": 158,
+        "mean": 1.078481012658228,
+        "median": 0.10000000000000009,
+        "up": 80,
+        "down": 75,
+        "ties": 3,
+        "corpora": 8,
+        "corpora_up": 5,
+        "corpora_down": 3,
+        "p": 0.4609375,
+        "p_corpus_median": 0.546875,
+        "p_pairs": 0.20845508893891362,
+        "corpus_means": {
+          "20newsgroups": 1.86,
+          "arxiv": 4.48,
+          "arxiv_protoformer": 0.8,
+          "bbc-news": -0.48,
+          "imdb": -2.92,
+          "ohsumed": 6.26,
+          "rcv1": -2.32,
+          "reuters21578": 0.62
+        },
+        "time_ratio_median": 2.5738068465333397
+      },
+      "dot": {
+        "n": 158,
+        "mean": 12.168987341772151,
+        "median": 10.850000000000001,
+        "up": 153,
+        "down": 3,
+        "ties": 2,
+        "corpora": 8,
+        "corpora_up": 8,
+        "corpora_down": 0,
+        "p": 0.0078125,
+        "p_corpus_median": 0.0078125,
+        "p_pairs": 5.706085165500257e-27,
+        "corpus_means": {
+          "20newsgroups": 19.4,
+          "arxiv": 20.8,
+          "arxiv_protoformer": 8.7,
+          "bbc-news": 7.42,
+          "imdb": 4.92,
+          "ohsumed": 21.2,
+          "rcv1": 8.31,
+          "reuters21578": 6.2
+        },
+        "time_ratio_median": 1.0147649197090622
+      }
+    },
+    "micro|WCE, static NN": {
+      "n": 129,
+      "mean": 1.5651162790697675,
+      "median": 0.40000000000000036,
+      "up": 72,
+      "down": 51,
+      "ties": 6,
+      "corpora": 8,
+      "corpora_up": 4,
+      "corpora_down": 4,
+      "p": 0.546875,
+      "p_corpus_median": 0.3125,
+      "p_pairs": 0.004356107017766733,
+      "corpus_means": {
+        "20newsgroups": 2.23,
+        "arxiv": 8.28,
+        "arxiv_protoformer": -0.54,
+        "bbc-news": -0.03,
+        "imdb": -0.12,
+        "ohsumed": 0.62,
+        "rcv1": -3.28,
+        "reuters21578": 1.47
+      },
+      "time_ratio_median": 1.0216808517773945
+    },
+    "micro|TCE, transformer": {
+      "n": 79,
+      "mean": 0.8632911392405066,
+      "median": 0.0,
+      "up": 39,
+      "down": 31,
+      "ties": 9,
+      "corpora": 8,
+      "corpora_up": 5,
+      "corpora_down": 3,
+      "p": 0.3828125,
+      "p_corpus_median": 0.9453125,
+      "p_pairs": 0.8765479600921275,
+      "corpus_means": {
+        "20newsgroups": -0.11,
+        "arxiv": 6.59,
+        "arxiv_protoformer": 0.17,
+        "bbc-news": -0.24,
+        "imdb": 0.01,
+        "ohsumed": 0.24,
+        "rcv1": -0.17,
+        "reuters21578": 0.28
+      },
+      "time_ratio_median": 1.0145097609552702
+    },
+    "micro|WCE, classical ML": {
+      "n": 623,
+      "mean": 5.034670947030498,
+      "median": 1.9999999999999907,
+      "up": 408,
+      "down": 194,
+      "ties": 21,
+      "corpora": 8,
+      "corpora_up": 7,
+      "corpora_down": 1,
+      "p": 0.015625,
+      "p_corpus_median": 0.0546875,
+      "p_pairs": 2.6859125598052385e-32,
+      "corpus_means": {
+        "20newsgroups": 6.79,
+        "arxiv": 11.25,
+        "arxiv_protoformer": 3.18,
+        "bbc-news": 1.89,
+        "imdb": -0.78,
+        "ohsumed": 8.8,
+        "rcv1": 6.0,
+        "reuters21578": 3.3
+      },
+      "time_ratio_median": 1.8609195152918498
+    },
+    "micro|TCE, transformer, no collapsed runs": {
+      "n": 77,
+      "mean": -0.0038961038961038996,
+      "median": 0.0,
+      "up": 38,
+      "down": 31,
+      "ties": 8,
+      "corpora": 8,
+      "corpora_up": 4,
+      "corpora_down": 4,
+      "p": 0.9453125,
+      "p_corpus_median": 0.9453125,
+      "p_pairs": 0.9593961803292385,
+      "corpus_means": {
+        "20newsgroups": -0.11,
+        "arxiv": -0.32,
+        "arxiv_protoformer": 0.17,
+        "bbc-news": -0.24,
+        "imdb": 0.01,
+        "ohsumed": 0.24,
+        "rcv1": -0.17,
+        "reuters21578": 0.28
+      },
+      "time_ratio_median": 1.0145097609552702
+    },
+    "micro|WCE static by dataset": {
+      "20newsgroups": 2.23,
+      "arxiv": 8.28,
+      "arxiv_protoformer": -0.54,
+      "bbc-news": -0.03,
+      "imdb": -0.12,
+      "ohsumed": 0.62,
+      "rcv1": -3.28,
+      "reuters21578": 1.47
+    },
+    "micro|WCE ML by base": {
+      "solo": {
+        "n": 158,
+        "mean": 6.791139240506326,
+        "median": 4.149999999999992,
+        "up": 126,
+        "down": 28,
+        "ties": 4,
+        "corpora": 8,
+        "corpora_up": 7,
+        "corpora_down": 1,
+        "p": 0.0234375,
+        "p_corpus_median": 0.0234375,
+        "p_pairs": 2.9621953758492697e-18,
+        "corpus_means": {
+          "20newsgroups": 5.08,
+          "arxiv": 16.86,
+          "arxiv_protoformer": 3.56,
+          "bbc-news": 0.62,
+          "imdb": -1.86,
+          "ohsumed": 12.62,
+          "rcv1": 7.59,
+          "reuters21578": 9.94
+        },
+        "time_ratio_median": 2.6219057634764504
+      },
+      "cat-doc": {
+        "n": 149,
+        "mean": -2.057046979865772,
+        "median": -1.8999999999999906,
+        "up": 36,
+        "down": 103,
+        "ties": 10,
+        "corpora": 8,
+        "corpora_up": 1,
+        "corpora_down": 7,
+        "p": 0.015625,
+        "p_corpus_median": 0.015625,
+        "p_pairs": 1.8880109012440675e-13,
+        "corpus_means": {
+          "20newsgroups": -0.58,
+          "arxiv": -2.67,
+          "arxiv_protoformer": -0.43,
+          "bbc-news": 0.02,
+          "imdb": -3.26,
+          "ohsumed": -1.19,
+          "rcv1": -3.18,
+          "reuters21578": -5.21
+        },
+        "time_ratio_median": 2.116757847652198
+      },
+      "lsa": {
+        "n": 158,
+        "mean": 1.7860759493670881,
+        "median": 0.7500000000000007,
+        "up": 90,
+        "down": 63,
+        "ties": 5,
+        "corpora": 8,
+        "corpora_up": 5,
+        "corpora_down": 3,
+        "p": 0.1953125,
+        "p_corpus_median": 0.1484375,
+        "p_pairs": 0.0003912759581518664,
+        "corpus_means": {
+          "20newsgroups": 2.15,
+          "arxiv": 6.26,
+          "arxiv_protoformer": 0.84,
+          "bbc-news": -0.56,
+          "imdb": -2.92,
+          "ohsumed": 4.64,
+          "rcv1": 4.39,
+          "reuters21578": -0.26
+        },
+        "time_ratio_median": 2.5738068465333397
+      },
+      "dot": {
+        "n": 158,
+        "mean": 13.214556962025314,
+        "median": 11.099999999999998,
+        "up": 156,
+        "down": 0,
+        "ties": 2,
+        "corpora": 8,
+        "corpora_up": 8,
+        "corpora_down": 0,
+        "p": 0.0078125,
+        "p_corpus_median": 0.0078125,
+        "p_pairs": 2.3756408768621974e-27,
+        "corpus_means": {
+          "20newsgroups": 19.77,
+          "arxiv": 23.18,
+          "arxiv_protoformer": 8.56,
+          "bbc-news": 7.31,
+          "imdb": 4.92,
+          "ohsumed": 19.11,
+          "rcv1": 15.19,
+          "reuters21578": 7.86
+        },
+        "time_ratio_median": 1.0194670235522143
+      }
+    }
+  },
+  "language_models": {
+    "friedman_chi2": 18.91363636363634,
+    "friedman_p": 0.004312001403946914,
+    "large_vs_encoder_gain_pts": {
+      "bbc-news": -0.9,
+      "20newsgroups": 0.2,
+      "imdb": -1.2,
+      "arxiv_protoformer": 1.3,
+      "reuters21578": -1.4,
+      "ohsumed": 1.3,
+      "arxiv": 8.0,
+      "rcv1": -1.2
+    },
+    "large_vs_encoder_gain_mean": 0.7625000000000008,
+    "large_vs_encoder_gain_median": -0.3500000000000003,
+    "large_vs_encoder_time_geo": 4.904357862026281,
+    "large_vs_encoder_time_range": [
+      2.3291339460865714,
+      7.1503339607078775
+    ],
+    "distil_vs_bert_time_median": 0.6572731847860531,
+    "distil_behind_best_encoder_pts": {
+      "bbc-news": 0.4,
+      "20newsgroups": 0.2,
+      "imdb": 1.7,
+      "arxiv_protoformer": 0.1,
+      "reuters21578": 8.0,
+      "ohsumed": 1.7,
+      "arxiv": 1.1,
+      "rcv1": 2.6
+    }
+  },
+  "peak_family_means": {
+    "macro": {
+      "ML": 0.7756,
+      "static": 0.7411,
+      "transformer": 0.8079
+    },
+    "micro": {
+      "ML": 0.8351,
+      "static": 0.8131,
+      "transformer": 0.8605
+    }
+  },
+  "pareto_counts": {
+    "macro": {
+      "ML": 71,
+      "transformer": 25
+    },
+    "micro": {
+      "ML": 69,
+      "transformer": 28,
+      "static": 4
+    }
+  },
+  "run_counts": {
+    "ML": 3197,
+    "static": 303,
+    "transformer": 225
+  },
+  "record_counts": {
+    "macro": 3725,
+    "micro": 3724
+  },
+  "macro_only_runs": [
+    {
+      "dataset": "imdb",
+      "classifier": "nb",
+      "representation": "[nb:imdb]:->tfidf[xlnet]:[def]",
+      "dims": "(25000, 23883)"
+    }
+  ]
+}
