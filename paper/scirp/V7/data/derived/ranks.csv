@@ -1,0 +1,17 @@
+measure,classifier,family,avg_rank
+macro,hf.cnn,transformer,1.625
+macro,hf.sc,transformer,2.5
+macro,attn,static,4.375
+macro,cnn,static,4.625
+macro,lr,ML,4.6875
+macro,lstm,static,5.125
+macro,svm,ML,5.8125
+macro,nb,ML,7.25
+micro,hf.cnn,transformer,1.5625
+micro,hf.sc,transformer,2.3125
+micro,cnn,static,4.5625
+micro,attn,static,4.6875
+micro,lstm,static,4.75
+micro,lr,ML,4.8125
+micro,svm,ML,6.0625
+micro,nb,ML,7.25

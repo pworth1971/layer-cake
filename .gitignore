@@ -16,4 +16,3 @@ src/supervised_term_weighting/__pycache__/
 bin/wandb/
 *.pt
 /datasets
-/paper
