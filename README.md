@@ -6,7 +6,7 @@ Layer Cake is a benchmarking framework for text classification that measures **e
 - neural networks over static word embeddings;
 - fine-tuned transformers.
 
-It accompanies the paper *Layer Cake: On Language Representation and Compute Characteristics in Text Classification* (Worth & Cardei, [International Journal of Intelligence Science 15(4), 2025](https://doi.org/10.4236/ijis.2025.154010)). A revised and extended version, *The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models*, is in preparation; its source, data and analysis scripts are in [`paper/scirp/V7/`](paper/scirp/V7/).
+It accompanies the paper *Layer Cake: On Language Representation and Compute Characteristics in Text Classification* (Worth & Cardei, [International Journal of Intelligence Science 15(4), 2025](https://doi.org/10.4236/ijis.2025.154010)). A revised and extended version, *The Cost of Accuracy in Text Classification: Tradeoffs in Data Representation and Model Design for Classical ML, Neural Network, and Transformer-based Models*, is in preparation.
 
 ## Key findings
 
@@ -41,7 +41,7 @@ src/            programs (see Modules) and their packages:
   model/          language-model wrappers (LCRepresentationModel) and classifiers
   util/           shared settings, logging, metrics
   test/, deprecated/   earlier versions, kept for reference
-paper/          manuscripts and submissions; paper/scirp/V7 is the current revision
+paper/          manuscripts and submissions (not tracked)
 datasets/       corpora (not tracked; see Datasets)
 .vector_cache/  pretrained embeddings and model downloads (not tracked)
 pickles/        cached, preprocessed datasets (not tracked)
@@ -206,8 +206,6 @@ python ../src/results_analysis_v4.0.py ../log/ml_test.test --summary --charts --
 ```
 
 This writes text and CSV summaries, per-corpus result files, charts and heatmaps to `out/<log-file-name>/`.
-
-The analysis behind the revised paper (peak and typical scores, significance tests, Pareto frontiers, tolerance tables, model-size and class-embedding comparisons) is in [`paper/scirp/V7/analysis/`](paper/scirp/V7/analysis/). It works from the run-level results in `paper/scirp/V7/data/runs/` and regenerates every table and figure in that manuscript; see [`paper/scirp/V7/REVISION_NOTES.md`](paper/scirp/V7/REVISION_NOTES.md).
 
 ## Citation
 
