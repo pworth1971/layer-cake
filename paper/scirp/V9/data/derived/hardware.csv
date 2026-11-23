@@ -1,0 +1,45 @@
+family,dataset,machine,n_gpus,runs
+ML,20newsgroups,Apple M3 Max (CPU),1.0,112
+ML,20newsgroups,Linux workstation (CPU),1.0,660
+ML,arxiv,Apple M3 Max (CPU),1.0,112
+ML,arxiv,Linux workstation (CPU),1.0,662
+ML,arxiv_protoformer,Apple M3 Max (CPU),1.0,217
+ML,arxiv_protoformer,Linux workstation (CPU),1.0,519
+ML,bbc-news,Apple M3 Max (CPU),1.0,84
+ML,bbc-news,Linux workstation (CPU),1.0,559
+ML,imdb,Linux workstation (CPU),1.0,777
+ML,ohsumed,Linux workstation (CPU),1.0,778
+ML,rcv1,Apple M3 Max (CPU),1.0,690
+ML,reuters21578,Apple M3 Max (CPU),1.0,110
+ML,reuters21578,Linux workstation (CPU),1.0,656
+static,20newsgroups,NVIDIA RTX 6000 Ada Generation,1.0,36
+static,arxiv,NVIDIA RTX 6000 Ada Generation,1.0,36
+static,arxiv_protoformer,NVIDIA RTX 6000 Ada Generation,1.0,36
+static,bbc-news,NVIDIA RTX 6000 Ada Generation,1.0,37
+static,imdb,NVIDIA RTX 6000 Ada Generation,1.0,36
+static,ohsumed,NVIDIA RTX 6000 Ada Generation,1.0,36
+static,rcv1,NVIDIA RTX 6000 Ada Generation,1.0,24
+static,reuters21578,NVIDIA RTX 6000 Ada Generation,1.0,36
+transformer,20newsgroups,NVIDIA A100-PCIE-40GB,4.0,20
+transformer,20newsgroups,NVIDIA RTX 6000 Ada Generation,4.0,4
+transformer,20newsgroups,NVIDIA RTX A6000,4.0,24
+transformer,arxiv,NVIDIA A100-PCIE-40GB,4.0,18
+transformer,arxiv,NVIDIA RTX 6000 Ada Generation,4.0,11
+transformer,arxiv,NVIDIA RTX A6000,4.0,19
+transformer,arxiv_protoformer,NVIDIA A100-PCIE-40GB,4.0,18
+transformer,arxiv_protoformer,NVIDIA RTX 6000 Ada Generation,4.0,12
+transformer,arxiv_protoformer,NVIDIA RTX A6000,4.0,18
+transformer,bbc-news,NVIDIA A100-PCIE-40GB,4.0,35
+transformer,bbc-news,NVIDIA RTX 6000 Ada Generation,4.0,4
+transformer,bbc-news,NVIDIA RTX A6000,4.0,13
+transformer,imdb,NVIDIA A100-PCIE-40GB,4.0,20
+transformer,imdb,NVIDIA RTX 6000 Ada Generation,4.0,8
+transformer,imdb,NVIDIA RTX A6000,4.0,20
+transformer,ohsumed,NVIDIA A100-PCIE-40GB,4.0,18
+transformer,ohsumed,NVIDIA RTX 6000 Ada Generation,4.0,12
+transformer,ohsumed,NVIDIA RTX A6000,4.0,18
+transformer,rcv1,NVIDIA A100-PCIE-40GB,4.0,26
+transformer,rcv1,NVIDIA RTX 6000 Ada Generation,4.0,14
+transformer,reuters21578,NVIDIA A100-PCIE-40GB,4.0,26
+transformer,reuters21578,NVIDIA RTX 6000 Ada Generation,4.0,8
+transformer,reuters21578,NVIDIA RTX A6000,4.0,24
