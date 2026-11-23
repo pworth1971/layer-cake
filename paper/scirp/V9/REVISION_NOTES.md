@@ -26,8 +26,8 @@ The build has no overfull or underfull boxes, no undefined references and no Bib
 ## Other changes
 
 - **Licence:** the V8 source said CC BY-NC 4.0. The signed copyright form (`ijis/copyright_signed-10282026.pdf`) selects CC BY, which is what the proof prints, so the override is removed and the class default (CC BY 4.0) applies.
-- **Data and Code Availability** now points to `paper/scirp/V9`.
-- **Acknowledgements:** the AI-use statement now also covers the proof corrections (Claude Fable 5.2, 22 November 2026). **The author should confirm this wording.**
+- **Data and Code Availability** no longer names a directory. It said `paper/scirp/V8`; it now says the results and scripts "are in the same repository", so the statement does not depend on where the paper files live. The README says where they are.
+- **Acknowledgements:** the AI-use statement now also covers the proof corrections (Claude Fable 5.2, 22 November 2026). Wording confirmed by the author on 2026-11-22.
 
 ## Typesetting errors found in the proof
 
